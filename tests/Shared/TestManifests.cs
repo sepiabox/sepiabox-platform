@@ -1,7 +1,7 @@
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 
-namespace Sepiabox.Worker.Tests;
+namespace Sepiabox.Tests.Shared;
 
 internal static class TestManifests
 {

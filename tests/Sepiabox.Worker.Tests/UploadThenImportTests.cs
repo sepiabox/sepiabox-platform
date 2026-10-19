@@ -1,10 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Ingest.Processing;
-using Sepiabox.Ingest.Tests;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Storage;
-using Sepiabox.Tests.Shared;
 using Sepiabox.Worker.Importing;
 
 namespace Sepiabox.Worker.Tests;
@@ -22,8 +20,8 @@ public sealed class UploadThenImportTests(CatalogFixture fixture)
         using var jonathasWork = new TempFolder();
         anaDrive.Write("2019/praia.jpg", TestPhotos.Porto("red"));
         jonathasDrive.Write("Fotos/IMG_0001.jpg", TestPhotos.Porto("red"));
-        ProcessCommand.Run(new ProcessOptions(anaDrive.Path, anaWork.Path, "HD da Ana", FfmpegFolder: anaWork.Path));
-        ProcessCommand.Run(new ProcessOptions(jonathasDrive.Path, jonathasWork.Path, "HD do Jonathas", FfmpegFolder: jonathasWork.Path));
+        ProcessCommand.Run(new ProcessOptions(anaDrive.Path, anaWork.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None));
+        ProcessCommand.Run(new ProcessOptions(jonathasDrive.Path, jonathasWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None));
         await UploadCommand.RunAsync(new UploadOptions(anaWork.Path, UploadDestination.Local), fixture.Blobs);
         await UploadCommand.RunAsync(new UploadOptions(jonathasWork.Path, UploadDestination.Local), fixture.Blobs);
         await using var db = await fixture.CreateMigratedDatabaseAsync();

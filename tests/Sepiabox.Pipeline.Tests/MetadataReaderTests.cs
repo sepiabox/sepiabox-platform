@@ -1,5 +1,4 @@
 using Sepiabox.Pipeline.Media;
-using Sepiabox.Tests.Shared;
 
 namespace Sepiabox.Pipeline.Tests;
 

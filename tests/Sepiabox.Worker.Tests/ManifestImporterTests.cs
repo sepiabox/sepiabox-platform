@@ -6,7 +6,7 @@ using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
 using Sepiabox.Worker.Importing;
-using static Sepiabox.Worker.Tests.TestManifests;
+using static Sepiabox.Tests.Shared.TestManifests;
 
 namespace Sepiabox.Worker.Tests;
 

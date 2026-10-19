@@ -1,4 +1,4 @@
-namespace Sepiabox.Pipeline.Tests;
+namespace Sepiabox.Tests.Shared;
 
 internal sealed class TempFolder : IDisposable
 {

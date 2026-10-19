@@ -1,6 +1,5 @@
 using ImageMagick;
 using Sepiabox.Pipeline.Imaging;
-using Sepiabox.Tests.Shared;
 
 namespace Sepiabox.Pipeline.Tests;
 
