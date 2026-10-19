@@ -18,6 +18,23 @@ Early development. Sepiabox is being built and tested by one family before anyon
 
 Heavy processing of a large archive runs on your own computer with `sepiabox-ingest`; the cloud only stores files and imports the results.
 
+## Try it: scan a drive
+
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+
+```bash
+dotnet run --project src/Sepiabox.Ingest -- scan "E:\Photos" --report scan.json
+```
+
+`scan` reads a folder or drive without changing anything and reports:
+
+- how many photos, videos and other files it holds, and how much space they take
+- the year each photo and video was taken, from its own metadata
+- exact duplicates, and how much space they waste
+- files that could not be read, an early sign of a failing drive
+
+`--report` also writes every duplicate and problem to a JSON file. `--no-duplicates` skips duplicate detection for a faster first look.
+
 ## Stack
 
 - .NET: ASP.NET Core with Blazor for the web app, .NET workers for the pipeline

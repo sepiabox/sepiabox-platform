@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sepiabox.Ingest/Sepiabox.Ingest.csproj" />
+    <Project Path="src/Sepiabox.Pipeline/Sepiabox.Pipeline.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sepiabox.Ingest.Tests/Sepiabox.Ingest.Tests.csproj" />
+    <Project Path="tests/Sepiabox.Pipeline.Tests/Sepiabox.Pipeline.Tests.csproj" />
+  </Folder>
+</Solution>
