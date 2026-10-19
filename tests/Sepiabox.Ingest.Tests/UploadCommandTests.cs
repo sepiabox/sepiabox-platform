@@ -202,18 +202,24 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
             await BlobNames(BlobLayout.ManifestsContainer));
     }
 
-    public static TheoryData<string> UnmergeableStoredManifests => new()
+    public static TheoryData<string, string> UnmergeableStoredManifests => new()
     {
         // Another asset's manifest under this name.
-        "{\"schemaVersion\":1,\"id\":\"" + new string('b', 64) + "\",\"kind\":\"photo\",\"sizeBytes\":1,\"contentType\":\"image/jpeg\",\"capturedAt\":null,\"location\":null,\"camera\":null,\"width\":null,\"height\":null,\"durationSeconds\":null,\"sources\":[{\"type\":\"local\",\"name\":\"x\",\"path\":\"x.jpg\",\"modifiedAt\":\"2019-07-14T17:00:00+00:00\"}],\"derivatives\":[],\"embeddings\":{},\"facesProcessed\":false,\"faces\":[]}",
+        {
+            "{\"schemaVersion\":1,\"id\":\"" + new string('b', 64) + "\",\"kind\":\"photo\",\"sizeBytes\":1,\"contentType\":\"image/jpeg\",\"capturedAt\":null,\"location\":null,\"camera\":null,\"width\":null,\"height\":null,\"durationSeconds\":null,\"sources\":[{\"type\":\"local\",\"name\":\"x\",\"path\":\"x.jpg\",\"modifiedAt\":\"2019-07-14T17:00:00+00:00\"}],\"derivatives\":[],\"embeddings\":{},\"facesProcessed\":false,\"faces\":[]}",
+            "describes asset"
+        },
         // Sources missing.
-        "{\"schemaVersion\":1,\"id\":\"ID\",\"kind\":\"photo\",\"sizeBytes\":1,\"contentType\":\"image/jpeg\",\"sources\":null}",
-        "not json",
+        {
+            "{\"schemaVersion\":1,\"id\":\"ID\",\"kind\":\"photo\",\"sizeBytes\":1,\"contentType\":\"image/jpeg\",\"sources\":null}",
+            "the manifest in storage cannot be read"
+        },
+        { "not json", "the manifest in storage cannot be read: not valid JSON" },
     };
 
     [Theory]
     [MemberData(nameof(UnmergeableStoredManifests))]
-    public async Task A_stored_manifest_that_cannot_be_merged_is_a_problem_for_that_asset_only(string stored)
+    public async Task A_stored_manifest_that_cannot_be_merged_is_a_problem_for_that_asset_only(string stored, string expected)
     {
         _drive.Write("a.jpg", TestPhotos.Porto("red"));
         _drive.Write("b.jpg", TestPhotos.Porto("green"));
@@ -221,12 +227,17 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         var blocked = manifests.Single(m => m.Sources[0].Path == "a.jpg").Id;
         var container = Service.GetBlobContainerClient(BlobLayout.ManifestsContainer);
         await container.CreateIfNotExistsAsync();
-        await container.GetBlobClient(BlobLayout.ManifestBlobName(blocked)).UploadAsync(BinaryData.FromString(stored.Replace("ID", blocked, StringComparison.Ordinal)));
+        var storedBlob = container.GetBlobClient(BlobLayout.ManifestBlobName(blocked));
+        var content = stored.Replace("ID", blocked, StringComparison.Ordinal);
+        await storedBlob.UploadAsync(BinaryData.FromString(content));
 
         var first = await Upload();
         var second = await Upload();
 
-        Assert.Contains(blocked, Assert.Single(first.Problems).Path, StringComparison.Ordinal);
+        var problem = Assert.Single(first.Problems);
+        Assert.Contains(blocked, problem.Path, StringComparison.Ordinal);
+        Assert.Contains(expected, problem.Reason, StringComparison.Ordinal);
+        Assert.Equal(content, (await storedBlob.DownloadContentAsync()).Value.Content.ToString());
         Assert.Contains(BlobLayout.ManifestBlobName(manifests.Single(m => m.Id != blocked).Id), await BlobNames(BlobLayout.ManifestsContainer));
         // Not marked as uploaded: the next run tries again and reports it again.
         Assert.Single(second.Problems);

@@ -75,6 +75,16 @@ public sealed class ManifestValidatorTests
     }
 
     [Fact]
+    public void Rejects_a_source_time_without_an_offset()
+    {
+        // date-time (RFC 3339) needs an offset; a source time without one would be ambiguous.
+        var json = ValidJson(node => node["sources"]![0]!["modifiedAt"] = "2019-07-14T17:00:00");
+
+        Assert.False(s_validator.TryValidate(json, out _, out var error));
+        Assert.Contains("/sources/0/modifiedAt", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Rejects_a_json_null()
     {
         Assert.False(s_validator.TryValidate("null", out var manifest, out _));
@@ -103,19 +113,32 @@ public sealed class ManifestValidatorTests
     private static List<string> Formats(JsonNode node, string location)
     {
         var found = new List<string>();
-        if (node is JsonObject obj)
+        switch (node)
         {
-            foreach (var (name, child) in obj)
-            {
-                if (name == "format" && child is JsonValue value)
+            case JsonObject obj:
+                foreach (var (name, child) in obj)
                 {
-                    found.Add($"{location}: {value}");
+                    if (name == "format" && child is JsonValue value)
+                    {
+                        found.Add($"{location}: {value}");
+                    }
+                    else if (child is not null)
+                    {
+                        found.AddRange(Formats(child, $"{location}/{name}"));
+                    }
                 }
-                else if (child is not null)
+
+                break;
+            case JsonArray array:
+                for (var index = 0; index < array.Count; index++)
                 {
-                    found.AddRange(Formats(child, $"{location}/{name}"));
+                    if (array[index] is { } item)
+                    {
+                        found.AddRange(Formats(item, $"{location}/{index}"));
+                    }
                 }
-            }
+
+                break;
         }
 
         return found;
