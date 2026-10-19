@@ -1,5 +1,6 @@
-# Temporary (S-015): prints the SHA-256 of the pinned models so models.json can be filled in. Removed in the next commit.
-name: Model hash
+# Temporary (S-015): runs the integration job once on this branch, where the sandbox that wrote it cannot
+# reach the model host or build infra/postgres. Removed before review.
+name: S-015 integration check
 
 on:
   push:
@@ -9,12 +10,20 @@ permissions:
   contents: read
 
 jobs:
-  hash:
+  integration:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          for url in $(jq -r '.models[].url' models/models.json); do
-            curl -sSfL "$url" -o model.bin
-            echo "MODEL $url size=$(stat -c%s model.bin) sha256=$(sha256sum model.bin | cut -d' ' -f1)"
-          done
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - uses: actions/cache@v4
+        with:
+          path: ~/.sepiabox/models
+          key: models-${{ hashFiles('models/models.json') }}
+      - run: dotnet run --project src/Sepiabox.Ingest --configuration Release -- models download
+      - run: dotnet test Sepiabox.slnx --configuration Release --filter "Category=Integration"
+        env:
+          SEPIABOX_REQUIRE_MODELS: "1"
+      - run: dotnet test Sepiabox.slnx --configuration Release --filter "Category!=Integration"
