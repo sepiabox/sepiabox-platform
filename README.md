@@ -35,6 +35,25 @@ dotnet run --project src/Sepiabox.Ingest -- scan "E:\Photos" --report scan.json
 
 `--report` also writes every duplicate and problem to a JSON file. `--no-duplicates` skips duplicate detection for a faster first look.
 
+## Development
+
+Requirements: the [.NET 10 SDK](https://dotnet.microsoft.com/download) and, for integration tests and the local environment, [Docker](https://docs.docker.com/get-docker/) and FFmpeg.
+
+```bash
+dotnet build Sepiabox.slnx
+dotnet test Sepiabox.slnx --filter "Category!=Integration"   # unit tests
+dotnet test Sepiabox.slnx --filter "Category=Integration"    # needs Docker / FFmpeg
+dotnet format Sepiabox.slnx --verify-no-changes              # lint, as CI runs it
+```
+
+Documentation:
+
+- [Architecture](docs/architecture.md)
+- [Decision log](docs/decisions.md)
+- [Operations](docs/operations.md): steps that need a person (accounts, DNS, OAuth clients)
+- [Backlog](docs/backlog/README.md)
+- [CLAUDE.md](CLAUDE.md): conventions for agents and contributors
+
 ## Stack
 
 - .NET: ASP.NET Core with Blazor for the web app, .NET workers for the pipeline
