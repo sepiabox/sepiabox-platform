@@ -71,9 +71,30 @@ public class ProcessCommandTests
 
         var second = Process(drive, work);
 
+        // These tests run without FFmpeg, so the video stays pending without being read again.
         Assert.Equal(0, second.Processed);
-        Assert.Equal(3, second.Skipped);
+        Assert.Equal(2, second.Skipped);
+        Assert.Equal(1, second.VideosPending);
         Assert.Equal(3, ReadManifests(work).Count);
+    }
+
+    [Fact]
+    public void Describes_videos_and_leaves_them_pending_with_a_warning_when_ffmpeg_is_missing()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var video = drive.Write("clip.mp4", RandomBytes(3_000));
+        drive.Write("photo.jpg", TestPhotos.Porto());
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        Assert.Equal(1, result.Processed);
+        Assert.Equal(1, result.VideosPending);
+        Assert.Contains("FFmpeg was not found", result.Warning, StringComparison.Ordinal);
+        Assert.Empty(Assert.Single(ReadManifests(work), m => m.Kind == MediaKind.Video).Derivatives);
+        using var state = new StateStore(Path.Combine(work.Path, "state.db"));
+        Assert.Equal(FileStatus.Pending, state.Get(video)?.Status);
     }
 
     [Fact]
@@ -218,8 +239,9 @@ public class ProcessCommandTests
         Assert.False(Directory.Exists(oldFolder));
     }
 
+    // Unit tests must behave the same with or without FFmpeg installed, so they point at a folder without it.
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
-        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD da Ana"));
+        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD da Ana", FfmpegFolder: Path.Combine(work.Path, "no-ffmpeg")));
 
     private static List<Manifest> ReadManifests(TempFolder work) =>
         [.. Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json").Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];

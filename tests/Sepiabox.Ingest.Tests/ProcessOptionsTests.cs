@@ -1,4 +1,5 @@
 using Sepiabox.Ingest.Processing;
+using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Ingest.Tests;
 
@@ -13,7 +14,25 @@ public class ProcessOptionsTests
         new[] { "E:\\", "--out", "work", "--source-name" },
         new[] { "E:\\", "F:\\", "--out", "work" },
         new[] { "E:\\", "--out", "work", "--fast" },
+        new[] { "E:\\", "--out", "work", "--ffmpeg" },
+        new[] { "E:\\", "--out", "work", "--hw", "quicksync" },
     };
+
+    [Fact]
+    public void Reads_the_ffmpeg_folder_and_the_nvenc_encoder()
+    {
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work", "--ffmpeg", "C:\\ffmpeg\\bin", "--hw", "nvenc"], out var options, out _));
+        Assert.Equal("C:\\ffmpeg\\bin", options.FfmpegFolder);
+        Assert.Equal(VideoEncoder.Nvenc, options.Encoder);
+    }
+
+    [Fact]
+    public void Uses_the_software_encoder_and_the_path_by_default()
+    {
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work"], out var options, out _));
+        Assert.Null(options.FfmpegFolder);
+        Assert.Equal(VideoEncoder.Software, options.Encoder);
+    }
 
     [Fact]
     public void Reads_folder_output_and_source_name()

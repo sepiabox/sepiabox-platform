@@ -6,6 +6,9 @@ public enum FileStatus
 {
     Done,
     Failed,
+
+    /// <summary>A video described without its poster and 720p version because FFmpeg was not available.</summary>
+    Pending,
 }
 
 /// <summary>What <c>process</c> last saw of a source file. <c>ModifiedTicks</c> is the last write time in UTC ticks.</summary>

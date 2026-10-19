@@ -7,7 +7,7 @@ const string Usage = """
     Commands:
       scan <folder>                  Read a folder or drive and report what it holds. Changes nothing.
       process <folder> --out <dir>   Describe every photo and video in one manifest per file content,
-                                     with WebP thumbnails of each photo.
+                                     with WebP thumbnails and, for videos, a poster and a 720p version.
 
     Options for scan:
       --report <file>  Also write the full result, with every duplicate and problem, as JSON.
@@ -16,6 +16,8 @@ const string Usage = """
     Options for process:
       --out <dir>           Work folder for manifests and progress. Running again resumes.
       --source-name <name>  Name of this drive or folder, such as "HD da Ana". Default: the folder name.
+      --ffmpeg <folder>     Folder with ffmpeg and ffprobe. Default: look on the PATH.
+      --hw nvenc            Encode the 720p versions on an NVIDIA GPU.
     """;
 
 if (args.Length == 0 || args[0] is "-h" or "--help" or "help")
@@ -87,8 +89,13 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
     var result = ProcessCommand.Run(options, progress, cancellationToken);
     Console.Error.WriteLine();
 
-    Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
+    Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
     Console.WriteLine($"Manifests: {result.ManifestFolder}");
+    if (result.Warning is not null)
+    {
+        Console.Error.WriteLine($"Warning: {result.Warning}");
+    }
+
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");

@@ -4,6 +4,7 @@ using Sepiabox.Ingest.Scanning;
 using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
+using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Ingest.Processing;
 
@@ -13,11 +14,13 @@ public sealed record ProcessResult(
     TimeSpan Duration,
     int Processed,
     int Skipped,
-    IReadOnlyList<ScanProblem> Problems);
+    IReadOnlyList<ScanProblem> Problems,
+    int VideosPending = 0,
+    string? Warning = null);
 
 /// <summary>
 /// Describes every photo and video in a folder tree as one manifest per distinct content (D-005, D-014),
-/// with the thumbnails the web shows instead of the originals (D-015).
+/// with the thumbnails, posters and 720p versions the web shows instead of the originals (D-015).
 /// Source files are only read; results go to the work folder.
 /// </summary>
 public static class ProcessCommand
@@ -35,10 +38,13 @@ public static class ProcessCommand
         var sourceName = options.SourceName ?? NullIfEmpty(Path.GetFileName(Path.TrimEndingDirectorySeparator(root))) ?? root;
         var outputPrefix = Path.TrimEndingDirectorySeparator(output) + Path.DirectorySeparatorChar;
 
+        var ffmpeg = FfmpegTools.Find(options.FfmpegFolder);
+        var video = ffmpeg is null ? null : new VideoProcessor(ffmpeg, options.Encoder);
+
         using var state = new StateStore(Path.Combine(output, "state.db"));
         var stopwatch = Stopwatch.StartNew();
         var problems = new List<ScanProblem>();
-        int processed = 0, skipped = 0;
+        int processed = 0, skipped = 0, pending = 0;
 
         foreach (var file in FileTree.Enumerate(root))
         {
@@ -52,9 +58,17 @@ public static class ProcessCommand
 
             var modifiedTicks = file.ModifiedAt.UtcTicks;
             var previous = state.Get(file.Path);
-            if (previous is { Status: FileStatus.Done } && previous.Size == file.Size && previous.ModifiedTicks == modifiedTicks)
+            var unchanged = previous is not null && previous.Size == file.Size && previous.ModifiedTicks == modifiedTicks;
+            if (unchanged && previous!.Status == FileStatus.Done)
             {
                 skipped++;
+                continue;
+            }
+
+            // Still no FFmpeg: re-reading a large unchanged video would change nothing.
+            if (unchanged && previous!.Status == FileStatus.Pending && video is null)
+            {
+                pending++;
                 continue;
             }
 
@@ -72,19 +86,23 @@ public static class ProcessCommand
                     RemoveSource(output, oldSha256, source);
                 }
 
-                var (manifest, derivativeProblem) = AddDerivatives(output, file, Describe(manifestFolder, sha256, kind, file, source));
+                var described = Describe(manifestFolder, sha256, kind, file, source);
+                var (manifest, status, derivativeProblem) = AddDerivatives(output, file, described, video, cancellationToken);
                 Write(ManifestPath(manifestFolder, sha256), manifest);
+                state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, status));
 
-                if (derivativeProblem is null)
+                switch (status)
                 {
-                    state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, FileStatus.Done));
-                    processed++;
-                }
-                else
-                {
-                    // The manifest is kept so the file is still catalogued; the next run tries the derivatives again.
-                    problems.Add(new ScanProblem(file.Path, derivativeProblem));
-                    state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, FileStatus.Failed));
+                    case FileStatus.Done:
+                        processed++;
+                        break;
+                    case FileStatus.Pending:
+                        pending++;
+                        break;
+                    default:
+                        // The manifest is kept so the file is still catalogued; the next run tries the derivatives again.
+                        problems.Add(new ScanProblem(file.Path, derivativeProblem!));
+                        break;
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -97,7 +115,11 @@ public static class ProcessCommand
             filesDone?.Report(processed + problems.Count);
         }
 
-        return new ProcessResult(root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems);
+        var warning = pending > 0
+            ? $"FFmpeg was not found {(options.FfmpegFolder is null ? "on the PATH" : $"in {options.FfmpegFolder}")}. "
+              + $"{pending:N0} videos are described but have no poster or 720p version yet; run process again once FFmpeg is installed."
+            : null;
+        return new ProcessResult(root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning);
     }
 
     private static Manifest Describe(string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source)
@@ -127,22 +149,43 @@ public static class ProcessCommand
         };
     }
 
-    /// <summary>Generates the derivatives the manifest is still missing. Problem is null on success.</summary>
-    private static (Manifest Manifest, string? Problem) AddDerivatives(string output, FoundFile file, Manifest manifest)
+    /// <summary>Generates the derivatives the manifest is still missing. Problem is set when the status is Failed.</summary>
+    private static (Manifest Manifest, FileStatus Status, string? Problem) AddDerivatives(
+        string output, FoundFile file, Manifest manifest, VideoProcessor? video, CancellationToken cancellationToken)
     {
-        if (manifest.Kind != MediaKind.Photo || manifest.Derivatives.Count > 0)
+        if (manifest.Derivatives.Count > 0)
         {
-            return (manifest, null);
+            return (manifest, FileStatus.Done, null);
         }
 
+        var folder = DerivativeFolder(manifest.Id);
         try
         {
-            var derivatives = ThumbnailGenerator.Generate(file.Path, output, DerivativeFolder(manifest.Id), ThumbnailGenerator.PhotoSizes);
-            return (manifest with { Derivatives = derivatives }, null);
+            if (manifest.Kind == MediaKind.Photo)
+            {
+                var thumbnails = ThumbnailGenerator.Generate(file.Path, output, folder, ThumbnailGenerator.PhotoSizes);
+                return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null);
+            }
+
+            if (video is null)
+            {
+                return (manifest, FileStatus.Pending, null);
+            }
+
+            var probe = video.Probe(file.Path, cancellationToken);
+            var derivatives = video.Generate(file.Path, output, folder, probe, cancellationToken);
+            return (manifest with
+            {
+                Width = probe.Width,
+                Height = probe.Height,
+                DurationSeconds = probe.DurationSeconds ?? manifest.DurationSeconds,
+                Derivatives = derivatives,
+            }, FileStatus.Done, null);
         }
-        catch (MagickException ex)
+        catch (Exception ex) when (ex is MagickException or VideoProcessingException)
         {
-            return (manifest, $"Could not make thumbnails: {ex.Message}");
+            var what = manifest.Kind == MediaKind.Photo ? "thumbnails" : "the poster and 720p version";
+            return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}");
         }
     }
 
