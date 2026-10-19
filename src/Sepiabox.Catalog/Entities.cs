@@ -33,7 +33,11 @@ public sealed class Asset
 
     public double? DurationSeconds { get; set; }
 
+    /// <summary>When the asset first entered the catalog.</summary>
     public DateTimeOffset ImportedAt { get; set; }
+
+    /// <summary>When a manifest last changed it.</summary>
+    public DateTimeOffset UpdatedAt { get; set; }
 
     public List<AssetSource> Sources { get; set; } = [];
 

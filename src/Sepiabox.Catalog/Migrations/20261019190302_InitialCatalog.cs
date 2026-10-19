@@ -31,7 +31,8 @@ namespace Sepiabox.Catalog.Migrations
                     width = table.Column<int>(type: "integer", nullable: true),
                     height = table.Column<int>(type: "integer", nullable: true),
                     duration_seconds = table.Column<double>(type: "double precision", nullable: true),
-                    imported_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    imported_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {

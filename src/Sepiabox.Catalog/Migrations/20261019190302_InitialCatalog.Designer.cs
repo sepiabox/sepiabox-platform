@@ -13,7 +13,7 @@ using Sepiabox.Catalog;
 namespace Sepiabox.Catalog.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
-    [Migration("20261019184056_InitialCatalog")]
+    [Migration("20261019190302_InitialCatalog")]
     partial class InitialCatalog
     {
         /// <inheritdoc />
@@ -76,6 +76,10 @@ namespace Sepiabox.Catalog.Migrations
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint")
                         .HasColumnName("size_bytes");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
                     b.Property<int?>("Width")
                         .HasColumnType("integer")
