@@ -1,25 +1,25 @@
-# Operações
+# Operations
 
-Passos que exigem uma pessoa, porque dependem de contas, consentimentos ou registos externos. As stories que dependem destes passos dizem-no nas notas técnicas; o código e os testes automáticos dessas stories não dependem deles.
+Steps that need a person, because they depend on accounts, consents or external registrations. Stories that depend on these steps say so in their technical notes; the code and automated tests of those stories do not depend on them.
 
-## Pré-requisitos humanos (uma vez)
+## Human prerequisites (one time)
 
-| Passo | Necessário para | Onde |
+| Step | Needed for | Where |
 |---|---|---|
-| Subscrição Azure com faturação em EUR e acesso de Owner ao grupo `rg-sepiabox` | S-029 em diante (deploy) | Portal Azure |
-| App registration no Entra ID com credencial federada (OIDC) para `sepiabox/sepiabox-platform` e `sepiabox/sepiabox-infra`, ambiente `production` | S-029, S-034 | Portal Azure → Entra ID |
-| Variáveis do GitHub `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` e ambiente `production` com aprovação manual | S-029, S-034 | GitHub → Settings |
-| Cliente OAuth Google (modo Testing, os dois e-mails como test users; Drive API ativada) | S-010, S-037 | Google Cloud Console |
-| App registration Microsoft para contas pessoais (login e Files.Read) | S-010, S-039 | Portal Azure → Entra ID |
-| Implantação de `claude-haiku-5-5` no Microsoft Foundry e chave no Key Vault | S-025 | Microsoft Foundry |
-| Registos DNS na GoDaddy: `app` (CNAME + TXT `asuid.app`) e `sepiabox.com` para o GitHub Pages | S-035, S-042 | GoDaddy |
-| Lista de e-mails autorizados (`Access:Emails`) no Key Vault | S-010, S-032 | Key Vault |
+| Azure subscription billed in EUR, with Owner access to the `rg-sepiabox` resource group | S-029 onwards (deploy) | Azure portal |
+| Entra ID app registration with a federated credential (OIDC) for `sepiabox/sepiabox-platform` and `sepiabox/sepiabox-infra`, environment `production` | S-029, S-034 | Azure portal → Entra ID |
+| GitHub variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` and a `production` environment with manual approval | S-029, S-034 | GitHub → Settings |
+| Google OAuth client (Testing mode, the two e-mails as test users; Drive API enabled) | S-010, S-037 | Google Cloud Console |
+| Microsoft app registration for personal accounts (sign-in and Files.Read) | S-010, S-039 | Azure portal → Entra ID |
+| `claude-haiku-5-5` deployment on Microsoft Foundry and its key in Key Vault | S-025 | Microsoft Foundry |
+| DNS records at GoDaddy: `app` (CNAME + TXT `asuid.app`) and `sepiabox.com` for GitHub Pages | S-035, S-042 | GoDaddy |
+| List of allowed e-mails (`Access:Emails`) in Key Vault | S-010, S-032 | Key Vault |
 
-## URLs de retorno OAuth
+## OAuth redirect URLs
 
-- Local: `https://localhost:<porta>/signin-google`, `/signin-microsoft`
-- Produção: `https://app.sepiabox.com/signin-google`, `/signin-microsoft`
+- Local: `https://localhost:<port>/signin-google`, `/signin-microsoft`
+- Production: `https://app.sepiabox.com/signin-google`, `/signin-microsoft`
 
-## Desligamento de emergência
+## Emergency shutdown
 
-Ver `sepiabox-infra/scripts/emergency-stop.sh` (desliga o tráfego da web, para o PostgreSQL e desativa a fila; mantém os dados).
+See `sepiabox-infra/scripts/emergency-stop.sh` (turns off web traffic, stops PostgreSQL and disables the queue; keeps the data).

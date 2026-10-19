@@ -1,101 +1,101 @@
-# Arquitetura do Sepiabox
+# Sepiabox architecture
 
-Resumo da arquitetura decidida para a primeira versão. Decisões individuais, com alternativas e motivos, estão em [decisions.md](decisions.md). Passos que exigem uma pessoa estão em [operations.md](operations.md).
+Summary of the architecture chosen for the first version. Individual decisions, with alternatives and reasons, are in [decisions.md](decisions.md). Steps that need a person are in [operations.md](operations.md).
 
-## O produto
+## The product
 
-O Sepiabox junta as fotos e vídeos de uma família (HD externo, Google Drive, OneDrive e, mais tarde, telemóveis) num só lugar e encontra qualquer momento quando se faz uma pergunta. Cada ficheiro é interpretado **uma única vez, na entrada**; a pesquisa só filtra os metadados guardados e nunca volta a ler as fotos.
+Sepiabox brings a family's photos and videos together (external drive, Google Drive, OneDrive and, later, phones) in one place and finds any moment when you ask a question. Each file is interpreted **once, on arrival**; search only filters the stored metadata and never re-reads the photos.
 
-Exemplos de perguntas que o sistema tem de responder:
+Examples of questions the system must answer (the app UI is in Portuguese):
 
-- "Fotos minhas com a Ana e o Pedro juntos" (pessoas)
-- "Fotos de Lisboa em dezembro", "O que fazia neste dia há cinco anos?" (tempo e lugar)
-- "Fotos na neve", "Mais fotos parecidas com esta" (semelhança visual)
-- "Quantos casamentos fomos este ano?" (ocasiões)
-- "Quantas fotos do HD já estavam no Google Drive?" (organização)
+- "Fotos minhas com a Ana e o Pedro juntos" (photos of me with Ana and Pedro together — people)
+- "Fotos de Lisboa em dezembro", "O que fazia neste dia há cinco anos?" (photos of Lisbon in December, what was I doing on this day five years ago — time and place)
+- "Fotos na neve", "Mais fotos parecidas com esta" (photos in the snow, more photos like this one — visual similarity)
+- "Quantos casamentos fomos este ano?" (how many weddings did we go to this year — occasions)
+- "Quantas fotos do HD já estavam no Google Drive?" (how many photos on the drive were already in Google Drive — organization)
 
-Utilizadores na v1: **duas pessoas** (um casal), com uma **biblioteca partilhada**. Não há registo aberto.
+Users in v1: **two people** (a couple), sharing **one library**. There is no open sign-up.
 
-## Visão geral
+## Overview
 
 ```
-PC com o HD ──sepiabox-ingest──► Blob Storage ──Event Grid──► Service Bus ──► Worker (Container Apps job) ──► PostgreSQL
- (processa localmente)            originals (Cold)                               importa manifestos               catálogo + pgvector + PostGIS
-                                  derivatives (Hot)
-                                  manifests                                                                            ▲
-                                                                                                                       │ SQL + kNN
-Navegador ──HTTPS──► Web (Blazor, Container Apps) ── login Google/Microsoft + lista de acesso ──────────────────────────┘
-                         │
-                         └── pergunta em texto ──► Claude Haiku 5.5 (Microsoft Foundry) ──► filtros (DSL JSON)
+PC with the drive ──sepiabox-ingest──► Blob Storage ──Event Grid──► Service Bus ──► Worker (Container Apps job) ──► PostgreSQL
+ (processes locally)                    originals (Cold)                              imports manifests                catalog + pgvector + PostGIS
+                                        derivatives (Hot)
+                                        manifests                                                                           ▲
+                                                                                                                            │ SQL + kNN
+Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsoft sign-in + access list ──────────────────────────────────┘
+                       │
+                       └── question text ──► Claude Haiku 5.5 (Microsoft Foundry) ──► filters (JSON DSL)
 ```
 
-## Componentes (.NET 10)
+## Components (.NET 10)
 
-| Projeto | Onde corre | Responsabilidade |
+| Project | Runs on | Responsibility |
 |---|---|---|
-| `Sepiabox.Pipeline` | biblioteca | Estágios de processamento: classificação, hash, metadados, miniaturas, vídeo, embeddings, rostos. Não sabe de onde vem o ficheiro. |
-| `Sepiabox.Ingest` (`sepiabox-ingest`) | PC do utilizador | `scan`, `process`, `upload`, `models download`. Processa o HD localmente e envia só o que é novo. |
-| `Sepiabox.Catalog` | biblioteca | EF Core + Npgsql: esquema, migrações, consultas. |
-| `Sepiabox.Worker` (`sepiabox-worker`) | Container Apps job | Importa manifestos, processa ficheiros que chegam pela nuvem, agrupa eventos, sincroniza fontes na nuvem. |
-| `Sepiabox.Web` | Container Apps | Blazor (interactive server): login, linha do tempo, pesquisa, pessoas, ocasiões, perguntas. |
-| `Sepiabox.AppHost` / `Sepiabox.ServiceDefaults` | PC (dev) / azd | .NET Aspire: ambiente local (PostgreSQL + Azurite) e descrição da infraestrutura para `azd`. |
+| `Sepiabox.Pipeline` | library | Processing stages: classification, hashing, metadata, thumbnails, video, embeddings, faces. Does not know where a file comes from. |
+| `Sepiabox.Ingest` (`sepiabox-ingest`) | user's PC | `scan`, `process`, `upload`, `models download`. Processes the drive locally and uploads only what is new. |
+| `Sepiabox.Catalog` | library | EF Core + Npgsql: schema, migrations, queries. |
+| `Sepiabox.Worker` (`sepiabox-worker`) | Container Apps job | Imports manifests, processes files that arrive through the cloud, groups events, syncs cloud sources. |
+| `Sepiabox.Web` | Container Apps | Blazor (interactive server): sign-in, timeline, search, people, occasions, questions. |
+| `Sepiabox.AppHost` / `Sepiabox.ServiceDefaults` | PC (dev) / azd | .NET Aspire: local environment (PostgreSQL + Azurite) and infrastructure description for `azd`. |
 
-## Fluxo de ingestão
+## Ingest flow
 
-1. `sepiabox-ingest scan <pasta>`: só lê; conta fotos/vídeos, anos, duplicados, ficheiros ilegíveis.
-2. `sepiabox-ingest process <pasta> --out <workdir>`: por ficheiro calcula SHA-256 (identidade do asset), lê EXIF/QuickTime (data, GPS, câmara, dimensões), gera miniaturas WebP, poster e versão 720p dos vídeos, embedding CLIP e, se ativado, rostos. Escreve um **manifesto JSON por asset** (schema v1, `docs/schemas/manifest.v1.json`). Estado em SQLite para retomar.
-3. `sepiabox-ingest upload <workdir>`: envia originais (camada **Cold**), derivados (**Hot**) e, por último, o manifesto. Retoma onde parou.
-4. Na nuvem, cada manifesto novo dispara a importação (Event Grid filtrado ao contentor `manifests` → fila → job do worker, uma execução de cada vez).
+1. `sepiabox-ingest scan <folder>`: read-only; counts photos/videos, years, duplicates, unreadable files.
+2. `sepiabox-ingest process <folder> --out <workdir>`: for each file computes the SHA-256 (asset identity), reads EXIF/QuickTime (date, GPS, camera, dimensions), generates WebP thumbnails, video posters and 720p versions, the CLIP embedding and, if enabled, faces. Writes **one JSON manifest per asset** (schema v1, `docs/schemas/manifest.v1.json`). State is kept in SQLite so runs can resume.
+3. `sepiabox-ingest upload <workdir>`: uploads originals (**Cold** tier), derivatives (**Hot**) and, last, the manifest. Resumes where it stopped.
+4. In the cloud, each new manifest triggers the import (Event Grid filtered to the `manifests` container → queue → worker job, one execution at a time).
 
-Os originais **nunca são relidos** na nuvem durante a ingestão local (ler a camada Cold custa ~US$ 0,03/GB). Ficheiros que chegam pela nuvem (Drive, OneDrive) passam pelo mesmo pipeline no worker.
+Originals are **never re-read** in the cloud during local ingest (reading the Cold tier costs ~US$ 0.03/GB). Files that arrive through the cloud (Drive, OneDrive) go through the same pipeline in the worker.
 
-## Dados
+## Data
 
-- **Blob Storage**: `originals` (Cold), `derivatives` (Hot), `manifests`, `incoming`, `exports`. Acesso público desligado; o navegador só lê por URLs SAS de curta duração geradas após login.
-- **PostgreSQL Flexible (B1ms)** com **pgvector** (embeddings CLIP 512-d e de rosto 128-d, índices HNSW) e **PostGIS** (localização, distância, lugares). Tabelas principais: `assets`, `asset_sources`, `derivatives`, `asset_embeddings`, `faces`, `people`, `events`, `saved_places`, `geonames`.
-- **Nomes de lugares**: GeoNames `cities500` carregado no PostgreSQL (offline, sem Azure Maps). Lugares pessoais ("Casa", "Casa da praia") são pontos com raio guardados pelo utilizador.
+- **Blob Storage**: `originals` (Cold), `derivatives` (Hot), `manifests`, `incoming`, `exports`. Public access disabled; the browser only reads through short-lived SAS URLs issued after sign-in.
+- **PostgreSQL Flexible (B1ms)** with **pgvector** (512-d CLIP and 128-d face embeddings, HNSW indexes) and **PostGIS** (location, distance, places). Main tables: `assets`, `asset_sources`, `derivatives`, `asset_embeddings`, `faces`, `people`, `events`, `saved_places`, `geonames`.
+- **Place names**: GeoNames `cities500` loaded into PostgreSQL (offline, no Azure Maps). Personal places ("Casa", "Casa da praia") are points with a radius saved by the user.
 
-## Modelos de ML (ONNX Runtime, CPU por defeito, CUDA opcional)
+## ML models (ONNX Runtime, CPU by default, optional CUDA)
 
-- **CLIP ViT-B/32** (MIT): embedding de imagem (pesquisa por descrição, "parecidas", tipos de ocasião por zero-shot).
-- **YuNet** (deteção de rosto, MIT) + **SFace** (embedding de rosto, Apache-2.0), da OpenCV Zoo. Rostos são **opt-in**.
-- Modelos não vão para o repositório: são descarregados por `sepiabox-ingest models download` com SHA-256 fixado em `models/models.json`.
+- **CLIP ViT-B/32** (MIT): image embedding (search by description, "more like this", occasion types by zero-shot).
+- **YuNet** (face detection, MIT) + **SFace** (face embedding, Apache-2.0), from the OpenCV Zoo. Faces are **opt-in**.
+- Models are not stored in the repository: `sepiabox-ingest models download` fetches them with SHA-256 pinned in `models/models.json`.
 
-## Pesquisa
+## Search
 
-Toda a pesquisa passa por uma **DSL JSON** (`docs/schemas/search.v1.json`): filtros de tempo, lugar, pessoas, fonte, tipo, ocasião, semelhança visual e agregações. A UI de filtros e o tradutor de perguntas produzem a mesma DSL; um único serviço a executa (SQL + kNN no pgvector).
+All search goes through a **JSON DSL** (`docs/schemas/search.v1.json`): filters for time, place, people, source, kind, occasion, visual similarity and aggregations. The filter UI and the question translator produce the same DSL; a single service executes it (SQL + kNN in pgvector).
 
-Perguntas em linguagem natural: o texto (nunca as fotos) vai para **Claude Haiku 5.5** (`claude-haiku-5-5`) no **Microsoft Foundry**, com *structured outputs* restritos ao schema da DSL. Termos visuais são traduzidos para inglês (o CLIP é inglês). Limite diário de perguntas por utilizador.
+Natural-language questions: the text (never the photos) goes to **Claude Haiku 5.5** (`claude-haiku-5-5`) on **Microsoft Foundry**, with *structured outputs* restricted to the DSL schema. Visual terms are translated to English (CLIP is English-only). Daily question limit per user.
 
-## Acesso e privacidade
+## Access and privacy
 
-- Login com **Google** e **Microsoft** (Apple virá com a app iOS). Uma **lista de e-mails** autorizados é verificada no retorno do login (sem lista, sem cookie) e uma política de autorização por defeito protege todas as rotas.
-- Reconhecimento facial opcional; pode ser desligado e os dados de rosto apagados. Nenhuma inferência de categorias sensíveis (religião, saúde).
-- Exportação completa a qualquer momento.
+- Sign-in with **Google** and **Microsoft** (Apple will come with the iOS app). A **list of allowed e-mails** is checked when the sign-in returns (not on the list, no cookie) and a default authorization policy protects every route.
+- Face recognition is optional; it can be turned off and face data deleted. No inference of sensitive categories (religion, health).
+- Full export at any time.
 
-## Nuvem e custos
+## Cloud and costs
 
-- Azure, região **France Central**, grupo de recursos `rg-sepiabox`. Teto: **€50/mês**; estimativa ~US$ 30–35/mês com 1 TB.
-- Container Apps (web escala a zero; worker como job), PostgreSQL B1ms, Storage, Service Bus Basic, Event Grid, Key Vault, Application Insights com limite diário, Container Registry Basic.
-- Proteções (repositório `sepiabox-infra`): orçamento €50 com alertas em €25/€40/previsão, alertas de anomalia, desligamento automático aos €45, Azure Policy de tipos de recurso permitidos, limite de logs.
-- Deploy: `azd` a partir do AppHost; GitHub Actions com OIDC (sem segredos no repositório).
+- Azure, **France Central** region, resource group `rg-sepiabox`. Ceiling: **€50/month**; estimate ~US$ 30–35/month with 1 TB.
+- Container Apps (web scales to zero; worker as a job), PostgreSQL B1ms, Storage, Service Bus Basic, Event Grid, Key Vault, Application Insights with a daily cap, Container Registry Basic.
+- Safeguards (repository `sepiabox-infra`): €50 budget with alerts at €25/€40/forecast, anomaly alerts, automatic shutdown at €45, Azure Policy of allowed resource types, log cap.
+- Deploy: `azd` from the AppHost; GitHub Actions with OIDC (no secrets in the repository).
 
-## Repositórios (organização `sepiabox`)
+## Repositories (organization `sepiabox`)
 
-| Repositório | Conteúdo |
+| Repository | Contents |
 |---|---|
-| `sepiabox-platform` | Este repositório: código .NET, docs, backlog |
-| `sepiabox-infra` | Orçamento, alertas, desligamento, Policy (Bicep) |
-| `sepiabox-site` | Site estático `sepiabox.com` (GitHub Pages) |
-| `sepiabox-brand` | Logo, cores, tipografia (todos os direitos reservados) |
-| `sepiabox-planning` | Privado: plano de negócio |
+| `sepiabox-platform` | This repository: .NET code, docs, backlog |
+| `sepiabox-infra` | Budget, alerts, shutdown, Policy (Bicep) |
+| `sepiabox-site` | Static site `sepiabox.com` (GitHub Pages) |
+| `sepiabox-brand` | Logo, colors, typography (all rights reserved) |
+| `sepiabox-planning` | Private: business plan |
 
-## Identidade visual (para a UI)
+## Visual identity (for the UI)
 
-Cores: Sépia `#9A5A2C` (marca), Cianótipo `#1F4C74` (ações), Revelador `#231A14` (texto), Papel prata `#EEECE7` (fundo), Moldura `#D8D1C6` (linhas). Tipos: Bricolage Grotesque (títulos), Figtree (texto), IBM Plex Mono (filtros e metadados). Símbolo em `sepiabox-brand/assets/`. Interface em **português**; código, comentários e nomes técnicos em **inglês**. Web pensada para **desktop** (largura mínima ~1024 px); no telemóvel só precisa de abrir sem partir.
+Colors: Sepia `#9A5A2C` (brand), Cyanotype `#1F4C74` (actions), Developer `#231A14` (text), Silver paper `#EEECE7` (background), Mat `#D8D1C6` (lines). Typefaces: Bricolage Grotesque (headings), Figtree (body), IBM Plex Mono (filters and metadata). Symbol in `sepiabox-brand/assets/`. The app UI is in **Portuguese**; code, comments, docs and technical names are in **English**. The web app targets **desktop** (minimum width ~1024 px); on phones it only needs to open without breaking.
 
-## Fases
+## Phases
 
-- **MVP**: HD local → nuvem, linha do tempo, filtros por data/lugar, pesquisa visual, pessoas, login restrito, deploy com proteções de custo.
-- **Fase 2**: ocasiões e tipos, perguntas em linguagem natural, Google Drive e OneDrive, organização (tremidas, rajadas), exportação.
-- **Fase 3 (fora deste backlog)**: grafo de relações entre pessoas, legendas por modelo de visão, apps móveis, deteção de objetos/roupas dedicada, OCR e transcrição.
+- **MVP**: local drive → cloud, timeline, date/place filters, visual search, people, restricted sign-in, deploy with cost safeguards.
+- **Phase 2**: occasions and types, natural-language questions, Google Drive and OneDrive, organization (blurry photos, bursts), export.
+- **Phase 3 (outside this backlog)**: relationship graph between people, captions from a vision model, mobile apps, dedicated object/clothing detection, OCR and transcription.
