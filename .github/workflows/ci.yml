@@ -44,11 +44,18 @@ jobs:
           dotnet-version: 10.0.x
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       # Models are never committed (D-016): download them once per models.json and verify their SHA-256.
-      - uses: actions/cache@v4
+      - id: models-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.sepiabox/models
           key: models-${{ hashFiles('models/models.json') }}
       - run: dotnet run --project src/Sepiabox.Ingest --configuration Release -- models download
+      # Saved right after the download, so a failing test run still keeps the 350 MB for the next one.
+      - if: steps.models-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.sepiabox/models
+          key: models-${{ hashFiles('models/models.json') }}
       - run: dotnet test Sepiabox.slnx --configuration Release --filter "Category=Integration"
         env:
           # Model tests are skipped on machines without the models; in CI a missing model is a failure.

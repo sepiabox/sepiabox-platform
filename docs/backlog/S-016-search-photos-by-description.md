@@ -25,6 +25,7 @@ The CLIP text encoder turns "snow" into a vector comparable with the photo embed
 ### Technical notes
 - Try `Microsoft.ML.Tokenizers` (BPE with end-of-word suffix); if it does not reproduce the reference ids, implement CLIP's BPE (~150 lines).
 - `Sepiabox.Pipeline/Clip/ClipTextEncoder.cs`, `ClipTokenizer.cs`. Singleton service with lazy loading in the web app.
+- The text model must come from the same repository revision as the image model in `models/models.json` (`Xenova/clip-vit-base-patch32` at `d15189d7028b43f1d3e65039190477f6af591c2a`, D-044), so both encoders share one embedding space.
 - Decisions: D-016, D-017, D-020.
 
 ### Expected tests
