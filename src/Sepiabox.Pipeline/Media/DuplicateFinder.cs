@@ -90,7 +90,7 @@ public static class DuplicateFinder
 
     private static string EdgeHash(string path)
     {
-        using var stream = OpenRead(path);
+        using var stream = MediaFile.OpenRead(path);
         var buffer = new byte[2 * EdgeBlockSize];
         stream.ReadExactly(buffer, 0, EdgeBlockSize);
         stream.Seek(-EdgeBlockSize, SeekOrigin.End);
@@ -98,13 +98,5 @@ public static class DuplicateFinder
         return Convert.ToHexString(SHA256.HashData(buffer));
     }
 
-    private static string FullHash(string path)
-    {
-        using var stream = OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(stream));
-    }
-
-    // Read-only and shared: the source drive is never modified.
-    private static FileStream OpenRead(string path) =>
-        new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1024 * 1024, FileOptions.SequentialScan);
+    private static string FullHash(string path) => MediaFile.Sha256Hex(path);
 }

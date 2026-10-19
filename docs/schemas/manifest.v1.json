@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepiabox.com/schemas/manifest.v1.json",
+  "title": "Sepiabox asset manifest v1",
+  "description": "Everything known about one photo or video, identified by the SHA-256 of its content (D-014).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "id", "kind", "sizeBytes", "contentType", "capturedAt", "location", "camera",
+    "width", "height", "durationSeconds", "sources", "derivatives", "embeddings", "facesProcessed", "faces"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": {
+      "description": "SHA-256 of the file content, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "kind": { "enum": ["photo", "video"] },
+    "sizeBytes": { "type": "integer", "minimum": 0 },
+    "contentType": { "type": "string", "minLength": 1 },
+    "capturedAt": {
+      "description": "Wall-clock time on the camera, without time zone.",
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$"
+    },
+    "location": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["latitude", "longitude"],
+      "properties": {
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 }
+      }
+    },
+    "camera": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["make", "model"],
+      "properties": {
+        "make": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] }
+      }
+    },
+    "width": { "type": ["integer", "null"], "minimum": 1 },
+    "height": { "type": ["integer", "null"], "minimum": 1 },
+    "durationSeconds": { "type": ["number", "null"], "minimum": 0 },
+    "sources": {
+      "description": "Every place where these exact bytes were found.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "name", "path", "modifiedAt"],
+        "properties": {
+          "type": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "modifiedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "derivatives": {
+      "description": "Thumbnails and video versions, filled from S-005 and S-006.",
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "embeddings": {
+      "description": "Vectors by model name, filled from S-015.",
+      "type": "object"
+    },
+    "facesProcessed": { "type": "boolean" },
+    "faces": {
+      "description": "Detected faces, filled from S-018.",
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  }
+}

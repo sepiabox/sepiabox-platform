@@ -14,6 +14,43 @@ public static class MediaTypes
         ".mp4", ".mov", ".m4v", ".avi", ".mkv", ".3gp", ".mts", ".m2ts", ".wmv", ".mpg", ".mpeg",
     };
 
+    private static readonly Dictionary<string, string> ContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".heic"] = "image/heic",
+        [".heif"] = "image/heif",
+        [".png"] = "image/png",
+        [".gif"] = "image/gif",
+        [".webp"] = "image/webp",
+        [".tif"] = "image/tiff",
+        [".tiff"] = "image/tiff",
+        [".bmp"] = "image/bmp",
+        [".dng"] = "image/x-adobe-dng",
+        [".cr2"] = "image/x-canon-cr2",
+        [".cr3"] = "image/x-canon-cr3",
+        [".nef"] = "image/x-nikon-nef",
+        [".arw"] = "image/x-sony-arw",
+        [".orf"] = "image/x-olympus-orf",
+        [".rw2"] = "image/x-panasonic-rw2",
+        [".raf"] = "image/x-fuji-raf",
+        [".mp4"] = "video/mp4",
+        [".mov"] = "video/quicktime",
+        [".m4v"] = "video/x-m4v",
+        [".avi"] = "video/x-msvideo",
+        [".mkv"] = "video/x-matroska",
+        [".3gp"] = "video/3gpp",
+        [".mts"] = "video/mp2t",
+        [".m2ts"] = "video/mp2t",
+        [".wmv"] = "video/x-ms-wmv",
+        [".mpg"] = "video/mpeg",
+        [".mpeg"] = "video/mpeg",
+    };
+
+    /// <summary>MIME type from the extension; generic binary for anything that is not a photo or video.</summary>
+    public static string ContentType(string path) =>
+        ContentTypes.GetValueOrDefault(Path.GetExtension(path), "application/octet-stream");
+
     public static MediaKind Classify(string path)
     {
         var name = Path.GetFileName(path);

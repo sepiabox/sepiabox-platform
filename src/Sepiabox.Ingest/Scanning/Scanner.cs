@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.IO.Enumeration;
 using Sepiabox.Pipeline.Media;
 
 namespace Sepiabox.Ingest.Scanning;
@@ -11,22 +10,9 @@ namespace Sepiabox.Ingest.Scanning;
 /// </summary>
 public static class Scanner
 {
-    // Operating system and NAS folders that never hold the user's own photos.
-    private static readonly HashSet<string> IgnoredFolders = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "$RECYCLE.BIN", "System Volume Information", ".Trashes", ".Spotlight-V100", ".fseventsd",
-        ".DocumentRevisions-V100", ".TemporaryItems", "@eaDir", ".thumbnails",
-    };
-
     public static ScanResult Scan(ScanOptions options, IProgress<int>? filesSeen = null, CancellationToken cancellationToken = default)
     {
-        // On Windows "E:" means the current folder on drive E, not the drive itself.
-        var requested = options.Root is [_, ':'] ? options.Root + Path.DirectorySeparatorChar : options.Root;
-        var root = Path.GetFullPath(requested);
-        if (!System.IO.Directory.Exists(root))
-        {
-            throw new DirectoryNotFoundException($"Folder not found: {root}");
-        }
+        var root = FileTree.ResolveRoot(options.Root);
 
         var stopwatch = Stopwatch.StartNew();
         var totals = Enum.GetValues<MediaKind>().ToDictionary(kind => kind, _ => new KindTotals(0, 0));
@@ -36,7 +22,7 @@ public static class Scanner
         var problems = new List<ScanProblem>();
         var seen = 0;
 
-        foreach (var (path, size) in EnumerateFiles(root))
+        foreach (var (path, size, _) in FileTree.Enumerate(root))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -93,24 +79,5 @@ public static class Scanner
             problems.Add(new ScanProblem(path, ex.Message));
             return ScanResult.UnknownYear;
         }
-    }
-
-    private static FileSystemEnumerable<(string Path, long Size)> EnumerateFiles(string root)
-    {
-        var options = new EnumerationOptions
-        {
-            RecurseSubdirectories = true,
-            IgnoreInaccessible = true,
-            AttributesToSkip = FileAttributes.System,
-        };
-
-        return new FileSystemEnumerable<(string, long)>(
-            root,
-            (ref FileSystemEntry entry) => (entry.ToFullPath(), entry.Length),
-            options)
-        {
-            ShouldIncludePredicate = (ref FileSystemEntry entry) => !entry.IsDirectory,
-            ShouldRecursePredicate = (ref FileSystemEntry entry) => !IgnoredFolders.Contains(entry.FileName.ToString()),
-        };
     }
 }
