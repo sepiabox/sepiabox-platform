@@ -3,7 +3,6 @@ using Json.Schema;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
-using Sepiabox.Tests.Shared;
 
 namespace Sepiabox.Ingest.Tests;
 
@@ -241,7 +240,7 @@ public class ProcessCommandTests
 
     // Unit tests must behave the same with or without FFmpeg installed, so they point at a folder without it.
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
-        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD da Ana", FfmpegFolder: Path.Combine(work.Path, "no-ffmpeg")));
+        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None));
 
     private static List<Manifest> ReadManifests(TempFolder work) =>
         [.. Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json").Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];

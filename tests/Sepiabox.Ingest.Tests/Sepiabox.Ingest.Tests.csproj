@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="Sepiabox.Tests.Shared" />
   </ItemGroup>
 
   <ItemGroup>
@@ -28,7 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\Shared\TestPhotos.cs" Link="Shared\TestPhotos.cs" />
+    <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
     <None Include="..\..\docs\schemas\manifest.v1.json" Link="TestData\manifest.v1.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

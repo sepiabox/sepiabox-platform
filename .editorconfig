@@ -81,3 +81,7 @@ dotnet_naming_rule.locals_camel.severity = warning
 dotnet_diagnostic.CA1707.severity = none
 # Inline arrays in test data are clearer than static fields.
 dotnet_diagnostic.CA1861.severity = none
+
+[src/Sepiabox.Catalog/Migrations/*.cs]
+# Written by dotnet ef; regenerated, never edited by hand.
+generated_code = true

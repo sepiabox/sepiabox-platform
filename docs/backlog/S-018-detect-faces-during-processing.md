@@ -24,7 +24,8 @@
 ### Technical notes
 - Fixture: a public-domain portrait (e.g. an official US government portrait on Wikimedia Commons), with source and license in `tests/.../TestData/README.md`.
 - Alignment with Magick.NET (affine `Distort`) or a custom matrix.
-- Decisions: D-016.
+- Extend `ManifestMerge` (D-036): `faces` come from the side with `facesProcessed: true`, the incoming one if both are, so uploading from a work folder with face detection off never erases detected faces.
+- Decisions: D-016, D-036.
 
 ### Expected tests
 - Unit: alignment transform. Integration (models): detection, embeddings, opt-in.

@@ -75,7 +75,7 @@ public class VideoProcessingTests
         using var drive = new TempFolder();
         using var work = new TempFolder();
         MakeVideo(Path.Combine(drive.Path, "later.mp4"), 640, 360, seconds: 1);
-        var withoutFfmpeg = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: Path.Combine(work.Path, "none")));
+        var withoutFfmpeg = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None));
 
         var withFfmpeg = Process(drive, work);
 

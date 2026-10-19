@@ -20,6 +20,7 @@ Guidance for agents working in `sepiabox-platform`. Read [docs/architecture.md](
 | Check formatting (what CI runs) | `dotnet format Sepiabox.slnx --verify-no-changes` |
 | Fix formatting | `dotnet format Sepiabox.slnx` |
 | Run the ingest CLI | `dotnet run --project src/Sepiabox.Ingest -- scan <folder>` |
+| Add a catalog migration | `dotnet ef migrations add <Name> --project src/Sepiabox.Catalog --output-dir Migrations` |
 | Run the local environment (needs Docker) | `dotnet run --project src/Sepiabox.AppHost` |
 
 Before pushing, the build must have zero warnings (warnings are errors) and the format check must pass.
@@ -30,6 +31,8 @@ Before pushing, the build must have zero warnings (warnings are errors) and the 
 src/
   Sepiabox.Pipeline/   processing stages, shared by the CLI and the cloud worker
   Sepiabox.Ingest/     sepiabox-ingest console app (scan, process, upload)
+  Sepiabox.Catalog/    EF Core catalog: CatalogDbContext, entities and migrations
+  Sepiabox.Worker/     sepiabox-worker: migrate, import manifests into the catalog
   Sepiabox.Web/        Blazor web app (interactive server)
   Sepiabox.AppHost/    .NET Aspire AppHost: PostgreSQL, Azurite and the web, locally and for azd
   Sepiabox.ServiceDefaults/  health checks and OpenTelemetry shared by the services
@@ -42,7 +45,7 @@ docs/
 .github/workflows/ci.yml      lint, tests (Linux + Windows), integration (Linux)
 ```
 
-New projects follow the names in `docs/architecture.md` (`Sepiabox.Catalog`, `Sepiabox.Worker`) and are added to `Sepiabox.slnx`.
+New projects follow the names in `docs/architecture.md` and are added to `Sepiabox.slnx`.
 
 ## Code conventions
 
@@ -54,6 +57,8 @@ New projects follow the names in `docs/architecture.md` (`Sepiabox.Catalog`, `Se
 - The user's source files (photos, videos, drives) are only ever opened for reading.
 - Dependencies must have an AGPL-compatible license (MIT, Apache-2.0, BSD). The code is AGPL-3.0; the Sepiabox name and logo are not covered by that license.
 - ML models are never committed; they are downloaded with a pinned SHA-256.
+- Catalog schema changes always add a new migration (`dotnet ef migrations add`); a migration that is on `main` is never edited or regenerated (D-033).
+- Manifest blobs are only written through `ManifestStore.WriteMergedAsync`, never uploaded directly (D-036).
 
 ## Tests
 

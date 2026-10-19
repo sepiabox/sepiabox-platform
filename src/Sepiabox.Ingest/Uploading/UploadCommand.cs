@@ -11,6 +11,7 @@ using Azure.Storage.Blobs.Specialized;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
+using Sepiabox.Pipeline.Storage;
 
 namespace Sepiabox.Ingest.Uploading;
 
@@ -28,9 +29,6 @@ public sealed record UploadResult(
 /// </summary>
 public static class UploadCommand
 {
-    public const string OriginalsContainer = "originals";
-    public const string DerivativesContainer = "derivatives";
-    public const string ManifestsContainer = "manifests";
     public const string ConnectionVariable = "SEPIABOX_BLOB_CONNECTION";
 
     public const int BlockSize = 8 * 1024 * 1024;
@@ -43,11 +41,20 @@ public static class UploadCommand
         _ => new BlobServiceClient(Environment.GetEnvironmentVariable(ConnectionVariable) ?? "UseDevelopmentStorage=true"),
     };
 
-    public static async Task<UploadResult> RunAsync(
+    public static Task<UploadResult> RunAsync(
         UploadOptions options,
         BlobServiceClient service,
         IProgress<long>? bytesSent = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        RunAsync(options, service, bytesSent, new ManifestValidator(), cancellationToken);
+
+    /// <summary>Takes the validator as a parameter so tests can reach the checks that the schema runs first.</summary>
+    internal static async Task<UploadResult> RunAsync(
+        UploadOptions options,
+        BlobServiceClient service,
+        IProgress<long>? bytesSent,
+        IManifestValidator validator,
+        CancellationToken cancellationToken)
     {
         var workFolder = Path.GetFullPath(options.WorkFolder);
         var manifestFolder = Path.Combine(workFolder, "manifests");
@@ -58,9 +65,9 @@ public static class UploadCommand
         }
 
         var containers = new Containers(
-            service.GetBlobContainerClient(OriginalsContainer),
-            service.GetBlobContainerClient(DerivativesContainer),
-            service.GetBlobContainerClient(ManifestsContainer));
+            service.GetBlobContainerClient(BlobLayout.OriginalsContainer),
+            service.GetBlobContainerClient(BlobLayout.DerivativesContainer),
+            service.GetBlobContainerClient(BlobLayout.ManifestsContainer));
         foreach (var container in new[] { containers.Originals, containers.Derivatives, containers.Manifests })
         {
             await container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
@@ -73,6 +80,8 @@ public static class UploadCommand
             state,
             // Azurite does not know the Cold tier, so it is only set on real accounts.
             options.Destination == UploadDestination.Azure ? AccessTier.Cold : (AccessTier?)null,
+            validator,
+            new ManifestStore(validator),
             bytesSent);
 
         var stopwatch = Stopwatch.StartNew();
@@ -86,10 +95,55 @@ public static class UploadCommand
             manifestFiles.Length, run.Uploaded, run.Skipped, run.Bytes, stopwatch.Elapsed, [.. run.Problems.OrderBy(p => p.Path)]);
     }
 
+    /// <summary>
+    /// Where a manifest's derivative is on disk, if it is a file inside <c>derivatives/&lt;id&gt;/</c> of the
+    /// work folder. Compared with GetRelativePath rather than a string prefix, so a work folder that is a
+    /// drive or filesystem root (F:\ or /) works too. The id must be one plain name, or it would move the
+    /// asset folder itself out of <c>derivatives/</c>.
+    /// </summary>
+    internal static bool TryResolveDerivative(string workFolder, string assetId, string relativePath, out string fullPath)
+    {
+        fullPath = "";
+        if (assetId is "" or "." or ".." || assetId.IndexOfAny(['/', '\\']) >= 0 || Path.IsPathRooted(relativePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var derivativesFolder = Path.GetFullPath(Path.Combine(workFolder, "derivatives"));
+            var assetFolder = Path.GetFullPath(Path.Combine(derivativesFolder, assetId));
+            fullPath = Path.GetFullPath(Path.Combine(workFolder, relativePath));
+            return IsStrictlyInside(derivativesFolder, assetFolder)
+                && IsStrictlyInside(assetFolder, fullPath)
+                && relativePath.IndexOf('\0') < 0;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            fullPath = "";
+            return false;
+        }
+    }
+
+    private static bool IsStrictlyInside(string folder, string path)
+    {
+        var inside = Path.GetRelativePath(folder, path);
+        return !Path.IsPathRooted(inside)
+            && inside != "."
+            && inside != ".."
+            && !inside.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+    }
+
     private sealed record Containers(BlobContainerClient Originals, BlobContainerClient Derivatives, BlobContainerClient Manifests);
 
     private sealed class Run(
-        string workFolder, Containers containers, UploadState state, AccessTier? originalTier, IProgress<long>? bytesSent)
+        string workFolder,
+        Containers containers,
+        UploadState state,
+        AccessTier? originalTier,
+        IManifestValidator validator,
+        ManifestStore manifestStore,
+        IProgress<long>? bytesSent)
     {
         private int _uploaded;
         private int _skipped;
@@ -104,7 +158,30 @@ public static class UploadCommand
         {
             try
             {
-                var manifest = ManifestJson.Deserialize(await File.ReadAllTextAsync(manifestPath, cancellationToken));
+                // Taken before reading: if process rewrites the manifest meanwhile, the next run sees a new
+                // fingerprint and sends it again instead of recording the old content as uploaded.
+                var manifestFile = new FileInfo(manifestPath);
+                var fingerprint = $"{manifestFile.Length}:{manifestFile.LastWriteTimeUtc.Ticks}";
+                // Checked before anything of this asset is sent: a hand-edited or truncated manifest must
+                // not put an original or a derivative in storage that no valid manifest describes.
+                if (!validator.TryValidate(await File.ReadAllTextAsync(manifestPath, cancellationToken), out var manifest, out var invalid))
+                {
+                    AddProblem(manifestPath, $"this manifest is not valid: {invalid}");
+                    return;
+                }
+
+                var derivativeFiles = new List<(ManifestDerivative Derivative, string Path)>();
+                foreach (var derivative in manifest.Derivatives)
+                {
+                    // The schema already only allows derivatives/<id>/<file>; this keeps that promise even if it changes.
+                    if (!TryResolveDerivative(workFolder, manifest.Id, derivative.Path, out var file))
+                    {
+                        AddProblem(manifestPath, $"derivative {derivative.Name} is outside derivatives/{manifest.Id}/: {derivative.Path}");
+                        return;
+                    }
+
+                    derivativeFiles.Add((derivative, file));
+                }
 
                 // Order matters: an asset's manifest is only sent once everything it points to is in storage.
                 if (!await UploadOriginalAsync(manifest, cancellationToken))
@@ -112,26 +189,39 @@ public static class UploadCommand
                     return;
                 }
 
-                foreach (var derivative in manifest.Derivatives)
+                foreach (var (derivative, file) in derivativeFiles)
                 {
-                    var blobName = $"{manifest.Id}/{Path.GetFileName(derivative.Path)}";
-                    await UploadWorkFileAsync(
-                        containers.Derivatives, blobName, Path.Combine(workFolder, derivative.Path), derivative.ContentType, cancellationToken);
+                    var blobName = BlobLayout.DerivativeBlobName(manifest.Id, derivative);
+                    await UploadWorkFileAsync(containers.Derivatives, blobName, file, derivative.ContentType, cancellationToken);
                 }
 
-                await UploadWorkFileAsync(
-                    containers.Manifests, $"{manifest.Id}.json", manifestPath, "application/json", cancellationToken);
+                await UploadManifestAsync(manifest, manifestPath, fingerprint, cancellationToken);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or RequestFailedException or System.Text.Json.JsonException)
+            catch (Exception ex) when (IsAssetFailure(ex))
             {
-                AddProblem(manifestPath, ex.Message);
+                // A cancel can surface as the I/O or storage error it caused; the user still asked to stop.
+                cancellationToken.ThrowIfCancellationRequested();
+                AddProblem(manifestPath, $"{ex.GetType().Name}: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// What one asset can fail with without saying anything about the others: files, permissions,
+        /// storage, JSON, an operation cancelled that the user did not cancel (an Azure SDK timeout), and the
+        /// AggregateException Azure.Core's RetryPolicy throws when every try failed with one of those.
+        /// Anything else is a bug and stops the run.
+        /// </summary>
+        private static bool IsAssetFailure(Exception ex) => ex switch
+        {
+            AggregateException aggregate => aggregate.Flatten().InnerExceptions is { Count: > 0 } inner && inner.All(IsAssetFailure),
+            _ => ex is IOException or UnauthorizedAccessException or RequestFailedException or System.Text.Json.JsonException
+                or InvalidDataException or OperationCanceledException,
+        };
 
         private async Task<bool> UploadOriginalAsync(Manifest manifest, CancellationToken cancellationToken)
         {
             var blob = containers.Originals.GetBlockBlobClient(manifest.Id);
-            if (state.IsUploaded(OriginalsContainer, manifest.Id, manifest.Id))
+            if (state.IsUploaded(BlobLayout.OriginalsContainer, manifest.Id, manifest.Id))
             {
                 Interlocked.Increment(ref _skipped);
                 return true;
@@ -139,7 +229,7 @@ public static class UploadCommand
 
             if (await ExistingSizeAsync(blob, cancellationToken) == manifest.SizeBytes)
             {
-                state.MarkUploaded(OriginalsContainer, manifest.Id, manifest.Id);
+                state.MarkUploaded(BlobLayout.OriginalsContainer, manifest.Id, manifest.Id);
                 Interlocked.Increment(ref _skipped);
                 return true;
             }
@@ -157,7 +247,7 @@ public static class UploadCommand
                 return false;
             }
 
-            state.MarkUploaded(OriginalsContainer, manifest.Id, manifest.Id);
+            state.MarkUploaded(BlobLayout.OriginalsContainer, manifest.Id, manifest.Id);
             Interlocked.Increment(ref _uploaded);
             return true;
         }
@@ -223,8 +313,7 @@ public static class UploadCommand
             }
 
             var blob = container.GetBlobClient(blobName);
-            var isManifest = container.Name == ManifestsContainer;
-            if (!isManifest && await ExistingSizeAsync(blob, cancellationToken) == file.Length)
+            if (await ExistingSizeAsync(blob, cancellationToken) == file.Length)
             {
                 state.MarkUploaded(container.Name, blobName, fingerprint);
                 Interlocked.Increment(ref _skipped);
@@ -253,6 +342,38 @@ public static class UploadCommand
 
             state.MarkUploaded(container.Name, blobName, fingerprint);
             Interlocked.Increment(ref _uploaded);
+        }
+
+        /// <summary>
+        /// Merges this work folder's manifest into the one already in storage (D-036): another drive may
+        /// have uploaded the same asset with its own sources. A manifest that cannot be merged is a
+        /// problem for this asset only, and is tried again on the next run.
+        /// </summary>
+        private async Task UploadManifestAsync(Manifest manifest, string path, string fingerprint, CancellationToken cancellationToken)
+        {
+            var blobName = BlobLayout.ManifestBlobName(manifest.Id);
+            if (state.IsUploaded(BlobLayout.ManifestsContainer, blobName, fingerprint))
+            {
+                Interlocked.Increment(ref _skipped);
+                return;
+            }
+
+            var result = await manifestStore.WriteMergedAsync(containers.Manifests, manifest, cancellationToken);
+            switch (result.Status)
+            {
+                case ManifestWriteStatus.Problem:
+                    AddProblem(path, result.Problem!);
+                    return;
+                case ManifestWriteStatus.Unchanged:
+                    Interlocked.Increment(ref _skipped);
+                    break;
+                default:
+                    AddBytes(result.Bytes);
+                    Interlocked.Increment(ref _uploaded);
+                    break;
+            }
+
+            state.MarkUploaded(BlobLayout.ManifestsContainer, blobName, fingerprint);
         }
 
         private static async Task<long?> ExistingSizeAsync(BlobBaseClient blob, CancellationToken cancellationToken)

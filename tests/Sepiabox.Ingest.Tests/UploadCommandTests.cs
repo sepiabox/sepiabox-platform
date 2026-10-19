@@ -1,8 +1,10 @@
+using System.Diagnostics.CodeAnalysis;
+using Azure;
 using Azure.Storage.Blobs;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Tests.Shared;
+using Sepiabox.Pipeline.Storage;
 using Testcontainers.Azurite;
 
 namespace Sepiabox.Ingest.Tests;
@@ -46,13 +48,13 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.Equal(2, result.Assets);
         Assert.Equal(8, result.Uploaded);
         var ids = manifests.Select(manifest => manifest.Id).Order().ToList();
-        Assert.Equal(ids, await BlobNames(UploadCommand.OriginalsContainer));
+        Assert.Equal(ids, await BlobNames(BlobLayout.OriginalsContainer));
         Assert.Equal(
             ids.SelectMany(id => new[] { $"{id}/preview-1280.webp", $"{id}/thumb-256.webp" }),
-            await BlobNames(UploadCommand.DerivativesContainer));
-        Assert.Equal(ids.Select(id => id + ".json"), await BlobNames(UploadCommand.ManifestsContainer));
+            await BlobNames(BlobLayout.DerivativesContainer));
+        Assert.Equal(ids.Select(id => id + ".json"), await BlobNames(BlobLayout.ManifestsContainer));
 
-        var original = Service.GetBlobContainerClient(UploadCommand.OriginalsContainer).GetBlobClient(ids[0]);
+        var original = Service.GetBlobContainerClient(BlobLayout.OriginalsContainer).GetBlobClient(ids[0]);
         var properties = (await original.GetPropertiesAsync()).Value;
         Assert.Equal("image/jpeg", properties.ContentType);
         Assert.Equal(manifests.Single(m => m.Id == ids[0]).SizeBytes, properties.ContentLength);
@@ -103,8 +105,8 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.Equal(6, afterResume.Count);
         // A blob uploaded again would have been given a new sequence number.
         Assert.All(beforeResume, record => Assert.Contains(record, afterResume));
-        Assert.Equal(2, (await BlobNames(UploadCommand.OriginalsContainer)).Count);
-        Assert.Equal(2, (await BlobNames(UploadCommand.ManifestsContainer)).Count);
+        Assert.Equal(2, (await BlobNames(BlobLayout.OriginalsContainer)).Count);
+        Assert.Equal(2, (await BlobNames(BlobLayout.ManifestsContainer)).Count);
     }
 
     [Fact]
@@ -122,9 +124,9 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         var problem = Assert.Single(result.Problems);
         Assert.Equal(path, problem.Path);
         Assert.Contains("Changed since it was processed", problem.Reason, StringComparison.Ordinal);
-        Assert.DoesNotContain(changedId, await BlobNames(UploadCommand.OriginalsContainer));
-        Assert.DoesNotContain(changedId + ".json", await BlobNames(UploadCommand.ManifestsContainer));
-        Assert.Single(await BlobNames(UploadCommand.ManifestsContainer));
+        Assert.DoesNotContain(changedId, await BlobNames(BlobLayout.OriginalsContainer));
+        Assert.DoesNotContain(changedId + ".json", await BlobNames(BlobLayout.ManifestsContainer));
+        Assert.Single(await BlobNames(BlobLayout.ManifestsContainer));
     }
 
     [Fact]
@@ -137,7 +139,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         var result = await Upload();
 
         Assert.Contains("Original not found", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
-        Assert.Empty(await BlobNames(UploadCommand.ManifestsContainer));
+        Assert.Empty(await BlobNames(BlobLayout.ManifestsContainer));
     }
 
     [Fact]
@@ -153,27 +155,222 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         var uploads = ReadUploads();
         foreach (var manifest in manifests)
         {
-            var manifestSequence = uploads.Single(r => r.Container == UploadCommand.ManifestsContainer && r.Blob == manifest.Id + ".json").Sequence;
+            var manifestSequence = uploads.Single(r => r.Container == BlobLayout.ManifestsContainer && r.Blob == manifest.Id + ".json").Sequence;
             var dependencies = uploads.Where(r =>
-                (r.Container == UploadCommand.OriginalsContainer && r.Blob == manifest.Id)
-                || (r.Container == UploadCommand.DerivativesContainer && r.Blob.StartsWith(manifest.Id + "/", StringComparison.Ordinal)))
+                (r.Container == BlobLayout.OriginalsContainer && r.Blob == manifest.Id)
+                || (r.Container == BlobLayout.DerivativesContainer && r.Blob.StartsWith(manifest.Id + "/", StringComparison.Ordinal)))
                 .ToList();
             Assert.Equal(3, dependencies.Count);
             Assert.All(dependencies, dependency => Assert.True(dependency.Sequence < manifestSequence));
         }
     }
 
+    [Fact]
+    public async Task A_second_work_folder_adds_its_sources_to_the_manifest_already_in_storage()
+    {
+        // The same photo on two drives, processed into two work folders and uploaded one after the other.
+        _drive.Write("2019/praia.jpg", TestPhotos.Porto("red"));
+        var id = Process().Single().Id;
+        await Upload();
+        using var otherDrive = new TempFolder();
+        using var otherWork = new TempFolder();
+        otherDrive.Write("Fotos/IMG_0001.jpg", TestPhotos.Porto("red"));
+        ProcessCommand.Run(new ProcessOptions(otherDrive.Path, otherWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None));
+
+        var result = await UploadCommand.RunAsync(new UploadOptions(otherWork.Path, UploadDestination.Local), Service);
+
+        Assert.Empty(result.Problems);
+        var blob = Service.GetBlobContainerClient(BlobLayout.ManifestsContainer).GetBlobClient(BlobLayout.ManifestBlobName(id));
+        var stored = ManifestJson.Deserialize((await blob.DownloadContentAsync()).Value.Content.ToString());
+        Assert.Equal(["HD da Ana/2019/praia.jpg", "HD do Jonathas/Fotos/IMG_0001.jpg"], stored.Sources.Select(s => $"{s.Name}/{s.Path}"));
+        Assert.Equal(["preview-1280", "thumb-256"], stored.Derivatives.Select(d => d.Name).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_invalid_work_folder_manifest_is_a_problem_for_that_asset_only()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        _drive.Write("b.jpg", TestPhotos.Porto("green"));
+        var manifests = Process();
+        var broken = manifests.Single(m => m.Sources[0].Path == "a.jpg");
+        var path = Path.Combine(_work.Path, "manifests", broken.Id + ".json");
+        await File.WriteAllTextAsync(path, ManifestJson.Serialize(broken with { Width = 0 }));
+
+        var result = await Upload();
+
+        Assert.StartsWith("this manifest is not valid", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        await AssertOnlyUploadedAsync(manifests.Single(m => m.Id != broken.Id).Id);
+    }
+
+    public static TheoryData<string> EscapingDerivativePaths => new()
+    {
+        "absolute",
+        "parent",
+        "nested",
+        "other asset",
+    };
+
+    [Theory]
+    [MemberData(nameof(EscapingDerivativePaths))]
+    public async Task A_derivative_outside_its_asset_folder_is_a_problem_and_nothing_of_that_asset_is_uploaded(string kind)
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        _drive.Write("b.jpg", TestPhotos.Porto("green"));
+        var manifests = Process();
+        var broken = manifests.Single(m => m.Sources[0].Path == "a.jpg");
+        var other = manifests.Single(m => m.Id != broken.Id);
+        var outside = _drive.Write("secret.webp", [1, 2, 3]);
+        var ownFolder = Path.Combine(_work.Path, "derivatives", broken.Id);
+        var escaping = kind switch
+        {
+            "absolute" => outside,
+            "parent" => Path.GetRelativePath(_work.Path, outside),
+            "nested" => $"derivatives/{broken.Id}/" + Path.GetRelativePath(ownFolder, outside),
+            _ => other.Derivatives[0].Path,
+        };
+        var tampered = broken with { Derivatives = [broken.Derivatives[0] with { Path = escaping.Replace('\\', '/') }] };
+        await File.WriteAllTextAsync(Path.Combine(_work.Path, "manifests", broken.Id + ".json"), ManifestJson.Serialize(tampered));
+
+        // The schema would refuse these paths first; a permissive validator lets the test reach the path check.
+        var result = await Upload(new AcceptsAnyManifest());
+
+        Assert.Contains($"is outside derivatives/{broken.Id}/", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        await AssertOnlyUploadedAsync(other.Id);
+    }
+
+    /// <summary>Only this asset's original, derivatives and manifest are in storage.</summary>
+    private async Task AssertOnlyUploadedAsync(string id)
+    {
+        Assert.Equal([id], await BlobNames(BlobLayout.OriginalsContainer));
+        Assert.All(await BlobNames(BlobLayout.DerivativesContainer), name => Assert.StartsWith(id + "/", name, StringComparison.Ordinal));
+        Assert.Equal([BlobLayout.ManifestBlobName(id)], await BlobNames(BlobLayout.ManifestsContainer));
+    }
+
+    public static TheoryData<string, string> UnmergeableStoredManifests => new()
+    {
+        // Another asset's manifest under this name.
+        {
+            "{\"schemaVersion\":1,\"id\":\"" + new string('b', 64) + "\",\"kind\":\"photo\",\"sizeBytes\":1,\"contentType\":\"image/jpeg\",\"capturedAt\":null,\"location\":null,\"camera\":null,\"width\":null,\"height\":null,\"durationSeconds\":null,\"sources\":[{\"type\":\"local\",\"name\":\"x\",\"path\":\"x.jpg\",\"modifiedAt\":\"2019-07-14T17:00:00+00:00\"}],\"derivatives\":[],\"embeddings\":{},\"facesProcessed\":false,\"faces\":[]}",
+            "describes asset"
+        },
+        // Sources missing.
+        {
+            "{\"schemaVersion\":1,\"id\":\"ID\",\"kind\":\"photo\",\"sizeBytes\":1,\"contentType\":\"image/jpeg\",\"sources\":null}",
+            "the manifest in storage cannot be read"
+        },
+        { "not json", "the manifest in storage cannot be read: not valid JSON" },
+    };
+
+    [Theory]
+    [MemberData(nameof(UnmergeableStoredManifests))]
+    public async Task A_stored_manifest_that_cannot_be_merged_is_a_problem_for_that_asset_only(string stored, string expected)
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        _drive.Write("b.jpg", TestPhotos.Porto("green"));
+        var manifests = Process();
+        var blocked = manifests.Single(m => m.Sources[0].Path == "a.jpg").Id;
+        var container = Service.GetBlobContainerClient(BlobLayout.ManifestsContainer);
+        await container.CreateIfNotExistsAsync();
+        var storedBlob = container.GetBlobClient(BlobLayout.ManifestBlobName(blocked));
+        var content = stored.Replace("ID", blocked, StringComparison.Ordinal);
+        await storedBlob.UploadAsync(BinaryData.FromString(content));
+
+        var first = await Upload();
+        var second = await Upload();
+
+        var problem = Assert.Single(first.Problems);
+        Assert.Contains(blocked, problem.Path, StringComparison.Ordinal);
+        Assert.Contains(expected, problem.Reason, StringComparison.Ordinal);
+        Assert.Equal(content, (await storedBlob.DownloadContentAsync()).Value.Content.ToString());
+        Assert.Contains(BlobLayout.ManifestBlobName(manifests.Single(m => m.Id != blocked).Id), await BlobNames(BlobLayout.ManifestsContainer));
+        // Not marked as uploaded: the next run tries again and reports it again.
+        Assert.Single(second.Problems);
+    }
+
+    public static TheoryData<Exception, Type> ProgrammingErrors => new()
+    {
+        { new InvalidOperationException("bug"), typeof(InvalidOperationException) },
+        // Retries that ended in a bug are still a bug, even next to failures that would only be this asset's.
+        { new AggregateException(new RequestFailedException("busy"), new InvalidOperationException("bug")), typeof(AggregateException) },
+    };
+
+    [Theory]
+    [MemberData(nameof(ProgrammingErrors))]
+    public async Task A_programming_error_stops_the_upload(Exception error, Type expected)
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        Process();
+
+        var failure = await Record.ExceptionAsync(() => Upload(new ThrowingValidator(error)));
+
+        Assert.IsType(expected, failure);
+    }
+
+    [Fact]
+    public async Task A_timeout_on_one_asset_is_a_problem_when_nobody_cancelled()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        Process();
+
+        // What Azure.Core's RetryPolicy throws when every try fails: an AggregateException of each try's failure,
+        // here a request that timed out (a TaskCanceledException nobody asked for) and one the service refused.
+        var retriesFailed = new AggregateException(
+            "Retry failed after 2 tries.",
+            new TaskCanceledException("The operation was cancelled because it exceeded the configured timeout."),
+            new RequestFailedException(503, "The server is busy."));
+        var result = await Upload(new ThrowingValidator(retriesFailed));
+
+        Assert.Contains("Retry failed after 2 tries", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_cancel_that_surfaces_as_a_file_error_still_cancels_the_upload()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        Process();
+
+        // A cancelled request can reach the caller as an IOException (the socket was closed under it).
+        using var cancellation = new CancellationTokenSource();
+        var failure = await Record.ExceptionAsync(() => UploadCommand.RunAsync(
+            Options(), Service, null, new ThrowingValidator(new IOException("connection closed"), cancellation), cancellation.Token));
+
+        Assert.IsAssignableFrom<OperationCanceledException>(failure);
+    }
+
+    /// <summary>Reads any manifest without checking it, so tests can reach the checks behind the schema.</summary>
+    private sealed class AcceptsAnyManifest : IManifestValidator
+    {
+        public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? problem)
+        {
+            manifest = ManifestJson.Deserialize(json);
+            problem = manifest is null ? "the manifest is null" : null;
+            return manifest is not null;
+        }
+    }
+
+    /// <summary>Throws while an asset is being uploaded, cancelling the run first when given a source.</summary>
+    private sealed class ThrowingValidator(Exception exception, CancellationTokenSource? cancelFirst = null) : IManifestValidator
+    {
+        public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? problem)
+        {
+            cancelFirst?.Cancel();
+            throw exception;
+        }
+    }
+
     private List<Manifest> Process()
     {
         // No FFmpeg in these tests: photos get thumbnails, videos stay pending with no derivatives.
-        ProcessCommand.Run(new ProcessOptions(_drive.Path, _work.Path, "HD da Ana", FfmpegFolder: Path.Combine(_work.Path, "no-ffmpeg")));
+        ProcessCommand.Run(new ProcessOptions(_drive.Path, _work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None));
         return [.. Directory.GetFiles(Path.Combine(_work.Path, "manifests"), "*.json")
             .Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];
     }
 
     private UploadOptions Options() => new(_work.Path, UploadDestination.Local);
 
-    private Task<UploadResult> Upload() => UploadCommand.RunAsync(Options(), Service);
+    private Task<UploadResult> Upload(IManifestValidator? validator = null) => validator is null
+        ? UploadCommand.RunAsync(Options(), Service)
+        : UploadCommand.RunAsync(Options(), Service, null, validator, CancellationToken.None);
 
     private List<UploadRecord> ReadUploads()
     {

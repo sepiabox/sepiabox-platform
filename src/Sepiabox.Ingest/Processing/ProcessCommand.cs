@@ -78,7 +78,7 @@ public static class ProcessCommand
                 var source = new ManifestSource(
                     LocalSourceType,
                     sourceName,
-                    Path.GetRelativePath(root, file.Path).Replace('\\', '/'),
+                    ManifestSource.NormalizePath(Path.GetRelativePath(root, file.Path)),
                     file.ModifiedAt);
 
                 if (previous?.Sha256 is { } oldSha256 && oldSha256 != sha256)

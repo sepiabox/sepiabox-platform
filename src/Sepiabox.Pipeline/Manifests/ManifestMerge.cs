@@ -1,0 +1,71 @@
+namespace Sepiabox.Pipeline.Manifests;
+
+/// <summary>
+/// Combines two manifests of the same asset written by different work folders (D-036), so uploading a
+/// second drive never loses what the first one described.
+/// </summary>
+public static class ManifestMerge
+{
+    public static Manifest Merge(Manifest existing, Manifest incoming)
+    {
+        if (existing.Id != incoming.Id)
+        {
+            throw new ArgumentException($"Cannot merge manifest {incoming.Id} into {existing.Id}.", nameof(incoming));
+        }
+
+        // A manifest without derivatives comes from a run that could not finish the file: a video
+        // waiting for FFmpeg (D-029) or a photo that did not decode (D-028). Its description is weaker.
+        var description = incoming.Derivatives.Count == 0 && existing.Derivatives.Count > 0 ? existing : incoming;
+
+        return description with
+        {
+            Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
+            Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
+        };
+    }
+
+    /// <summary>
+    /// The form a manifest is stored in: sources and derivatives deduplicated and sorted, paths with '/'.
+    /// Writing it lets the next upload of the same manifest see that nothing changed.
+    /// </summary>
+    public static Manifest Canonical(Manifest manifest) => manifest with
+    {
+        Sources = MergeSources(manifest.Sources),
+        Derivatives = MergeDerivatives(manifest.Derivatives),
+    };
+
+    // Later entries win for the same file, unless they are older.
+    private static List<ManifestSource> MergeSources(IEnumerable<ManifestSource> sources)
+    {
+        var merged = new List<ManifestSource>();
+        foreach (var source in sources.Select(s => s with { Path = ManifestSource.NormalizePath(s.Path) }))
+        {
+            var index = merged.FindIndex(s => s.IsSameFile(source));
+            if (index < 0)
+            {
+                merged.Add(source);
+            }
+            else if (source.ModifiedAt > merged[index].ModifiedAt)
+            {
+                merged[index] = source;
+            }
+        }
+
+        return [.. merged
+            .OrderBy(s => s.Type, StringComparer.Ordinal)
+            .ThenBy(s => s.Name, StringComparer.Ordinal)
+            .ThenBy(s => s.Path, StringComparer.Ordinal)];
+    }
+
+    // Later entries win for the same name.
+    private static List<ManifestDerivative> MergeDerivatives(IEnumerable<ManifestDerivative> derivatives)
+    {
+        var byName = new Dictionary<string, ManifestDerivative>(StringComparer.Ordinal);
+        foreach (var derivative in derivatives)
+        {
+            byName[derivative.Name] = derivative;
+        }
+
+        return [.. byName.Values.OrderBy(d => d.Name, StringComparer.Ordinal)];
+    }
+}
