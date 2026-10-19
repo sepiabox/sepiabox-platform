@@ -23,15 +23,17 @@ public sealed class UploadThenImportTests(CatalogFixture fixture)
         jonathasDrive.Write("Fotos/IMG_0001.jpg", TestPhotos.Porto("red"));
         ProcessCommand.Run(new ProcessOptions(anaDrive.Path, anaWork.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None));
         ProcessCommand.Run(new ProcessOptions(jonathasDrive.Path, jonathasWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None));
+        var id = Path.GetFileNameWithoutExtension(Assert.Single(Directory.GetFiles(Path.Combine(anaWork.Path, "manifests"), "*.json")));
         await UploadCommand.RunAsync(new UploadOptions(anaWork.Path, UploadDestination.Local), fixture.Blobs);
         await UploadCommand.RunAsync(new UploadOptions(jonathasWork.Path, UploadDestination.Local), fixture.Blobs);
         await using var db = await fixture.CreateMigratedDatabaseAsync();
 
+        // upload writes to the fixed manifests container, which other tests may also use; only this asset matters.
         var result = await new ManifestImporter(db, new ManifestValidator(), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
             .ImportOnceAsync(fixture.Blobs.GetBlobContainerClient(BlobLayout.ManifestsContainer), CancellationToken.None);
 
-        Assert.Equal(1, result.Imported);
-        var asset = await db.Assets.AsNoTracking().Include(a => a.Sources).Include(a => a.Derivatives).SingleAsync();
+        Assert.DoesNotContain(result.Problems, p => p.BlobName == BlobLayout.ManifestBlobName(id));
+        var asset = await db.Assets.AsNoTracking().Include(a => a.Sources).Include(a => a.Derivatives).SingleAsync(a => a.Id == id);
         Assert.Equal(["HD da Ana", "HD do Jonathas"], asset.Sources.Select(s => s.Name).Order(StringComparer.Ordinal));
         Assert.Equal(["preview-1280", "thumb-256"], asset.Derivatives.Select(d => d.Name).Order(StringComparer.Ordinal));
     }
