@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Npgsql;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Sepiabox.Catalog;
 
@@ -20,6 +22,16 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             .UseNpgsql(connectionString, npgsql => npgsql.UseNetTopologySuite())
             .UseSnakeCaseNamingConvention();
 
+    /// <summary>
+    /// Same as <see cref="Configure(DbContextOptionsBuilder, string)"/>, on a data source that already exists
+    /// (the web's, registered by Aspire), so EF and the health check share one connection pool. The data
+    /// source must have NetTopologySuite enabled.
+    /// </summary>
+    public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, NpgsqlDataSource dataSource) =>
+        options
+            .UseNpgsql(dataSource, npgsql => npgsql.UseNetTopologySuite())
+            .UseSnakeCaseNamingConvention();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("postgis");
@@ -32,7 +44,11 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             // Camera clocks have no time zone, so the value is stored exactly as read.
             asset.Property(a => a.CapturedAt).HasColumnType("timestamp without time zone");
             asset.Property(a => a.Location).HasColumnType("geography (Point, 4326)");
-            asset.HasIndex(a => a.CapturedAt);
+            // The timeline's order (newest first, undated last, then id), so a page is an index range scan.
+            asset.HasIndex(a => new { a.CapturedAt, a.Id })
+                .HasDatabaseName("ix_assets_timeline")
+                .IsDescending(true, false)
+                .HasNullSortOrder(NullSortOrder.NullsLast, NullSortOrder.NullsLast);
             asset.HasMany(a => a.Sources).WithOne().HasForeignKey(s => s.AssetId);
             asset.HasMany(a => a.Derivatives).WithOne().HasForeignKey(d => d.AssetId);
         });

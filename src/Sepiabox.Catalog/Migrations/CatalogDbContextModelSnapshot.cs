@@ -85,8 +85,11 @@ namespace Sepiabox.Catalog.Migrations
                     b.HasKey("Id")
                         .HasName("pk_assets");
 
-                    b.HasIndex("CapturedAt")
-                        .HasDatabaseName("ix_assets_captured_at");
+                    b.HasIndex("CapturedAt", "Id")
+                        .IsDescending(true, false)
+                        .HasDatabaseName("ix_assets_timeline");
+
+                    NpgsqlIndexBuilderExtensions.HasNullSortOrder(b.HasIndex("CapturedAt", "Id"), new[] { NullSortOrder.NullsLast, NullSortOrder.NullsLast });
 
                     b.ToTable("assets", (string)null);
                 });
