@@ -38,7 +38,7 @@ public class ProcessCommandTests
         using var work = new TempFolder();
         drive.Write("photo.jpg", TestPhotos.Porto());
 
-        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, SourceName: null));
+        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, SourceName: null, ModelFolder: TestModels.None));
 
         Assert.Equal(Path.GetFileName(drive.Path), Assert.Single(Assert.Single(ReadManifests(work)).Sources).Name);
     }
@@ -164,7 +164,7 @@ public class ProcessCommandTests
         var work = Path.Combine(drive.Path, ".sepiabox");
         drive.Write(".sepiabox/manifests/leftover.jpg", TestPhotos.Plain());
 
-        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work, "HD"));
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work, "HD", ModelFolder: TestModels.None));
 
         Assert.Equal(1, result.Processed);
     }
@@ -258,7 +258,7 @@ public class ProcessCommandTests
     }
 
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
-        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None));
+        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
 
     private static List<Manifest> ReadManifests(TempFolder work) =>
         [.. Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json").Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];

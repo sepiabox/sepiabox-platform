@@ -10,6 +10,12 @@ using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Ingest.Processing;
 
+/// <summary>
+/// What a process run did. <see cref="Problems"/> are files that could not be described and make the exit code
+/// non-zero. <see cref="EmbeddingProblems"/> are files that were processed but have no embedding because it could
+/// not be computed: warnings, not failures, since an embedding is optional and the next run tries again.
+/// <see cref="Embedded"/> counts the embeddings added in this run, to new or unchanged files.
+/// </summary>
 public sealed record ProcessResult(
     string Root,
     string ManifestFolder,
@@ -19,7 +25,11 @@ public sealed record ProcessResult(
     IReadOnlyList<ScanProblem> Problems,
     int VideosPending = 0,
     string? Warning = null,
-    int Embedded = 0);
+    int Embedded = 0,
+    IReadOnlyList<ScanProblem>? EmbeddingProblems = null)
+{
+    public IReadOnlyList<ScanProblem> EmbeddingProblems { get; init; } = EmbeddingProblems ?? [];
+}
 
 /// <summary>
 /// Describes every photo and video in a folder tree as one manifest per distinct content (D-005, D-014),
@@ -31,7 +41,23 @@ public static class ProcessCommand
 {
     public const string LocalSourceType = "local";
 
+    /// <summary>
+    /// Processes <see cref="ProcessOptions.Root"/> with the CLIP model when it is downloaded. <paramref name="filesDone"/>
+    /// is called after each photo or video, processed or not, so a long run over unchanged files shows activity.
+    /// </summary>
     public static ProcessResult Run(ProcessOptions options, IProgress<int>? filesDone = null, CancellationToken cancellationToken = default)
+    {
+        using var embedder = ClipImageEmbedder.TryCreate(options.ModelFolder ?? ModelFolder.Default(), out var embedderWarning);
+        return Run(options, embedder, embedderWarning, filesDone, cancellationToken);
+    }
+
+    /// <summary>The same with a given embedder, or none; <paramref name="embedderWarning"/> says why there is none.</summary>
+    internal static ProcessResult Run(
+        ProcessOptions options,
+        IImageEmbedder? embedder,
+        string? embedderWarning,
+        IProgress<int>? filesDone = null,
+        CancellationToken cancellationToken = default)
     {
         var root = FileTree.ResolveRoot(options.Root);
         var output = Path.GetFullPath(options.OutputPath);
@@ -44,13 +70,41 @@ public static class ProcessCommand
 
         var ffmpeg = FfmpegTools.Find(options.FfmpegFolder);
         var video = ffmpeg is null ? null : new VideoProcessor(ffmpeg, options.Encoder);
-        var modelFolder = options.ModelFolder ?? ModelFolder.Default();
-        using var embedder = ClipImageEmbedder.TryCreate(modelFolder, options.UseGpu);
 
         using var state = new StateStore(Path.Combine(output, "state.db"));
         var stopwatch = Stopwatch.StartNew();
         var problems = new List<ScanProblem>();
-        int processed = 0, skipped = 0, pending = 0, embedded = 0;
+        var embeddingProblems = new List<ScanProblem>();
+        int processed = 0, skipped = 0, pending = 0, embedded = 0, withoutDerivative = 0, handled = 0;
+
+        // An embedding never decides a file's status: whatever goes wrong is a warning for that file, and the
+        // next run tries again from the work folder.
+        Manifest? AddEmbedding(string sourcePath, Func<EmbeddingOutcome> add)
+        {
+            try
+            {
+                var outcome = add();
+                switch (outcome.Status)
+                {
+                    case EmbeddingStatus.Added:
+                        embedded++;
+                        break;
+                    case EmbeddingStatus.NoDerivative:
+                        withoutDerivative++;
+                        break;
+                    case EmbeddingStatus.Failed:
+                        embeddingProblems.Add(new ScanProblem(sourcePath, outcome.Problem!));
+                        break;
+                }
+
+                return outcome.Manifest;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                embeddingProblems.Add(new ScanProblem(sourcePath, $"Could not compute the embedding: {ex.Message}"));
+                return null;
+            }
+        }
 
         foreach (var file in FileTree.Enumerate(root))
         {
@@ -62,6 +116,18 @@ public static class ProcessCommand
                 continue;
             }
 
+            try
+            {
+                ProcessFile(file, kind);
+            }
+            finally
+            {
+                filesDone?.Report(++handled);
+            }
+        }
+
+        void ProcessFile(FoundFile file, MediaKind kind)
+        {
             var modifiedTicks = file.ModifiedAt.UtcTicks;
             var previous = state.Get(file.Path);
             var unchanged = previous is not null && previous.Size == file.Size && previous.ModifiedTicks == modifiedTicks;
@@ -72,17 +138,17 @@ public static class ProcessCommand
                 // the thumbnails in the work folder, so the drive is not read again.
                 if (embedder is not null && previous.Sha256 is { } doneSha256)
                 {
-                    embedded += AddMissingEmbedding(output, ManifestPath(manifestFolder, doneSha256), file.Path, embedder, problems);
+                    AddEmbedding(file.Path, () => ManifestEmbeddings.TryAddToFile(ManifestPath(manifestFolder, doneSha256), output, embedder));
                 }
 
-                continue;
+                return;
             }
 
             // Still no FFmpeg: re-reading a large unchanged video would change nothing.
             if (unchanged && previous!.Status == FileStatus.Pending && video is null)
             {
                 pending++;
-                continue;
+                return;
             }
 
             try
@@ -103,19 +169,11 @@ public static class ProcessCommand
                 var (manifest, status, derivativeProblem) = AddDerivatives(output, file, described, video, cancellationToken);
                 if (embedder is not null && status == FileStatus.Done)
                 {
-                    (manifest, var embeddingProblem) = WithEmbedding(output, manifest, embedder);
-                    if (embeddingProblem is null)
-                    {
-                        embedded += manifest.Embeddings.ContainsKey(ClipImageEmbedder.ModelKey) ? 1 : 0;
-                    }
-                    else
-                    {
-                        // The file stays Done: the next run adds the embedding from the work folder.
-                        problems.Add(new ScanProblem(file.Path, embeddingProblem));
-                    }
+                    var withDerivatives = manifest;
+                    manifest = AddEmbedding(file.Path, () => ManifestEmbeddings.TryAdd(withDerivatives, output, embedder)) ?? manifest;
                 }
 
-                Write(ManifestPath(manifestFolder, sha256), manifest);
+                ManifestJson.WriteFile(ManifestPath(manifestFolder, sha256), manifest);
                 state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, status));
 
                 switch (status)
@@ -138,8 +196,6 @@ public static class ProcessCommand
                 problems.Add(new ScanProblem(file.Path, ex.Message));
                 state.Save(new FileState(file.Path, file.Size, modifiedTicks, previous?.Sha256, FileStatus.Failed));
             }
-
-            filesDone?.Report(processed + problems.Count);
         }
 
         var warnings = new List<string>();
@@ -150,82 +206,22 @@ public static class ProcessCommand
                 + $"{pending:N0} videos are described but have no poster or 720p version yet; run process again once FFmpeg is installed.");
         }
 
-        if (embedder is null)
+        if (embedder is null && embedderWarning is not null)
         {
-            warnings.Add(
-                $"The CLIP model is not in {modelFolder}, so no embeddings were computed. Run `sepiabox-ingest models download` "
-                + "and then process again: embeddings are added from the work folder without reading the drive again.");
+            warnings.Add(embedderWarning);
         }
-        else if (embedder.Warning is not null)
+
+        if (withoutDerivative > 0)
         {
-            warnings.Add(embedder.Warning);
+            // One line for all of them: a work folder whose derivatives were deleted would otherwise list every file.
+            warnings.Add(
+                $"{withoutDerivative:N0} photos and videos have no preview or poster in the work folder, so they have no embedding. "
+                + "Keep the work folder until embeddings are computed.");
         }
 
         var warning = warnings.Count == 0 ? null : string.Join(Environment.NewLine, warnings);
-        return new ProcessResult(root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded);
-    }
-
-    /// <summary>
-    /// Adds the CLIP embedding when the manifest has none, from the derivative the web shows: the 1280 px
-    /// preview of a photo or the poster of a video. Problem is set when the image could not be embedded.
-    /// </summary>
-    private static (Manifest Manifest, string? Problem) WithEmbedding(string output, Manifest manifest, ClipImageEmbedder embedder)
-    {
-        if (manifest.Embeddings.ContainsKey(ClipImageEmbedder.ModelKey))
-        {
-            return (manifest, null);
-        }
-
-        var name = manifest.Kind == MediaKind.Video ? VideoProcessor.PosterName : ThumbnailGenerator.PreviewName;
-        var derivative = manifest.Derivatives.FirstOrDefault(d => d.Name == name);
-        if (derivative is null)
-        {
-            return (manifest, null);
-        }
-
-        try
-        {
-            var vector = embedder.Embed(Path.Combine(output, derivative.Path));
-            var embeddings = new Dictionary<string, System.Text.Json.Nodes.JsonNode>(manifest.Embeddings.ToDictionary(e => e.Key, e => e.Value))
-            {
-                [ClipImageEmbedder.ModelKey] = System.Text.Json.Nodes.JsonValue.Create(EmbeddingCodec.Encode(vector)),
-            };
-            return (manifest with { Embeddings = embeddings }, null);
-        }
-        catch (Exception ex) when (ex is MagickException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException or IOException)
-        {
-            return (manifest, $"Could not compute the CLIP embedding: {ex.Message}");
-        }
-    }
-
-    private static int AddMissingEmbedding(
-        string output, string manifestPath, string sourcePath, ClipImageEmbedder embedder, List<ScanProblem> problems)
-    {
-        if (!File.Exists(manifestPath))
-        {
-            return 0;
-        }
-
-        var manifest = ManifestJson.Deserialize(File.ReadAllText(manifestPath));
-        if (manifest.Embeddings.ContainsKey(ClipImageEmbedder.ModelKey))
-        {
-            return 0;
-        }
-
-        var (withEmbedding, problem) = WithEmbedding(output, manifest, embedder);
-        if (problem is not null)
-        {
-            problems.Add(new ScanProblem(sourcePath, problem));
-            return 0;
-        }
-
-        if (ReferenceEquals(withEmbedding, manifest))
-        {
-            return 0;
-        }
-
-        Write(manifestPath, withEmbedding);
-        return 1;
+        return new ProcessResult(
+            root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems);
     }
 
     private static Manifest Describe(string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source)
@@ -316,7 +312,7 @@ public static class ProcessCommand
         }
         else
         {
-            Write(path, manifest with { Sources = remaining });
+            ManifestJson.WriteFile(path, manifest with { Sources = remaining });
         }
     }
 
@@ -326,14 +322,6 @@ public static class ProcessCommand
     private static string ManifestPath(string manifestFolder, string sha256) => Path.Combine(manifestFolder, sha256 + ".json");
 
     private static string DerivativeFolder(string sha256) => $"derivatives/{sha256}";
-
-    // Written to a temporary file first so an interrupted run never leaves half a manifest.
-    private static void Write(string path, Manifest manifest)
-    {
-        var temporary = path + ".tmp";
-        File.WriteAllText(temporary, ManifestJson.Serialize(manifest));
-        File.Move(temporary, path, overwrite: true);
-    }
 
     private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
 }

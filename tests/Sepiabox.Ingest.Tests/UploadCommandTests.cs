@@ -175,7 +175,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         using var otherDrive = new TempFolder();
         using var otherWork = new TempFolder();
         otherDrive.Write("Fotos/IMG_0001.jpg", TestPhotos.Porto("red"));
-        ProcessCommand.Run(new ProcessOptions(otherDrive.Path, otherWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None));
+        ProcessCommand.Run(new ProcessOptions(otherDrive.Path, otherWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
 
         var result = await UploadCommand.RunAsync(new UploadOptions(otherWork.Path, UploadDestination.Local), Service);
 
@@ -361,7 +361,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
     private List<Manifest> Process()
     {
         // No FFmpeg in these tests: photos get thumbnails, videos stay pending with no derivatives.
-        ProcessCommand.Run(new ProcessOptions(_drive.Path, _work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None));
+        ProcessCommand.Run(new ProcessOptions(_drive.Path, _work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
         return [.. Directory.GetFiles(Path.Combine(_work.Path, "manifests"), "*.json")
             .Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];
     }

@@ -17,22 +17,22 @@ public class ProcessOptionsTests
         new[] { "E:\\", "--out", "work", "--ffmpeg" },
         new[] { "E:\\", "--out", "work", "--hw", "quicksync" },
         new[] { "E:\\", "--out", "work", "--models" },
+        // The shipped ONNX Runtime package runs on the CPU only (D-042).
+        new[] { "E:\\", "--out", "work", "--gpu" },
     };
 
     [Fact]
-    public void Reads_the_models_folder_and_the_gpu_switch()
+    public void Reads_the_models_folder()
     {
-        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work", "--models", "D:\\models", "--gpu"], out var options, out _));
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work", "--models", "D:\\models"], out var options, out _));
         Assert.Equal("D:\\models", options.ModelFolder);
-        Assert.True(options.UseGpu);
     }
 
     [Fact]
-    public void Uses_the_default_models_folder_and_the_cpu_by_default()
+    public void Uses_the_default_models_folder_by_default()
     {
         Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work"], out var options, out _));
         Assert.Null(options.ModelFolder);
-        Assert.False(options.UseGpu);
     }
 
     [Fact]
