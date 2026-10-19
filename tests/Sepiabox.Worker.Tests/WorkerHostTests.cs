@@ -20,7 +20,7 @@ public sealed class WorkerHostTests : IDisposable
         var code = await WorkerHost.RunAsync(host, (_, _, _) => throw new InvalidOperationException("database is down"), shutdown);
 
         Assert.Equal(ExitCodes.Failed, code);
-        Assert.Contains(_logs.Entries, e => e.Category == "Sepiabox.Worker" && e.Level == LogLevel.Error && e.Exception?.Message == "database is down");
+        Assert.Contains(_logs.Entries, e => e.Category == WorkerHost.LoggerCategory && e.Level == LogLevel.Error && e.Exception?.Message == "database is down");
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public sealed class WorkerHostTests : IDisposable
         var code = await WorkerHost.RunAsync(host, (_, _, _) => Task.FromResult(ExitCodes.Success), shutdown);
 
         Assert.Equal(ExitCodes.Success, code);
-        Assert.Contains(_logs.Entries, e => e.Category == "Sepiabox.Worker" && e.Level == LogLevel.Warning && e.Exception is not null);
+        Assert.Contains(_logs.Entries, e => e.Category == WorkerHost.LoggerCategory && e.Level == LogLevel.Warning && e.Exception is not null);
     }
 
     [Fact]
@@ -55,13 +55,51 @@ public sealed class WorkerHostTests : IDisposable
         Assert.Equal(ExitCodes.Cancelled, code);
     }
 
+    [Fact]
+    public async Task A_service_that_fails_to_start_still_stops_the_ones_that_started()
+    {
+        var started = new RecordsStop();
+        using var host = BuildHost(services =>
+        {
+            services.AddSingleton<IHostedService>(started);
+            services.AddHostedService<FailsOnStart>();
+        });
+        using var shutdown = new CancellationTokenSource();
+
+        var failure = await Record.ExceptionAsync(() => WorkerHost.RunAsync(host, (_, _, _) => Task.FromResult(ExitCodes.Success), shutdown));
+
+        Assert.NotNull(failure);
+        Assert.True(started.Stopped);
+    }
+
     private IHost BuildHost(Action<IServiceCollection>? configure = null)
     {
-        var builder = Host.CreateApplicationBuilder();
+        // Empty: no machine environment, configuration files or console lifetime hooking process signals.
+        var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
         builder.Logging.ClearProviders();
         builder.Logging.AddProvider(_logs);
         configure?.Invoke(builder.Services);
         return builder.Build();
+    }
+
+    private sealed class RecordsStop : IHostedService
+    {
+        public bool Stopped { get; private set; }
+
+        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task StopAsync(CancellationToken cancellationToken)
+        {
+            Stopped = true;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FailsOnStart : IHostedService
+    {
+        public Task StartAsync(CancellationToken cancellationToken) => throw new InvalidOperationException("start failed");
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FailsOnStop : IHostedService

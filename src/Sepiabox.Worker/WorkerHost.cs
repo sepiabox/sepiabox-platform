@@ -16,10 +16,13 @@ public static class WorkerHost
     public static async Task<int> RunAsync(
         IHost host, Func<IServiceProvider, ILogger, CancellationToken, Task<int>> command, CancellationTokenSource shutdown)
     {
-        await host.StartAsync(shutdown.Token);
         var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger(LoggerCategory);
         try
         {
+            // Inside the try: if one hosted service fails to start, the ones already started still stop.
+            // The start failure itself propagates to Program, which reports it with exit code 1.
+            await host.StartAsync(shutdown.Token);
+
             // Ctrl+C and SIGTERM (Container Apps stopping a job) reach the command through ApplicationStopping.
             using var stopping = host.Services.GetRequiredService<IHostApplicationLifetime>()
                 .ApplicationStopping.Register(shutdown.Cancel);
