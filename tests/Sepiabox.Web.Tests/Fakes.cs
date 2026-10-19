@@ -38,14 +38,19 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
         Task.FromResult(Assets.ContainsKey(id) ? new OriginalFile("IMG_0001.jpg", "image/jpeg") : null);
 }
 
-/// <summary>Signing that fails the way Azure does when the web's identity cannot get a delegation key.</summary>
-internal sealed class FailingLinks : ISasUrlFactory
+/// <summary>
+/// Signing that fails the ways Azure can: storage refuses the delegation key, or the managed identity
+/// cannot get a token at all.
+/// </summary>
+internal sealed class FailingLinks(Exception? failure = null) : ISasUrlFactory
 {
+    private readonly Exception _failure = failure ?? new RequestFailedException(403, "AuthorizationPermissionMismatch");
+
     public Task<Uri> ForDerivativeAsync(string blobPath, CancellationToken cancellationToken = default) =>
-        throw new RequestFailedException(403, "AuthorizationPermissionMismatch");
+        Task.FromException<Uri>(_failure);
 
     public Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default) =>
-        throw new RequestFailedException(403, "AuthorizationPermissionMismatch");
+        Task.FromException<Uri>(_failure);
 }
 
 internal static class Ids

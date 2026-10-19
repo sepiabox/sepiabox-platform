@@ -17,6 +17,9 @@ public sealed class PhotoDetailTests : BunitContext
         Assert.Contains("Apple iPhone 15", page.Markup, StringComparison.Ordinal);
         Assert.Contains("HD Ana", page.Find("ul.sources").TextContent, StringComparison.Ordinal);
         Assert.Equal($"fotos/{Ids.Of(1)}/original", page.Find("a.button").GetAttribute("href"));
+        // Enhanced navigation would fetch the redirect itself, failing on CORS and reading the original twice.
+        Assert.Equal("false", page.Find("a.button").GetAttribute("data-enhance-nav"));
+        Assert.True(page.Find("a.button").HasAttribute("download"));
         Assert.DoesNotContain("sig=", page.Markup, StringComparison.Ordinal);
     }
 

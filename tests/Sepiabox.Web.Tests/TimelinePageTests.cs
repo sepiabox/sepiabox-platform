@@ -34,6 +34,20 @@ public sealed class TimelinePageTests(CatalogFixture catalog)
         Assert.Contains("Não há mais fotos", html, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("?pagina=abc", "outubro de 2026")]
+    [InlineData("?pagina=99999999999", "Não há mais fotos")]
+    public async Task Malformed_or_huge_page_numbers_are_not_errors(string query, string expected)
+    {
+        await using var web = await WebWithPhotoAsync();
+        using var http = web.CreateClient();
+
+        using var response = await http.GetAsync(new Uri("/" + query, UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(expected, await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_photo_page_renders_against_a_real_catalog()
     {

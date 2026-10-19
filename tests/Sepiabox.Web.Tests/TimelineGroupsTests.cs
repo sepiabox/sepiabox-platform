@@ -32,4 +32,24 @@ public sealed class TimelineGroupsTests
     {
         Assert.Equal("14 de julho de 2019, 10:32", PortugueseDates.DateAndTime(new DateTime(2019, 7, 14, 10, 32, 5)));
     }
+
+    [Theory]
+    [InlineData(1, LibraryQueries.PageSize + 1, true)]
+    [InlineData(1, LibraryQueries.PageSize, false)]
+    [InlineData(LibraryQueries.MaxPage, LibraryQueries.PageSize + 1, false)]
+    public void There_is_no_next_page_after_the_last_allowed_one(int page, int rowsFetched, bool expected)
+    {
+        Assert.Equal(expected, LibraryQueries.HasNextPage(page, rowsFetched));
+    }
+
+    [Theory]
+    [InlineData("2019/IMG_0001.HEIC", "image/heic", "IMG_0001.HEIC")]
+    [InlineData(null, "image/jpeg", "abc.jpg")]
+    [InlineData(null, "video/mp4", "abc.mp4")]
+    [InlineData(null, "application/x-unknown", "abc")]
+    [InlineData("2019/", "image/png", "abc.png")]
+    public void A_download_is_named_after_its_source_or_its_id_and_type(string? path, string contentType, string expected)
+    {
+        Assert.Equal(expected, LibraryQueries.DownloadName(path, "abc", contentType));
+    }
 }

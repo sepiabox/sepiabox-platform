@@ -19,7 +19,7 @@ public sealed class MediaRedirectTests(CatalogFixture catalog)
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.True(response.Headers.CacheControl?.Private);
-        Assert.Equal(TimeSpan.FromSeconds(600), response.Headers.CacheControl?.MaxAge);
+        Assert.Equal(TimeSpan.FromSeconds(540), response.Headers.CacheControl?.MaxAge);
         var target = response.Headers.Location!;
         Assert.EndsWith($"/derivatives/{Ids.Of(1)}/thumb-256.webp", target.AbsolutePath, StringComparison.Ordinal);
         var query = HttpUtility.ParseQueryString(target.Query);

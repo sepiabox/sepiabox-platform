@@ -77,6 +77,14 @@ public sealed class SasUrlFactoryTests
     }
 
     [Fact]
+    public void A_cached_redirect_expires_at_least_a_minute_before_its_link()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(540), SasUrlFactory.DerivativeCacheDuration);
+        Assert.True(SasUrlFactory.DerivativeCacheDuration + TimeSpan.FromMinutes(1)
+            <= SasUrlFactory.DerivativeLifetime - SasUrlFactory.DerivativeWindow);
+    }
+
+    [Fact]
     public void Container_names_match_what_upload_writes()
     {
         Assert.Equal(BlobLayout.OriginalsContainer, StorageContainers.Originals);

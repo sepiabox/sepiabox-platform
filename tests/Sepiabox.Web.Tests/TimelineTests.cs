@@ -58,7 +58,7 @@ public sealed class TimelineTests : BunitContext
 
         var page = Render<Timeline>();
 
-        Assert.EndsWith("?pagina=2", page.Find("nav.pages a").GetAttribute("href"), StringComparison.Ordinal);
+        Assert.Equal("./?pagina=2", page.Find("nav.pages a").GetAttribute("href"));
         Assert.Contains("sem miniatura", page.Find("ul.grid .placeholder").TextContent, StringComparison.Ordinal);
     }
 
@@ -81,14 +81,17 @@ public sealed class TimelineTests : BunitContext
 
         var message = page.Find("p.empty");
         Assert.Contains("Não há mais fotos", message.TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("pagina", message.QuerySelector("a")!.GetAttribute("href"), StringComparison.Ordinal);
+        Assert.Equal("./", message.QuerySelector("a")!.GetAttribute("href"));
     }
 
     [Theory]
-    [InlineData(0, 1)]
-    [InlineData(-3, 1)]
-    [InlineData(int.MaxValue, LibraryQueries.MaxPage)]
-    public void Out_of_range_page_numbers_are_clamped(int requested, int expected)
+    [InlineData("0", 1)]
+    [InlineData("-3", 1)]
+    [InlineData("2147483647", LibraryQueries.MaxPage)]
+    [InlineData("99999999999", LibraryQueries.MaxPage)]
+    [InlineData("abc", 1)]
+    [InlineData("", 1)]
+    public void Out_of_range_or_malformed_page_numbers_are_clamped(string requested, int expected)
     {
         var library = new FakeLibrary();
         Use(library);
@@ -111,10 +114,25 @@ public sealed class TimelineTests : BunitContext
         Assert.Equal($"fotos/{Ids.Of(11)}?pagina=2", page.Find("a.thumb").GetAttribute("href"));
     }
 
+    [Fact]
+    public void Paging_links_are_relative_and_keep_other_query_parameters()
+    {
+        Use(new FakeLibrary(
+            new TimelineItem(Ids.Of(12), AssetKinds.Photo, new DateTime(2026, 1, 3), true),
+            new TimelineItem(Ids.Of(13), AssetKinds.Photo, new DateTime(2026, 1, 2), true),
+            new TimelineItem(Ids.Of(14), AssetKinds.Photo, new DateTime(2026, 1, 1), true))
+        { PageSize = 1 });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/?pagina=2&vista=grelha");
+
+        var page = Render<Timeline>();
+
+        Assert.Equal(["./?vista=grelha", "./?vista=grelha&pagina=3"], page.FindAll("nav.pages a").Select(a => a.GetAttribute("href")));
+    }
+
     private void Use(FakeLibrary library) => Services.AddSingleton<ILibraryQueries>(library);
 
     // The page reads `pagina` from the URL, as a visitor's browser would send it.
-    private IRenderedComponent<Timeline> RenderPage(int pagina)
+    private IRenderedComponent<Timeline> RenderPage(object pagina)
     {
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/?pagina={pagina}");
         return Render<Timeline>();
