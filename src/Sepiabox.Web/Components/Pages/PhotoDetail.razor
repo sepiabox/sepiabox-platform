@@ -46,8 +46,9 @@
                 }
             </ul>
 
-            @* Not an enhanced navigation: Blazor would fetch the redirect itself, fail on CORS and read the original twice. *@
-            <p><a class="button" href="fotos/@_asset.Id/original" download data-enhance-nav="false">Descarregar o original</a></p>
+            @* Not an enhanced navigation: Blazor would fetch the redirect itself, fail on CORS and read the original twice.
+               No `download` attribute: Content-Disposition names the file, and a failure message must stay visible. *@
+            <p><a class="button" href="fotos/@_asset.Id/original" data-enhance-nav="false">Descarregar o original</a></p>
         </section>
     </div>
 }

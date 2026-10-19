@@ -59,7 +59,7 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
     /// <summary>One row beyond the page means more follow, unless the page is already the last allowed.</summary>
     public static bool HasNextPage(int page, int rowsFetched) => rowsFetched > PageSize && page < MaxPage;
 
-    // File extensions for the content types `process` writes (MediaTypes in Sepiabox.Pipeline).
+    // File extensions for common photo and video content types; any other type downloads as the bare id.
     private static readonly Dictionary<string, string> s_extensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ["image/jpeg"] = ".jpg",

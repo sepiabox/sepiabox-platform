@@ -38,9 +38,10 @@ public static partial class MediaEndpoints
             http.Response.Headers.CacheControl = $"private, max-age={(int)SasUrlFactory.DerivativeCacheDuration.TotalSeconds}";
             return Results.Redirect(url.AbsoluteUri);
         }
-        catch (Exception ex) when (IsSigningFailure(ex))
+        catch (Exception ex) when (IsSigningFailure(ex, http.RequestAborted))
         {
-            LogSigningFailed(log, ex, id, derivative);
+            // A page asks for up to 200 thumbnails: one short line each, not 200 stack traces.
+            LogDerivativeSigningFailed(log, id, derivative, ex.GetType().Name, ex.Message);
             Unavailable(http);
             return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
@@ -66,9 +67,9 @@ public static partial class MediaEndpoints
             http.Response.Headers.CacheControl = "no-store";
             return Results.Redirect(url.AbsoluteUri);
         }
-        catch (Exception ex) when (IsSigningFailure(ex))
+        catch (Exception ex) when (IsSigningFailure(ex, http.RequestAborted))
         {
-            LogSigningFailed(log, ex, id, "original");
+            LogOriginalSigningFailed(log, ex, id);
             Unavailable(http);
             return Results.Text(
                 "Não foi possível preparar o download. Tente novamente daqui a pouco.",
@@ -77,8 +78,19 @@ public static partial class MediaEndpoints
         }
     }
 
-    // Storage refusing the delegation key, or the managed identity unable to get a token at all.
-    private static bool IsSigningFailure(Exception ex) => ex is RequestFailedException or AuthenticationFailedException;
+    /// <summary>
+    /// Storage refusing or not answering the delegation key request, or the managed identity unable to get a
+    /// token. Azure.Core's retry policy reports repeated failures as one AggregateException, and a timeout as a
+    /// cancellation; a cancellation only counts while the browser is still waiting for this response.
+    /// </summary>
+    private static bool IsSigningFailure(Exception ex, CancellationToken requestAborted) => ex switch
+    {
+        RequestFailedException or AuthenticationFailedException => true,
+        OperationCanceledException => !requestAborted.IsCancellationRequested,
+        AggregateException aggregate => aggregate.Flatten().InnerExceptions is { Count: > 0 } inner
+            && inner.All(e => IsSigningFailure(e, requestAborted)),
+        _ => false,
+    };
 
     // A failure is not cached (unlike the redirect), and the browser may try again in a minute.
     private static void Unavailable(HttpContext http)
@@ -87,8 +99,11 @@ public static partial class MediaEndpoints
         http.Response.Headers.RetryAfter = "60";
     }
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Could not sign a link to {Derivative} of asset {AssetId}.")]
-    private static partial void LogSigningFailed(ILogger logger, Exception exception, string assetId, string derivative);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not sign a link to {Derivative} of asset {AssetId}: {ErrorType}: {ErrorMessage}")]
+    private static partial void LogDerivativeSigningFailed(ILogger logger, string assetId, string derivative, string errorType, string errorMessage);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not sign a link to the original of asset {AssetId}.")]
+    private static partial void LogOriginalSigningFailed(ILogger logger, Exception exception, string assetId);
 }
 
 /// <summary>Asset ids are SHA-256 in lowercase hex (D-014); anything else cannot exist.</summary>
