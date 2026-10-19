@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Azure.Storage.Blobs;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
@@ -90,7 +91,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
             }
         });
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => UploadCommand.RunAsync(Options(), Service, cancelOnFirstBlock, cancellation.Token));
+            () => UploadCommand.RunAsync(Options(), Service, cancelOnFirstBlock, cancellationToken: cancellation.Token));
         var beforeResume = ReadUploads();
 
         var resumed = await Upload();
@@ -196,7 +197,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
 
         var result = await Upload();
 
-        Assert.Contains("is not valid", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.StartsWith("this manifest is not valid", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
         await AssertOnlyUploadedAsync(manifests.Single(m => m.Id != broken.Id).Id);
     }
 
@@ -204,27 +205,36 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
     {
         "absolute",
         "parent",
+        "nested",
+        "other asset",
     };
 
     [Theory]
     [MemberData(nameof(EscapingDerivativePaths))]
-    public async Task A_derivative_outside_the_work_folder_is_a_problem_and_nothing_of_that_asset_is_uploaded(string kind)
+    public async Task A_derivative_outside_its_asset_folder_is_a_problem_and_nothing_of_that_asset_is_uploaded(string kind)
     {
         _drive.Write("a.jpg", TestPhotos.Porto("red"));
         _drive.Write("b.jpg", TestPhotos.Porto("green"));
         var manifests = Process();
         var broken = manifests.Single(m => m.Sources[0].Path == "a.jpg");
+        var other = manifests.Single(m => m.Id != broken.Id);
         var outside = _drive.Write("secret.webp", [1, 2, 3]);
-        var escaping = kind == "absolute"
-            ? outside
-            : Path.GetRelativePath(_work.Path, outside).Replace('\\', '/');
-        var tampered = broken with { Derivatives = [broken.Derivatives[0] with { Path = escaping }] };
+        var ownFolder = Path.Combine(_work.Path, "derivatives", broken.Id);
+        var escaping = kind switch
+        {
+            "absolute" => outside,
+            "parent" => Path.GetRelativePath(_work.Path, outside),
+            "nested" => $"derivatives/{broken.Id}/" + Path.GetRelativePath(ownFolder, outside),
+            _ => other.Derivatives[0].Path,
+        };
+        var tampered = broken with { Derivatives = [broken.Derivatives[0] with { Path = escaping.Replace('\\', '/') }] };
         await File.WriteAllTextAsync(Path.Combine(_work.Path, "manifests", broken.Id + ".json"), ManifestJson.Serialize(tampered));
 
-        var result = await Upload();
+        // The schema would refuse these paths first; a permissive validator lets the test reach the path check.
+        var result = await Upload(new AcceptsAnyManifest());
 
-        Assert.Single(result.Problems);
-        await AssertOnlyUploadedAsync(manifests.Single(m => m.Id != broken.Id).Id);
+        Assert.Contains("is outside the work folder", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        await AssertOnlyUploadedAsync(other.Id);
     }
 
     /// <summary>Only this asset's original, derivatives and manifest are in storage.</summary>
@@ -276,6 +286,46 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.Single(second.Problems);
     }
 
+    [Fact]
+    public async Task A_programming_error_stops_the_upload()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        Process();
+
+        var failure = await Record.ExceptionAsync(() => Upload(new ThrowingValidator(new InvalidOperationException("bug"))));
+
+        Assert.IsType<InvalidOperationException>(failure);
+    }
+
+    [Fact]
+    public async Task A_timeout_on_one_asset_is_a_problem_when_nobody_cancelled()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        Process();
+
+        // What the Azure SDK throws when a request times out: a TaskCanceledException nobody asked for.
+        var result = await Upload(new ThrowingValidator(new TaskCanceledException("The operation timed out.")));
+
+        Assert.Contains("timed out", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>Reads any manifest without checking it, so tests can reach the checks behind the schema.</summary>
+    private sealed class AcceptsAnyManifest : IManifestValidator
+    {
+        public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? problem)
+        {
+            manifest = ManifestJson.Deserialize(json);
+            problem = null;
+            return true;
+        }
+    }
+
+    private sealed class ThrowingValidator(Exception exception) : IManifestValidator
+    {
+        public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? problem) =>
+            throw exception;
+    }
+
     private List<Manifest> Process()
     {
         // No FFmpeg in these tests: photos get thumbnails, videos stay pending with no derivatives.
@@ -286,7 +336,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
 
     private UploadOptions Options() => new(_work.Path, UploadDestination.Local);
 
-    private Task<UploadResult> Upload() => UploadCommand.RunAsync(Options(), Service);
+    private Task<UploadResult> Upload(IManifestValidator? validator = null) => UploadCommand.RunAsync(Options(), Service, validator: validator);
 
     private List<UploadRecord> ReadUploads()
     {

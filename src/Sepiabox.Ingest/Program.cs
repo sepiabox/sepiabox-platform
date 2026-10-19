@@ -122,7 +122,7 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
     }
 
     var progress = new Progress<long>(bytes => Console.Error.Write($"\r{ScanReport.FormatBytes(bytes)} sent..."));
-    var result = await UploadCommand.RunAsync(options, UploadCommand.CreateClient(options), progress, cancellationToken);
+    var result = await UploadCommand.RunAsync(options, UploadCommand.CreateClient(options), progress, cancellationToken: cancellationToken);
     Console.Error.WriteLine();
 
     Console.WriteLine($"{result.Assets:N0} assets: uploaded {result.Uploaded:N0} files ({ScanReport.FormatBytes(result.Bytes)}), already there {result.Skipped:N0}, problems {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
