@@ -1,9 +1,18 @@
 @inherits LayoutComponentBase
 
-@Body
+<header class="top">
+    <a href="./" class="brand">
+        <img src="symbol.svg" alt="" width="28" height="28" />
+        <span>sepiabox</span>
+    </a>
+</header>
+
+<main>
+    @Body
+</main>
 
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    Ocorreu um erro inesperado.
+    <a href="." class="reload">Recarregar</a>
+    <button type="button" class="dismiss" aria-label="Fechar">🗙</button>
 </div>

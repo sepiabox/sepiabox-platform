@@ -1,0 +1,100 @@
+@page "/"
+@using Microsoft.AspNetCore.WebUtilities
+@inject ILibraryQueries Library
+@inject NavigationManager Navigation
+@* Static server rendering (no @rendermode): the page is plain HTML with links, nothing interactive. *@
+
+<PageTitle>Sepiabox</PageTitle>
+
+<h1 class="visually-hidden">Fotos e vídeos</h1>
+
+@if (_page is null)
+{
+    <p class="muted">A carregar…</p>
+}
+else if (_page.Items.Count == 0 && _page.Page == 1)
+{
+    <p class="empty">Ainda não há fotos. Use <code>sepiabox-ingest</code> para enviar as do HD.</p>
+}
+else if (_page.Items.Count == 0)
+{
+    <p class="empty">Não há mais fotos. <a href="@PageLink(1)">Voltar ao início</a></p>
+}
+else
+{
+    @foreach (var group in _groups)
+    {
+        <section class="month">
+            <h2>@group.Title</h2>
+            <ul class="grid">
+                @foreach (var item in group.Items)
+                {
+                    <li>
+                        <a href="@DetailLink(item)" class="thumb" aria-label="@Describe(item)">
+                            @if (item.HasThumbnail)
+                            {
+                                <img src="fotos/@item.Id/@DerivativeNames.Thumbnail" alt="" loading="lazy" width="256" height="256" />
+                            }
+                            else
+                            {
+                                <span class="placeholder">@AssetKinds.Label(item.Kind) sem miniatura</span>
+                            }
+                            @if (AssetKinds.IsVideo(item.Kind))
+                            {
+                                <span class="badge">@AssetKinds.Label(item.Kind)</span>
+                            }
+                        </a>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+
+    <nav class="pages" aria-label="Páginas">
+        @if (_page.Page > 1)
+        {
+            <a href="@PageLink(_page.Page - 1)">← Mais recentes</a>
+        }
+        @if (_page.HasMore)
+        {
+            <a href="@PageLink(_page.Page + 1)">Mais antigas →</a>
+        }
+    </nav>
+}
+
+@code {
+    // Text, not int: a hand-typed "abc" or 99999999999 must become a page, not a binding error.
+    [SupplyParameterFromQuery(Name = "pagina")]
+    public string? Pagina { get; set; }
+
+    private TimelinePage? _page;
+    private IReadOnlyList<TimelineGroup> _groups = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var page = await Library.GetTimelinePageAsync(LibraryQueries.ParsePage(Pagina));
+        _groups = TimelineGroups.ByMonth(page.Items);
+        _page = page;
+    }
+
+    // Relative, keeping any other query parameters, so links work under whatever base path the app has.
+    private string PageLink(int page)
+    {
+        var query = QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query)
+            .Where(p => !string.Equals(p.Key, "pagina", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(p => p.Value, (p, value) => new KeyValuePair<string, string?>(p.Key, value))
+            .ToList();
+        if (page > 1)
+        {
+            query.Add(new("pagina", page.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        return QueryHelpers.AddQueryString("./", query);
+    }
+
+    private string DetailLink(TimelineItem item) =>
+        _page is { Page: > 1 } page ? $"fotos/{item.Id}?pagina={page.Page}" : $"fotos/{item.Id}";
+
+    private static string Describe(TimelineItem item) =>
+        $"{AssetKinds.Label(item.Kind)}, {(item.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle)}";
+}

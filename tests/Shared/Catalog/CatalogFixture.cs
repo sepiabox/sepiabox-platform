@@ -6,7 +6,7 @@ using Sepiabox.Catalog;
 using Testcontainers.Azurite;
 using Testcontainers.PostgreSql;
 
-namespace Sepiabox.Worker.Tests;
+namespace Sepiabox.Tests.Catalog;
 
 /// <summary>
 /// One PostgreSQL (built from <c>infra/postgres</c>, D-012) and one Azurite for the whole collection;
@@ -57,11 +57,20 @@ public sealed class CatalogFixture : IAsyncLifetime
             await create.ExecuteNonQueryAsync();
         }
 
-        var connectionString = new NpgsqlConnectionStringBuilder(_postgres.GetConnectionString()) { Database = name }.ConnectionString;
+        var connectionString = ConnectionStringFor(name);
         var options = new DbContextOptionsBuilder<CatalogDbContext>();
         CatalogDbContext.Configure(options, connectionString);
         return new CatalogDbContext(options.Options);
     }
+
+    /// <summary>
+    /// The full connection string (with the password, which an opened context no longer reports) for a
+    /// database created by this fixture, for code under test that opens its own connections.
+    /// </summary>
+    public string ConnectionStringFor(CatalogDbContext db) => ConnectionStringFor(db.Database.GetDbConnection().Database);
+
+    private string ConnectionStringFor(string database) =>
+        new NpgsqlConnectionStringBuilder(_postgres.GetConnectionString()) { Database = database }.ConnectionString;
 
     public async Task<CatalogDbContext> CreateMigratedDatabaseAsync()
     {

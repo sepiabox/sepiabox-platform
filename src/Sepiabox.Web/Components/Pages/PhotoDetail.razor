@@ -1,0 +1,84 @@
+@page "/fotos/{Id}"
+@inject ILibraryQueries Library
+@inject NavigationManager Navigation
+@* Static server rendering (no @rendermode): the page is plain HTML with links, nothing interactive. *@
+
+@if (_asset is not null)
+{
+    <PageTitle>@Title · Sepiabox</PageTitle>
+
+    <p class="back"><a href="@BackLink">← Linha do tempo</a></p>
+
+    <div class="detail">
+        <figure class="preview">
+            @if (_asset.PreviewName is { } preview)
+            {
+                <img src="fotos/@_asset.Id/@preview" alt="@AssetKinds.Label(_asset.Kind)" />
+            }
+            else
+            {
+                <span class="placeholder">Sem pré-visualização</span>
+            }
+        </figure>
+
+        <section class="facts">
+            <h1>@Title</h1>
+            <dl>
+                @if (Camera is { } camera)
+                {
+                    <dt>Câmara</dt>
+                    <dd>@camera</dd>
+                }
+                @if (_asset.Width is { } width && _asset.Height is { } height)
+                {
+                    <dt>Dimensões</dt>
+                    <dd class="mono">@width × @height</dd>
+                }
+                <dt>Tipo</dt>
+                <dd>@AssetKinds.Label(_asset.Kind)</dd>
+            </dl>
+
+            <h2>Onde está</h2>
+            <ul class="sources">
+                @foreach (var source in _asset.Sources)
+                {
+                    <li><span class="source-name">@source.Name</span> <span class="mono">@source.Path</span></li>
+                }
+            </ul>
+
+            @* Not an enhanced navigation: Blazor would fetch the redirect itself, fail on CORS and read the original twice.
+               No `download` attribute: Content-Disposition names the file, and a failure message must stay visible. *@
+            <p><a class="button" href="fotos/@_asset.Id/original" data-enhance-nav="false">Descarregar o original</a></p>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>The timeline page the visitor came from, so "back" returns there.</summary>
+    [SupplyParameterFromQuery(Name = "pagina")]
+    public string? Pagina { get; set; }
+
+    private AssetDetail? _asset;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var asset = AssetIds.IsValid(Id) ? await Library.GetAssetAsync(Id) : null;
+        _asset = asset;
+        if (asset is null)
+        {
+            Navigation.NotFound();
+        }
+    }
+
+    private string Title => _asset?.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle;
+
+    private string BackLink => LibraryQueries.ParsePage(Pagina) is > 1 and var page ? $"./?pagina={page}" : "./";
+
+    private string? Camera =>
+        string.Join(' ', new[] { _asset?.CameraMake, _asset?.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s))) is { Length: > 0 } text
+            ? text
+            : null;
+}

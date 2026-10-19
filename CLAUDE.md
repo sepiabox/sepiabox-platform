@@ -39,6 +39,7 @@ src/
 infra/postgres/        PostgreSQL image with pgvector and PostGIS
 tests/
   Sepiabox.<Project>.Tests/   one xUnit project per source project
+  Shared/              helpers compiled into the test projects (Catalog/ holds the PostgreSQL + Azurite fixture)
 docs/
   architecture.md, decisions.md, operations.md
   backlog/             one file per story plus the index
