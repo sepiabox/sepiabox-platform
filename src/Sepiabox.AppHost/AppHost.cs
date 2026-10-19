@@ -12,20 +12,33 @@ var storage = builder.AddAzureStorage("storage")
     .RunAsEmulator();
 var blobs = storage.AddBlobs("blobs");
 
-// Runs once at startup: applies migrations, imports whatever manifests are in storage, and exits.
-// Automatic import when a manifest arrives comes with S-033.
-builder.AddProject<Projects.Sepiabox_Worker>("worker")
-    .WithArgs("import", "--once", "--migrate")
-    .WithReference(catalog)
-    .WaitFor(catalog)
-    .WithReference(blobs)
-    .WaitFor(blobs);
-
-builder.AddProject<Projects.Sepiabox_Web>("web")
+var web = builder.AddProject<Projects.Sepiabox_Web>("web")
     .WithReference(catalog)
     .WaitFor(catalog)
     .WithReference(blobs)
     .WaitFor(blobs)
     .WithExternalHttpEndpoints();
+
+// Local runs only (D-034): published, a project becomes an always-on Container App, and the cloud
+// gets its own job in S-033.
+if (builder.ExecutionContext.IsRunMode)
+{
+    var migrate = builder.AddProject<Projects.Sepiabox_Worker>("worker-migrate")
+        .WithArgs("migrate")
+        .WithReference(catalog)
+        .WaitFor(catalog)
+        .WithReference(blobs);
+
+    // Imports whatever manifests are in storage, then exits; it exits with 1 when a manifest has a
+    // problem, which must not keep the web from starting.
+    builder.AddProject<Projects.Sepiabox_Worker>("worker-import")
+        .WithArgs("import", "--once")
+        .WithReference(catalog)
+        .WithReference(blobs)
+        .WaitFor(blobs)
+        .WaitForCompletion(migrate);
+
+    web.WaitForCompletion(migrate);
+}
 
 builder.Build().Run();

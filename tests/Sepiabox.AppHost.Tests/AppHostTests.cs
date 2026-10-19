@@ -8,6 +8,14 @@ namespace Sepiabox.AppHost.Tests;
 public sealed class AppHostTests(AppHostFixture fixture)
 {
     [Fact]
+    public void Migrations_and_the_first_import_finish_successfully_at_startup()
+    {
+        Assert.Equal(0, fixture.Workers[AppHostFixture.MigrateWorker].ExitCode);
+        // Storage starts empty, so there is nothing to import and nothing to report.
+        Assert.Equal(0, fixture.Workers[AppHostFixture.ImportWorker].ExitCode);
+    }
+
+    [Fact]
     public async Task Web_health_returns_ok_when_database_and_storage_are_up()
     {
         using var http = fixture.App.CreateHttpClient("web");
