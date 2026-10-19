@@ -64,6 +64,8 @@ New projects follow the names in `docs/architecture.md` (`Sepiabox.Catalog`, `Se
 
 ## Backlog workflow
 
+The full cycle (story selection, the Atlas + Spock review, priorities, iteration limit, CI, merge, blocked stories and the Agent Log) is in [docs/process.md](docs/process.md). In short:
+
 1. Take the first `todo` story in [docs/backlog/README.md](docs/backlog/README.md) whose dependencies are all `done`.
 2. Work on a branch `story/S-XXX-short-slug`, one story per PR.
 3. In that PR, set the story's status in the index (`doing` while open, `done` when the PR completes it, `blocked` with the reason when a human step from `docs/operations.md` is missing).
