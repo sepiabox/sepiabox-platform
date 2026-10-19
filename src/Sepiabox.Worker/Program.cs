@@ -23,13 +23,14 @@ if (!WorkerCommand.TryParse(args, out var command, out var error))
     return ExitCodes.Usage;
 }
 
-// Reports failures that happen before the host, and its configured logging, exist.
+// Only for failures before the host, and its configured logging, exist (building or starting it);
+// once started, WorkerHost logs through the host.
 using var startupLoggers = LoggerFactory.Create(logging => logging.AddSimpleConsole());
 using var shutdown = new CancellationTokenSource();
 
 return await ExitCodes.RunAsync(
     () => RunHostAsync(command, shutdown),
-    startupLoggers.CreateLogger("Sepiabox.Worker"),
+    startupLoggers.CreateLogger(WorkerHost.LoggerCategory),
     shutdown.Token);
 
 static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSource shutdown)
@@ -53,19 +54,8 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
     builder.Services.AddSingleton(TimeProvider.System);
 
     using var host = builder.Build();
-    // Starting the host hooks Ctrl+C and SIGTERM (Container Apps stopping a job) to ApplicationStopping.
-    await host.StartAsync(shutdown.Token);
-    try
-    {
-        using var stopping = host.Services.GetRequiredService<IHostApplicationLifetime>()
-            .ApplicationStopping.Register(shutdown.Cancel);
-        var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Sepiabox.Worker");
-        return await RunCommandAsync(command, host.Services, logger, shutdown.Token);
-    }
-    finally
-    {
-        await host.StopAsync(CancellationToken.None);
-    }
+    return await WorkerHost.RunAsync(
+        host, (services, logger, cancellationToken) => RunCommandAsync(command, services, logger, cancellationToken), shutdown);
 }
 
 static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider root, ILogger logger, CancellationToken cancellationToken)

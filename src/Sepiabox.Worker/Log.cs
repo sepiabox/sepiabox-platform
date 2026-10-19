@@ -21,4 +21,7 @@ internal static partial class Log
 
     [LoggerMessage(Level = LogLevel.Error, Message = "The worker failed.")]
     public static partial void Failed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The host did not stop cleanly; the exit code reflects the command.")]
+    public static partial void StopFailed(ILogger logger, Exception exception);
 }
