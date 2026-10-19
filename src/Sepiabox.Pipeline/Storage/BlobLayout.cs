@@ -15,6 +15,10 @@ public static class BlobLayout
     public static string ManifestBlobName(string assetId) => assetId + ".json";
 
     /// <summary><c>&lt;sha256&gt;/thumb-256.webp</c>: the work-folder file name under the asset's id.</summary>
-    public static string DerivativeBlobName(string assetId, ManifestDerivative derivative) =>
-        $"{assetId}/{Path.GetFileName(derivative.Path)}";
+    public static string DerivativeBlobName(string assetId, ManifestDerivative derivative)
+    {
+        // Not Path.GetFileName: on Linux it ignores '\', so a manifest written on Windows would differ.
+        var fileName = derivative.Path[(derivative.Path.LastIndexOfAny(['/', '\\']) + 1)..];
+        return $"{assetId}/{fileName}";
+    }
 }
