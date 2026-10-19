@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Sepiabox">
+  <path d="M4 4H24L4 24Z" fill="#231A14"/>
+  <path d="M60 4H40L60 24Z" fill="#231A14"/>
+  <path d="M4 60V40L24 60Z" fill="#231A14"/>
+  <path d="M60 60V40L40 60Z" fill="#231A14"/>
+  <g transform="rotate(-6 32 32)">
+    <rect x="17" y="19" width="30" height="26" rx="1.5" fill="#FFFFFF" stroke="#231A14" stroke-width="1.4"/>
+    <rect x="20" y="22" width="24" height="20" rx="0.5" fill="#9A5A2C"/>
+  </g>
+</svg>

@@ -1,0 +1,90 @@
+@page "/"
+@inject ILibraryQueries Library
+@inject ISasUrlFactory Links
+
+<PageTitle>Sepiabox</PageTitle>
+
+<h1 class="visually-hidden">Fotos e vídeos</h1>
+
+@if (_groups is null)
+{
+    <p class="muted">A carregar…</p>
+}
+else if (_groups.Count == 0)
+{
+    <p class="empty">Ainda não há fotos. Use <code>sepiabox-ingest</code> para enviar as do HD.</p>
+}
+else
+{
+    @foreach (var group in _groups)
+    {
+        <section class="month">
+            <h2>@group.Title</h2>
+            <ul class="grid">
+                @foreach (var item in group.Items)
+                {
+                    <li>
+                        <a href="fotos/@item.Id" class="thumb" title="@Describe(item)">
+                            @if (_thumbnails.TryGetValue(item.Id, out var url))
+                            {
+                                <img src="@url" alt="@Describe(item)" loading="lazy" width="256" height="256" />
+                            }
+                            else
+                            {
+                                <span class="placeholder">@(item.Kind == "video" ? "Vídeo" : "Foto") sem miniatura</span>
+                            }
+                            @if (item.Kind == "video")
+                            {
+                                <span class="badge">Vídeo</span>
+                            }
+                        </a>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+
+    <nav class="pages" aria-label="Páginas">
+        @if (_page > 1)
+        {
+            <a href="@PageLink(_page - 1)">← Mais recentes</a>
+        }
+        @if (_hasMore)
+        {
+            <a href="@PageLink(_page + 1)">Mais antigas →</a>
+        }
+    </nav>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "pagina")]
+    public int? Pagina { get; set; }
+
+    private IReadOnlyList<TimelineGroup>? _groups;
+    private readonly Dictionary<string, Uri> _thumbnails = [];
+    private int _page;
+    private bool _hasMore;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var page = await Library.GetTimelinePageAsync(Math.Max(Pagina ?? 1, 1));
+        _page = page.Page;
+        _hasMore = page.HasMore;
+
+        _thumbnails.Clear();
+        foreach (var item in page.Items)
+        {
+            if (item.ThumbnailBlobPath is { } path)
+            {
+                _thumbnails[item.Id] = await Links.ForDerivativeAsync(path);
+            }
+        }
+
+        _groups = TimelineGroups.ByMonth(page.Items);
+    }
+
+    private static string PageLink(int page) => page == 1 ? "./" : $"?pagina={page}";
+
+    private static string Describe(TimelineItem item) =>
+        item.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle;
+}

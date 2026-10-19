@@ -1,0 +1,86 @@
+@page "/fotos/{Id}"
+@inject ILibraryQueries Library
+@inject ISasUrlFactory Links
+@inject NavigationManager Navigation
+
+@if (_asset is not null)
+{
+    <PageTitle>@Title · Sepiabox</PageTitle>
+
+    <p class="back"><a href="./">← Linha do tempo</a></p>
+
+    <div class="detail">
+        <figure class="preview">
+            @if (_preview is not null)
+            {
+                <img src="@_preview" alt="@Title" />
+            }
+            else
+            {
+                <span class="placeholder">Sem pré-visualização</span>
+            }
+        </figure>
+
+        <section class="facts">
+            <h1>@Title</h1>
+            <dl>
+                @if (Camera is { } camera)
+                {
+                    <dt>Câmara</dt>
+                    <dd>@camera</dd>
+                }
+                @if (_asset.Width is { } width && _asset.Height is { } height)
+                {
+                    <dt>Dimensões</dt>
+                    <dd class="mono">@width × @height</dd>
+                }
+                <dt>Tipo</dt>
+                <dd>@(_asset.Kind == "video" ? "Vídeo" : "Foto")</dd>
+            </dl>
+
+            <h2>Onde está</h2>
+            <ul class="sources">
+                @foreach (var source in _asset.Sources)
+                {
+                    <li><span class="source-name">@source.Name</span> <span class="mono">@source.Path</span></li>
+                }
+            </ul>
+
+            <p><a class="button" href="@_original">Descarregar o original</a></p>
+            <p class="muted small">O link é válido durante @((int)SasUrlFactory.OriginalLifetime.TotalMinutes) minutos.</p>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    private AssetDetail? _asset;
+    private Uri? _preview;
+    private Uri? _original;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Ids are SHA-256 in lowercase hex (D-014); anything else cannot exist, so skip the query.
+        _asset = IsAssetId(Id) ? await Library.GetAssetAsync(Id) : null;
+        if (_asset is null)
+        {
+            Navigation.NotFound();
+            return;
+        }
+
+        _preview = _asset.PreviewBlobPath is { } path ? await Links.ForDerivativeAsync(path) : null;
+        _original = await Links.ForOriginalAsync(_asset.Id);
+    }
+
+    private string Title => _asset?.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle;
+
+    private string? Camera =>
+        string.Join(' ', new[] { _asset?.CameraMake, _asset?.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s))) is { Length: > 0 } text
+            ? text
+            : null;
+
+    private static bool IsAssetId(string value) =>
+        value.Length == 64 && value.All(c => char.IsAsciiDigit(c) || c is >= 'a' and <= 'f');
+}
