@@ -3,6 +3,7 @@ using Azure;
 using Azure.Storage.Blobs;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
+using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
 using Testcontainers.Azurite;
@@ -335,6 +336,27 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
             Options(), Service, null, new ThrowingValidator(new IOException("connection closed"), cancellation), cancellation.Token));
 
         Assert.IsAssignableFrom<OperationCanceledException>(failure);
+    }
+
+    [Fact]
+    public async Task A_manifest_that_gains_an_embedding_in_a_later_run_is_sent_again()
+    {
+        _drive.Write("2019/praia.jpg", TestPhotos.Porto("red"));
+        var id = Assert.Single(Process()).Id;
+        await Upload();
+
+        var rerun = ProcessCommand.Run(
+            new ProcessOptions(_drive.Path, _work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None),
+            new FakeEmbedder(),
+            embedderWarning: null);
+        Assert.Equal(1, rerun.Embedded);
+        var second = await Upload();
+
+        Assert.Empty(second.Problems);
+        Assert.Equal(1, second.Uploaded);
+        var blob = Service.GetBlobContainerClient(BlobLayout.ManifestsContainer).GetBlobClient(BlobLayout.ManifestBlobName(id));
+        var uploaded = ManifestJson.Deserialize((await blob.DownloadContentAsync()).Value.Content.ToString());
+        Assert.True(uploaded.Embeddings.ContainsKey(ClipImageEmbedder.ModelKey));
     }
 
     /// <summary>Reads any manifest without checking it, so tests can reach the checks behind the schema.</summary>
