@@ -13,6 +13,12 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Information, Message = "Catalog migrations applied.")]
     public static partial void MigrationsApplied(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Imported {Imported} manifests, {Unchanged} unchanged, {Invalid} invalid.")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Imported {Imported} manifests, {Unchanged} unchanged, {Invalid} with problems.")]
     public static partial void ImportFinished(ILogger logger, int imported, int unchanged, int invalid);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Stopped before finishing; running the same command again continues.")]
+    public static partial void Cancelled(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "The worker failed.")]
+    public static partial void Failed(ILogger logger, Exception exception);
 }

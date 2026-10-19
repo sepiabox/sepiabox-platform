@@ -9,17 +9,17 @@ using Sepiabox.Pipeline.Storage;
 using Sepiabox.Worker;
 using Sepiabox.Worker.Importing;
 
-if (args is [] or ["-h" or "--help" or "help"])
+if (args is ["-h" or "--help" or "help"])
 {
     Console.WriteLine(WorkerCommand.Usage);
-    return 0;
+    return ExitCodes.Success;
 }
 
 if (!WorkerCommand.TryParse(args, out var command, out var error))
 {
     Console.Error.WriteLine(error);
     Console.Error.WriteLine(WorkerCommand.Usage);
-    return 2;
+    return ExitCodes.Usage;
 }
 
 // No args to the host: its command-line parser would read "--once" as a setting. Connection strings
@@ -28,37 +28,44 @@ var builder = Host.CreateApplicationBuilder();
 builder.AddServiceDefaults();
 builder.AddAzureBlobServiceClient("blobs");
 
-var connectionString = builder.Configuration.GetConnectionString("catalog")
-    ?? throw new InvalidOperationException("Connection string 'catalog' is not set.");
-builder.Services.AddDbContext<CatalogDbContext>(options => CatalogDbContext.Configure(options, connectionString));
+// Read when first used, so a missing setting is reported like any other failure (exit code 1).
+builder.Services.AddDbContext<CatalogDbContext>((services, options) => CatalogDbContext.Configure(
+    options,
+    services.GetRequiredService<IConfiguration>().GetConnectionString("catalog")
+        ?? throw new InvalidOperationException("Connection string 'catalog' is not set.")));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ManifestValidator>();
 builder.Services.AddScoped<ManifestImporter>();
 
 using var host = builder.Build();
-using var cancellation = new CancellationTokenSource();
-Console.CancelKeyPress += (_, e) =>
-{
-    e.Cancel = true;
-    cancellation.Cancel();
-};
+// Starting the host hooks Ctrl+C and SIGTERM (Container Apps stopping a job) to ApplicationStopping.
+await host.StartAsync();
+var stopping = host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping;
+var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Sepiabox.Worker");
 
-await using var scope = host.Services.CreateAsyncScope();
-var services = scope.ServiceProvider;
-var logger = services.GetRequiredService<ILogger<WorkerCommand>>();
+var exitCode = await ExitCodes.RunAsync(() => RunAsync(command, host.Services, logger, stopping), logger, stopping);
 
-if (command.Action == WorkerAction.Migrate || command.MigrateFirst)
-{
-    await services.GetRequiredService<CatalogDbContext>().Database.MigrateAsync(cancellation.Token);
-    Log.MigrationsApplied(logger);
-}
+await host.StopAsync(CancellationToken.None);
+return exitCode;
 
-if (command.Action == WorkerAction.ImportOnce)
+static async Task<int> RunAsync(WorkerCommand command, IServiceProvider root, ILogger logger, CancellationToken cancellationToken)
 {
+    await using var scope = root.CreateAsyncScope();
+    var services = scope.ServiceProvider;
+
+    if (command.Action == WorkerAction.Migrate || command.MigrateFirst)
+    {
+        await services.GetRequiredService<CatalogDbContext>().Database.MigrateAsync(cancellationToken);
+        Log.MigrationsApplied(logger);
+    }
+
+    if (command.Action != WorkerAction.ImportOnce)
+    {
+        return ExitCodes.Success;
+    }
+
     var manifests = services.GetRequiredService<BlobServiceClient>().GetBlobContainerClient(BlobLayout.ManifestsContainer);
-    var result = await services.GetRequiredService<ManifestImporter>().ImportOnceAsync(manifests, cancellation.Token);
+    var result = await services.GetRequiredService<ManifestImporter>().ImportOnceAsync(manifests, cancellationToken);
     Log.ImportFinished(logger, result.Imported, result.Unchanged, result.Problems.Count);
-    return result.Problems.Count == 0 ? 0 : 1;
+    return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
 }
-
-return 0;

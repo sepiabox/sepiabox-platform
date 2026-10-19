@@ -32,7 +32,8 @@ public sealed class WorkerCommandTests
     [MemberData(nameof(InvalidArguments))]
     public void Rejects_missing_or_unknown_arguments(string[] args)
     {
-        Assert.False(WorkerCommand.TryParse(args, out _, out var error));
+        Assert.False(WorkerCommand.TryParse(args, out var command, out var error));
+        Assert.Null(command);
         Assert.NotEmpty(error);
     }
 }
