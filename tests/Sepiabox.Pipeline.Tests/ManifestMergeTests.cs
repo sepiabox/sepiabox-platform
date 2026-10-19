@@ -42,6 +42,35 @@ public sealed class ManifestMergeTests
     }
 
     [Fact]
+    public void A_derivative_listed_twice_does_not_stop_the_merge()
+    {
+        var existing = Photo(Source("HD da Ana", "a.jpg")) with { Derivatives = [Derivative("thumb-256", 256), Derivative("thumb-256", 200)] };
+
+        var merged = ManifestMerge.Merge(existing, Photo(Source("HD da Ana", "a.jpg")) with { Derivatives = [] });
+
+        Assert.Equal(200, Assert.Single(merged.Derivatives).Width);
+    }
+
+    [Fact]
+    public void The_same_file_written_with_windows_and_linux_separators_is_one_source()
+    {
+        var merged = ManifestMerge.Merge(
+            Photo(Source("HD da Ana", "2019\\praia.jpg", hour: 10)),
+            Photo(Source("HD da Ana", "2019/praia.jpg", hour: 12)));
+
+        Assert.Equal("2019/praia.jpg", Assert.Single(merged.Sources).Path);
+    }
+
+    [Theory]
+    [InlineData("2019\\praia.jpg", "2019/praia.jpg", true)]
+    [InlineData("2019/praia.jpg", "2019/praia.jpg", true)]
+    [InlineData("2019/Praia.jpg", "2019/praia.jpg", false)]
+    public void Source_identity_ignores_the_path_separator_but_not_case(string first, string second, bool same)
+    {
+        Assert.Equal(same, Source("HD da Ana", first).IsSameFile(Source("HD da Ana", second)));
+    }
+
+    [Fact]
     public void Incoming_description_wins_when_it_is_complete()
     {
         var existing = Photo(Source("HD da Ana", "a.jpg")) with { Width = 100 };

@@ -19,15 +19,26 @@ public static class ManifestMerge
 
         return description with
         {
-            Sources = MergeSources(existing.Sources, incoming.Sources),
-            Derivatives = MergeDerivatives(existing.Derivatives, incoming.Derivatives),
+            Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
+            Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
         };
     }
 
-    private static List<ManifestSource> MergeSources(IReadOnlyList<ManifestSource> existing, IReadOnlyList<ManifestSource> incoming)
+    /// <summary>
+    /// The form a manifest is stored in: sources and derivatives deduplicated and sorted, paths with '/'.
+    /// Writing it lets the next upload of the same manifest see that nothing changed.
+    /// </summary>
+    public static Manifest Canonical(Manifest manifest) => manifest with
     {
-        var merged = existing.ToList();
-        foreach (var source in incoming)
+        Sources = MergeSources(manifest.Sources),
+        Derivatives = MergeDerivatives(manifest.Derivatives),
+    };
+
+    // Later entries win for the same file, unless they are older.
+    private static List<ManifestSource> MergeSources(IEnumerable<ManifestSource> sources)
+    {
+        var merged = new List<ManifestSource>();
+        foreach (var source in sources.Select(s => s with { Path = ManifestSource.NormalizePath(s.Path) }))
         {
             var index = merged.FindIndex(s => s.IsSameFile(source));
             if (index < 0)
@@ -46,11 +57,11 @@ public static class ManifestMerge
             .ThenBy(s => s.Path, StringComparer.Ordinal)];
     }
 
-    private static List<ManifestDerivative> MergeDerivatives(
-        IReadOnlyList<ManifestDerivative> existing, IReadOnlyList<ManifestDerivative> incoming)
+    // Later entries win for the same name.
+    private static List<ManifestDerivative> MergeDerivatives(IEnumerable<ManifestDerivative> derivatives)
     {
-        var byName = existing.ToDictionary(d => d.Name, StringComparer.Ordinal);
-        foreach (var derivative in incoming)
+        var byName = new Dictionary<string, ManifestDerivative>(StringComparer.Ordinal);
+        foreach (var derivative in derivatives)
         {
             byName[derivative.Name] = derivative;
         }

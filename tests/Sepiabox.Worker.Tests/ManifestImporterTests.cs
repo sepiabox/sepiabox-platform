@@ -95,6 +95,20 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task The_same_file_with_windows_and_linux_separators_is_one_source()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, Photo(Source("HD da Ana", "2019\\praia.jpg")));
+        await ImportAsync(db, container);
+
+        await PutAsync(container, Photo(Source("HD da Ana", "2019/praia.jpg", hour: 18)));
+        await ImportAsync(db, container);
+
+        Assert.Equal("2019/praia.jpg", (await db.AssetSources.SingleAsync()).Path);
+    }
+
+    [Fact]
     public async Task A_changed_manifest_updates_the_asset_its_derivatives_and_source_times()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();

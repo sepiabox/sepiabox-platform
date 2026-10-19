@@ -56,8 +56,14 @@ public sealed record Manifest
 /// <param name="ModifiedAt">Last write time of the file, UTC.</param>
 public sealed record ManifestSource(string Type, string Name, string Path, DateTimeOffset ModifiedAt)
 {
+    /// <summary>Paths are stored with '/'; a manifest written on Windows by another tool may use '\'.</summary>
+    public static string NormalizePath(string path) => path.Replace('\\', '/');
+
+    /// <summary>Same source and same path, whatever the separator. Case matters: Linux drives are case-sensitive.</summary>
     public bool IsSameFile(ManifestSource other) =>
-        Type == other.Type && Name == other.Name && string.Equals(Path, other.Path, StringComparison.Ordinal);
+        Type == other.Type
+        && Name == other.Name
+        && string.Equals(NormalizePath(Path), NormalizePath(other.Path), StringComparison.Ordinal);
 }
 
 public static class ManifestJson

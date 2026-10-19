@@ -143,7 +143,7 @@ public sealed class ManifestImporter(
         {
             var modifiedAt = source.ModifiedAt.ToUniversalTime();
             var existing = asset.Sources.FirstOrDefault(s =>
-                s.Type == source.Type && s.Name == source.Name && string.Equals(s.Path, source.Path, StringComparison.Ordinal));
+                source.IsSameFile(new ManifestSource(s.Type, s.Name, s.Path, s.ModifiedAt)));
             if (existing is null)
             {
                 asset.Sources.Add(new AssetSource
@@ -151,7 +151,7 @@ public sealed class ManifestImporter(
                     AssetId = asset.Id,
                     Type = source.Type,
                     Name = source.Name,
-                    Path = source.Path,
+                    Path = ManifestSource.NormalizePath(source.Path),
                     ModifiedAt = modifiedAt,
                 });
             }
