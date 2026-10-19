@@ -52,25 +52,48 @@ public sealed class ClipImageEmbedderTests : IDisposable
     }
 
     [ClipFact]
-    public void Different_scenes_are_further_apart_than_an_image_and_its_copy()
+    public void A_resized_copy_is_closer_than_a_different_picture()
     {
         using var embedder = CreateEmbedder();
-        var scene = embedder.Embed(WriteScene("scene.webp", 640, 480));
-        string flat;
+        var large = WriteScene("large.webp", 1280, 960);
+        string small, flat;
+        using (var image = new MagickImage(large))
+        {
+            image.Resize(320, 240);
+            small = Path.Combine(_folder.Path, "small.webp");
+            image.Write(small);
+        }
+
         using (var image = new MagickImage(MagickColors.Black, 640, 480))
         {
             flat = Path.Combine(_folder.Path, "flat.webp");
             image.Write(flat);
         }
 
-        var cosine = EmbeddingCodec.Cosine(scene, embedder.Embed(flat));
+        var scene = embedder.Embed(large);
+        var copy = EmbeddingCodec.Cosine(scene, embedder.Embed(small));
+        var different = EmbeddingCodec.Cosine(scene, embedder.Embed(flat));
 
-        Assert.True(cosine < 0.999, $"cosine was {cosine}");
+        Assert.True(copy > different, $"copy {copy}, different picture {different}");
+    }
+
+    // The reference is Hugging Face transformers' CLIPProcessor + CLIPModel.get_image_features on
+    // openai/clip-vit-base-patch32, computed once for these committed images (S-015) and normalized.
+    [ClipTheory]
+    [InlineData("clip-landscape")]
+    [InlineData("clip-portrait")]
+    public void Matches_the_reference_implementation_on_a_golden_image(string name)
+    {
+        using var embedder = CreateEmbedder();
+        var reference = EmbeddingCodec.Decode(File.ReadAllText(Path.Combine("TestData", $"{name}.image_embeds.txt")).Trim());
+
+        var cosine = EmbeddingCodec.Cosine(embedder.Embed(Path.Combine("TestData", $"{name}.png")), reference);
+
+        Assert.True(cosine > 0.99, $"cosine with the reference was {cosine}");
     }
 
     private static ClipImageEmbedder CreateEmbedder() =>
-        ClipImageEmbedder.TryCreate(TestModels.Folder, useGpu: false)
-        ?? throw new InvalidOperationException($"The CLIP model is not in {TestModels.Folder}.");
+        ClipImageEmbedder.TryCreate(TestModels.Folder, out var warning) ?? throw new InvalidOperationException(warning);
 
     // A deterministic picture with structure (sky, sun, ground), so the model sees more than a flat colour.
     private string WriteScene(string name, uint width, uint height)

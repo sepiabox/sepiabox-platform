@@ -47,7 +47,20 @@ public sealed class EmbeddingCodecTests
     [Fact]
     public void Normalize_refuses_a_zero_vector()
     {
-        Assert.Throws<ArgumentException>(() => EmbeddingCodec.Normalize(new float[3]));
+        Assert.Throws<EmbeddingException>(() => EmbeddingCodec.Normalize(new float[3]));
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    public void Normalize_refuses_a_vector_with_a_value_that_is_not_finite(float value)
+    {
+        float[] values = [1f, value, 2f];
+
+        var failure = Assert.Throws<EmbeddingException>(() => EmbeddingCodec.Normalize(values));
+
+        Assert.Contains("not finite", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

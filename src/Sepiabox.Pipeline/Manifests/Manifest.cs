@@ -80,6 +80,14 @@ public static class ManifestJson
     public static Manifest Deserialize(string json) =>
         JsonSerializer.Deserialize<Manifest>(json, Options) ?? throw new JsonException("Manifest is empty.");
 
+    /// <summary>Writes a manifest file through a temporary file, so an interrupted run never leaves half a manifest.</summary>
+    public static void WriteFile(string path, Manifest manifest)
+    {
+        var temporary = path + ".tmp";
+        File.WriteAllText(temporary, Serialize(manifest));
+        File.Move(temporary, path, overwrite: true);
+    }
+
     // capturedAt is wall-clock time with no offset, so it must never gain a "Z" or a local offset.
     private sealed class LocalDateTimeConverter : JsonConverter<DateTime>
     {

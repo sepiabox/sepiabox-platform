@@ -74,4 +74,16 @@ public sealed class ClipPreprocessorTests
 
         Assert.All(rgb, value => Assert.Equal(255, value));
     }
+
+    // Hugging Face's CLIPImageProcessor truncates the longer side (int(224 * long / short)), the reference
+    // the golden test compares with; rounding would make 403×301 one pixel wider than the reference.
+    [Theory]
+    [InlineData(403, 301, 299, 224)]
+    [InlineData(257, 389, 224, 339)]
+    [InlineData(1280, 960, 298, 224)]
+    [InlineData(224, 500, 224, 500)]
+    public void Resized_size_truncates_the_longer_side_like_the_reference_processor(int width, int height, int expectedWidth, int expectedHeight)
+    {
+        Assert.Equal(((uint)expectedWidth, (uint)expectedHeight), ClipPreprocessor.ResizedSize((uint)width, (uint)height));
+    }
 }

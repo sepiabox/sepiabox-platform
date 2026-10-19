@@ -92,6 +92,7 @@
       "properties": {
         "clip-vit-b32": {
           "type": "string",
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$",
           "minLength": 2732,
           "maxLength": 2732
         }

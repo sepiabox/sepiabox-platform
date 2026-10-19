@@ -8,74 +8,94 @@ namespace Sepiabox.Pipeline.Embeddings;
 /// CLIP ViT-B/32 image embeddings (D-016): 512 values, L2-normalized, stored in manifests under
 /// <see cref="ModelKey"/>. One instance per run; ONNX Runtime sessions are expensive to create.
 /// </summary>
-public sealed class ClipImageEmbedder : IDisposable
+public sealed class ClipImageEmbedder : IImageEmbedder, IDisposable
 {
-    /// <summary>Key in the manifest's <c>embeddings</c> and the catalog's <c>model</c> column.</summary>
     public const string ModelKey = "clip-vit-b32";
 
     public const int Dimensions = 512;
 
+    /// <summary>The projected image embedding, next to the raw hidden states in the Xenova export.</summary>
+    public const string OutputName = "image_embeds";
+
     private readonly InferenceSession _session;
     private readonly string _input;
-    private readonly string _output;
 
-    private ClipImageEmbedder(InferenceSession session, string? warning)
+    private ClipImageEmbedder(InferenceSession session)
     {
         _session = session;
         _input = session.InputMetadata.Keys.First();
-        // The Xenova export has the projected embedding as "image_embeds" next to the raw hidden states.
-        _output = session.OutputMetadata.ContainsKey("image_embeds") ? "image_embeds" : session.OutputMetadata.Keys.First();
-        Warning = warning;
     }
 
-    /// <summary>Set when CUDA was asked for but could not be used, so the run fell back to the CPU.</summary>
-    public string? Warning { get; }
+    string IImageEmbedder.ModelKey => ModelKey;
 
-    /// <summary>Null when the model has not been downloaded to <paramref name="modelFolder"/>.</summary>
-    public static ClipImageEmbedder? TryCreate(string modelFolder, bool useGpu)
+    int IImageEmbedder.Dimensions => Dimensions;
+
+    /// <summary>The pinned CLIP model in <paramref name="modelFolder"/>; see the other overload.</summary>
+    public static ClipImageEmbedder? TryCreate(string modelFolder, out string? warning) =>
+        TryCreate(modelFolder, ModelCatalog.Get(ModelCatalog.ClipVision), out warning);
+
+    /// <summary>
+    /// Loads <paramref name="model"/> from <paramref name="modelFolder"/>, or returns null with a warning that
+    /// says why: the file is missing, its SHA-256 is not the pinned one, ONNX Runtime cannot load it, or it has
+    /// no <see cref="OutputName"/> output. A run goes on without embeddings rather than failing every photo.
+    /// </summary>
+    public static ClipImageEmbedder? TryCreate(string modelFolder, ModelInfo model, out string? warning)
     {
-        var path = ModelFolder.PathOf(modelFolder, ModelCatalog.Get(ModelCatalog.ClipVision));
+        const string Download =
+            "Run `sepiabox-ingest models download` and process again: embeddings are added from the work folder "
+            + "without reading the drive again.";
+        var path = ModelFolder.PathOf(modelFolder, model);
         if (!File.Exists(path))
         {
+            warning = $"The CLIP model is not in {modelFolder}, so no embeddings were computed. {Download}";
             return null;
-        }
-
-        string? warning = null;
-        var options = new SessionOptions();
-        if (useGpu)
-        {
-            try
-            {
-                options.AppendExecutionProvider_CUDA();
-            }
-            catch (OnnxRuntimeException ex)
-            {
-                // The default build ships the CPU provider only (D-042); a missing GPU must not stop a run.
-                warning = $"CUDA is not available ({ex.Message}); embeddings are computed on the CPU.";
-                options.Dispose();
-                options = new SessionOptions();
-            }
         }
 
         try
         {
-            return new ClipImageEmbedder(new InferenceSession(path, options), warning);
+            if (!ModelVerifier.Verify(model, path, out var actual))
+            {
+                warning = $"{path} has SHA-256 {actual}, not the {model.Sha256} pinned in models.json, so no embeddings were computed. {Download}";
+                return null;
+            }
         }
-        finally
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            options.Dispose();
+            warning = $"Could not read {path} ({ex.Message}), so no embeddings were computed. {Download}";
+            return null;
         }
+
+        InferenceSession session;
+        try
+        {
+            session = new InferenceSession(path);
+        }
+        catch (OnnxRuntimeException ex)
+        {
+            warning = $"ONNX Runtime could not load {path} ({ex.Message}), so no embeddings were computed. {Download}";
+            return null;
+        }
+
+        if (!session.OutputMetadata.ContainsKey(OutputName))
+        {
+            var found = string.Join(", ", session.OutputMetadata.Keys);
+            session.Dispose();
+            warning = $"{path} has no {OutputName} output (it has {found}), so no embeddings were computed. {Download}";
+            return null;
+        }
+
+        warning = null;
+        return new ClipImageEmbedder(session);
     }
 
-    /// <summary>The embedding of the image at <paramref name="path"/>, L2-normalized.</summary>
     public float[] Embed(string path)
     {
         var tensor = new DenseTensor<float>(ClipPreprocessor.Prepare(path), [1, 3, ClipPreprocessor.Size, ClipPreprocessor.Size]);
-        using var results = _session.Run([NamedOnnxValue.CreateFromTensor(_input, tensor)], [_output]);
+        using var results = _session.Run([NamedOnnxValue.CreateFromTensor(_input, tensor)], [OutputName]);
         var embedding = results[0].AsEnumerable<float>().ToArray();
         if (embedding.Length != Dimensions)
         {
-            throw new InvalidOperationException($"The CLIP model returned {embedding.Length} values instead of {Dimensions}.");
+            throw new EmbeddingException($"The CLIP model returned {embedding.Length} values instead of {Dimensions}.");
         }
 
         EmbeddingCodec.Normalize(embedding);

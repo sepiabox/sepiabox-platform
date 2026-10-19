@@ -29,18 +29,28 @@ public static class ClipPreprocessor
         image.Alpha(AlphaAction.Remove);
         image.ColorSpace = ColorSpace.sRGB;
 
-        var scale = (double)Size / Math.Min(image.Width, image.Height);
-        var width = Math.Max(Size, (uint)Math.Round(image.Width * scale));
-        var height = Math.Max(Size, (uint)Math.Round(image.Height * scale));
+        var (width, height) = ResizedSize(image.Width, image.Height);
         // Catmull-Rom is the bicubic kernel (a = −0.5) the reference preprocessing uses.
         image.FilterType = FilterType.Catrom;
         image.Resize(new MagickGeometry(width, height) { IgnoreAspectRatio = true });
+        // The offset rounds down, like the reference's (size - 224) // 2.
         image.Crop(new MagickGeometry((int)(width - Size) / 2, (int)(height - Size) / 2, Size, Size));
         image.ResetPage();
 
         using var pixels = image.GetPixels();
         return pixels.ToByteArray(PixelMapping.RGB)
-            ?? throw new InvalidOperationException("The image has no pixels.");
+            ?? throw new EmbeddingException("The image has no pixels.");
+    }
+
+    /// <summary>
+    /// The size with the shorter side at 224. The longer side is truncated, not rounded, as Hugging Face's
+    /// CLIPImageProcessor does (<c>int(224 * long / short)</c>), so the crop matches the reference pixel for pixel.
+    /// </summary>
+    public static (uint Width, uint Height) ResizedSize(uint width, uint height)
+    {
+        var shorter = Math.Min(width, height);
+        var longer = (uint)((double)Size * Math.Max(width, height) / shorter);
+        return width <= height ? (Size, longer) : (longer, Size);
     }
 
     /// <summary>Interleaved 224×224 RGB bytes to a normalized channel-first tensor.</summary>

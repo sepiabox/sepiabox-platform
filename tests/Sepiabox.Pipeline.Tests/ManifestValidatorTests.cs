@@ -138,6 +138,15 @@ public sealed class ManifestValidatorTests
         Assert.False(s_validator.TryValidate(json, out _, out _));
     }
 
+    [Fact]
+    public void Rejects_a_clip_embedding_of_the_right_length_that_is_not_base64()
+    {
+        var json = ValidJson(node => node["embeddings"] = new JsonObject { ["clip-vit-b32"] = new string('!', 2732) });
+
+        Assert.False(s_validator.TryValidate(json, out _, out var error));
+        Assert.Contains("/embeddings/clip-vit-b32", error, StringComparison.Ordinal);
+    }
+
     private static string ValidJson(Action<JsonObject>? change = null)
     {
         var node = JsonNode.Parse(ManifestJson.Serialize(TestManifests.Photo(TestManifests.Source("HD da Ana", "2019/praia.jpg"))))!.AsObject();

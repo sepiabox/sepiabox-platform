@@ -34,19 +34,27 @@ public static class EmbeddingCodec
         return values;
     }
 
-    /// <summary>Scales <paramref name="values"/> to length 1 in place, so cosine similarity is a dot product.</summary>
+    /// <summary>
+    /// Scales <paramref name="values"/> to length 1 in place, so cosine similarity is a dot product. A vector
+    /// with a value that is not finite, or with no length, has no direction and is refused.
+    /// </summary>
     public static void Normalize(Span<float> values)
     {
         double sum = 0;
         foreach (var value in values)
         {
+            if (!float.IsFinite(value))
+            {
+                throw new EmbeddingException($"The embedding has a value that is not finite ({value}).");
+            }
+
             sum += (double)value * value;
         }
 
         var norm = Math.Sqrt(sum);
         if (norm == 0)
         {
-            throw new ArgumentException("A zero vector has no direction to normalize.", nameof(values));
+            throw new EmbeddingException("The embedding is a zero vector, which has no direction.");
         }
 
         for (var i = 0; i < values.Length; i++)
