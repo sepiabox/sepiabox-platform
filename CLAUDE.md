@@ -33,12 +33,15 @@ src/
   Sepiabox.Ingest/     sepiabox-ingest console app (scan, process, upload)
   Sepiabox.Catalog/    EF Core catalog: CatalogDbContext, entities and migrations
   Sepiabox.Worker/     sepiabox-worker: migrate, import manifests into the catalog
+  Sepiabox.Catalog/    EF Core catalog (PostgreSQL) and its migrations
+  Sepiabox.Worker/     sepiabox-worker: migrations and manifest import
   Sepiabox.Web/        Blazor web app (interactive server)
   Sepiabox.AppHost/    .NET Aspire AppHost: PostgreSQL, Azurite and the web, locally and for azd
   Sepiabox.ServiceDefaults/  health checks and OpenTelemetry shared by the services
 infra/postgres/        PostgreSQL image with pgvector and PostGIS
 tests/
   Sepiabox.<Project>.Tests/   one xUnit project per source project
+  Shared/              helpers compiled into the test projects (Catalog/ holds the PostgreSQL + Azurite fixture)
 docs/
   architecture.md, decisions.md, operations.md
   backlog/             one file per story plus the index
