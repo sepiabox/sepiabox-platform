@@ -23,33 +23,52 @@ if (!WorkerCommand.TryParse(args, out var command, out var error))
     return ExitCodes.Usage;
 }
 
-// No args to the host: its command-line parser would read "--once" as a setting. Connection strings
-// come from the environment, which is how Aspire and Container Apps pass them.
-var builder = Host.CreateApplicationBuilder();
-builder.AddServiceDefaults();
-builder.AddAzureBlobServiceClient("blobs");
+// Reports failures that happen before the host, and its configured logging, exist.
+using var startupLoggers = LoggerFactory.Create(logging => logging.AddSimpleConsole());
+using var shutdown = new CancellationTokenSource();
 
-// Read when first used, so a missing setting is reported like any other failure (exit code 1).
-builder.Services.AddDbContext<CatalogDbContext>((services, options) => CatalogDbContext.Configure(
-    options,
-    services.GetRequiredService<IConfiguration>().GetConnectionString("catalog")
-        ?? throw new InvalidOperationException("Connection string 'catalog' is not set.")));
-builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<ManifestValidator>();
-builder.Services.AddScoped<ManifestImporter>();
+return await ExitCodes.RunAsync(
+    () => RunHostAsync(command, shutdown),
+    startupLoggers.CreateLogger("Sepiabox.Worker"),
+    shutdown.Token);
 
-using var host = builder.Build();
-// Starting the host hooks Ctrl+C and SIGTERM (Container Apps stopping a job) to ApplicationStopping.
-await host.StartAsync();
-var stopping = host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping;
-var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Sepiabox.Worker");
+static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSource shutdown)
+{
+    // No args to the host: its command-line parser would read "--once" as a setting. Connection strings
+    // come from the environment, which is how Aspire and Container Apps pass them.
+    var builder = Host.CreateApplicationBuilder();
+    builder.AddServiceDefaults();
+    if (command.Action == WorkerAction.ImportOnce)
+    {
+        builder.AddAzureBlobServiceClient("blobs");
+        builder.Services.AddSingleton<ManifestValidator>();
+        builder.Services.AddScoped<ManifestImporter>();
+    }
 
-var exitCode = await ExitCodes.RunAsync(() => RunAsync(command, host.Services, logger, stopping), logger, stopping);
+    // Read when first used, so a missing setting is reported like any other failure (exit code 1).
+    builder.Services.AddDbContext<CatalogDbContext>((services, options) => CatalogDbContext.Configure(
+        options,
+        services.GetRequiredService<IConfiguration>().GetConnectionString("catalog")
+            ?? throw new InvalidOperationException("Connection string 'catalog' is not set.")));
+    builder.Services.AddSingleton(TimeProvider.System);
 
-await host.StopAsync(CancellationToken.None);
-return exitCode;
+    using var host = builder.Build();
+    // Starting the host hooks Ctrl+C and SIGTERM (Container Apps stopping a job) to ApplicationStopping.
+    await host.StartAsync(shutdown.Token);
+    try
+    {
+        using var stopping = host.Services.GetRequiredService<IHostApplicationLifetime>()
+            .ApplicationStopping.Register(shutdown.Cancel);
+        var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Sepiabox.Worker");
+        return await RunCommandAsync(command, host.Services, logger, shutdown.Token);
+    }
+    finally
+    {
+        await host.StopAsync(CancellationToken.None);
+    }
+}
 
-static async Task<int> RunAsync(WorkerCommand command, IServiceProvider root, ILogger logger, CancellationToken cancellationToken)
+static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider root, ILogger logger, CancellationToken cancellationToken)
 {
     await using var scope = root.CreateAsyncScope();
     var services = scope.ServiceProvider;

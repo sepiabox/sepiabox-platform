@@ -26,8 +26,7 @@ if (builder.ExecutionContext.IsRunMode)
     var migrate = builder.AddProject<Projects.Sepiabox_Worker>("worker-migrate")
         .WithArgs("migrate")
         .WithReference(catalog)
-        .WaitFor(catalog)
-        .WithReference(blobs);
+        .WaitFor(catalog);
 
     // Imports whatever manifests are in storage, then exits; it exits with 1 when a manifest has a
     // problem, which must not keep the web from starting.
