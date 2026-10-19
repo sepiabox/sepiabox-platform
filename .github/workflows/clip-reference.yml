@@ -20,38 +20,3 @@ jobs:
           for repo in Xenova/clip-vit-base-patch32 openai/clip-vit-base-patch32; do
             echo "REVISION $repo $(curl -sSf https://huggingface.co/api/models/$repo | jq -r .sha)"
           done
-      - name: Model hash at the pinned revision
-        run: |
-          rev=$(curl -sSf https://huggingface.co/api/models/Xenova/clip-vit-base-patch32 | jq -r .sha)
-          curl -sSfL -o vision_model.onnx "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/$rev/onnx/vision_model.onnx"
-          echo "MODELHASH $(sha256sum vision_model.onnx | cut -d' ' -f1) $(stat -c %s vision_model.onnx)"
-      - name: Reference embeddings
-        run: |
-          pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch
-          pip install --quiet "transformers>=4.40,<5" pillow onnxruntime numpy
-          cat > reference.py <<'EOF'
-          import base64, io, numpy as np, onnxruntime as ort, torch
-          from PIL import Image
-          from transformers import CLIPModel, CLIPProcessor
-          processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-          model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").eval()
-          session = ort.InferenceSession("vision_model.onnx")
-          for name in ["clip-landscape", "clip-portrait"]:
-              image = Image.open(f"tests/Sepiabox.Pipeline.Tests/TestData/{name}.png").convert("RGB")
-              pixels = processor(images=image, return_tensors="pt")["pixel_values"]
-              with torch.no_grad():
-                  features = model.get_image_features(pixel_values=pixels)[0].numpy().astype(np.float32)
-              features /= np.linalg.norm(features)
-              onnx = session.run(["image_embeds"], {session.get_inputs()[0].name: pixels.numpy()})[0][0]
-              onnx = onnx / np.linalg.norm(onnx)
-              print("ONNXCOSINE", name, float(np.dot(features, onnx)))
-              print("EMBEDDING", name, base64.b64encode(features.astype("<f4").tobytes()).decode())
-              # The 224x224 crop before normalization, to compare preprocessing outside this job.
-              mean = np.array(processor.image_processor.image_mean).reshape(3, 1, 1)
-              std = np.array(processor.image_processor.image_std).reshape(3, 1, 1)
-              crop = np.clip(np.rint((pixels[0].numpy() * std + mean) * 255), 0, 255).astype(np.uint8).transpose(1, 2, 0)
-              buffer = io.BytesIO()
-              Image.fromarray(crop).save(buffer, format="PNG")
-              print("CROP", name, base64.b64encode(buffer.getvalue()).decode())
-          EOF
-          python reference.py
