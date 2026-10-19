@@ -110,15 +110,8 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
     Console.Error.WriteLine();
 
     Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, embeddings added {result.Embedded:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
-    if (result.EmbeddingProblems.Count > 0)
-    {
-        // Warnings, not failures: the files are processed and the next run computes their embeddings again.
-        Console.Error.WriteLine($"Warning: {result.EmbeddingProblems.Count:N0} files have no embedding yet:");
-        foreach (var problem in result.EmbeddingProblems)
-        {
-            Console.Error.WriteLine($"  {problem.Path}: {problem.Reason}");
-        }
-    }
+    // Warnings, not failures: the files are processed and the next run computes their embeddings again.
+    EmbeddingWarnings.Write(result.EmbeddingProblems, Console.Error);
 
     Console.WriteLine($"Manifests: {result.ManifestFolder}");
     if (result.Warning is not null)

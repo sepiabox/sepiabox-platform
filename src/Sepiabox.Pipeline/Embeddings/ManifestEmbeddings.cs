@@ -103,7 +103,7 @@ public static class ManifestEmbeddings
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return new EmbeddingOutcome(EmbeddingStatus.Failed, null, $"Could not read the manifest {manifestPath}: {ex.Message}");
+            return new EmbeddingOutcome(EmbeddingStatus.Failed, null, $"Could not read its manifest: {ex.Message}");
         }
 
         var outcome = TryAdd(manifest, workFolder, embedder);
@@ -119,7 +119,7 @@ public static class ManifestEmbeddings
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return new EmbeddingOutcome(EmbeddingStatus.Failed, manifest, $"Could not write the manifest {manifestPath}: {ex.Message}");
+            return new EmbeddingOutcome(EmbeddingStatus.Failed, manifest, $"Could not write its manifest: {ex.Message}");
         }
     }
 }

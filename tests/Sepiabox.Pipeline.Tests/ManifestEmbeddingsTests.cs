@@ -194,7 +194,7 @@ public sealed class ManifestEmbeddingsTests : IDisposable
 
         Assert.Equal(EmbeddingStatus.Failed, outcome.Status);
         Assert.Null(outcome.Manifest);
-        Assert.Contains("Could not read the manifest", outcome.Problem, StringComparison.Ordinal);
+        Assert.Contains("Could not read its manifest", outcome.Problem, StringComparison.Ordinal);
         Assert.Equal("{ not json", File.ReadAllText(path));
     }
 

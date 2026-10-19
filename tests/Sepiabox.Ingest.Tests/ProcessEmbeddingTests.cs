@@ -60,7 +60,7 @@ public sealed class ProcessEmbeddingTests : IDisposable
 
         Assert.Equal((2, 1), (result.Skipped, result.Embedded));
         Assert.Empty(result.Problems);
-        Assert.Contains("Could not read the manifest", Assert.Single(result.EmbeddingProblems).Reason, StringComparison.Ordinal);
+        Assert.Contains("Could not read its manifest", Assert.Single(result.EmbeddingProblems).Reason, StringComparison.Ordinal);
         Assert.True(ManifestJson.Deserialize(File.ReadAllText(manifests[1])).Embeddings.ContainsKey(ClipImageEmbedder.ModelKey));
     }
 
@@ -101,6 +101,36 @@ public sealed class ProcessEmbeddingTests : IDisposable
         Assert.Equal(0, result.Embedded);
         Assert.Empty(result.EmbeddingProblems);
         Assert.Contains("2 photos and videos have no preview or poster", result.Warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Counts_missing_previews_once_per_asset_when_the_same_photo_is_in_two_folders()
+    {
+        _drive.Write("2019/a.jpg", TestPhotos.Porto());
+        _drive.Write("backup/a.jpg", TestPhotos.Porto());
+        Run(embedder: null);
+        Directory.Delete(Path.Combine(_work.Path, "derivatives"), recursive: true);
+
+        var result = Run(new FakeEmbedder());
+
+        Assert.Contains("1 photos and videos have no preview or poster", result.Warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Gives_one_warning_for_all_files_when_their_manifests_are_missing()
+    {
+        _drive.Write("2019/a.jpg", TestPhotos.Porto());
+        _drive.Write("2019/b.jpg", TestPhotos.Porto("tomato"));
+        Run(embedder: null);
+        foreach (var manifest in Directory.GetFiles(Path.Combine(_work.Path, "manifests")))
+        {
+            File.Delete(manifest);
+        }
+
+        var result = Run(new FakeEmbedder());
+
+        Assert.Empty(result.EmbeddingProblems);
+        Assert.Contains("2 files marked as processed have no manifest", result.Warning, StringComparison.Ordinal);
     }
 
     [Fact]
