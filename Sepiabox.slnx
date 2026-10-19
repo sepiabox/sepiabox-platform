@@ -12,6 +12,7 @@
     <Project Path="tests/Sepiabox.AppHost.Tests/Sepiabox.AppHost.Tests.csproj" />
     <Project Path="tests/Sepiabox.Ingest.Tests/Sepiabox.Ingest.Tests.csproj" />
     <Project Path="tests/Sepiabox.Pipeline.Tests/Sepiabox.Pipeline.Tests.csproj" />
+    <Project Path="tests/Sepiabox.Web.Tests/Sepiabox.Web.Tests.csproj" />
     <Project Path="tests/Sepiabox.Worker.Tests/Sepiabox.Worker.Tests.csproj" />
   </Folder>
 </Solution>
