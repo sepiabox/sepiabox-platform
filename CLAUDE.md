@@ -20,6 +20,7 @@ Guidance for agents working in `sepiabox-platform`. Read [docs/architecture.md](
 | Check formatting (what CI runs) | `dotnet format Sepiabox.slnx --verify-no-changes` |
 | Fix formatting | `dotnet format Sepiabox.slnx` |
 | Run the ingest CLI | `dotnet run --project src/Sepiabox.Ingest -- scan <folder>` |
+| Add a catalog migration | `dotnet ef migrations add <Name> --project src/Sepiabox.Catalog --output-dir Migrations` |
 | Run the local environment (needs Docker) | `dotnet run --project src/Sepiabox.AppHost` |
 
 Before pushing, the build must have zero warnings (warnings are errors) and the format check must pass.
@@ -30,6 +31,8 @@ Before pushing, the build must have zero warnings (warnings are errors) and the 
 src/
   Sepiabox.Pipeline/   processing stages, shared by the CLI and the cloud worker
   Sepiabox.Ingest/     sepiabox-ingest console app (scan, process, upload)
+  Sepiabox.Catalog/    EF Core catalog: CatalogDbContext, entities and migrations
+  Sepiabox.Worker/     sepiabox-worker: migrate, import manifests into the catalog
   Sepiabox.Web/        Blazor web app (interactive server)
   Sepiabox.AppHost/    .NET Aspire AppHost: PostgreSQL, Azurite and the web, locally and for azd
   Sepiabox.ServiceDefaults/  health checks and OpenTelemetry shared by the services
@@ -42,7 +45,7 @@ docs/
 .github/workflows/ci.yml      lint, tests (Linux + Windows), integration (Linux)
 ```
 
-New projects follow the names in `docs/architecture.md` (`Sepiabox.Catalog`, `Sepiabox.Worker`) and are added to `Sepiabox.slnx`.
+New projects follow the names in `docs/architecture.md` and are added to `Sepiabox.slnx`.
 
 ## Code conventions
 
