@@ -26,7 +26,8 @@ public sealed class ManifestStore(ManifestValidator validator)
 {
     public const int MaxAttempts = 5;
 
-    public async Task<ManifestWriteResult> WriteMergedAsync(BlobClient blob, Manifest incoming, CancellationToken cancellationToken)
+    /// <summary>Merges <paramref name="incoming"/> into its blob in <paramref name="manifests"/>, named after its id.</summary>
+    public async Task<ManifestWriteResult> WriteMergedAsync(BlobContainerClient manifests, Manifest incoming, CancellationToken cancellationToken)
     {
         // A hand-edited or truncated work-folder manifest (null sources, a width of 0…) must neither
         // throw out of the merge nor reach storage.
@@ -34,6 +35,9 @@ public sealed class ManifestStore(ManifestValidator validator)
         {
             return Problem($"this manifest is not valid: {incomingError}");
         }
+
+        // Named here, from the validated id, so no caller can store a manifest under another asset's name.
+        var blob = manifests.GetBlobClient(BlobLayout.ManifestBlobName(incoming.Id));
 
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {

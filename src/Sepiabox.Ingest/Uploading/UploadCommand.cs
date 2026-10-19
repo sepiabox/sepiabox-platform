@@ -108,6 +108,10 @@ public static class UploadCommand
         {
             try
             {
+                // Taken before reading: if process rewrites the manifest meanwhile, the next run sees a new
+                // fingerprint and sends it again instead of recording the old content as uploaded.
+                var manifestFile = new FileInfo(manifestPath);
+                var fingerprint = $"{manifestFile.Length}:{manifestFile.LastWriteTimeUtc.Ticks}";
                 var manifest = ManifestJson.Deserialize(await File.ReadAllTextAsync(manifestPath, cancellationToken));
 
                 // Order matters: an asset's manifest is only sent once everything it points to is in storage.
@@ -123,7 +127,7 @@ public static class UploadCommand
                         containers.Derivatives, blobName, Path.Combine(workFolder, derivative.Path), derivative.ContentType, cancellationToken);
                 }
 
-                await UploadManifestAsync(manifest, manifestPath, cancellationToken);
+                await UploadManifestAsync(manifest, manifestPath, fingerprint, cancellationToken);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or RequestFailedException or System.Text.Json.JsonException)
             {
@@ -262,18 +266,16 @@ public static class UploadCommand
         /// have uploaded the same asset with its own sources. A manifest that cannot be merged is a
         /// problem for this asset only, and is tried again on the next run.
         /// </summary>
-        private async Task UploadManifestAsync(Manifest manifest, string path, CancellationToken cancellationToken)
+        private async Task UploadManifestAsync(Manifest manifest, string path, string fingerprint, CancellationToken cancellationToken)
         {
-            var file = new FileInfo(path);
             var blobName = BlobLayout.ManifestBlobName(manifest.Id);
-            var fingerprint = $"{file.Length}:{file.LastWriteTimeUtc.Ticks}";
             if (state.IsUploaded(BlobLayout.ManifestsContainer, blobName, fingerprint))
             {
                 Interlocked.Increment(ref _skipped);
                 return;
             }
 
-            var result = await manifestStore.WriteMergedAsync(containers.Manifests.GetBlobClient(blobName), manifest, cancellationToken);
+            var result = await manifestStore.WriteMergedAsync(containers.Manifests, manifest, cancellationToken);
             switch (result.Status)
             {
                 case ManifestWriteStatus.Problem:
