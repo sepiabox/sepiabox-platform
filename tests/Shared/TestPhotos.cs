@@ -24,6 +24,22 @@ internal static class TestPhotos
         return image.ToByteArray(MagickFormat.Jpeg);
     }
 
+    /// <summary>A solid-colour JPEG of the given size, optionally with an EXIF orientation (6 = rotate 90° clockwise).</summary>
+    public static byte[] Sized(int width, int height, ushort? orientation = null)
+    {
+        using var image = new MagickImage(MagickColors.Orange, (uint)width, (uint)height);
+        if (orientation is { } value)
+        {
+            // ImageMagick writes the EXIF orientation from the image's own attribute, so set both.
+            image.Orientation = (Orientation)value;
+            var exif = new ExifProfile();
+            exif.SetValue(ExifTag.Orientation, value);
+            image.SetProfile(exif);
+        }
+
+        return image.ToByteArray(MagickFormat.Jpeg);
+    }
+
     /// <summary>A 32×32 PNG with no metadata at all.</summary>
     public static byte[] Plain()
     {

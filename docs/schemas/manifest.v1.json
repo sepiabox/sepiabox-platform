@@ -62,9 +62,24 @@
       }
     },
     "derivatives": {
-      "description": "Thumbnails and video versions, filled from S-005 and S-006.",
+      "description": "Files generated for the web: photo thumbnails and previews (S-005), video posters and versions (S-006).",
       "type": "array",
-      "items": { "type": "object" }
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "width", "height", "contentType"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "path": {
+            "description": "Relative to the work folder: derivatives/<id>/<name>.<extension>.",
+            "type": "string",
+            "pattern": "^derivatives/[0-9a-f]{64}/[a-z0-9-]+\\.[a-z0-9]+$"
+          },
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 },
+          "contentType": { "type": "string", "minLength": 1 }
+        }
+      }
     },
     "embeddings": {
       "description": "Vectors by model name, filled from S-015.",
