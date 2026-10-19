@@ -1,4 +1,5 @@
 using Azure;
+using Azure.Identity;
 
 namespace Sepiabox.Web.Services;
 
@@ -37,9 +38,10 @@ public static partial class MediaEndpoints
             http.Response.Headers.CacheControl = $"private, max-age={(int)SasUrlFactory.DerivativeCacheDuration.TotalSeconds}";
             return Results.Redirect(url.AbsoluteUri);
         }
-        catch (RequestFailedException ex)
+        catch (Exception ex) when (IsSigningFailure(ex))
         {
             LogSigningFailed(log, ex, id, derivative);
+            Unavailable(http);
             return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
     }
@@ -64,14 +66,25 @@ public static partial class MediaEndpoints
             http.Response.Headers.CacheControl = "no-store";
             return Results.Redirect(url.AbsoluteUri);
         }
-        catch (RequestFailedException ex)
+        catch (Exception ex) when (IsSigningFailure(ex))
         {
             LogSigningFailed(log, ex, id, "original");
+            Unavailable(http);
             return Results.Text(
                 "Não foi possível preparar o download. Tente novamente daqui a pouco.",
                 "text/plain; charset=utf-8",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
+    }
+
+    // Storage refusing the delegation key, or the managed identity unable to get a token at all.
+    private static bool IsSigningFailure(Exception ex) => ex is RequestFailedException or AuthenticationFailedException;
+
+    // A failure is not cached (unlike the redirect), and the browser may try again in a minute.
+    private static void Unavailable(HttpContext http)
+    {
+        http.Response.Headers.CacheControl = "no-store";
+        http.Response.Headers.RetryAfter = "60";
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Could not sign a link to {Derivative} of asset {AssetId}.")]

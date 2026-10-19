@@ -32,8 +32,11 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
     /// </summary>
     public static readonly TimeSpan DerivativeWindow = TimeSpan.FromMinutes(5);
 
-    /// <summary>How long a browser may cache a redirect to a derivative; shorter than any link's life.</summary>
-    public static readonly TimeSpan DerivativeCacheDuration = DerivativeLifetime - DerivativeWindow;
+    /// <summary>
+    /// How long a browser may cache a redirect to a derivative: a minute less than the shortest link's
+    /// life, so a cached redirect never points at a link that has just expired (clock skew, slow loads).
+    /// </summary>
+    public static readonly TimeSpan DerivativeCacheDuration = DerivativeLifetime - DerivativeWindow - TimeSpan.FromMinutes(1);
 
     public static readonly TimeSpan OriginalLifetime = TimeSpan.FromMinutes(5);
 

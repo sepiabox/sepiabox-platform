@@ -1,5 +1,6 @@
 @page "/"
 @inject ILibraryQueries Library
+@using Microsoft.AspNetCore.WebUtilities
 @inject NavigationManager Navigation
 @* Static server rendering (no @rendermode): the page is plain HTML with links, nothing interactive. *@
 
@@ -62,21 +63,34 @@ else
 }
 
 @code {
+    // Text, not int: a hand-typed "abc" or 99999999999 must become a page, not a binding error.
     [SupplyParameterFromQuery(Name = "pagina")]
-    public int? Pagina { get; set; }
+    public string? Pagina { get; set; }
 
     private TimelinePage? _page;
     private IReadOnlyList<TimelineGroup> _groups = [];
 
     protected override async Task OnParametersSetAsync()
     {
-        var page = await Library.GetTimelinePageAsync(LibraryQueries.ClampPage(Pagina ?? 1));
+        var page = await Library.GetTimelinePageAsync(LibraryQueries.ParsePage(Pagina));
         _groups = TimelineGroups.ByMonth(page.Items);
         _page = page;
     }
 
-    private string PageLink(int page) =>
-        Navigation.GetUriWithQueryParameter("pagina", page == 1 ? null : page);
+    // Relative, keeping any other query parameters, so links work under whatever base path the app has.
+    private string PageLink(int page)
+    {
+        var query = QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query)
+            .Where(p => !string.Equals(p.Key, "pagina", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(p => p.Value, (p, value) => new KeyValuePair<string, string?>(p.Key, value))
+            .ToList();
+        if (page > 1)
+        {
+            query.Add(new("pagina", page.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        return QueryHelpers.AddQueryString("./", query);
+    }
 
     private string DetailLink(TimelineItem item) =>
         _page is { Page: > 1 } page ? $"fotos/{item.Id}?pagina={page.Page}" : $"fotos/{item.Id}";

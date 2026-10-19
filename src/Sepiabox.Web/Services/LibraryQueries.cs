@@ -48,7 +48,44 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
     /// <summary>Far beyond any family library (20 million assets); keeps a hand-typed page number sane.</summary>
     public const int MaxPage = 100_000;
 
-    public static int ClampPage(int page) => Math.Clamp(page, 1, MaxPage);
+    public static int ClampPage(long page) => (int)Math.Clamp(page, 1, MaxPage);
+
+    /// <summary>A page number typed in a URL: anything that is not a whole number is page 1.</summary>
+    public static int ParsePage(string? value) =>
+        long.TryParse(value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var page)
+            ? ClampPage(page)
+            : 1;
+
+    /// <summary>One row beyond the page means more follow, unless the page is already the last allowed.</summary>
+    public static bool HasNextPage(int page, int rowsFetched) => rowsFetched > PageSize && page < MaxPage;
+
+    // File extensions for the content types `process` writes (MediaTypes in Sepiabox.Pipeline).
+    private static readonly Dictionary<string, string> s_extensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["image/jpeg"] = ".jpg",
+        ["image/png"] = ".png",
+        ["image/gif"] = ".gif",
+        ["image/webp"] = ".webp",
+        ["image/heic"] = ".heic",
+        ["image/heif"] = ".heif",
+        ["image/tiff"] = ".tif",
+        ["video/mp4"] = ".mp4",
+        ["video/quicktime"] = ".mov",
+        ["video/x-msvideo"] = ".avi",
+        ["video/x-matroska"] = ".mkv",
+    };
+
+    /// <summary>
+    /// The file name a download gets: the source's own name, or the asset id with an extension for its
+    /// content type when no source has a usable name.
+    /// </summary>
+    public static string DownloadName(string? sourcePath, string id, string contentType)
+    {
+        var fileName = sourcePath?[(sourcePath.LastIndexOfAny(['/', '\\']) + 1)..];
+        return string.IsNullOrWhiteSpace(fileName)
+            ? id + s_extensions.GetValueOrDefault(contentType, string.Empty)
+            : fileName;
+    }
 
     public async Task<TimelinePage> GetTimelinePageAsync(int page, CancellationToken cancellationToken = default)
     {
@@ -67,7 +104,7 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
             """).ToListAsync(cancellationToken);
 
         var items = rows.Take(PageSize).Select(r => new TimelineItem(r.Id, r.Kind, r.CapturedAt, r.HasThumbnail)).ToList();
-        return new TimelinePage(page, items, rows.Count > PageSize);
+        return new TimelinePage(page, items, HasNextPage(page, rows.Count));
     }
 
     public async Task<AssetDetail?> GetAssetAsync(string id, CancellationToken cancellationToken = default)
@@ -125,8 +162,7 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
 
         // The first source in the order the detail page lists them names the download.
         var path = OrderSources(asset.Sources).FirstOrDefault()?.Path;
-        var fileName = path is null ? null : path[(path.LastIndexOfAny(['/', '\\']) + 1)..];
-        return new OriginalFile(string.IsNullOrWhiteSpace(fileName) ? asset.Id : fileName, asset.ContentType);
+        return new OriginalFile(DownloadName(path, asset.Id, asset.ContentType), asset.ContentType);
     }
 
     private static IEnumerable<AssetSource> OrderSources(IEnumerable<AssetSource> sources) =>

@@ -46,7 +46,8 @@
                 }
             </ul>
 
-            <p><a class="button" href="fotos/@_asset.Id/original">Descarregar o original</a></p>
+            @* Not an enhanced navigation: Blazor would fetch the redirect itself, fail on CORS and read the original twice. *@
+            <p><a class="button" href="fotos/@_asset.Id/original" download data-enhance-nav="false">Descarregar o original</a></p>
         </section>
     </div>
 }
@@ -57,7 +58,7 @@
 
     /// <summary>The timeline page the visitor came from, so "back" returns there.</summary>
     [SupplyParameterFromQuery(Name = "pagina")]
-    public int? Pagina { get; set; }
+    public string? Pagina { get; set; }
 
     private AssetDetail? _asset;
 
@@ -73,7 +74,7 @@
 
     private string Title => _asset?.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle;
 
-    private string BackLink => Pagina is > 1 and var page ? $"./?pagina={LibraryQueries.ClampPage(page)}" : "./";
+    private string BackLink => LibraryQueries.ParsePage(Pagina) is > 1 and var page ? $"./?pagina={page}" : "./";
 
     private string? Camera =>
         string.Join(' ', new[] { _asset?.CameraMake, _asset?.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s))) is { Length: > 0 } text
