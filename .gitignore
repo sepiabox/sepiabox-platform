@@ -1,0 +1,28 @@
+# .NET build output
+bin/
+obj/
+artifacts/
+TestResults/
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Local configuration and secrets: never commit these
+appsettings.*.local.json
+appsettings.Development.json
+*.env
+.env*
+secrets.json
+
+# Downloaded ML models (fetched by script, licensed separately)
+models/
+
+# Local ingestion state and test media
+.sepiabox/
+*.sqlite
+*.db
+samples/private/
