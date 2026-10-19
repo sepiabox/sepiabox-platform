@@ -219,6 +219,32 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task A_constraint_violation_is_reported_as_a_data_problem()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, Photo(Source("HD da Ana", "a.jpg")));
+        await db.Database.ExecuteSqlRawAsync(RejectTestPhotoByCheckSql);
+
+        var result = await ImportAsync(db, container);
+
+        Assert.Contains("refuse_test_photo", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_missing_table_stops_the_import()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, Photo(Source("HD da Ana", "a.jpg")));
+        await db.Database.ExecuteSqlRawAsync("DROP TABLE derivatives");
+
+        var failure = await Record.ExceptionAsync(() => ImportAsync(db, container));
+
+        Assert.Contains(Chain(failure), ex => ex is PostgresException { SqlState: PostgresErrorCodes.UndefinedTable });
+    }
+
+    [Fact]
     public async Task A_lost_database_connection_stops_the_import_instead_of_failing_every_manifest()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
@@ -230,30 +256,40 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
 
         var failure = await Record.ExceptionAsync(() => ImportAsync(db, container));
 
-        // EF's execution strategy wraps it; what matters is that it escaped instead of becoming a problem.
+        Assert.Contains(Chain(failure), ex => ex is PostgresException { SqlState: PostgresErrorCodes.AdminShutdown });
+    }
+
+    // EF's execution strategy wraps database errors; what matters is that they escaped instead of becoming a problem.
+    private static List<Exception> Chain(Exception? failure)
+    {
         var chain = new List<Exception>();
         for (var current = failure; current is not null; current = current.InnerException)
         {
             chain.Add(current);
         }
 
-        Assert.Contains(chain, ex => ex is PostgresException { SqlState: "57P01" });
+        return chain;
     }
 
-    // Both triggers fire only for the test photo (its id starts with 0a1b2c3d).
-    private const string RefuseTestPhotoSql = """
+    // These fire only for the test photo, so the other manifests in a test import normally.
+    private const string RefuseTestPhotoSql = $$"""
         CREATE FUNCTION refuse_asset() RETURNS trigger LANGUAGE plpgsql AS
         $$ BEGIN RAISE EXCEPTION 'refused by test'; END $$;
         CREATE TRIGGER refuse BEFORE INSERT ON assets FOR EACH ROW
-        WHEN (starts_with(NEW.id, '0a1b2c3d')) EXECUTE FUNCTION refuse_asset();
+        WHEN (NEW.id = '{{PhotoId}}') EXECUTE FUNCTION refuse_asset();
+        """;
+
+    // SQLSTATE 23514, a check violation: a data class.
+    private const string RejectTestPhotoByCheckSql = $$"""
+        ALTER TABLE assets ADD CONSTRAINT refuse_test_photo CHECK (id <> '{{PhotoId}}');
         """;
 
     // The server ends this session, as when the database restarts mid-import (SQLSTATE 57P01).
-    private const string DropConnectionOnTestPhotoSql = """
+    private const string DropConnectionOnTestPhotoSql = $$"""
         CREATE FUNCTION drop_connection() RETURNS trigger LANGUAGE plpgsql AS
         $$ BEGIN PERFORM pg_terminate_backend(pg_backend_pid()); RETURN NEW; END $$;
         CREATE TRIGGER drop_connection BEFORE INSERT ON assets FOR EACH ROW
-        WHEN (starts_with(NEW.id, '0a1b2c3d')) EXECUTE FUNCTION drop_connection();
+        WHEN (NEW.id = '{{PhotoId}}') EXECUTE FUNCTION drop_connection();
         """;
 
     private Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container) =>

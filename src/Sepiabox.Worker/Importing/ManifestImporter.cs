@@ -101,27 +101,23 @@ public sealed class ManifestImporter(
             return (false, $"has kind {manifest.Kind}, which the catalog does not store");
         }
 
-        // Errors caused by this manifest's data are reported and the import goes on; anything that
-        // means the database itself is unavailable stops the import, rather than failing every manifest
-        // left with the same error.
+        // Only errors known to be about this manifest's data are reported and the import goes on;
+        // everything else (connection, missing table, cancellation…) stops the import, rather than
+        // failing every manifest left with the same error.
+        // DbUpdateConcurrencyException is deliberately fatal: no concurrency tokens are configured, so it
+        // means rows changed underneath (another import running); the next run imports again.
         try
         {
             await SaveAsync(manifest, kind, blobName, etag, cancellationToken);
             return (true, null);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException postgres && IsDataError(postgres))
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException && IsDataError(ex.InnerException))
         {
-            return (false, $"could not be saved: {postgres.MessageText}");
+            return (false, $"could not be saved: {Describe(ex.InnerException!)}");
         }
-        catch (PostgresException ex) when (IsDataError(ex))
+        catch (Exception ex) when (IsDataError(ex))
         {
-            return (false, $"could not be saved: {ex.MessageText}");
-        }
-        catch (InvalidCastException ex)
-        {
-            // Npgsql refuses to send a value that does not fit its column before it reaches the server,
-            // such as a DateTime whose Kind does not match the column type: a problem with this data.
-            return (false, $"could not be saved: {ex.Message}");
+            return (false, $"could not be saved: {Describe(ex)}");
         }
         finally
         {
@@ -230,10 +226,19 @@ public sealed class ManifestImporter(
     };
 
     /// <summary>
-    /// SQLSTATE classes that describe the server or the connection, not the row: connection (08),
-    /// insufficient resources (53), operator intervention such as a restart (57), system (58), internal (XX).
+    /// Allow-list of errors caused by the row being written: SQLSTATE classes data exception (22),
+    /// integrity constraint violation (23), program limit exceeded such as a value too large (54) and
+    /// PL/pgSQL raise (P0); and InvalidCastException, which Npgsql throws before sending a value that does
+    /// not fit its column (a DateTime whose Kind does not match the column type).
     /// </summary>
-    private static bool IsDataError(PostgresException ex) => ex.SqlState[..2] is not ("08" or "53" or "57" or "58" or "XX");
+    private static bool IsDataError(Exception? ex) => ex switch
+    {
+        PostgresException postgres => postgres.SqlState[..2] is "22" or "23" or "54" or "P0",
+        InvalidCastException => true,
+        _ => false,
+    };
+
+    private static string Describe(Exception ex) => ex is PostgresException postgres ? postgres.MessageText : ex.Message;
 
     // Listings return the ETag bare and downloads return it quoted, as in the HTTP header.
     private static string? Normalize(ETag? etag) => etag?.ToString().Trim('"');
