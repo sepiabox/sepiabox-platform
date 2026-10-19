@@ -9,7 +9,7 @@ namespace Sepiabox.Pipeline.Manifests;
 /// Checks a manifest against <c>docs/schemas/manifest.v1.json</c> before anything is written. Used by every
 /// reader of a manifest that someone else wrote: the worker's import and <c>upload</c>'s merge.
 /// </summary>
-public sealed class ManifestValidator
+public sealed class ManifestValidator : IManifestValidator
 {
     private readonly JsonSchema _schema;
 
@@ -22,7 +22,7 @@ public sealed class ManifestValidator
     }
 
     /// <summary>Reads a manifest, or explains why it was rejected. Never throws for bad input.</summary>
-    public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? error)
+    public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? problem)
     {
         manifest = null;
         try
@@ -37,7 +37,7 @@ public sealed class ManifestValidator
                 var errors = evaluation.Details
                     .Where(detail => detail.Errors is { Count: > 0 })
                     .SelectMany(detail => detail.Errors!.Values.Select(message => $"{detail.InstanceLocation}: {message}"));
-                error = string.Join("; ", errors.DefaultIfEmpty("does not match the manifest schema"));
+                problem = string.Join("; ", errors.DefaultIfEmpty("does not match the manifest schema"));
                 return false;
             }
 
@@ -47,24 +47,24 @@ public sealed class ManifestValidator
         }
         catch (JsonException ex)
         {
-            error = $"not valid JSON: {ex.Message}";
+            problem = $"not valid JSON: {ex.Message}";
             return false;
         }
         catch (Exception ex) when (ex is FormatException or OverflowException or NotSupportedException
             or ArgumentException or InvalidOperationException)
         {
             // ArgumentException: a property repeated in the same object.
-            error = $"cannot be read: {ex.Message}";
+            problem = $"cannot be read: {ex.Message}";
             return false;
         }
 
         if (manifest is null)
         {
-            error = "is empty";
+            problem = "is empty";
             return false;
         }
 
-        error = null;
+        problem = null;
         return true;
     }
 }

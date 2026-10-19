@@ -22,7 +22,7 @@ public sealed record ManifestWriteResult(ManifestWriteStatus Status, long Bytes 
 /// nobody changed the blob in between. Every writer uses it, so two drives, two computers or the
 /// worker never overwrite each other.
 /// </summary>
-public sealed class ManifestStore(ManifestValidator validator)
+public sealed class ManifestStore(IManifestValidator validator)
 {
     public const int MaxAttempts = 5;
 

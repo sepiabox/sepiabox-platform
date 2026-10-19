@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
@@ -112,7 +113,7 @@ public sealed class ManifestStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_merge_that_would_store_an_invalid_manifest_is_a_problem_and_writes_nothing()
+    public async Task An_invalid_incoming_manifest_is_a_problem_and_leaves_the_stored_one_alone()
     {
         await _store.WriteMergedAsync(_container, Photo(Source("HD da Ana", "a.jpg")), CancellationToken.None);
         var before = await StoredJsonAsync();
@@ -121,6 +122,23 @@ public sealed class ManifestStoreTests : IAsyncLifetime
         var result = await _store.WriteMergedAsync(_container, Photo(Source("HD do Jonathas", "b.jpg")) with { Width = 0 }, CancellationToken.None);
 
         Assert.Equal(ManifestWriteStatus.Problem, result.Status);
+        Assert.StartsWith("this manifest is not valid", result.Problem, StringComparison.Ordinal);
+        Assert.Equal(before, await StoredJsonAsync());
+    }
+
+    [Fact]
+    public async Task A_merge_that_would_store_an_invalid_manifest_is_a_problem_and_writes_nothing()
+    {
+        // Two valid manifests cannot merge into an invalid one under today's schema, so a validator
+        // that refuses any manifest with more than one source stands in for a future rule that could.
+        var store = new ManifestStore(new RejectsSeveralSources());
+        await store.WriteMergedAsync(_container, Photo(Source("HD da Ana", "a.jpg")), CancellationToken.None);
+        var before = await StoredJsonAsync();
+
+        var result = await store.WriteMergedAsync(_container, Photo(Source("HD do Jonathas", "b.jpg")), CancellationToken.None);
+
+        Assert.Equal(ManifestWriteStatus.Problem, result.Status);
+        Assert.StartsWith("the merged manifest is not valid: more than one source", result.Problem, StringComparison.Ordinal);
         Assert.Equal(before, await StoredJsonAsync());
     }
 
@@ -167,10 +185,29 @@ public sealed class ManifestStoreTests : IAsyncLifetime
 
     private async Task<Manifest> StoredAsync() => ManifestJson.Deserialize(await StoredJsonAsync());
 
-    /// <summary>
-    /// Another upload of the same asset that writes the manifest right after each of our reads, for the
-    /// first <c>interferences</c> reads.
-    /// </summary>
+    /// <summary>The real validator, except that it refuses any manifest with more than one source.</summary>
+    private sealed class RejectsSeveralSources : IManifestValidator
+    {
+        private readonly ManifestValidator _real = new();
+
+        public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? problem)
+        {
+            if (!_real.TryValidate(json, out manifest, out problem))
+            {
+                return false;
+            }
+
+            if (manifest.Sources.Count > 1)
+            {
+                manifest = null;
+                problem = "more than one source";
+                return false;
+            }
+
+            return true;
+        }
+    }
+
     /// <summary>The manifests container, handing out the interfering blob for the test photo.</summary>
     private sealed class InterferingContainer(ManifestStoreTests test, int interferences)
         : BlobContainerClient(test._azurite.GetConnectionString(), test._container.Name)
@@ -181,6 +218,10 @@ public sealed class ManifestStoreTests : IAsyncLifetime
             blobName == BlobLayout.ManifestBlobName(PhotoId) ? _blob : base.GetBlobClient(blobName);
     }
 
+    /// <summary>
+    /// Another upload of the same asset that writes the manifest right after each of our reads, for the
+    /// first <c>interferences</c> reads.
+    /// </summary>
     private sealed class InterferingBlob(ManifestStoreTests test, int interferences)
         : BlobClient(test._azurite.GetConnectionString(), test._container.Name, BlobLayout.ManifestBlobName(PhotoId))
     {
