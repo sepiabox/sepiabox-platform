@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Json.Schema;
@@ -18,9 +19,10 @@ public sealed class ManifestValidator
         _schema = JsonSchema.FromText(reader.ReadToEnd());
     }
 
-    /// <summary>Returns the manifest, or null with the reason it was rejected.</summary>
-    public (Manifest? Manifest, string? Error) Validate(string json)
+    /// <summary>Reads a manifest, or explains why it was rejected.</summary>
+    public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? error)
     {
+        manifest = null;
         JsonNode? node;
         try
         {
@@ -28,18 +30,34 @@ public sealed class ManifestValidator
         }
         catch (JsonException ex)
         {
-            return (null, $"not valid JSON: {ex.Message}");
+            error = $"not valid JSON: {ex.Message}";
+            return false;
         }
 
-        var evaluation = _schema.Evaluate(node, new EvaluationOptions { OutputFormat = OutputFormat.List });
+        // Formats (date-time) are only annotations unless required.
+        var evaluation = _schema.Evaluate(node, new EvaluationOptions { OutputFormat = OutputFormat.List, RequireFormatValidation = true });
         if (!evaluation.IsValid)
         {
             var errors = evaluation.Details
                 .Where(detail => detail.Errors is { Count: > 0 })
-                .SelectMany(detail => detail.Errors!.Values.Select(error => $"{detail.InstanceLocation}: {error}"));
-            return (null, string.Join("; ", errors.DefaultIfEmpty("does not match the manifest schema")));
+                .SelectMany(detail => detail.Errors!.Values.Select(message => $"{detail.InstanceLocation}: {message}"));
+            error = string.Join("; ", errors.DefaultIfEmpty("does not match the manifest schema"));
+            return false;
         }
 
-        return (ManifestJson.Deserialize(json), null);
+        // The schema cannot express everything the reader needs (an impossible date, an integer that
+        // does not fit in an int, 1.0 for an integer), so a schema-valid manifest can still fail here.
+        try
+        {
+            manifest = ManifestJson.Deserialize(json);
+        }
+        catch (Exception ex) when (ex is JsonException or FormatException or OverflowException or NotSupportedException)
+        {
+            error = $"cannot be read: {ex.Message}";
+            return false;
+        }
+
+        error = null;
+        return true;
     }
 }

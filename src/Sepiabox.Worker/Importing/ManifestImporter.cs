@@ -44,12 +44,11 @@ public sealed class ManifestImporter(
             }
 
             var content = await manifests.GetBlobClient(blob.Name).DownloadContentAsync(cancellationToken);
-            var (manifest, error) = validator.Validate(content.Value.Content.ToString());
-            if (manifest is null)
+            if (!validator.TryValidate(content.Value.Content.ToString(), out var manifest, out var error))
             {
                 // Not recorded as imported: it is reported on every run until someone fixes or deletes it.
-                Log.InvalidManifest(logger, blob.Name, error!);
-                problems.Add(new ImportProblem(blob.Name, error!));
+                Log.InvalidManifest(logger, blob.Name, error);
+                problems.Add(new ImportProblem(blob.Name, error));
                 continue;
             }
 
