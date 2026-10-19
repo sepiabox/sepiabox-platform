@@ -44,6 +44,7 @@ dotnet build Sepiabox.slnx
 dotnet test Sepiabox.slnx --filter "Category!=Integration"   # unit tests
 dotnet test Sepiabox.slnx --filter "Category=Integration"    # needs Docker / FFmpeg
 dotnet format Sepiabox.slnx --verify-no-changes              # lint, as CI runs it
+dotnet run --project src/Sepiabox.AppHost                    # PostgreSQL, Azurite and the web app, with the Aspire dashboard
 ```
 
 Documentation:
