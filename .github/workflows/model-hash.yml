@@ -1,0 +1,20 @@
+# Temporary (S-015): prints the SHA-256 of the pinned models so models.json can be filled in. Removed in the next commit.
+name: Model hash
+
+on:
+  push:
+    branches: ['story/S-015-clip-embeddings']
+
+permissions:
+  contents: read
+
+jobs:
+  hash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          for url in $(jq -r '.models[].url' models/models.json); do
+            curl -sSfL "$url" -o model.bin
+            echo "MODEL $url size=$(stat -c%s model.bin) sha256=$(sha256sum model.bin | cut -d' ' -f1)"
+          done
