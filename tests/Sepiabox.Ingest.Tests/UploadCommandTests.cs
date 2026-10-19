@@ -2,6 +2,7 @@ using Azure.Storage.Blobs;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Manifests;
+using Sepiabox.Pipeline.Storage;
 using Sepiabox.Tests.Shared;
 using Testcontainers.Azurite;
 
@@ -161,6 +162,27 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
             Assert.Equal(3, dependencies.Count);
             Assert.All(dependencies, dependency => Assert.True(dependency.Sequence < manifestSequence));
         }
+    }
+
+    [Fact]
+    public async Task A_second_work_folder_adds_its_sources_to_the_manifest_already_in_storage()
+    {
+        // The same photo on two drives, processed into two work folders and uploaded one after the other.
+        _drive.Write("2019/praia.jpg", TestPhotos.Porto("red"));
+        var id = Process().Single().Id;
+        await Upload();
+        using var otherDrive = new TempFolder();
+        using var otherWork = new TempFolder();
+        otherDrive.Write("Fotos/IMG_0001.jpg", TestPhotos.Porto("red"));
+        ProcessCommand.Run(new ProcessOptions(otherDrive.Path, otherWork.Path, "HD do Jonathas", FfmpegFolder: Path.Combine(otherWork.Path, "no-ffmpeg")));
+
+        var result = await UploadCommand.RunAsync(new UploadOptions(otherWork.Path, UploadDestination.Local), Service);
+
+        Assert.Empty(result.Problems);
+        var blob = Service.GetBlobContainerClient(BlobLayout.ManifestsContainer).GetBlobClient(BlobLayout.ManifestBlobName(id));
+        var stored = ManifestJson.Deserialize((await blob.DownloadContentAsync()).Value.Content.ToString());
+        Assert.Equal(["HD da Ana/2019/praia.jpg", "HD do Jonathas/Fotos/IMG_0001.jpg"], stored.Sources.Select(s => $"{s.Name}/{s.Path}"));
+        Assert.Equal(["preview-1280", "thumb-256"], stored.Derivatives.Select(d => d.Name).Order(StringComparer.Ordinal));
     }
 
     private List<Manifest> Process()

@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="15.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="Testcontainers.Azurite" Version="4.16.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.16.0" />
@@ -20,6 +21,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sepiabox.Worker\Sepiabox.Worker.csproj" />
+    <!-- Only for the end-to-end test that uploads two work folders and imports them. -->
+    <ProjectReference Include="..\..\src\Sepiabox.Ingest\Sepiabox.Ingest.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\TestPhotos.cs" Link="Shared\TestPhotos.cs" />
+    <Compile Include="..\Sepiabox.Ingest.Tests\TempFolder.cs" Link="Shared\TempFolder.cs" />
   </ItemGroup>
 
 </Project>

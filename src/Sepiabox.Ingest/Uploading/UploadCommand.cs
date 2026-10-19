@@ -36,6 +36,7 @@ public static class UploadCommand
 
     public const int BlockSize = 8 * 1024 * 1024;
     public const int ParallelUploads = 4;
+    public const int ManifestWriteAttempts = 5;
 
     public static BlobServiceClient CreateClient(UploadOptions options) => options.Destination switch
     {
@@ -224,8 +225,15 @@ public static class UploadCommand
             }
 
             var blob = container.GetBlobClient(blobName);
-            var isManifest = container.Name == ManifestsContainer;
-            if (!isManifest && await ExistingSizeAsync(blob, cancellationToken) == file.Length)
+            if (container.Name == BlobLayout.ManifestsContainer)
+            {
+                AddBytes(await UploadManifestAsync(blob, path, cancellationToken));
+                state.MarkUploaded(container.Name, blobName, fingerprint);
+                Interlocked.Increment(ref _uploaded);
+                return;
+            }
+
+            if (await ExistingSizeAsync(blob, cancellationToken) == file.Length)
             {
                 state.MarkUploaded(container.Name, blobName, fingerprint);
                 Interlocked.Increment(ref _skipped);
@@ -254,6 +262,50 @@ public static class UploadCommand
 
             state.MarkUploaded(container.Name, blobName, fingerprint);
             Interlocked.Increment(ref _uploaded);
+        }
+
+        /// <summary>
+        /// Merges this work folder's manifest into the one already in storage (D-036): another drive may
+        /// have uploaded the same asset with its own sources. The write only succeeds if nobody changed the
+        /// blob since it was read; otherwise it is read and merged again. Returns the bytes sent.
+        /// </summary>
+        private static async Task<long> UploadManifestAsync(BlobClient blob, string path, CancellationToken cancellationToken)
+        {
+            var incoming = ManifestJson.Deserialize(await File.ReadAllTextAsync(path, cancellationToken));
+            for (var attempt = 1; ; attempt++)
+            {
+                Manifest merged;
+                BlobRequestConditions conditions;
+                try
+                {
+                    var current = (await blob.DownloadContentAsync(cancellationToken)).Value;
+                    merged = ManifestMerge.Merge(ManifestJson.Deserialize(current.Content.ToString()), incoming);
+                    conditions = new BlobRequestConditions { IfMatch = current.Details.ETag };
+                }
+                catch (RequestFailedException ex) when (ex.Status == 404)
+                {
+                    merged = incoming;
+                    conditions = new BlobRequestConditions { IfNoneMatch = ETag.All };
+                }
+
+                var content = BinaryData.FromString(ManifestJson.Serialize(merged));
+                try
+                {
+                    await blob.UploadAsync(
+                        content,
+                        new BlobUploadOptions
+                        {
+                            HttpHeaders = new BlobHttpHeaders { ContentType = "application/json" },
+                            Conditions = conditions,
+                        },
+                        cancellationToken);
+                    return content.ToMemory().Length;
+                }
+                catch (RequestFailedException ex) when (ex.Status is 409 or 412 && attempt < ManifestWriteAttempts)
+                {
+                    // Someone wrote the manifest between our read and our write: read it again and merge.
+                }
+            }
         }
 
         private static async Task<long?> ExistingSizeAsync(BlobBaseClient blob, CancellationToken cancellationToken)
