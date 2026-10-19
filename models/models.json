@@ -3,7 +3,8 @@
     {
       "name": "clip-vit-b32-vision",
       "file": "clip-vit-b32-vision.onnx",
-      "url": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model.onnx",
+      "url": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/onnx/vision_model.onnx",
+      "revision": "d15189d7028b43f1d3e65039190477f6af591c2a",
       "sha256": "fd6e1402a588279d1723c7534d4bcba5bc0b14b47dfab0e46f8c47b8270d7d40",
       "license": "MIT",
       "source": "Xenova/clip-vit-base-patch32 (ONNX export of openai/clip-vit-base-patch32)"
