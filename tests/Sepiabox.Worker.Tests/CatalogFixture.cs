@@ -26,6 +26,8 @@ public sealed class CatalogFixture : IAsyncLifetime
 
     public BlobServiceClient Blobs { get; private set; } = null!;
 
+    public string BlobConnectionString => _azurite.GetConnectionString();
+
     public async Task InitializeAsync()
     {
         var image = Environment.GetEnvironmentVariable(ImageOverrideVariable);
@@ -41,7 +43,7 @@ public sealed class CatalogFixture : IAsyncLifetime
 
         _postgres = new PostgreSqlBuilder(image).Build();
         await Task.WhenAll(_postgres.StartAsync(), _azurite.StartAsync());
-        Blobs = new BlobServiceClient(_azurite.GetConnectionString());
+        Blobs = new BlobServiceClient(BlobConnectionString);
     }
 
     /// <summary>Creates an empty database and returns a context for it, without applying migrations.</summary>
