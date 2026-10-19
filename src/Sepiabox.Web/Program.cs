@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Web.Components;
