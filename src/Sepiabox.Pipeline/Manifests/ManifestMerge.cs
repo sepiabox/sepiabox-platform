@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Sepiabox.Pipeline.Manifests;
 
 /// <summary>
@@ -21,6 +23,7 @@ public static class ManifestMerge
         {
             Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
             Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
+            Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),
         };
     }
 
@@ -32,6 +35,7 @@ public static class ManifestMerge
     {
         Sources = MergeSources(manifest.Sources),
         Derivatives = MergeDerivatives(manifest.Derivatives),
+        Embeddings = MergeEmbeddings(manifest.Embeddings),
     };
 
     // Later entries win for the same file, unless they are older.
@@ -67,5 +71,18 @@ public static class ManifestMerge
         }
 
         return [.. byName.Values.OrderBy(d => d.Name, StringComparer.Ordinal)];
+    }
+
+    // By model key, later entries winning (D-036): a drive processed without a model, or with another model
+    // version, never drops the vectors stored for other keys. Sorted so equal manifests serialize equally.
+    private static SortedDictionary<string, JsonNode> MergeEmbeddings(IEnumerable<KeyValuePair<string, JsonNode>> embeddings)
+    {
+        var byModel = new SortedDictionary<string, JsonNode>(StringComparer.Ordinal);
+        foreach (var (model, value) in embeddings)
+        {
+            byModel[model] = value.DeepClone();
+        }
+
+        return byModel;
     }
 }

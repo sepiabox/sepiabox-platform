@@ -82,8 +82,20 @@
       }
     },
     "embeddings": {
-      "description": "Vectors by model name, filled from S-015.",
-      "type": "object"
+      "description": "Vectors by model key (S-015): base64 of float32 little-endian values. clip-vit-b32 has 512 values, L2-normalized.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9-]*$" },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+      },
+      "properties": {
+        "clip-vit-b32": {
+          "type": "string",
+          "minLength": 2732,
+          "maxLength": 2732
+        }
+      }
     },
     "facesProcessed": { "type": "boolean" },
     "faces": {

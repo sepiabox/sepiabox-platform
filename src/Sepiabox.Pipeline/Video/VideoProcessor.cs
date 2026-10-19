@@ -66,9 +66,12 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
     public const string ProxyName = "proxy-720p";
     public const string ProxyContentType = "video/mp4";
 
+    /// <summary>The video's still, which is also what its CLIP embedding is computed from (S-015).</summary>
+    public const string PosterName = "poster";
+
     public static readonly IReadOnlyList<ThumbnailSize> PosterSizes =
     [
-        new("poster", 1280),
+        new(PosterName, 1280),
         new("thumb-256", 256),
     ];
 

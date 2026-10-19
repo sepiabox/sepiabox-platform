@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 
@@ -28,6 +29,38 @@ public sealed class ManifestMergeTests
             Photo(Source("HD da Ana", "a.jpg", hour: 10)));
 
         Assert.Equal(12, Assert.Single(merged.Sources).ModifiedAt.Hour);
+    }
+
+    [Fact]
+    public void Merges_embeddings_by_model_key_with_the_incoming_value_winning()
+    {
+        var existing = Photo(Source("HD da Ana", "a.jpg")) with
+        {
+            Embeddings = new Dictionary<string, JsonNode> { ["clip-vit-b32"] = "old", ["other-model"] = "kept" },
+        };
+        var incoming = Photo(Source("HD do Jonathas", "c.jpg")) with
+        {
+            Embeddings = new Dictionary<string, JsonNode> { ["clip-vit-b32"] = "new" },
+        };
+
+        var merged = ManifestMerge.Merge(existing, incoming);
+
+        Assert.Equal(
+            ["clip-vit-b32=new", "other-model=kept"],
+            merged.Embeddings.Select(e => $"{e.Key}={e.Value.GetValue<string>()}"));
+    }
+
+    [Fact]
+    public void A_manifest_without_embeddings_never_drops_the_stored_ones()
+    {
+        var existing = Photo(Source("HD da Ana", "a.jpg")) with
+        {
+            Embeddings = new Dictionary<string, JsonNode> { ["clip-vit-b32"] = "stored" },
+        };
+
+        var merged = ManifestMerge.Merge(existing, Photo(Source("HD do Jonathas", "c.jpg")));
+
+        Assert.Equal("stored", merged.Embeddings["clip-vit-b32"].GetValue<string>());
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
 
 namespace Sepiabox.Pipeline.Tests;
@@ -101,6 +102,40 @@ public sealed class ManifestValidatorTests
 
         Assert.False(s_validator.TryValidate(json, out _, out var error));
         Assert.Contains("/capturedAt", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Accepts_a_clip_embedding_of_512_float32_values()
+    {
+        var json = ValidJson(node => node["embeddings"] = new JsonObject
+        {
+            ["clip-vit-b32"] = EmbeddingCodec.Encode(new float[ClipImageEmbedder.Dimensions]),
+        });
+
+        Assert.True(s_validator.TryValidate(json, out var manifest, out var error), error);
+        Assert.True(manifest.Embeddings.ContainsKey("clip-vit-b32"));
+    }
+
+    [Theory]
+    [InlineData(511)]
+    [InlineData(513)]
+    public void Rejects_a_clip_embedding_of_the_wrong_length(int values)
+    {
+        var json = ValidJson(node => node["embeddings"] = new JsonObject
+        {
+            ["clip-vit-b32"] = EmbeddingCodec.Encode(new float[values]),
+        });
+
+        Assert.False(s_validator.TryValidate(json, out _, out var error));
+        Assert.Contains("/embeddings/clip-vit-b32", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rejects_an_embedding_that_is_not_base64()
+    {
+        var json = ValidJson(node => node["embeddings"] = new JsonObject { ["other-model"] = "not base64!" });
+
+        Assert.False(s_validator.TryValidate(json, out _, out _));
     }
 
     private static string ValidJson(Action<JsonObject>? change = null)
