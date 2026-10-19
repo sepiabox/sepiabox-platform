@@ -26,7 +26,7 @@ The AppHost describes the infrastructure; `azd` provisions it in France Central 
 ### Technical notes
 - Customizations via Aspire's `ConfigureInfrastructure`.
 - Human prerequisites in `docs/operations.md`.
-- The web signs blob links with a user delegation key (D-039): its managed identity needs *Storage Blob Data Reader* and *Storage Blob Delegator* on the storage account.
+- The web signs blob links with a user delegation key (D-039): its managed identity needs *Storage Blob Data Reader* on the storage account. That role includes the user delegation key action, so *Storage Blob Delegator* is not added.
 - Decisions: D-002, D-003, D-004, D-022, D-034.
 
 ### Expected tests

@@ -74,6 +74,8 @@ Documentation:
 
 Sepiabox is licensed under the [GNU Affero General Public License v3.0](LICENSE). If you run a modified version as a network service, you must make its source code available to its users.
 
+The Sepiabox name and logo, including `src/Sepiabox.Web/wwwroot/symbol.svg`, are not covered by the AGPL: all rights reserved (from [sepiabox-brand](https://github.com/sepiabox/sepiabox-brand)). The typefaces in `src/Sepiabox.Web/wwwroot/fonts` are under the SIL Open Font License 1.1 (see the `OFL.txt` next to each).
+
 Place names use data from [GeoNames](https://www.geonames.org/), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ## Contributing
