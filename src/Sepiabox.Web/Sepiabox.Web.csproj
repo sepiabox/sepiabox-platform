@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Sepiabox.Catalog\Sepiabox.Catalog.csproj" />
     <ProjectReference Include="..\Sepiabox.ServiceDefaults\Sepiabox.ServiceDefaults.csproj" />
   </ItemGroup>
 
