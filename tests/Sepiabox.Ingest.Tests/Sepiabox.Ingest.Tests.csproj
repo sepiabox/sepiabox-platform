@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="JsonSchema.Net" Version="7.3.4" />
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="15.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
@@ -22,6 +24,11 @@
 
   <ItemGroup>
     <None Include="..\Sepiabox.Pipeline.Tests\TestData\taken-2019-07-14.jpg" Link="TestData\taken-2019-07-14.jpg" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\TestPhotos.cs" Link="Shared\TestPhotos.cs" />
+    <None Include="..\..\docs\schemas\manifest.v1.json" Link="TestData\manifest.v1.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

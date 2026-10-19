@@ -26,6 +26,12 @@ public static class CaptureDateReader
             return null;
         }
 
+        return FromDirectories(directories);
+    }
+
+    /// <summary>Capture date from metadata that was already read, so a file is parsed only once.</summary>
+    public static DateTime? FromDirectories(IReadOnlyList<MetadataExtractor.Directory> directories)
+    {
         var exif = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
         if (exif is not null && exif.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var taken))
         {
