@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Azure;
 using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
@@ -55,9 +54,11 @@ public sealed class ManifestImporter(
             {
                 done++;
             }
-            else if (problem is not null)
+
+            // A manifest that was not imported is reported on every run until someone fixes or deletes it; one
+            // imported without an unusable embedding is reported once, when it is imported (D-043).
+            if (problem is not null)
             {
-                // Not recorded as imported: it is reported on every run until someone fixes or deletes it.
                 Log.ManifestProblem(logger, blob.Name, problem);
                 problems.Add(new ImportProblem(blob.Name, problem));
             }
@@ -66,7 +67,10 @@ public sealed class ManifestImporter(
         return new ImportResult(done, unchanged, problems);
     }
 
-    /// <summary>Imports one manifest blob. Neither imported nor a problem means the blob was gone.</summary>
+    /// <summary>
+    /// Imports one manifest blob. Neither imported nor a problem means the blob was gone; imported with a problem
+    /// means an embedding was left out.
+    /// </summary>
     private async Task<(bool Imported, string? Problem)> ImportBlobAsync(
         BlobContainerClient manifests, string blobName, CancellationToken cancellationToken)
     {
@@ -104,10 +108,7 @@ public sealed class ManifestImporter(
             return (false, $"has kind {manifest.Kind}, which the catalog does not store");
         }
 
-        if (!TryReadEmbeddings(manifest, out var embeddings, out var embeddingProblem))
-        {
-            return (false, embeddingProblem);
-        }
+        var (embeddings, embeddingProblem) = ReadEmbeddings(manifest);
 
         // Only errors known to be about this manifest's data are reported and the import goes on;
         // everything else (connection, missing table, a schema the model no longer matches,
@@ -119,7 +120,7 @@ public sealed class ManifestImporter(
         try
         {
             await SaveAsync(manifest, kind, embeddings, blobName, etag, cancellationToken);
-            return (true, null);
+            return (true, embeddingProblem);
         }
         // Only SaveChanges failures (which EF wraps in DbUpdateException) can be about the data; a read
         // that fails says something about the database. SaveAsync writes only through SaveChangesAsync
@@ -252,11 +253,15 @@ public sealed class ManifestImporter(
         [ClipImageEmbedder.ModelKey] = ClipImageEmbedder.Dimensions,
     };
 
-    private static bool TryReadEmbeddings(
-        Manifest manifest, out IReadOnlyDictionary<string, float[]> embeddings, [NotNullWhen(false)] out string? problem)
+    /// <summary>
+    /// The embeddings to store. The schema has already checked their keys and base64 length; a vector whose values
+    /// are not finite or that has no length would break cosine search, so it is left out and reported, and the
+    /// asset is imported without it (D-043).
+    /// </summary>
+    private static (IReadOnlyDictionary<string, float[]> Embeddings, string? Problem) ReadEmbeddings(Manifest manifest)
     {
         var read = new Dictionary<string, float[]>(StringComparer.Ordinal);
-        embeddings = read;
+        var problems = new List<string>();
         foreach (var (model, node) in manifest.Embeddings)
         {
             if (!s_embeddingDimensions.TryGetValue(model, out var dimensions))
@@ -271,21 +276,20 @@ public sealed class ManifestImporter(
             }
             catch (Exception ex) when (ex is FormatException or InvalidOperationException)
             {
-                problem = $"has an unreadable {model} embedding: {ex.Message}";
-                return false;
+                problems.Add($"has an unreadable {model} embedding, which was left out: {ex.Message}");
+                continue;
             }
 
-            if (values.Length != dimensions || values.Any(v => !float.IsFinite(v)))
+            if (values.Length != dimensions || values.Any(v => !float.IsFinite(v)) || values.All(v => v == 0))
             {
-                problem = $"has a {model} embedding of {values.Length} values; expected {dimensions} finite values";
-                return false;
+                problems.Add($"has a {model} embedding that is not {dimensions} finite values with a length, which was left out");
+                continue;
             }
 
             read[model] = values;
         }
 
-        problem = null;
-        return true;
+        return (read, problems.Count == 0 ? null : string.Join("; ", problems));
     }
 
     // The schema only allows photo and video; anything else is reported before saving.
