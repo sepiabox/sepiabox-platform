@@ -196,10 +196,43 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
 
         var result = await Upload();
 
-        Assert.Contains("this manifest is not valid", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
-        Assert.Equal(
-            [BlobLayout.ManifestBlobName(manifests.Single(m => m.Id != broken.Id).Id)],
-            await BlobNames(BlobLayout.ManifestsContainer));
+        Assert.Contains("is not valid", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        await AssertOnlyUploadedAsync(manifests.Single(m => m.Id != broken.Id).Id);
+    }
+
+    public static TheoryData<string> EscapingDerivativePaths => new()
+    {
+        "absolute",
+        "parent",
+    };
+
+    [Theory]
+    [MemberData(nameof(EscapingDerivativePaths))]
+    public async Task A_derivative_outside_the_work_folder_is_a_problem_and_nothing_of_that_asset_is_uploaded(string kind)
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        _drive.Write("b.jpg", TestPhotos.Porto("green"));
+        var manifests = Process();
+        var broken = manifests.Single(m => m.Sources[0].Path == "a.jpg");
+        var outside = _drive.Write("secret.webp", [1, 2, 3]);
+        var escaping = kind == "absolute"
+            ? outside
+            : Path.GetRelativePath(_work.Path, outside).Replace('\\', '/');
+        var tampered = broken with { Derivatives = [broken.Derivatives[0] with { Path = escaping }] };
+        await File.WriteAllTextAsync(Path.Combine(_work.Path, "manifests", broken.Id + ".json"), ManifestJson.Serialize(tampered));
+
+        var result = await Upload();
+
+        Assert.Single(result.Problems);
+        await AssertOnlyUploadedAsync(manifests.Single(m => m.Id != broken.Id).Id);
+    }
+
+    /// <summary>Only this asset's original, derivatives and manifest are in storage.</summary>
+    private async Task AssertOnlyUploadedAsync(string id)
+    {
+        Assert.Equal([id], await BlobNames(BlobLayout.OriginalsContainer));
+        Assert.All(await BlobNames(BlobLayout.DerivativesContainer), name => Assert.StartsWith(id + "/", name, StringComparison.Ordinal));
+        Assert.Equal([BlobLayout.ManifestBlobName(id)], await BlobNames(BlobLayout.ManifestsContainer));
     }
 
     public static TheoryData<string, string> UnmergeableStoredManifests => new()

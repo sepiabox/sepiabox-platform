@@ -65,13 +65,15 @@ public static class UploadCommand
         }
 
         using var state = new UploadState(databasePath);
+        var validator = new ManifestValidator();
         var run = new Run(
             workFolder,
             containers,
             state,
             // Azurite does not know the Cold tier, so it is only set on real accounts.
             options.Destination == UploadDestination.Azure ? AccessTier.Cold : (AccessTier?)null,
-            new ManifestStore(new ManifestValidator()),
+            validator,
+            new ManifestStore(validator),
             bytesSent);
 
         var stopwatch = Stopwatch.StartNew();
@@ -92,6 +94,7 @@ public static class UploadCommand
         Containers containers,
         UploadState state,
         AccessTier? originalTier,
+        IManifestValidator validator,
         ManifestStore manifestStore,
         IProgress<long>? bytesSent)
     {
@@ -112,7 +115,26 @@ public static class UploadCommand
                 // fingerprint and sends it again instead of recording the old content as uploaded.
                 var manifestFile = new FileInfo(manifestPath);
                 var fingerprint = $"{manifestFile.Length}:{manifestFile.LastWriteTimeUtc.Ticks}";
-                var manifest = ManifestJson.Deserialize(await File.ReadAllTextAsync(manifestPath, cancellationToken));
+                // Checked before anything of this asset is sent: a hand-edited or truncated manifest must
+                // not put an original or a derivative in storage that no valid manifest describes.
+                if (!validator.TryValidate(await File.ReadAllTextAsync(manifestPath, cancellationToken), out var manifest, out var invalid))
+                {
+                    AddProblem(manifestPath, $"this manifest is not valid: {invalid}");
+                    return;
+                }
+
+                var derivativeFiles = new List<(ManifestDerivative Derivative, string Path)>();
+                foreach (var derivative in manifest.Derivatives)
+                {
+                    // The schema already only allows derivatives/<id>/<file>; this keeps that promise even if it changes.
+                    if (!TryResolveInWorkFolder(derivative.Path, out var file))
+                    {
+                        AddProblem(manifestPath, $"derivative {derivative.Name} is outside the work folder: {derivative.Path}");
+                        return;
+                    }
+
+                    derivativeFiles.Add((derivative, file));
+                }
 
                 // Order matters: an asset's manifest is only sent once everything it points to is in storage.
                 if (!await UploadOriginalAsync(manifest, cancellationToken))
@@ -120,19 +142,27 @@ public static class UploadCommand
                     return;
                 }
 
-                foreach (var derivative in manifest.Derivatives)
+                foreach (var (derivative, file) in derivativeFiles)
                 {
                     var blobName = BlobLayout.DerivativeBlobName(manifest.Id, derivative);
-                    await UploadWorkFileAsync(
-                        containers.Derivatives, blobName, Path.Combine(workFolder, derivative.Path), derivative.ContentType, cancellationToken);
+                    await UploadWorkFileAsync(containers.Derivatives, blobName, file, derivative.ContentType, cancellationToken);
                 }
 
                 await UploadManifestAsync(manifest, manifestPath, fingerprint, cancellationToken);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or RequestFailedException or System.Text.Json.JsonException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                // One asset's failure, whatever it is, must not stop the others.
                 AddProblem(manifestPath, ex.Message);
             }
+        }
+
+        private bool TryResolveInWorkFolder(string relativePath, out string fullPath)
+        {
+            fullPath = Path.GetFullPath(Path.Combine(workFolder, relativePath));
+            var root = Path.TrimEndingDirectorySeparator(workFolder) + Path.DirectorySeparatorChar;
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            return !Path.IsPathRooted(relativePath) && fullPath.StartsWith(root, comparison);
         }
 
         private async Task<bool> UploadOriginalAsync(Manifest manifest, CancellationToken cancellationToken)
