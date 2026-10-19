@@ -245,6 +245,22 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task A_schema_that_no_longer_matches_the_model_stops_the_import()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, Photo(Source("HD da Ana", "a.jpg")));
+        await ImportAsync(db, container);
+        // Reading the asset back now throws InvalidCastException outside SaveChanges: the database, not the data.
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE assets ALTER COLUMN width TYPE text");
+        await PutAsync(container, Photo(Source("HD do Jonathas", "b.jpg")));
+
+        var failure = await Record.ExceptionAsync(() => ImportAsync(db, container));
+
+        Assert.Contains(Chain(failure), ex => ex is InvalidCastException);
+    }
+
+    [Fact]
     public async Task A_lost_database_connection_stops_the_import_instead_of_failing_every_manifest()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();

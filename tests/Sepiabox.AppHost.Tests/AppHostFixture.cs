@@ -32,7 +32,7 @@ public sealed class AppHostFixture : IAsyncLifetime
         var migrate = await WaitForWorkerAsync(MigrateWorker, cts.Token);
         if (migrate.ExitCode != 0)
         {
-            var exitCode = migrate.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown (it never ran)";
+            var exitCode = migrate.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
             throw new InvalidOperationException(
                 $"{MigrateWorker} ended in state '{migrate.State?.Text}' with exit code {exitCode}; see its logs.");
         }

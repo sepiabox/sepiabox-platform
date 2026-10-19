@@ -102,10 +102,12 @@ public sealed class ManifestImporter(
         }
 
         // Only errors known to be about this manifest's data are reported and the import goes on;
-        // everything else (connection, missing table, cancellation…) stops the import, rather than
-        // failing every manifest left with the same error.
-        // DbUpdateConcurrencyException is deliberately fatal: no concurrency tokens are configured, so it
-        // means rows changed underneath (another import running); the next run imports again.
+        // everything else (connection, missing table, a schema the model no longer matches,
+        // cancellation…) stops the import, rather than failing every manifest left with the same error.
+        // Two imports inserting the same new asset at once make one fail with a unique violation
+        // (23505): that is reported for its manifest and imported again by the next run.
+        // DbUpdateConcurrencyException is deliberately fatal: no concurrency tokens are configured, so
+        // it only means an update or delete found its row gone, which is not this manifest's fault.
         try
         {
             await SaveAsync(manifest, kind, blobName, etag, cancellationToken);
@@ -115,9 +117,9 @@ public sealed class ManifestImporter(
         {
             return (false, $"could not be saved: {Describe(ex.InnerException!)}");
         }
-        catch (Exception ex) when (IsDataError(ex))
+        catch (PostgresException ex) when (IsDataSqlState(ex))
         {
-            return (false, $"could not be saved: {Describe(ex)}");
+            return (false, $"could not be saved: {ex.MessageText}");
         }
         finally
         {
@@ -226,17 +228,23 @@ public sealed class ManifestImporter(
     };
 
     /// <summary>
-    /// Allow-list of errors caused by the row being written: SQLSTATE classes data exception (22),
-    /// integrity constraint violation (23), program limit exceeded such as a value too large (54) and
-    /// PL/pgSQL raise (P0); and InvalidCastException, which Npgsql throws before sending a value that does
-    /// not fit its column (a DateTime whose Kind does not match the column type).
+    /// What SaveChanges can fail with because of the row being written: a data SQLSTATE, or an
+    /// InvalidCastException, which Npgsql throws before sending a value that does not fit its column
+    /// (a DateTime whose Kind does not match the column type). Outside SaveChanges an
+    /// InvalidCastException means reading the database failed, which is not about this manifest.
     /// </summary>
     private static bool IsDataError(Exception? ex) => ex switch
     {
-        PostgresException postgres => postgres.SqlState[..2] is "22" or "23" or "54" or "P0",
+        PostgresException postgres => IsDataSqlState(postgres),
         InvalidCastException => true,
         _ => false,
     };
+
+    /// <summary>
+    /// Allow-list of SQLSTATE classes caused by the row: data exception (22), integrity constraint
+    /// violation (23), program limit exceeded such as a value too large (54) and PL/pgSQL raise (P0).
+    /// </summary>
+    private static bool IsDataSqlState(PostgresException ex) => ex.SqlState[..2] is "22" or "23" or "54" or "P0";
 
     private static string Describe(Exception ex) => ex is PostgresException postgres ? postgres.MessageText : ex.Message;
 
