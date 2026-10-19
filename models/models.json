@@ -1,0 +1,12 @@
+{
+  "models": [
+    {
+      "name": "clip-vit-b32-vision",
+      "file": "clip-vit-b32-vision.onnx",
+      "url": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model.onnx",
+      "sha256": "",
+      "license": "MIT",
+      "source": "Xenova/clip-vit-base-patch32 (ONNX export of openai/clip-vit-base-patch32)"
+    }
+  ]
+}

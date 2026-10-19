@@ -19,8 +19,9 @@ appsettings.Development.json
 .env*
 secrets.json
 
-# Downloaded ML models (fetched by script, licensed separately)
-models/
+# Downloaded ML models (fetched by `sepiabox-ingest models download`, licensed separately); only the pinned list is committed
+models/*
+!models/models.json
 
 # Local ingestion state and test media
 .sepiabox/
