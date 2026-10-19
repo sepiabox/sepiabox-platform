@@ -1,8 +1,7 @@
 using System.Text.Json.Nodes;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Worker.Importing;
 
-namespace Sepiabox.Worker.Tests;
+namespace Sepiabox.Pipeline.Tests;
 
 public sealed class ManifestValidatorTests
 {
@@ -52,6 +51,30 @@ public sealed class ManifestValidatorTests
     }
 
     [Fact]
+    public void Rejects_a_repeated_property_without_throwing()
+    {
+        var json = ValidJson().Insert(1, "\"kind\":\"video\",");
+
+        Assert.False(s_validator.TryValidate(json, out var manifest, out var error));
+        Assert.Null(manifest);
+        Assert.False(string.IsNullOrEmpty(error));
+    }
+
+    [Fact]
+    public void Enforces_date_time_only_on_source_times_and_a_local_time_pattern_on_capture_time()
+    {
+        // Format validation is required (RequireFormatValidation), so every "format" is a hard rule.
+        // capturedAt deliberately has no "format": date-time would demand an offset the camera never wrote.
+        using var stream = typeof(ManifestValidator).Assembly.GetManifestResourceStream("manifest.v1.json")!;
+        var schema = JsonNode.Parse(stream)!;
+
+        Assert.Equal(["/properties/sources/items/properties/modifiedAt: date-time"], Formats(schema, ""));
+        var capturedAt = schema["properties"]!["capturedAt"]!;
+        Assert.Equal(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", (string?)capturedAt["pattern"]);
+        Assert.Null(capturedAt["format"]);
+    }
+
+    [Fact]
     public void Rejects_a_json_null()
     {
         Assert.False(s_validator.TryValidate("null", out var manifest, out _));
@@ -75,6 +98,27 @@ public sealed class ManifestValidatorTests
         var node = JsonNode.Parse(ManifestJson.Serialize(TestManifests.Photo(TestManifests.Source("HD da Ana", "2019/praia.jpg"))))!.AsObject();
         change?.Invoke(node);
         return node.ToJsonString();
+    }
+
+    private static List<string> Formats(JsonNode node, string location)
+    {
+        var found = new List<string>();
+        if (node is JsonObject obj)
+        {
+            foreach (var (name, child) in obj)
+            {
+                if (name == "format" && child is JsonValue value)
+                {
+                    found.Add($"{location}: {value}");
+                }
+                else if (child is not null)
+                {
+                    found.AddRange(Formats(child, $"{location}/{name}"));
+                }
+            }
+        }
+
+        return found;
     }
 
     private static void Set(JsonObject root, string location, JsonNode? value)

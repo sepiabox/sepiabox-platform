@@ -9,17 +9,12 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.6.1" />
-    <PackageReference Include="JsonSchema.Net" Version="7.3.4" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Sepiabox.Catalog\Sepiabox.Catalog.csproj" />
     <ProjectReference Include="..\Sepiabox.Pipeline\Sepiabox.Pipeline.csproj" />
     <ProjectReference Include="..\Sepiabox.ServiceDefaults\Sepiabox.ServiceDefaults.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="..\..\docs\schemas\manifest.v1.json" LogicalName="manifest.v1.json" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
+using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
 using Sepiabox.Worker.Importing;
 

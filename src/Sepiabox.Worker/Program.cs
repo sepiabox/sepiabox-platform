@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Sepiabox.Catalog;
+using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
 using Sepiabox.Worker;
 using Sepiabox.Worker.Importing;
