@@ -89,6 +89,31 @@ public sealed class ManifestStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_unusable_work_folder_manifest_is_a_problem_and_creates_nothing()
+    {
+        var incoming = Photo(Source("HD da Ana", "a.jpg")) with { Sources = null! };
+
+        var result = await _store.WriteMergedAsync(Blob(), incoming, CancellationToken.None);
+
+        Assert.Equal(ManifestWriteStatus.Problem, result.Status);
+        Assert.StartsWith("this manifest is not valid", result.Problem, StringComparison.Ordinal);
+        Assert.False(await Blob().ExistsAsync());
+    }
+
+    [Fact]
+    public async Task A_merge_that_would_store_an_invalid_manifest_is_a_problem_and_writes_nothing()
+    {
+        await _store.WriteMergedAsync(Blob(), Photo(Source("HD da Ana", "a.jpg")), CancellationToken.None);
+        var before = await StoredJsonAsync();
+
+        // Width 0 deserializes fine but the schema requires at least 1.
+        var result = await _store.WriteMergedAsync(Blob(), Photo(Source("HD do Jonathas", "b.jpg")) with { Width = 0 }, CancellationToken.None);
+
+        Assert.Equal(ManifestWriteStatus.Problem, result.Status);
+        Assert.Equal(before, await StoredJsonAsync());
+    }
+
+    [Fact]
     public async Task Merges_again_when_another_writer_creates_the_blob_first()
     {
         // Our read finds nothing; another upload then creates the blob, so If-None-Match: * fails (409).

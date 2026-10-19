@@ -28,6 +28,13 @@ public sealed class ManifestStore(ManifestValidator validator)
 
     public async Task<ManifestWriteResult> WriteMergedAsync(BlobClient blob, Manifest incoming, CancellationToken cancellationToken)
     {
+        // A hand-edited or truncated work-folder manifest (null sources, a width of 0…) must neither
+        // throw out of the merge nor reach storage.
+        if (!validator.TryValidate(ManifestJson.Serialize(incoming), out _, out var incomingError))
+        {
+            return Problem($"this manifest is not valid: {incomingError}");
+        }
+
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             if (attempt > 1)
@@ -71,6 +78,12 @@ public sealed class ManifestStore(ManifestValidator validator)
             {
                 // Writing would only change the ETag and make the worker import the same thing again.
                 return new ManifestWriteResult(ManifestWriteStatus.Unchanged);
+            }
+
+            // What is written is checked like what was read: the worker would only reject it later.
+            if (!validator.TryValidate(json, out _, out var mergedError))
+            {
+                return Problem($"the merged manifest is not valid: {mergedError}");
             }
 
             var content = BinaryData.FromString(json);

@@ -184,6 +184,24 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.Equal(["preview-1280", "thumb-256"], stored.Derivatives.Select(d => d.Name).Order(StringComparer.Ordinal));
     }
 
+    [Fact]
+    public async Task An_invalid_work_folder_manifest_is_a_problem_for_that_asset_only()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        _drive.Write("b.jpg", TestPhotos.Porto("green"));
+        var manifests = Process();
+        var broken = manifests.Single(m => m.Sources[0].Path == "a.jpg");
+        var path = Path.Combine(_work.Path, "manifests", broken.Id + ".json");
+        await File.WriteAllTextAsync(path, ManifestJson.Serialize(broken with { Width = 0 }));
+
+        var result = await Upload();
+
+        Assert.Contains("this manifest is not valid", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Equal(
+            [BlobLayout.ManifestBlobName(manifests.Single(m => m.Id != broken.Id).Id)],
+            await BlobNames(BlobLayout.ManifestsContainer));
+    }
+
     public static TheoryData<string> UnmergeableStoredManifests => new()
     {
         // Another asset's manifest under this name.
