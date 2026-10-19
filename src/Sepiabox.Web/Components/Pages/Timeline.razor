@@ -1,18 +1,23 @@
 @page "/"
 @inject ILibraryQueries Library
-@inject ISasUrlFactory Links
+@inject NavigationManager Navigation
+@* Static server rendering (no @rendermode): the page is plain HTML with links, nothing interactive. *@
 
 <PageTitle>Sepiabox</PageTitle>
 
 <h1 class="visually-hidden">Fotos e vídeos</h1>
 
-@if (_groups is null)
+@if (_page is null)
 {
     <p class="muted">A carregar…</p>
 }
-else if (_groups.Count == 0)
+else if (_page.Items.Count == 0 && _page.Page == 1)
 {
     <p class="empty">Ainda não há fotos. Use <code>sepiabox-ingest</code> para enviar as do HD.</p>
+}
+else if (_page.Items.Count == 0)
+{
+    <p class="empty">Não há mais fotos. <a href="@PageLink(1)">Voltar ao início</a></p>
 }
 else
 {
@@ -24,18 +29,18 @@ else
                 @foreach (var item in group.Items)
                 {
                     <li>
-                        <a href="fotos/@item.Id" class="thumb" title="@Describe(item)">
-                            @if (_thumbnails.TryGetValue(item.Id, out var url))
+                        <a href="@DetailLink(item)" class="thumb" aria-label="@Describe(item)">
+                            @if (item.HasThumbnail)
                             {
-                                <img src="@url" alt="@Describe(item)" loading="lazy" width="256" height="256" />
+                                <img src="fotos/@item.Id/@DerivativeNames.Thumbnail" alt="" loading="lazy" width="256" height="256" />
                             }
                             else
                             {
-                                <span class="placeholder">@(item.Kind == "video" ? "Vídeo" : "Foto") sem miniatura</span>
+                                <span class="placeholder">@AssetKinds.Label(item.Kind) sem miniatura</span>
                             }
-                            @if (item.Kind == "video")
+                            @if (AssetKinds.IsVideo(item.Kind))
                             {
-                                <span class="badge">Vídeo</span>
+                                <span class="badge">@AssetKinds.Label(item.Kind)</span>
                             }
                         </a>
                     </li>
@@ -45,13 +50,13 @@ else
     }
 
     <nav class="pages" aria-label="Páginas">
-        @if (_page > 1)
+        @if (_page.Page > 1)
         {
-            <a href="@PageLink(_page - 1)">← Mais recentes</a>
+            <a href="@PageLink(_page.Page - 1)">← Mais recentes</a>
         }
-        @if (_hasMore)
+        @if (_page.HasMore)
         {
-            <a href="@PageLink(_page + 1)">Mais antigas →</a>
+            <a href="@PageLink(_page.Page + 1)">Mais antigas →</a>
         }
     </nav>
 }
@@ -60,31 +65,22 @@ else
     [SupplyParameterFromQuery(Name = "pagina")]
     public int? Pagina { get; set; }
 
-    private IReadOnlyList<TimelineGroup>? _groups;
-    private readonly Dictionary<string, Uri> _thumbnails = [];
-    private int _page;
-    private bool _hasMore;
+    private TimelinePage? _page;
+    private IReadOnlyList<TimelineGroup> _groups = [];
 
     protected override async Task OnParametersSetAsync()
     {
-        var page = await Library.GetTimelinePageAsync(Math.Max(Pagina ?? 1, 1));
-        _page = page.Page;
-        _hasMore = page.HasMore;
-
-        _thumbnails.Clear();
-        foreach (var item in page.Items)
-        {
-            if (item.ThumbnailBlobPath is { } path)
-            {
-                _thumbnails[item.Id] = await Links.ForDerivativeAsync(path);
-            }
-        }
-
+        var page = await Library.GetTimelinePageAsync(LibraryQueries.ClampPage(Pagina ?? 1));
         _groups = TimelineGroups.ByMonth(page.Items);
+        _page = page;
     }
 
-    private static string PageLink(int page) => page == 1 ? "./" : $"?pagina={page}";
+    private string PageLink(int page) =>
+        Navigation.GetUriWithQueryParameter("pagina", page == 1 ? null : page);
+
+    private string DetailLink(TimelineItem item) =>
+        _page is { Page: > 1 } page ? $"fotos/{item.Id}?pagina={page.Page}" : $"fotos/{item.Id}";
 
     private static string Describe(TimelineItem item) =>
-        item.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle;
+        $"{AssetKinds.Label(item.Kind)}, {(item.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle)}";
 }
