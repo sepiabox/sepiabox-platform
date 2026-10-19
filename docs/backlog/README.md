@@ -23,7 +23,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-002 | [Scan a drive and report what it contains](S-002-scan-a-drive-and-report-what-it.md) | Local ingest | S-001 | High | M | `done` |
 | S-003 | [Start the local environment with .NET Aspire](S-003-start-the-local-environment-with-net-aspire.md) | Foundation | S-001 | High | M | `done` |
 | S-004 | [Describe each photo and video in a manifest](S-004-describe-each-photo-and-video-in-a.md) | Local ingest | S-002 | High | M | `done` |
-| S-005 | [Generate photo thumbnails](S-005-generate-photo-thumbnails.md) | Local ingest | S-004 | High | S | `todo` |
+| S-005 | [Generate photo thumbnails](S-005-generate-photo-thumbnails.md) | Local ingest | S-004 | High | S | `done` |
 | S-006 | [Generate video posters and 720p versions](S-006-generate-video-posters-and-720p-versions.md) | Local ingest | S-004 | High | M | `todo` |
 
 ### Sprint 2 — See the photos in the browser

@@ -6,7 +6,8 @@ const string Usage = """
 
     Commands:
       scan <folder>                  Read a folder or drive and report what it holds. Changes nothing.
-      process <folder> --out <dir>   Describe every photo and video in one manifest per file content.
+      process <folder> --out <dir>   Describe every photo and video in one manifest per file content,
+                                     with WebP thumbnails of each photo.
 
     Options for scan:
       --report <file>  Also write the full result, with every duplicate and problem, as JSON.

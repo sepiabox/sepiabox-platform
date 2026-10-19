@@ -149,6 +149,75 @@ public class ProcessCommandTests
         Assert.Equal(1, result.Processed);
     }
 
+    [Fact]
+    public void Writes_photo_thumbnails_and_lists_them_in_the_manifest()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        drive.Write("big.jpg", TestPhotos.Sized(4000, 3000));
+
+        Process(drive, work);
+
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal(
+            [
+                new ManifestDerivative("thumb-256", $"derivatives/{manifest.Id}/thumb-256.webp", 256, 192, "image/webp"),
+                new ManifestDerivative("preview-1280", $"derivatives/{manifest.Id}/preview-1280.webp", 1280, 960, "image/webp"),
+            ],
+            manifest.Derivatives);
+        Assert.All(manifest.Derivatives, d => Assert.True(File.Exists(Path.Combine(work.Path, d.Path))));
+    }
+
+    [Fact]
+    public void Keeps_the_manifest_without_derivatives_and_reports_a_corrupted_photo()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        drive.Write("broken.jpg", RandomBytes(2_000));
+        drive.Write("good.jpg", TestPhotos.Porto());
+
+        var result = Process(drive, work);
+
+        var problem = Assert.Single(result.Problems);
+        Assert.EndsWith("broken.jpg", problem.Path, StringComparison.Ordinal);
+        var broken = Assert.Single(ReadManifests(work), m => m.Sources[0].Path == "broken.jpg");
+        Assert.Empty(broken.Derivatives);
+        Assert.Equal(1, result.Processed);
+    }
+
+    [Fact]
+    public void Does_not_regenerate_thumbnails_when_nothing_changed()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        drive.Write("photo.jpg", TestPhotos.Porto());
+        Process(drive, work);
+        var thumb = Path.Combine(work.Path, Assert.Single(ReadManifests(work)).Derivatives[0].Path);
+        var firstWrite = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(thumb, firstWrite);
+
+        var second = Process(drive, work);
+
+        Assert.Equal(1, second.Skipped);
+        Assert.Equal(firstWrite, File.GetLastWriteTimeUtc(thumb));
+    }
+
+    [Fact]
+    public void Deletes_the_thumbnails_of_a_description_that_no_longer_has_any_source()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var path = drive.Write("edited.jpg", TestPhotos.Porto("red"));
+        Process(drive, work);
+        var oldFolder = Path.Combine(work.Path, "derivatives", Assert.Single(ReadManifests(work)).Id);
+
+        File.WriteAllBytes(path, TestPhotos.Porto("blue"));
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(5));
+        Process(drive, work);
+
+        Assert.False(Directory.Exists(oldFolder));
+    }
+
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
         ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD da Ana"));
 

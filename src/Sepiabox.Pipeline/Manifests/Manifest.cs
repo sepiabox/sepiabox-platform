@@ -7,8 +7,8 @@ namespace Sepiabox.Pipeline.Manifests;
 
 /// <summary>
 /// Everything known about one asset, written once by the pipeline and imported by the cloud (D-014).
-/// Schema: <c>docs/schemas/manifest.v1.json</c>. Later stories fill <see cref="Derivatives"/>,
-/// <see cref="Embeddings"/> and <see cref="Faces"/>.
+/// Schema: <c>docs/schemas/manifest.v1.json</c>. Later stories fill <see cref="Embeddings"/>
+/// and <see cref="Faces"/>.
 /// </summary>
 public sealed record Manifest
 {
@@ -40,7 +40,7 @@ public sealed record Manifest
 
     public IReadOnlyList<ManifestSource> Sources { get; init; } = [];
 
-    public IReadOnlyList<JsonObject> Derivatives { get; init; } = [];
+    public IReadOnlyList<ManifestDerivative> Derivatives { get; init; } = [];
 
     public IReadOnlyDictionary<string, JsonNode> Embeddings { get; init; } = new Dictionary<string, JsonNode>();
 
