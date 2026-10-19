@@ -19,7 +19,7 @@ The first time the family sees the drive's photos in the browser. The web shows 
 ### Acceptance criteria
 - [ ] Given 3 assets in different months, when I open `/`, then I see 3 month groups in descending order.
 - [ ] Given an asset without a date, when I open `/`, then it appears under "Sem data" at the end.
-- [ ] Given a thumbnail, when the page renders, then its URL is a SAS with expiry ≤ 15 min and read permission only.
+- [ ] Given a thumbnail, when the browser requests it (`/fotos/{id}/thumb-256`), then the web redirects to a read-only SAS that expires in ≤ 15 min, and the page itself contains no SAS URLs (D-039).
 - [ ] Given a non-existent `/fotos/{id}`, when I request it, then the response is 404.
 
 ### Technical notes

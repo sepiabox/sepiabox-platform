@@ -23,6 +23,7 @@ Sepiabox is private to two people. Login proves identity; the email list decides
 - [ ] Given an email not on the list, when `OnTicketReceived` runs, then the handler creates no session and redirects to `/sem-acesso`.
 - [ ] Given an authenticated user not on the list with an old cookie, when they call the APIs, then they get 403.
 - [ ] Given the `Production` environment, when I request `/dev-login`, then it returns 404.
+- [ ] Given an anonymous request to `/fotos/{id}/thumb-256` or `/fotos/{id}/original`, when it is handled, then it is challenged (redirected to `/entrar`) and never redirected to storage.
 
 ### Technical notes
 - `Sepiabox.Web/Auth/AccessList.cs`, `AuthSetup.cs`. Tests with `WebApplicationFactory` and a test authentication scheme.
@@ -30,4 +31,4 @@ Sepiabox is private to two people. Login proves identity; the email list decides
 - Decisions: D-006.
 
 ### Expected tests
-- Unit: `AccessList`, ticket handler. Integration (WebApplicationFactory): redirects, 403, `/dev-login` per environment.
+- Unit: `AccessList`, ticket handler. Integration (WebApplicationFactory, extending the S-009 `WebFactory`): redirects, 403, `/dev-login` per environment, and anonymous requests to the media endpoints (`/fotos/{id}/thumb-256`, `/fotos/{id}/original`) never answering with a storage URL.
