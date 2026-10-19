@@ -51,9 +51,10 @@ public sealed class ClipImageEmbedder : IImageEmbedder, IDisposable
             return null;
         }
 
+        bool fromMarker;
         try
         {
-            if (!ModelVerifier.Verify(model, path, out var actual))
+            if (!ModelVerifier.Verify(model, path, trustMarker: true, out var actual, out fromMarker))
             {
                 warning = $"{path} has SHA-256 {actual}, not the {model.Sha256} pinned in models.json, so no embeddings were computed. {Download}";
                 return null;
@@ -72,7 +73,7 @@ public sealed class ClipImageEmbedder : IImageEmbedder, IDisposable
         }
         catch (OnnxRuntimeException ex)
         {
-            warning = $"ONNX Runtime could not load {path} ({ex.Message}), so no embeddings were computed. {Download}";
+            warning = $"ONNX Runtime could not load {path} ({ex.Message}), so no embeddings were computed.{Forgotten(path, fromMarker)} {Download}";
             return null;
         }
 
@@ -80,12 +81,27 @@ public sealed class ClipImageEmbedder : IImageEmbedder, IDisposable
         {
             var found = string.Join(", ", session.OutputMetadata.Keys);
             session.Dispose();
-            warning = $"{path} has no {OutputName} output (it has {found}), so no embeddings were computed. {Download}";
+            warning = $"{path} has no {OutputName} output (it has {found}), so no embeddings were computed.{Forgotten(path, fromMarker)} {Download}";
             return null;
         }
 
         warning = null;
         return new ClipImageEmbedder(session);
+    }
+
+    /// <summary>
+    /// A file accepted on the strength of its marker but unusable may have been corrupted in place: the marker
+    /// goes, so the next run hashes it again.
+    /// </summary>
+    private static string Forgotten(string path, bool fromMarker)
+    {
+        if (!fromMarker)
+        {
+            return "";
+        }
+
+        ModelVerifier.Forget(path);
+        return " Its verification was removed, so the next run checks its SHA-256 again.";
     }
 
     public float[] Embed(string path)

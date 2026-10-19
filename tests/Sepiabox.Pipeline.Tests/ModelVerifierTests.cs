@@ -19,7 +19,7 @@ public sealed class ModelVerifierTests : IDisposable
         var model = Model(Sha256(s_garbage));
         var path = _folder.Write(model.File, s_garbage);
 
-        Assert.True(ModelVerifier.Verify(model, path, out _));
+        Assert.True(ModelVerifier.Verify(model, path, trustMarker: true, out _, out _));
         Assert.True(File.Exists(ModelVerifier.MarkerPath(path)));
     }
 
@@ -28,14 +28,14 @@ public sealed class ModelVerifierTests : IDisposable
     {
         var model = Model(Sha256(s_garbage));
         var path = _folder.Write(model.File, s_garbage);
-        Assert.True(ModelVerifier.Verify(model, path, out _));
+        Assert.True(ModelVerifier.Verify(model, path, trustMarker: true, out _, out _));
         var time = File.GetLastWriteTimeUtc(path);
 
         // Same length and time, different bytes: only the marker can make this pass.
         File.WriteAllBytes(path, [.. s_garbage.Select(b => (byte)(b ^ 1))]);
         File.SetLastWriteTimeUtc(path, time);
 
-        Assert.True(ModelVerifier.Verify(model, path, out _));
+        Assert.True(ModelVerifier.Verify(model, path, trustMarker: true, out _, out _));
     }
 
     [Fact]
@@ -43,11 +43,11 @@ public sealed class ModelVerifierTests : IDisposable
     {
         var model = Model(Sha256(s_garbage));
         var path = _folder.Write(model.File, s_garbage);
-        Assert.True(ModelVerifier.Verify(model, path, out _));
+        Assert.True(ModelVerifier.Verify(model, path, trustMarker: true, out _, out _));
 
         File.WriteAllBytes(path, [.. s_garbage, 0]);
 
-        Assert.False(ModelVerifier.Verify(model, path, out var actual));
+        Assert.False(ModelVerifier.Verify(model, path, trustMarker: true, out var actual, out _));
         Assert.Equal(Sha256([.. s_garbage, 0]), actual);
         Assert.False(File.Exists(ModelVerifier.MarkerPath(path)));
     }
@@ -76,6 +76,37 @@ public sealed class ModelVerifierTests : IDisposable
         Assert.Null(embedder);
         Assert.Contains("ONNX Runtime could not load", warning, StringComparison.Ordinal);
         Assert.Contains("sepiabox-ingest models download", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Hashes_again_when_the_marker_must_not_be_trusted()
+    {
+        var model = Model(Sha256(s_garbage));
+        var path = _folder.Write(model.File, s_garbage);
+        Assert.True(ModelVerifier.Verify(model, path, trustMarker: true, out _, out _));
+        var time = File.GetLastWriteTimeUtc(path);
+        File.WriteAllBytes(path, [.. s_garbage.Select(b => (byte)(b ^ 1))]);
+        File.SetLastWriteTimeUtc(path, time);
+
+        Assert.False(ModelVerifier.Verify(model, path, trustMarker: false, out _, out var fromMarker));
+        Assert.False(fromMarker);
+    }
+
+    [Fact]
+    public void Removes_the_marker_when_a_model_accepted_by_its_marker_cannot_be_loaded()
+    {
+        var model = Model(Sha256(s_garbage));
+        var path = _folder.Write(model.File, s_garbage);
+        using (ClipImageEmbedder.TryCreate(_folder.Path, model, out _))
+        {
+            Assert.True(File.Exists(ModelVerifier.MarkerPath(path)));
+        }
+
+        using var embedder = ClipImageEmbedder.TryCreate(_folder.Path, model, out var warning);
+
+        Assert.Null(embedder);
+        Assert.False(File.Exists(ModelVerifier.MarkerPath(path)));
+        Assert.Contains("verification was removed", warning, StringComparison.Ordinal);
     }
 
     [Fact]

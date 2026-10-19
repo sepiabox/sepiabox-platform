@@ -89,7 +89,7 @@ public sealed class ClipImageEmbedderTests : IDisposable
 
         var cosine = EmbeddingCodec.Cosine(embedder.Embed(Path.Combine("TestData", $"{name}.png")), reference);
 
-        Assert.True(cosine > 0.99, $"cosine with the reference was {cosine}");
+        Assert.True(cosine > 0.999, $"cosine with the reference was {cosine}");
     }
 
     private static ClipImageEmbedder CreateEmbedder() =>

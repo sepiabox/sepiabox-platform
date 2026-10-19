@@ -57,7 +57,7 @@ public static partial class ModelCatalog
         {
             problem = "a name of lowercase letters, digits and dashes";
         }
-        else if (string.IsNullOrEmpty(model.File) || Path.GetFileName(model.File) != model.File)
+        else if (string.IsNullOrEmpty(model.File) || Path.GetFileName(model.File) != model.File || model.File is "." or "..")
         {
             problem = "a plain file name";
         }
@@ -69,10 +69,10 @@ public static partial class ModelCatalog
         {
             problem = "a revision that is a 40-character commit hash";
         }
-        else if (model.Url is null || model.Url.Scheme != Uri.UriSchemeHttps
+        else if (model.Url is null || !model.Url.IsAbsoluteUri || model.Url.Scheme != Uri.UriSchemeHttps
             || !model.Url.AbsolutePath.Contains($"/{model.Revision}/", StringComparison.Ordinal))
         {
-            problem = "an https URL that contains its revision";
+            problem = "an absolute https URL that contains its revision";
         }
         else if (model.License is null || !s_licenses.Contains(model.License))
         {

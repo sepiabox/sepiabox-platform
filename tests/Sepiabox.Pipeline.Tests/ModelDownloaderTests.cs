@@ -79,12 +79,36 @@ public sealed class ModelDownloaderTests : IDisposable
     }
 
     [Fact]
-    public async Task Accepts_a_pin_written_in_uppercase()
+    public async Task Downloads_again_when_a_remembered_model_was_corrupted_without_changing_size_or_time()
     {
-        var outcome = await new ModelDownloader(new HttpClient(new ServeBytes(s_content)))
-            .EnsureAsync(Model(s_contentSha256.ToUpperInvariant()), _folder.Path);
+        var model = Model(s_contentSha256);
+        var handler = new ServeBytes(s_content);
+        var downloader = new ModelDownloader(new HttpClient(handler));
+        await downloader.EnsureAsync(model, _folder.Path);
+        var path = ModelFolder.PathOf(_folder.Path, model);
+        var time = File.GetLastWriteTimeUtc(path);
+        File.WriteAllBytes(path, [.. s_content.Select(b => (byte)(b ^ 1))]);
+        File.SetLastWriteTimeUtc(path, time);
+
+        var outcome = await downloader.EnsureAsync(model, _folder.Path);
 
         Assert.Equal(ModelDownloader.Outcome.Downloaded, outcome);
+        Assert.Equal(s_content, await File.ReadAllBytesAsync(path));
+        Assert.Equal(2, handler.Requests);
+    }
+
+    [Fact]
+    public async Task Deletes_temporary_files_of_abandoned_downloads_when_starting()
+    {
+        var model = Model(s_contentSha256);
+        var abandoned = _folder.Write(model.File + ".0123.download", [1, 2, 3]);
+        File.SetLastWriteTimeUtc(abandoned, DateTime.UtcNow.AddHours(-1));
+        var running = _folder.Write(model.File + ".4567.download", [4, 5, 6]);
+
+        await new ModelDownloader(new HttpClient(new ServeBytes(s_content))).EnsureAsync(model, _folder.Path);
+
+        Assert.False(File.Exists(abandoned));
+        Assert.True(File.Exists(running));
     }
 
     [Fact]

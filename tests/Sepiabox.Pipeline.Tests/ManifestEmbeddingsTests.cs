@@ -69,13 +69,45 @@ public sealed class ManifestEmbeddingsTests : IDisposable
     }
 
     [Fact]
-    public void Reports_no_derivative_when_the_manifest_lists_no_preview()
+    public void Reports_not_listed_when_the_manifest_lists_no_preview()
     {
         var manifest = TestManifests.Photo(Source()) with { Derivatives = [TestManifests.Derivative("thumb-256", 256, 192)] };
 
         var outcome = ManifestEmbeddings.TryAdd(WithDerivativeFiles(manifest), _work.Path, new FakeEmbedder());
 
-        Assert.Equal(EmbeddingStatus.NoDerivative, outcome.Status);
+        Assert.Equal(EmbeddingStatus.NotListed, outcome.Status);
+    }
+
+    [Fact]
+    public void Reports_a_failure_when_the_embedder_throws_something_unexpected()
+    {
+        var embedder = new FakeEmbedder { Failure = _ => new InvalidOperationException("The session was disposed.") };
+
+        var outcome = ManifestEmbeddings.TryAdd(WithDerivativeFiles(TestManifests.Photo(Source())), _work.Path, embedder);
+
+        Assert.Equal(EmbeddingStatus.Failed, outcome.Status);
+        Assert.Contains("The session was disposed.", outcome.Problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Lets_cancellation_through_when_the_embedder_is_cancelled()
+    {
+        var embedder = new FakeEmbedder { Failure = _ => new OperationCanceledException() };
+
+        Assert.Throws<OperationCanceledException>(
+            () => ManifestEmbeddings.TryAdd(WithDerivativeFiles(TestManifests.Photo(Source())), _work.Path, embedder));
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(0f)]
+    public void Reports_a_failure_when_the_embedder_returns_a_vector_that_cannot_be_stored(float value)
+    {
+        var embedder = new FakeEmbedder { RawOutput = Enumerable.Repeat(value, ClipImageEmbedder.Dimensions).ToArray() };
+
+        var outcome = ManifestEmbeddings.TryAdd(WithDerivativeFiles(TestManifests.Photo(Source())), _work.Path, embedder);
+
+        Assert.Equal(EmbeddingStatus.Failed, outcome.Status);
     }
 
     [Theory]
@@ -167,11 +199,19 @@ public sealed class ManifestEmbeddingsTests : IDisposable
     }
 
     [Fact]
-    public void A_missing_manifest_file_is_reported()
+    public void Reports_a_missing_manifest_when_the_file_is_gone()
     {
         var outcome = ManifestEmbeddings.TryAddToFile(Path.Combine(_work.Path, "manifests", "gone.json"), _work.Path, new FakeEmbedder());
 
-        Assert.Equal(EmbeddingStatus.Failed, outcome.Status);
+        Assert.Equal(EmbeddingStatus.ManifestMissing, outcome.Status);
+    }
+
+    [Fact]
+    public void Reports_a_missing_manifest_when_its_folder_is_gone()
+    {
+        var outcome = ManifestEmbeddings.TryAddToFile(Path.Combine(_work.Path, "nowhere", "gone.json"), _work.Path, new FakeEmbedder());
+
+        Assert.Equal(EmbeddingStatus.ManifestMissing, outcome.Status);
     }
 
     private static ManifestSource Source() => TestManifests.Source("HD da Ana", "2019/praia.jpg");

@@ -18,6 +18,9 @@ internal sealed class FakeEmbedder(string modelKey = ClipImageEmbedder.ModelKey,
     /// <summary>When set, <see cref="Embed"/> returns this instead of a unit vector.</summary>
     public float[]? Output { get; set; }
 
+    /// <summary>When set, <see cref="Embed"/> returns this as it is, without the checks a real embedder makes.</summary>
+    public float[]? RawOutput { get; set; }
+
     public List<string> Embedded { get; } = [];
 
     public float[] Embed(string path)
@@ -28,6 +31,11 @@ internal sealed class FakeEmbedder(string modelKey = ClipImageEmbedder.ModelKey,
         }
 
         Embedded.Add(path);
+        if (RawOutput is not null)
+        {
+            return RawOutput;
+        }
+
         if (Output is not null)
         {
             var output = (float[])Output.Clone();

@@ -18,10 +18,13 @@ public sealed class ModelCatalogTests
     [Theory]
     [InlineData("name", "Clip Model", "a name of lowercase letters")]
     [InlineData("file", "../clip.onnx", "a plain file name")]
+    [InlineData("file", ".", "a plain file name")]
+    [InlineData("file", "..", "a plain file name")]
+    [InlineData("url", "/x/y/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/model.onnx", "an absolute https URL")]
     [InlineData("sha256", "ABC", "a SHA-256 of 64 lowercase hex characters")]
     [InlineData("revision", "main", "a revision that is a 40-character commit hash")]
-    [InlineData("url", "https://huggingface.co/x/y/resolve/main/model.onnx", "an https URL that contains its revision")]
-    [InlineData("url", "http://huggingface.co/x/y/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/model.onnx", "an https URL")]
+    [InlineData("url", "https://huggingface.co/x/y/resolve/main/model.onnx", "an absolute https URL that contains its revision")]
+    [InlineData("url", "http://huggingface.co/x/y/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/model.onnx", "an absolute https URL")]
     [InlineData("license", "CC-BY-NC-4.0", "an AGPL-compatible license")]
     public void Refuses_an_entry_that_cannot_be_trusted(string property, string value, string expected)
     {

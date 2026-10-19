@@ -14,6 +14,3 @@ public interface IImageEmbedder
     /// </summary>
     float[] Embed(string path);
 }
-
-/// <summary>A model output that cannot be stored: wrong size, values that are not finite, or no direction.</summary>
-public sealed class EmbeddingException(string message) : Exception(message);

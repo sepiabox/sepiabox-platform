@@ -33,7 +33,10 @@ public sealed class ModelDownloader(HttpClient http, TimeSpan? inactivityTimeout
 
         Directory.CreateDirectory(folder);
         var target = ModelFolder.PathOf(folder, model);
-        if (File.Exists(target) && ModelVerifier.Verify(model, target, out _))
+        DeleteAbandonedDownloads(target);
+
+        // Always hashed here, never taken from the marker: this is the command that repairs a corrupted model.
+        if (File.Exists(target) && ModelVerifier.Verify(model, target, trustMarker: false, out _, out _))
         {
             return Outcome.AlreadyPresent;
         }
@@ -63,6 +66,31 @@ public sealed class ModelDownloader(HttpClient http, TimeSpan? inactivityTimeout
         }
     }
 
+    /// <summary>
+    /// Removes temporary files left by a download that was killed, once they are older than the inactivity
+    /// timeout, so a download still running in another process keeps its file.
+    /// </summary>
+    private void DeleteAbandonedDownloads(string target)
+    {
+        var folder = Path.GetDirectoryName(target)!;
+        foreach (var file in Directory.EnumerateFiles(folder, Path.GetFileName(target) + ".*.download"))
+        {
+            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) <= _inactivityTimeout)
+            {
+                continue;
+            }
+
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Still open elsewhere; the next download tries again.
+            }
+        }
+    }
+
     /// <summary>Writes the response to <paramref name="path"/> and returns its SHA-256.</summary>
     private async Task<string> DownloadAsync(ModelInfo model, string path, IProgress<long>? bytesRead, CancellationToken cancellationToken)
     {
@@ -82,6 +110,8 @@ public sealed class ModelDownloader(HttpClient http, TimeSpan? inactivityTimeout
             {
                 stalled.CancelAfter(_inactivityTimeout);
                 var read = await body.ReadAsync(buffer, stalled.Token);
+                // Only the wait for data counts: a slow disk or progress display is not a stalled connection.
+                stalled.CancelAfter(Timeout.InfiniteTimeSpan);
                 if (read == 0)
                 {
                     break;
