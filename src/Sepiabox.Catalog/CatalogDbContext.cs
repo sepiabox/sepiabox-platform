@@ -16,25 +16,36 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<ManifestImport> ManifestImports => Set<ManifestImport>();
 
+    public DbSet<AssetEmbedding> AssetEmbeddings => Set<AssetEmbedding>();
+
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNetTopologySuite())
+            .UseNpgsql(connectionString, npgsql => npgsql.UseNetTopologySuite().UseVector())
             .UseSnakeCaseNamingConvention();
 
     /// <summary>
     /// Same as <see cref="Configure(DbContextOptionsBuilder, string)"/>, on a data source that already exists
     /// (the web's, registered by Aspire), so EF and the health check share one connection pool. The data
-    /// source must have NetTopologySuite enabled.
+    /// source must have NetTopologySuite and pgvector enabled (<see cref="ConfigureDataSource"/>).
     /// </summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, NpgsqlDataSource dataSource) =>
         options
-            .UseNpgsql(dataSource, npgsql => npgsql.UseNetTopologySuite())
+            .UseNpgsql(dataSource, npgsql => npgsql.UseNetTopologySuite().UseVector())
             .UseSnakeCaseNamingConvention();
+
+    /// <summary>The type mappings a data source for this catalog needs: PostGIS points and pgvector vectors.</summary>
+    public static NpgsqlDataSourceBuilder ConfigureDataSource(NpgsqlDataSourceBuilder dataSource)
+    {
+        dataSource.UseNetTopologySuite();
+        dataSource.UseVector();
+        return dataSource;
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("postgis");
+        modelBuilder.HasPostgresExtension("vector");
 
         modelBuilder.Entity<Asset>(asset =>
         {
@@ -63,6 +74,20 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
         {
             derivative.ToTable("derivatives");
             derivative.HasKey(d => new { d.AssetId, d.Name });
+        });
+
+        modelBuilder.Entity<AssetEmbedding>(embedding =>
+        {
+            embedding.ToTable("asset_embeddings");
+            embedding.HasKey(e => new { e.AssetId, e.Model });
+            embedding.Property(e => e.Model).HasMaxLength(32);
+            embedding.Property(e => e.Embedding).HasColumnType("vector(512)");
+            embedding.HasOne<Asset>().WithMany().HasForeignKey(e => e.AssetId).OnDelete(DeleteBehavior.Cascade);
+            // Approximate nearest neighbours by cosine distance, for "parecidas com esta" and text search (S-016, S-017).
+            embedding.HasIndex(e => e.Embedding)
+                .HasDatabaseName("ix_asset_embeddings_embedding")
+                .HasMethod("hnsw")
+                .HasOperators("vector_cosine_ops");
         });
 
         modelBuilder.Entity<ManifestImport>(import =>

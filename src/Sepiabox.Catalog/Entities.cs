@@ -1,4 +1,5 @@
 using NetTopologySuite.Geometries;
+using Pgvector;
 
 namespace Sepiabox.Catalog;
 
@@ -86,4 +87,18 @@ public sealed class ManifestImport
     public required string ETag { get; set; }
 
     public DateTimeOffset ImportedAt { get; set; }
+}
+
+/// <summary>
+/// A vector computed from the asset's image by one model (S-015), such as CLIP ViT-B/32. Vectors are
+/// L2-normalized, so cosine distance ranks the most similar images first.
+/// </summary>
+public sealed class AssetEmbedding
+{
+    public required string AssetId { get; set; }
+
+    /// <summary>The manifest's key, such as <c>clip-vit-b32</c>.</summary>
+    public required string Model { get; set; }
+
+    public required Vector Embedding { get; set; }
 }

@@ -1,10 +1,13 @@
+using System.Diagnostics.CodeAnalysis;
 using Azure;
 using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
 using Npgsql;
+using Pgvector;
 using Sepiabox.Catalog;
+using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Storage;
@@ -101,6 +104,11 @@ public sealed class ManifestImporter(
             return (false, $"has kind {manifest.Kind}, which the catalog does not store");
         }
 
+        if (!TryReadEmbeddings(manifest, out var embeddings, out var embeddingProblem))
+        {
+            return (false, embeddingProblem);
+        }
+
         // Only errors known to be about this manifest's data are reported and the import goes on;
         // everything else (connection, missing table, a schema the model no longer matches,
         // cancellation…) stops the import, rather than failing every manifest left with the same error.
@@ -110,7 +118,7 @@ public sealed class ManifestImporter(
         // it only means an update or delete found its row gone, which is not this manifest's fault.
         try
         {
-            await SaveAsync(manifest, kind, blobName, etag, cancellationToken);
+            await SaveAsync(manifest, kind, embeddings, blobName, etag, cancellationToken);
             return (true, null);
         }
         // Only SaveChanges failures (which EF wraps in DbUpdateException) can be about the data; a read
@@ -128,7 +136,9 @@ public sealed class ManifestImporter(
         }
     }
 
-    private async Task SaveAsync(Manifest manifest, string kind, string blobName, string etag, CancellationToken cancellationToken)
+    private async Task SaveAsync(
+        Manifest manifest, string kind, IReadOnlyDictionary<string, float[]> embeddings, string blobName, string etag,
+        CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
         var asset = await db.Assets
@@ -204,6 +214,20 @@ public sealed class ManifestImporter(
             }
         }
 
+        // Like sources, embeddings are only added or replaced per model (D-036): the blob is already a merge.
+        foreach (var (model, values) in embeddings)
+        {
+            var row = await db.AssetEmbeddings.FindAsync([asset.Id, model], cancellationToken);
+            if (row is null)
+            {
+                db.AssetEmbeddings.Add(new AssetEmbedding { AssetId = asset.Id, Model = model, Embedding = new Vector(values) });
+            }
+            else
+            {
+                row.Embedding = new Vector(values);
+            }
+        }
+
         var import = await db.ManifestImports.FindAsync([blobName], cancellationToken);
         if (import is null)
         {
@@ -217,6 +241,51 @@ public sealed class ManifestImporter(
 
         // One SaveChanges per manifest: the asset and its import record commit together or not at all.
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The embeddings the catalog stores, by model key, with the dimensions of their column. Keys of other
+    /// models are left in the manifest for a later story to import.
+    /// </summary>
+    private static readonly Dictionary<string, int> s_embeddingDimensions = new(StringComparer.Ordinal)
+    {
+        [ClipImageEmbedder.ModelKey] = ClipImageEmbedder.Dimensions,
+    };
+
+    private static bool TryReadEmbeddings(
+        Manifest manifest, out IReadOnlyDictionary<string, float[]> embeddings, [NotNullWhen(false)] out string? problem)
+    {
+        var read = new Dictionary<string, float[]>(StringComparer.Ordinal);
+        embeddings = read;
+        foreach (var (model, node) in manifest.Embeddings)
+        {
+            if (!s_embeddingDimensions.TryGetValue(model, out var dimensions))
+            {
+                continue;
+            }
+
+            float[] values;
+            try
+            {
+                values = EmbeddingCodec.Decode(node.GetValue<string>());
+            }
+            catch (Exception ex) when (ex is FormatException or InvalidOperationException)
+            {
+                problem = $"has an unreadable {model} embedding: {ex.Message}";
+                return false;
+            }
+
+            if (values.Length != dimensions || values.Any(v => !float.IsFinite(v)))
+            {
+                problem = $"has a {model} embedding of {values.Length} values; expected {dimensions} finite values";
+                return false;
+            }
+
+            read[model] = values;
+        }
+
+        problem = null;
+        return true;
     }
 
     // The schema only allows photo and video; anything else is reported before saving.
