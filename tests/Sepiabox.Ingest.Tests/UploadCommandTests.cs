@@ -184,6 +184,36 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.Equal(["preview-1280", "thumb-256"], stored.Derivatives.Select(d => d.Name).Order(StringComparer.Ordinal));
     }
 
+    public static TheoryData<string> UnmergeableStoredManifests => new()
+    {
+        // Another asset's manifest under this name.
+        "{\"schemaVersion\":1,\"id\":\"" + new string('b', 64) + "\",\"kind\":\"photo\",\"sizeBytes\":1,\"contentType\":\"image/jpeg\",\"capturedAt\":null,\"location\":null,\"camera\":null,\"width\":null,\"height\":null,\"durationSeconds\":null,\"sources\":[{\"type\":\"local\",\"name\":\"x\",\"path\":\"x.jpg\",\"modifiedAt\":\"2019-07-14T17:00:00+00:00\"}],\"derivatives\":[],\"embeddings\":{},\"facesProcessed\":false,\"faces\":[]}",
+        // Sources missing.
+        "{\"schemaVersion\":1,\"id\":\"ID\",\"kind\":\"photo\",\"sizeBytes\":1,\"contentType\":\"image/jpeg\",\"sources\":null}",
+        "not json",
+    };
+
+    [Theory]
+    [MemberData(nameof(UnmergeableStoredManifests))]
+    public async Task A_stored_manifest_that_cannot_be_merged_is_a_problem_for_that_asset_only(string stored)
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        _drive.Write("b.jpg", TestPhotos.Porto("green"));
+        var manifests = Process();
+        var blocked = manifests.Single(m => m.Sources[0].Path == "a.jpg").Id;
+        var container = Service.GetBlobContainerClient(BlobLayout.ManifestsContainer);
+        await container.CreateIfNotExistsAsync();
+        await container.GetBlobClient(BlobLayout.ManifestBlobName(blocked)).UploadAsync(BinaryData.FromString(stored.Replace("ID", blocked, StringComparison.Ordinal)));
+
+        var first = await Upload();
+        var second = await Upload();
+
+        Assert.Contains(blocked, Assert.Single(first.Problems).Path, StringComparison.Ordinal);
+        Assert.Contains(BlobLayout.ManifestBlobName(manifests.Single(m => m.Id != blocked).Id), await BlobNames(BlobLayout.ManifestsContainer));
+        // Not marked as uploaded: the next run tries again and reports it again.
+        Assert.Single(second.Problems);
+    }
+
     private List<Manifest> Process()
     {
         // No FFmpeg in these tests: photos get thumbnails, videos stay pending with no derivatives.

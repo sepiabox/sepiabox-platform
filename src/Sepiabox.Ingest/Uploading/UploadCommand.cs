@@ -33,7 +33,6 @@ public static class UploadCommand
 
     public const int BlockSize = 8 * 1024 * 1024;
     public const int ParallelUploads = 4;
-    public const int ManifestWriteAttempts = 5;
 
     public static BlobServiceClient CreateClient(UploadOptions options) => options.Destination switch
     {
@@ -72,6 +71,7 @@ public static class UploadCommand
             state,
             // Azurite does not know the Cold tier, so it is only set on real accounts.
             options.Destination == UploadDestination.Azure ? AccessTier.Cold : (AccessTier?)null,
+            new ManifestStore(new ManifestValidator()),
             bytesSent);
 
         var stopwatch = Stopwatch.StartNew();
@@ -88,7 +88,12 @@ public static class UploadCommand
     private sealed record Containers(BlobContainerClient Originals, BlobContainerClient Derivatives, BlobContainerClient Manifests);
 
     private sealed class Run(
-        string workFolder, Containers containers, UploadState state, AccessTier? originalTier, IProgress<long>? bytesSent)
+        string workFolder,
+        Containers containers,
+        UploadState state,
+        AccessTier? originalTier,
+        ManifestStore manifestStore,
+        IProgress<long>? bytesSent)
     {
         private int _uploaded;
         private int _skipped;
@@ -118,8 +123,7 @@ public static class UploadCommand
                         containers.Derivatives, blobName, Path.Combine(workFolder, derivative.Path), derivative.ContentType, cancellationToken);
                 }
 
-                await UploadWorkFileAsync(
-                    containers.Manifests, BlobLayout.ManifestBlobName(manifest.Id), manifestPath, "application/json", cancellationToken);
+                await UploadManifestAsync(manifest, manifestPath, cancellationToken);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or RequestFailedException or System.Text.Json.JsonException)
             {
@@ -222,14 +226,6 @@ public static class UploadCommand
             }
 
             var blob = container.GetBlobClient(blobName);
-            if (container.Name == BlobLayout.ManifestsContainer)
-            {
-                AddBytes(await UploadManifestAsync(blob, path, cancellationToken));
-                state.MarkUploaded(container.Name, blobName, fingerprint);
-                Interlocked.Increment(ref _uploaded);
-                return;
-            }
-
             if (await ExistingSizeAsync(blob, cancellationToken) == file.Length)
             {
                 state.MarkUploaded(container.Name, blobName, fingerprint);
@@ -263,46 +259,36 @@ public static class UploadCommand
 
         /// <summary>
         /// Merges this work folder's manifest into the one already in storage (D-036): another drive may
-        /// have uploaded the same asset with its own sources. The write only succeeds if nobody changed the
-        /// blob since it was read; otherwise it is read and merged again. Returns the bytes sent.
+        /// have uploaded the same asset with its own sources. A manifest that cannot be merged is a
+        /// problem for this asset only, and is tried again on the next run.
         /// </summary>
-        private static async Task<long> UploadManifestAsync(BlobClient blob, string path, CancellationToken cancellationToken)
+        private async Task UploadManifestAsync(Manifest manifest, string path, CancellationToken cancellationToken)
         {
-            var incoming = ManifestJson.Deserialize(await File.ReadAllTextAsync(path, cancellationToken));
-            for (var attempt = 1; ; attempt++)
+            var file = new FileInfo(path);
+            var blobName = BlobLayout.ManifestBlobName(manifest.Id);
+            var fingerprint = $"{file.Length}:{file.LastWriteTimeUtc.Ticks}";
+            if (state.IsUploaded(BlobLayout.ManifestsContainer, blobName, fingerprint))
             {
-                Manifest merged;
-                BlobRequestConditions conditions;
-                try
-                {
-                    var current = (await blob.DownloadContentAsync(cancellationToken)).Value;
-                    merged = ManifestMerge.Merge(ManifestJson.Deserialize(current.Content.ToString()), incoming);
-                    conditions = new BlobRequestConditions { IfMatch = current.Details.ETag };
-                }
-                catch (RequestFailedException ex) when (ex.Status == 404)
-                {
-                    merged = incoming;
-                    conditions = new BlobRequestConditions { IfNoneMatch = ETag.All };
-                }
-
-                var content = BinaryData.FromString(ManifestJson.Serialize(merged));
-                try
-                {
-                    await blob.UploadAsync(
-                        content,
-                        new BlobUploadOptions
-                        {
-                            HttpHeaders = new BlobHttpHeaders { ContentType = "application/json" },
-                            Conditions = conditions,
-                        },
-                        cancellationToken);
-                    return content.ToMemory().Length;
-                }
-                catch (RequestFailedException ex) when (ex.Status is 409 or 412 && attempt < ManifestWriteAttempts)
-                {
-                    // Someone wrote the manifest between our read and our write: read it again and merge.
-                }
+                Interlocked.Increment(ref _skipped);
+                return;
             }
+
+            var result = await manifestStore.WriteMergedAsync(containers.Manifests.GetBlobClient(blobName), manifest, cancellationToken);
+            switch (result.Status)
+            {
+                case ManifestWriteStatus.Problem:
+                    AddProblem(path, result.Problem!);
+                    return;
+                case ManifestWriteStatus.Unchanged:
+                    Interlocked.Increment(ref _skipped);
+                    break;
+                default:
+                    AddBytes(result.Bytes);
+                    Interlocked.Increment(ref _uploaded);
+                    break;
+            }
+
+            state.MarkUploaded(BlobLayout.ManifestsContainer, blobName, fingerprint);
         }
 
         private static async Task<long?> ExistingSizeAsync(BlobBaseClient blob, CancellationToken cancellationToken)
