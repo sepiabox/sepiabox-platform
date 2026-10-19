@@ -11,6 +11,7 @@ using Azure.Storage.Blobs.Specialized;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
+using Sepiabox.Pipeline.Storage;
 
 namespace Sepiabox.Ingest.Uploading;
 
@@ -28,9 +29,9 @@ public sealed record UploadResult(
 /// </summary>
 public static class UploadCommand
 {
-    public const string OriginalsContainer = "originals";
-    public const string DerivativesContainer = "derivatives";
-    public const string ManifestsContainer = "manifests";
+    public const string OriginalsContainer = BlobLayout.OriginalsContainer;
+    public const string DerivativesContainer = BlobLayout.DerivativesContainer;
+    public const string ManifestsContainer = BlobLayout.ManifestsContainer;
     public const string ConnectionVariable = "SEPIABOX_BLOB_CONNECTION";
 
     public const int BlockSize = 8 * 1024 * 1024;
@@ -114,13 +115,13 @@ public static class UploadCommand
 
                 foreach (var derivative in manifest.Derivatives)
                 {
-                    var blobName = $"{manifest.Id}/{Path.GetFileName(derivative.Path)}";
+                    var blobName = BlobLayout.DerivativeBlobName(manifest.Id, derivative);
                     await UploadWorkFileAsync(
                         containers.Derivatives, blobName, Path.Combine(workFolder, derivative.Path), derivative.ContentType, cancellationToken);
                 }
 
                 await UploadWorkFileAsync(
-                    containers.Manifests, $"{manifest.Id}.json", manifestPath, "application/json", cancellationToken);
+                    containers.Manifests, BlobLayout.ManifestBlobName(manifest.Id), manifestPath, "application/json", cancellationToken);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or RequestFailedException or System.Text.Json.JsonException)
             {
