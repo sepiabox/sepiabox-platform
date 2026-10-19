@@ -1,9 +1,13 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Sepiabox.AppHost/Sepiabox.AppHost.csproj" />
     <Project Path="src/Sepiabox.Ingest/Sepiabox.Ingest.csproj" />
     <Project Path="src/Sepiabox.Pipeline/Sepiabox.Pipeline.csproj" />
+    <Project Path="src/Sepiabox.ServiceDefaults/Sepiabox.ServiceDefaults.csproj" />
+    <Project Path="src/Sepiabox.Web/Sepiabox.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Sepiabox.AppHost.Tests/Sepiabox.AppHost.Tests.csproj" />
     <Project Path="tests/Sepiabox.Ingest.Tests/Sepiabox.Ingest.Tests.csproj" />
     <Project Path="tests/Sepiabox.Pipeline.Tests/Sepiabox.Pipeline.Tests.csproj" />
   </Folder>

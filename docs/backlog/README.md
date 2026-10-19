@@ -19,10 +19,10 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-001 | [Set up the repository foundation](S-001-set-up-the-repository-foundation.md) | Foundation | — | High | M | `doing` |
+| S-001 | [Set up the repository foundation](S-001-set-up-the-repository-foundation.md) | Foundation | — | High | M | `done` |
 | S-002 | [Scan a drive and report what it contains](S-002-scan-a-drive-and-report-what-it.md) | Local ingest | S-001 | High | M | `done` |
-| S-003 | [Start the local environment with .NET Aspire](S-003-start-the-local-environment-with-net-aspire.md) | Foundation | S-001 | High | M | `todo` |
-| S-004 | [Describe each photo and video in a manifest](S-004-describe-each-photo-and-video-in-a.md) | Local ingest | S-002 | High | M | `todo` |
+| S-003 | [Start the local environment with .NET Aspire](S-003-start-the-local-environment-with-net-aspire.md) | Foundation | S-001 | High | M | `done` |
+| S-004 | [Describe each photo and video in a manifest](S-004-describe-each-photo-and-video-in-a.md) | Local ingest | S-002 | High | M | `done` |
 | S-005 | [Generate photo thumbnails](S-005-generate-photo-thumbnails.md) | Local ingest | S-004 | High | S | `todo` |
 | S-006 | [Generate video posters and 720p versions](S-006-generate-video-posters-and-720p-versions.md) | Local ingest | S-004 | High | M | `todo` |
 
@@ -128,7 +128,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 - **Size:** 14 stories S, 28 M, none L.
 - **Sprints:** 7 sprints, between 5 and 7 stories each.
 - **Decisions covered:** D-001 to D-024 in [`decisions.md`](../decisions.md) are applied: each is cited in the technical notes of at least one story, except D-021, which this backlog itself applies.
-- **S-002** is `done` (sepiabox/sepiabox-platform#1, the `scan` command, is merged). **S-001** is `doing`: its CI, build and test parts came with that PR; lint, `CLAUDE.md` and the doc links remain.
+- Story status is kept up to date by each story's PR (see [How to use](#how-to-use)).
 
 ### Discussed in the session but outside this backlog
 

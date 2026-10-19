@@ -4,7 +4,8 @@ obj/
 artifacts/
 TestResults/
 
-# IDEs
+# IDEs and agent worktrees
+.claude/worktrees/
 .vs/
 .vscode/
 .idea/
