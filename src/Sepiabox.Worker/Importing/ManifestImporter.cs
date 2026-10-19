@@ -113,13 +113,11 @@ public sealed class ManifestImporter(
             await SaveAsync(manifest, kind, blobName, etag, cancellationToken);
             return (true, null);
         }
+        // Only SaveChanges failures (which EF wraps in DbUpdateException) can be about the data; a read
+        // that fails says something about the database.
         catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException && IsDataError(ex.InnerException))
         {
             return (false, $"could not be saved: {Describe(ex.InnerException!)}");
-        }
-        catch (PostgresException ex) when (IsDataSqlState(ex))
-        {
-            return (false, $"could not be saved: {ex.MessageText}");
         }
         finally
         {
