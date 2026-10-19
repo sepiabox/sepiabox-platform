@@ -32,7 +32,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-007 | [Upload originals, derivatives and manifests to storage](S-007-upload-originals-derivatives-and-manifests-to-storage.md) | Local ingest | S-003, S-004 | High | M | `todo` |
+| S-007 | [Upload originals, derivatives and manifests to storage](S-007-upload-originals-derivatives-and-manifests-to-storage.md) | Local ingest | S-003, S-004 | High | M | `done` |
 | S-008 | [Import manifests into the catalog](S-008-import-manifests-into-the-catalog.md) | Cloud catalog | S-003, S-007 | High | M | `todo` |
 | S-009 | [Browse the library on a timeline](S-009-browse-the-library-on-a-timeline.md) | Web app | S-008 | High | M | `todo` |
 | S-010 | [Sign in with Google or Microsoft and allow only the access list](S-010-sign-in-with-google-or-microsoft-and.md) | Web app | S-009 | High | M | `todo` |
@@ -82,9 +82,9 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-029 | [Protect the budget with alerts](S-029-protect-the-budget-with-alerts.md) | Cloud and costs | — | High | S | `todo` |
-| S-030 | [Shut everything down automatically at €45](S-030-shut-everything-down-automatically-at-45.md) | Cloud and costs | S-029 | High | M | `todo` |
-| S-031 | [Restrict resource types and cap logging](S-031-restrict-resource-types-and-cap-logging.md) | Cloud and costs | S-029 | High | S | `todo` |
+| S-029 | [Protect the budget with alerts](S-029-protect-the-budget-with-alerts.md) | Cloud and costs | — | High | S | `done` |
+| S-030 | [Shut everything down automatically at €45](S-030-shut-everything-down-automatically-at-45.md) | Cloud and costs | S-029 | High | M | `done` |
+| S-031 | [Restrict resource types and cap logging](S-031-restrict-resource-types-and-cap-logging.md) | Cloud and costs | S-029 | High | S | `done` |
 | S-032 | [Publish the app to Azure with azd](S-032-publish-the-app-to-azure-with-azd.md) | Cloud and costs | S-010, S-031 | High | M | `todo` |
 | S-033 | [Import manifests automatically when they arrive](S-033-import-manifests-automatically-when-they-arrive.md) | Cloud and costs | S-032, S-008 | High | M | `todo` |
 | S-034 | [Deploy from GitHub Actions with OIDC](S-034-deploy-from-github-actions-with-oidc.md) | Cloud and costs | S-032 | Medium | S | `todo` |
@@ -102,7 +102,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010 | Medium | M | `todo` |
 | S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010 | Medium | S | `todo` |
 | S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `todo` |
-| S-042 | [Publish the showcase site at sepiabox.com](S-042-publish-the-showcase-site-at-sepiabox-com.md) | Site | — | Low | S | `todo` |
+| S-042 | [Publish the showcase site at sepiabox.com](S-042-publish-the-showcase-site-at-sepiabox-com.md) | Site | — | Low | S | `done` |
 
 ## Epics
 
