@@ -47,13 +47,13 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.Equal(2, result.Assets);
         Assert.Equal(8, result.Uploaded);
         var ids = manifests.Select(manifest => manifest.Id).Order().ToList();
-        Assert.Equal(ids, await BlobNames(UploadCommand.OriginalsContainer));
+        Assert.Equal(ids, await BlobNames(BlobLayout.OriginalsContainer));
         Assert.Equal(
             ids.SelectMany(id => new[] { $"{id}/preview-1280.webp", $"{id}/thumb-256.webp" }),
-            await BlobNames(UploadCommand.DerivativesContainer));
-        Assert.Equal(ids.Select(id => id + ".json"), await BlobNames(UploadCommand.ManifestsContainer));
+            await BlobNames(BlobLayout.DerivativesContainer));
+        Assert.Equal(ids.Select(id => id + ".json"), await BlobNames(BlobLayout.ManifestsContainer));
 
-        var original = Service.GetBlobContainerClient(UploadCommand.OriginalsContainer).GetBlobClient(ids[0]);
+        var original = Service.GetBlobContainerClient(BlobLayout.OriginalsContainer).GetBlobClient(ids[0]);
         var properties = (await original.GetPropertiesAsync()).Value;
         Assert.Equal("image/jpeg", properties.ContentType);
         Assert.Equal(manifests.Single(m => m.Id == ids[0]).SizeBytes, properties.ContentLength);
@@ -104,8 +104,8 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.Equal(6, afterResume.Count);
         // A blob uploaded again would have been given a new sequence number.
         Assert.All(beforeResume, record => Assert.Contains(record, afterResume));
-        Assert.Equal(2, (await BlobNames(UploadCommand.OriginalsContainer)).Count);
-        Assert.Equal(2, (await BlobNames(UploadCommand.ManifestsContainer)).Count);
+        Assert.Equal(2, (await BlobNames(BlobLayout.OriginalsContainer)).Count);
+        Assert.Equal(2, (await BlobNames(BlobLayout.ManifestsContainer)).Count);
     }
 
     [Fact]
@@ -123,9 +123,9 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         var problem = Assert.Single(result.Problems);
         Assert.Equal(path, problem.Path);
         Assert.Contains("Changed since it was processed", problem.Reason, StringComparison.Ordinal);
-        Assert.DoesNotContain(changedId, await BlobNames(UploadCommand.OriginalsContainer));
-        Assert.DoesNotContain(changedId + ".json", await BlobNames(UploadCommand.ManifestsContainer));
-        Assert.Single(await BlobNames(UploadCommand.ManifestsContainer));
+        Assert.DoesNotContain(changedId, await BlobNames(BlobLayout.OriginalsContainer));
+        Assert.DoesNotContain(changedId + ".json", await BlobNames(BlobLayout.ManifestsContainer));
+        Assert.Single(await BlobNames(BlobLayout.ManifestsContainer));
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         var result = await Upload();
 
         Assert.Contains("Original not found", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
-        Assert.Empty(await BlobNames(UploadCommand.ManifestsContainer));
+        Assert.Empty(await BlobNames(BlobLayout.ManifestsContainer));
     }
 
     [Fact]
@@ -154,10 +154,10 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         var uploads = ReadUploads();
         foreach (var manifest in manifests)
         {
-            var manifestSequence = uploads.Single(r => r.Container == UploadCommand.ManifestsContainer && r.Blob == manifest.Id + ".json").Sequence;
+            var manifestSequence = uploads.Single(r => r.Container == BlobLayout.ManifestsContainer && r.Blob == manifest.Id + ".json").Sequence;
             var dependencies = uploads.Where(r =>
-                (r.Container == UploadCommand.OriginalsContainer && r.Blob == manifest.Id)
-                || (r.Container == UploadCommand.DerivativesContainer && r.Blob.StartsWith(manifest.Id + "/", StringComparison.Ordinal)))
+                (r.Container == BlobLayout.OriginalsContainer && r.Blob == manifest.Id)
+                || (r.Container == BlobLayout.DerivativesContainer && r.Blob.StartsWith(manifest.Id + "/", StringComparison.Ordinal)))
                 .ToList();
             Assert.Equal(3, dependencies.Count);
             Assert.All(dependencies, dependency => Assert.True(dependency.Sequence < manifestSequence));

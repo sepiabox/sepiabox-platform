@@ -29,9 +29,6 @@ public sealed record UploadResult(
 /// </summary>
 public static class UploadCommand
 {
-    public const string OriginalsContainer = BlobLayout.OriginalsContainer;
-    public const string DerivativesContainer = BlobLayout.DerivativesContainer;
-    public const string ManifestsContainer = BlobLayout.ManifestsContainer;
     public const string ConnectionVariable = "SEPIABOX_BLOB_CONNECTION";
 
     public const int BlockSize = 8 * 1024 * 1024;
@@ -60,9 +57,9 @@ public static class UploadCommand
         }
 
         var containers = new Containers(
-            service.GetBlobContainerClient(OriginalsContainer),
-            service.GetBlobContainerClient(DerivativesContainer),
-            service.GetBlobContainerClient(ManifestsContainer));
+            service.GetBlobContainerClient(BlobLayout.OriginalsContainer),
+            service.GetBlobContainerClient(BlobLayout.DerivativesContainer),
+            service.GetBlobContainerClient(BlobLayout.ManifestsContainer));
         foreach (var container in new[] { containers.Originals, containers.Derivatives, containers.Manifests })
         {
             await container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
@@ -133,7 +130,7 @@ public static class UploadCommand
         private async Task<bool> UploadOriginalAsync(Manifest manifest, CancellationToken cancellationToken)
         {
             var blob = containers.Originals.GetBlockBlobClient(manifest.Id);
-            if (state.IsUploaded(OriginalsContainer, manifest.Id, manifest.Id))
+            if (state.IsUploaded(BlobLayout.OriginalsContainer, manifest.Id, manifest.Id))
             {
                 Interlocked.Increment(ref _skipped);
                 return true;
@@ -141,7 +138,7 @@ public static class UploadCommand
 
             if (await ExistingSizeAsync(blob, cancellationToken) == manifest.SizeBytes)
             {
-                state.MarkUploaded(OriginalsContainer, manifest.Id, manifest.Id);
+                state.MarkUploaded(BlobLayout.OriginalsContainer, manifest.Id, manifest.Id);
                 Interlocked.Increment(ref _skipped);
                 return true;
             }
@@ -159,7 +156,7 @@ public static class UploadCommand
                 return false;
             }
 
-            state.MarkUploaded(OriginalsContainer, manifest.Id, manifest.Id);
+            state.MarkUploaded(BlobLayout.OriginalsContainer, manifest.Id, manifest.Id);
             Interlocked.Increment(ref _uploaded);
             return true;
         }
