@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
@@ -207,12 +208,7 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
         var other = Photo(Source("HD da Ana", "b.jpg")) with { Id = new string('b', 64) };
         await PutAsync(container, Photo(Source("HD da Ana", "a.jpg")));
         await PutAsync(container, other);
-        await db.Database.ExecuteSqlRawAsync($"""
-            CREATE FUNCTION refuse_asset() RETURNS trigger LANGUAGE plpgsql AS
-            $$ BEGIN RAISE EXCEPTION 'refused by test'; END $$;
-            CREATE TRIGGER refuse BEFORE INSERT ON assets FOR EACH ROW
-            WHEN (NEW.id = '{PhotoId}') EXECUTE FUNCTION refuse_asset();
-            """);
+        await db.Database.ExecuteSqlRawAsync(RefuseTestPhotoSql);
 
         var result = await ImportAsync(db, container);
 
@@ -221,6 +217,44 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
         Assert.Equal(other.Id, (await db.Assets.SingleAsync()).Id);
         Assert.Equal(BlobLayout.ManifestBlobName(other.Id), (await db.ManifestImports.SingleAsync()).BlobName);
     }
+
+    [Fact]
+    public async Task A_lost_database_connection_stops_the_import_instead_of_failing_every_manifest()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var other = Photo(Source("HD da Ana", "b.jpg")) with { Id = new string('b', 64) };
+        await PutAsync(container, Photo(Source("HD da Ana", "a.jpg")));
+        await PutAsync(container, other);
+        await db.Database.ExecuteSqlRawAsync(DropConnectionOnTestPhotoSql);
+
+        var failure = await Record.ExceptionAsync(() => ImportAsync(db, container));
+
+        // EF's execution strategy wraps it; what matters is that it escaped instead of becoming a problem.
+        var chain = new List<Exception>();
+        for (var current = failure; current is not null; current = current.InnerException)
+        {
+            chain.Add(current);
+        }
+
+        Assert.Contains(chain, ex => ex is PostgresException { SqlState: "57P01" });
+    }
+
+    // Both triggers fire only for the test photo (its id starts with 0a1b2c3d).
+    private const string RefuseTestPhotoSql = """
+        CREATE FUNCTION refuse_asset() RETURNS trigger LANGUAGE plpgsql AS
+        $$ BEGIN RAISE EXCEPTION 'refused by test'; END $$;
+        CREATE TRIGGER refuse BEFORE INSERT ON assets FOR EACH ROW
+        WHEN (starts_with(NEW.id, '0a1b2c3d')) EXECUTE FUNCTION refuse_asset();
+        """;
+
+    // The server ends this session, as when the database restarts mid-import (SQLSTATE 57P01).
+    private const string DropConnectionOnTestPhotoSql = """
+        CREATE FUNCTION drop_connection() RETURNS trigger LANGUAGE plpgsql AS
+        $$ BEGIN PERFORM pg_terminate_backend(pg_backend_pid()); RETURN NEW; END $$;
+        CREATE TRIGGER drop_connection BEFORE INSERT ON assets FOR EACH ROW
+        WHEN (starts_with(NEW.id, '0a1b2c3d')) EXECUTE FUNCTION drop_connection();
+        """;
 
     private Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container) =>
         new ManifestImporter(db, new ManifestValidator(), _clock, NullLogger<ManifestImporter>.Instance)

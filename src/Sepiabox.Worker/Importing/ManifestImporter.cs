@@ -96,14 +96,32 @@ public sealed class ManifestImporter(
             return (false, $"describes asset {manifest.Id} but is stored as {blobName}");
         }
 
+        if (KindName(manifest.Kind) is not { } kind)
+        {
+            return (false, $"has kind {manifest.Kind}, which the catalog does not store");
+        }
+
+        // Errors caused by this manifest's data are reported and the import goes on; anything that
+        // means the database itself is unavailable stops the import, rather than failing every manifest
+        // left with the same error.
         try
         {
-            await SaveAsync(manifest, blobName, etag, cancellationToken);
+            await SaveAsync(manifest, kind, blobName, etag, cancellationToken);
             return (true, null);
         }
-        catch (Exception ex) when (ex is DbUpdateException or PostgresException or InvalidCastException)
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException postgres && IsDataError(postgres))
         {
-            return (false, $"could not be saved: {(ex.InnerException ?? ex).Message}");
+            return (false, $"could not be saved: {postgres.MessageText}");
+        }
+        catch (PostgresException ex) when (IsDataError(ex))
+        {
+            return (false, $"could not be saved: {ex.MessageText}");
+        }
+        catch (InvalidCastException ex)
+        {
+            // Npgsql refuses to send a value that does not fit its column before it reaches the server,
+            // such as a DateTime whose Kind does not match the column type: a problem with this data.
+            return (false, $"could not be saved: {ex.Message}");
         }
         finally
         {
@@ -112,7 +130,7 @@ public sealed class ManifestImporter(
         }
     }
 
-    private async Task SaveAsync(Manifest manifest, string blobName, string etag, CancellationToken cancellationToken)
+    private async Task SaveAsync(Manifest manifest, string kind, string blobName, string etag, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
         var asset = await db.Assets
@@ -121,11 +139,11 @@ public sealed class ManifestImporter(
             .SingleOrDefaultAsync(a => a.Id == manifest.Id, cancellationToken);
         if (asset is null)
         {
-            asset = new Asset { Id = manifest.Id, Kind = KindName(manifest.Kind), ContentType = manifest.ContentType, ImportedAt = now };
+            asset = new Asset { Id = manifest.Id, Kind = kind, ContentType = manifest.ContentType, ImportedAt = now };
             db.Assets.Add(asset);
         }
 
-        asset.Kind = KindName(manifest.Kind);
+        asset.Kind = kind;
         asset.SizeBytes = manifest.SizeBytes;
         asset.ContentType = manifest.ContentType;
         // Wall-clock time from the camera (the schema refuses offsets): stored exactly as written.
@@ -203,12 +221,19 @@ public sealed class ManifestImporter(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static string KindName(MediaKind kind) => kind switch
+    // The schema only allows photo and video; anything else is reported before saving.
+    private static string? KindName(MediaKind kind) => kind switch
     {
         MediaKind.Photo => "photo",
         MediaKind.Video => "video",
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Only photos and videos have manifests."),
+        _ => null,
     };
+
+    /// <summary>
+    /// SQLSTATE classes that describe the server or the connection, not the row: connection (08),
+    /// insufficient resources (53), operator intervention such as a restart (57), system (58), internal (XX).
+    /// </summary>
+    private static bool IsDataError(PostgresException ex) => ex.SqlState[..2] is not ("08" or "53" or "57" or "58" or "XX");
 
     // Listings return the ETag bare and downloads return it quoted, as in the HTTP header.
     private static string? Normalize(ETag? etag) => etag?.ToString().Trim('"');
