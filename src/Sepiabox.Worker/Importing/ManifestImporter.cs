@@ -114,7 +114,9 @@ public sealed class ManifestImporter(
             return (true, null);
         }
         // Only SaveChanges failures (which EF wraps in DbUpdateException) can be about the data; a read
-        // that fails says something about the database.
+        // that fails says something about the database. SaveAsync writes only through SaveChangesAsync
+        // (no ExecuteUpdate, ExecuteSql or explicit transaction), so no data error escapes unwrapped;
+        // a raw write added there needs its own catch.
         catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException && IsDataError(ex.InnerException))
         {
             return (false, $"could not be saved: {Describe(ex.InnerException!)}");

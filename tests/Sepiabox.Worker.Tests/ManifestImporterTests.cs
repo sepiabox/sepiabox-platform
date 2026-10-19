@@ -218,17 +218,24 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
         Assert.Equal(BlobLayout.ManifestBlobName(other.Id), (await db.ManifestImports.SingleAsync()).BlobName);
     }
 
-    [Fact]
-    public async Task A_constraint_violation_is_reported_as_a_data_problem()
+    public static TheoryData<string, string> DataErrorsOnSave => new()
+    {
+        { RejectTestPhotoByCheckSql, "refuse_test_photo" },
+        { ShortenContentTypeSql, "value too long" },
+    };
+
+    [Theory]
+    [MemberData(nameof(DataErrorsOnSave))]
+    public async Task A_data_error_on_save_is_reported_as_a_problem_for_that_manifest(string sql, string expected)
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
         var container = await fixture.CreateContainerAsync();
         await PutAsync(container, Photo(Source("HD da Ana", "a.jpg")));
-        await db.Database.ExecuteSqlRawAsync(RejectTestPhotoByCheckSql);
+        await db.Database.ExecuteSqlRawAsync(sql);
 
         var result = await ImportAsync(db, container);
 
-        Assert.Contains("refuse_test_photo", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Contains(expected, Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -299,6 +306,9 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
     private const string RejectTestPhotoByCheckSql = $$"""
         ALTER TABLE assets ADD CONSTRAINT refuse_test_photo CHECK (id <> '{{PhotoId}}');
         """;
+
+    // SQLSTATE 22001, a string too long for its column: a data class.
+    private const string ShortenContentTypeSql = "ALTER TABLE assets ALTER COLUMN content_type TYPE varchar(3);";
 
     // The server ends this session, as when the database restarts mid-import (SQLSTATE 57P01).
     private const string DropConnectionOnTestPhotoSql = $$"""
