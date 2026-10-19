@@ -17,6 +17,7 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="Sepiabox.Tests.Shared" />
+    <Using Include="Sepiabox.Tests.Catalog" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,7 @@
 
   <ItemGroup>
     <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
+    <Compile Include="..\Shared\Catalog\*.cs" LinkBase="Shared\Catalog" />
   </ItemGroup>
 
 </Project>
