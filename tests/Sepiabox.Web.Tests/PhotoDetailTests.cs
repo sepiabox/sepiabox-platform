@@ -1,66 +1,68 @@
-using System.Net;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
+using Sepiabox.Web.Components.Pages;
+using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
 
-[Collection(CatalogGroup.Name)]
-[Trait("Category", "Integration")]
-public sealed class PhotoDetailTests(CatalogFixture catalog)
+public sealed class PhotoDetailTests : BunitContext
 {
-    [Theory]
-    [InlineData(10)]
-    [InlineData(null)]
-    public async Task A_photo_that_does_not_exist_is_a_404(int? existing)
+    [Fact]
+    public void A_photo_shows_its_preview_details_sources_and_download_link()
     {
-        await using var db = await catalog.CreateMigratedDatabaseAsync();
-        await using var web = CreateWeb(catalog.ConnectionStringFor(db));
-        using var http = web.CreateClient();
+        var page = RenderDetail(Details.Photo(Ids.Of(1), new DateTime(2019, 7, 14, 10, 32, 0)));
 
-        // A well-formed id that isn't in the catalog, and a malformed one.
-        var id = existing is { } n ? Ids.Of(n) : "not-an-id";
-        using var response = await http.GetAsync(new Uri($"/fotos/{id}", UriKind.Relative));
-
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal($"fotos/{Ids.Of(1)}/preview-1280", page.Find("figure.preview img").GetAttribute("src"));
+        Assert.Equal("14 de julho de 2019, 10:32", page.Find("h1").TextContent);
+        Assert.Contains("Apple iPhone 15", page.Markup, StringComparison.Ordinal);
+        Assert.Contains("HD Ana", page.Find("ul.sources").TextContent, StringComparison.Ordinal);
+        Assert.Equal($"fotos/{Ids.Of(1)}/original", page.Find("a.button").GetAttribute("href"));
+        Assert.DoesNotContain("sig=", page.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task An_existing_photo_shows_its_details_and_a_link_to_the_original()
+    public void A_video_shows_its_poster()
     {
-        await using var db = await catalog.CreateMigratedDatabaseAsync();
-        db.Assets.Add(CatalogData.Photo(Ids.Of(11), new DateTime(2019, 7, 14, 10, 32, 0)));
-        await db.SaveChangesAsync();
-        await using var web = CreateWeb(catalog.ConnectionStringFor(db));
-        using var http = web.CreateClient();
+        var video = Details.Photo(Ids.Of(2), new DateTime(2020, 1, 1), DerivativeNames.Poster) with { Kind = AssetKinds.Video };
 
-        using var response = await http.GetAsync(new Uri($"/fotos/{Ids.Of(11)}", UriKind.Relative));
-        var html = await response.Content.ReadAsStringAsync();
+        var page = RenderDetail(video);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("14 de julho de 2019, 10:32", html, StringComparison.Ordinal);
-        Assert.Contains("Apple iPhone 15", html, StringComparison.Ordinal);
-        Assert.Contains($"/originals/{Ids.Of(11)}?", html, StringComparison.Ordinal);
-        Assert.Contains("HD Ana", html, StringComparison.Ordinal);
+        Assert.Equal($"fotos/{Ids.Of(2)}/poster", page.Find("figure.preview img").GetAttribute("src"));
+        Assert.Contains("Vídeo", page.Find("dl").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task The_timeline_renders_against_a_real_catalog()
+    public void An_asset_without_derivatives_says_there_is_no_preview()
     {
-        await using var db = await catalog.CreateMigratedDatabaseAsync();
-        db.Assets.Add(CatalogData.Photo(Ids.Of(12), new DateTime(2026, 10, 1)));
-        await db.SaveChangesAsync();
-        await using var web = CreateWeb(catalog.ConnectionStringFor(db));
-        using var http = web.CreateClient();
+        var page = RenderDetail(Details.Photo(Ids.Of(3), new DateTime(2020, 1, 1), previewName: null));
 
-        var html = await http.GetStringAsync(new Uri("/", UriKind.Relative));
-
-        Assert.Contains("outubro de 2026", html, StringComparison.Ordinal);
-        Assert.Contains($"fotos/{Ids.Of(12)}", html, StringComparison.Ordinal);
+        Assert.Empty(page.FindAll("figure.preview img"));
+        Assert.Equal("Sem pré-visualização", page.Find("figure.preview .placeholder").TextContent);
     }
 
-    private static WebApplicationFactory<Program> CreateWeb(string catalogConnectionString) =>
-        new WebApplicationFactory<Program>().WithWebHostBuilder(web => web
-            .UseSetting("ConnectionStrings:catalog", catalogConnectionString)
-            // Signing works offline with the emulator's well-known key; nothing is fetched from storage.
-            .UseSetting("ConnectionStrings:blobs", "UseDevelopmentStorage=true"));
+    [Fact]
+    public void An_undated_asset_is_titled_sem_data()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(4), capturedAt: null));
+
+        Assert.Equal("Sem data", page.Find("h1").TextContent);
+    }
+
+    [Fact]
+    public void The_back_link_returns_to_the_timeline_page_the_visitor_came_from()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(5), new DateTime(2020, 1, 1)), pagina: 3);
+
+        Assert.Equal("./?pagina=3", page.Find("p.back a").GetAttribute("href"));
+    }
+
+    private IRenderedComponent<PhotoDetail> RenderDetail(AssetDetail asset, int? pagina = null)
+    {
+        var library = new FakeLibrary();
+        library.Assets[asset.Id] = asset;
+        Services.AddSingleton<ILibraryQueries>(library);
+        var query = pagina is { } page ? $"?pagina={page}" : string.Empty;
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/fotos/{asset.Id}{query}");
+        return Render<PhotoDetail>(p => p.Add(d => d.Id, asset.Id));
+    }
 }

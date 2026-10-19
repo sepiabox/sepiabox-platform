@@ -16,7 +16,7 @@ internal sealed class TestContexts(string connectionString) : IDbContextFactory<
 
 internal static class CatalogData
 {
-    public static Asset Photo(string id, DateTime? capturedAt) => new()
+    public static Asset Photo(string id, DateTime? capturedAt, bool withDerivatives = true) => new()
     {
         Id = id,
         Kind = "photo",
@@ -29,11 +29,13 @@ internal static class CatalogData
         Height = 3000,
         ImportedAt = DateTimeOffset.UnixEpoch,
         UpdatedAt = DateTimeOffset.UnixEpoch,
-        Sources = [new AssetSource { AssetId = id, Type = "local", Name = "HD Ana", Path = $"2019/{id[..8]}.jpg" }],
-        Derivatives =
-        [
-            new Derivative { AssetId = id, Name = "thumb-256", BlobPath = $"{id}/thumb-256.webp", Width = 256, Height = 192, ContentType = "image/webp" },
-            new Derivative { AssetId = id, Name = "preview-1280", BlobPath = $"{id}/preview-1280.webp", Width = 1280, Height = 960, ContentType = "image/webp" },
-        ],
+        Sources = [new AssetSource { AssetId = id, Type = "local", Name = "HD Ana", Path = $"2019/Praia {id[^4..]}.jpg" }],
+        Derivatives = withDerivatives
+            ?
+            [
+                new Derivative { AssetId = id, Name = "thumb-256", BlobPath = $"{id}/thumb-256.webp", Width = 256, Height = 192, ContentType = "image/webp" },
+                new Derivative { AssetId = id, Name = "preview-1280", BlobPath = $"{id}/preview-1280.webp", Width = 1280, Height = 960, ContentType = "image/webp" },
+            ]
+            : [],
     };
 }

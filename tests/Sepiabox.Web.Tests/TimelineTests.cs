@@ -1,5 +1,4 @@
-using System.Web;
-using Azure.Storage.Blobs;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Sepiabox.Web.Components.Pages;
 using Sepiabox.Web.Services;
@@ -11,11 +10,10 @@ public sealed class TimelineTests : BunitContext
     [Fact]
     public void Assets_from_three_months_show_three_month_groups_newest_first()
     {
-        Services.AddSingleton<ILibraryQueries>(new FakeLibrary(
-            new TimelineItem(Ids.Of(1), "photo", new DateTime(2026, 8, 3, 10, 0, 0), $"{Ids.Of(1)}/thumb-256.webp"),
-            new TimelineItem(Ids.Of(2), "photo", new DateTime(2026, 10, 1, 9, 0, 0), $"{Ids.Of(2)}/thumb-256.webp"),
-            new TimelineItem(Ids.Of(3), "video", new DateTime(2025, 12, 24, 20, 0, 0), $"{Ids.Of(3)}/thumb-256.webp")));
-        Services.AddSingleton<ISasUrlFactory>(new FakeLinks());
+        Use(new FakeLibrary(
+            new TimelineItem(Ids.Of(1), AssetKinds.Photo, new DateTime(2026, 8, 3, 10, 0, 0), true),
+            new TimelineItem(Ids.Of(2), AssetKinds.Photo, new DateTime(2026, 10, 1, 9, 0, 0), true),
+            new TimelineItem(Ids.Of(3), AssetKinds.Video, new DateTime(2025, 12, 24, 20, 0, 0), true)));
 
         var page = Render<Timeline>();
 
@@ -27,10 +25,9 @@ public sealed class TimelineTests : BunitContext
     [Fact]
     public void An_asset_without_a_date_appears_last_under_sem_data()
     {
-        Services.AddSingleton<ILibraryQueries>(new FakeLibrary(
-            new TimelineItem(Ids.Of(4), "photo", null, $"{Ids.Of(4)}/thumb-256.webp"),
-            new TimelineItem(Ids.Of(5), "photo", new DateTime(2019, 7, 14, 10, 32, 0), $"{Ids.Of(5)}/thumb-256.webp")));
-        Services.AddSingleton<ISasUrlFactory>(new FakeLinks());
+        Use(new FakeLibrary(
+            new TimelineItem(Ids.Of(4), AssetKinds.Photo, null, true),
+            new TimelineItem(Ids.Of(5), AssetKinds.Photo, new DateTime(2019, 7, 14, 10, 32, 0), true)));
 
         var page = Render<Timeline>();
 
@@ -41,44 +38,85 @@ public sealed class TimelineTests : BunitContext
     }
 
     [Fact]
-    public void Thumbnails_are_read_only_links_that_expire_within_15_minutes()
+    public void Thumbnails_point_at_the_signing_endpoint_and_the_page_holds_no_storage_links()
     {
-        var now = new DateTimeOffset(2026, 10, 19, 12, 0, 0, TimeSpan.Zero);
-        Services.AddSingleton<ILibraryQueries>(new FakeLibrary(
-            new TimelineItem(Ids.Of(6), "photo", new DateTime(2026, 10, 2), $"{Ids.Of(6)}/thumb-256.webp")));
-        Services.AddSingleton<ISasUrlFactory>(new SasUrlFactory(new BlobServiceClient("UseDevelopmentStorage=true"), new FixedTime(now)));
+        Use(new FakeLibrary(new TimelineItem(Ids.Of(6), AssetKinds.Photo, new DateTime(2026, 10, 2), true)));
 
         var page = Render<Timeline>();
 
-        var src = new Uri(page.Find("ul.grid img").GetAttribute("src")!);
-        var query = HttpUtility.ParseQueryString(src.Query);
-        Assert.Equal("r", query["sp"]);
-        var expiry = DateTimeOffset.Parse(query["se"]!, System.Globalization.CultureInfo.InvariantCulture);
-        Assert.True(expiry <= now.AddMinutes(15), $"Expiry {expiry:O} is more than 15 minutes after {now:O}.");
+        Assert.Equal($"fotos/{Ids.Of(6)}/thumb-256", page.Find("ul.grid img").GetAttribute("src"));
+        Assert.DoesNotContain("sig=", page.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
     public void A_full_page_links_to_the_older_page()
     {
-        Services.AddSingleton<ILibraryQueries>(new FakeLibrary(
-            new TimelineItem(Ids.Of(7), "photo", new DateTime(2026, 1, 1), null))
-        { HasMore = true });
-        Services.AddSingleton<ISasUrlFactory>(new FakeLinks());
+        Use(new FakeLibrary(
+            new TimelineItem(Ids.Of(7), AssetKinds.Photo, new DateTime(2026, 1, 2), false),
+            new TimelineItem(Ids.Of(8), AssetKinds.Photo, new DateTime(2026, 1, 1), false))
+        { PageSize = 1 });
 
         var page = Render<Timeline>();
 
-        Assert.Equal("?pagina=2", page.Find("nav.pages a").GetAttribute("href"));
+        Assert.EndsWith("?pagina=2", page.Find("nav.pages a").GetAttribute("href"), StringComparison.Ordinal);
         Assert.Contains("sem miniatura", page.Find("ul.grid .placeholder").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
     public void An_empty_library_says_how_to_add_photos()
     {
-        Services.AddSingleton<ILibraryQueries>(new FakeLibrary());
-        Services.AddSingleton<ISasUrlFactory>(new FakeLinks());
+        Use(new FakeLibrary());
 
         var page = Render<Timeline>();
 
         Assert.Contains("sepiabox-ingest", page.Find("p.empty").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_page_beyond_the_end_says_there_are_no_more_photos()
+    {
+        Use(new FakeLibrary(new TimelineItem(Ids.Of(9), AssetKinds.Photo, new DateTime(2026, 1, 1), true)));
+
+        var page = RenderPage(5);
+
+        var message = page.Find("p.empty");
+        Assert.Contains("Não há mais fotos", message.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("pagina", message.QuerySelector("a")!.GetAttribute("href"), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(-3, 1)]
+    [InlineData(int.MaxValue, LibraryQueries.MaxPage)]
+    public void Out_of_range_page_numbers_are_clamped(int requested, int expected)
+    {
+        var library = new FakeLibrary();
+        Use(library);
+
+        RenderPage(requested);
+
+        Assert.Equal(expected, library.RequestedPage);
+    }
+
+    [Fact]
+    public void Photos_on_later_pages_link_back_to_their_page()
+    {
+        Use(new FakeLibrary(
+            new TimelineItem(Ids.Of(10), AssetKinds.Photo, new DateTime(2026, 1, 2), true),
+            new TimelineItem(Ids.Of(11), AssetKinds.Photo, new DateTime(2026, 1, 1), true))
+        { PageSize = 1 });
+
+        var page = RenderPage(2);
+
+        Assert.Equal($"fotos/{Ids.Of(11)}?pagina=2", page.Find("a.thumb").GetAttribute("href"));
+    }
+
+    private void Use(FakeLibrary library) => Services.AddSingleton<ILibraryQueries>(library);
+
+    // The page reads `pagina` from the URL, as a visitor's browser would send it.
+    private IRenderedComponent<Timeline> RenderPage(int pagina)
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/?pagina={pagina}");
+        return Render<Timeline>();
     }
 }

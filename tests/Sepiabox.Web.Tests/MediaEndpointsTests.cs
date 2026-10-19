@@ -1,0 +1,50 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.Logging.Abstractions;
+using Sepiabox.Web.Services;
+
+namespace Sepiabox.Web.Tests;
+
+public sealed class MediaEndpointsTests
+{
+    [Fact]
+    public async Task A_failed_signing_of_a_thumbnail_is_a_503_not_a_crash()
+    {
+        var library = new FakeLibrary();
+        library.Assets[Ids.Of(1)] = Details.Photo(Ids.Of(1));
+
+        var result = await MediaEndpoints.DerivativeAsync(
+            Ids.Of(1), DerivativeNames.Thumbnail, new DefaultHttpContext(), library, new FailingLinks(), NullLogger<Program>.Instance);
+
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, Assert.IsType<StatusCodeHttpResult>(result).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_failed_signing_of_the_original_explains_it_in_portuguese()
+    {
+        var library = new FakeLibrary();
+        library.Assets[Ids.Of(2)] = Details.Photo(Ids.Of(2));
+
+        var result = await MediaEndpoints.OriginalAsync(
+            Ids.Of(2), new DefaultHttpContext(), library, new FailingLinks(), NullLogger<Program>.Instance);
+
+        var text = Assert.IsType<ContentHttpResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, text.StatusCode);
+        Assert.Contains("download", text.ResponseContent, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("preview-2048")]
+    [InlineData("..")]
+    [InlineData("original.jpg")]
+    public async Task Only_known_derivative_names_are_served(string name)
+    {
+        var library = new FakeLibrary();
+        library.Assets[Ids.Of(3)] = Details.Photo(Ids.Of(3));
+
+        var result = await MediaEndpoints.DerivativeAsync(
+            Ids.Of(3), name, new DefaultHttpContext(), library, new FailingLinks(), NullLogger<Program>.Instance);
+
+        Assert.IsType<NotFound>(result);
+    }
+}
