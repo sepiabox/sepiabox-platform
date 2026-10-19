@@ -41,12 +41,20 @@ public static class UploadCommand
         _ => new BlobServiceClient(Environment.GetEnvironmentVariable(ConnectionVariable) ?? "UseDevelopmentStorage=true"),
     };
 
-    public static async Task<UploadResult> RunAsync(
+    public static Task<UploadResult> RunAsync(
         UploadOptions options,
         BlobServiceClient service,
         IProgress<long>? bytesSent = null,
-        IManifestValidator? validator = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        RunAsync(options, service, bytesSent, new ManifestValidator(), cancellationToken);
+
+    /// <summary>Takes the validator as a parameter so tests can reach the checks that the schema runs first.</summary>
+    internal static async Task<UploadResult> RunAsync(
+        UploadOptions options,
+        BlobServiceClient service,
+        IProgress<long>? bytesSent,
+        IManifestValidator validator,
+        CancellationToken cancellationToken)
     {
         var workFolder = Path.GetFullPath(options.WorkFolder);
         var manifestFolder = Path.Combine(workFolder, "manifests");
@@ -66,7 +74,6 @@ public static class UploadCommand
         }
 
         using var state = new UploadState(databasePath);
-        validator ??= new ManifestValidator();
         var run = new Run(
             workFolder,
             containers,
@@ -91,15 +98,37 @@ public static class UploadCommand
     /// <summary>
     /// Where a manifest's derivative is on disk, if it is a file inside <c>derivatives/&lt;id&gt;/</c> of the
     /// work folder. Compared with GetRelativePath rather than a string prefix, so a work folder that is a
-    /// drive or filesystem root (F:\ or /) works too.
+    /// drive or filesystem root (F:\ or /) works too. The id must be one plain name, or it would move the
+    /// asset folder itself out of <c>derivatives/</c>.
     /// </summary>
     internal static bool TryResolveDerivative(string workFolder, string assetId, string relativePath, out string fullPath)
     {
-        var assetFolder = Path.GetFullPath(Path.Combine(workFolder, "derivatives", assetId));
-        fullPath = Path.GetFullPath(Path.Combine(workFolder, relativePath));
-        var inside = Path.GetRelativePath(assetFolder, fullPath);
-        return !Path.IsPathRooted(relativePath)
-            && !Path.IsPathRooted(inside)
+        fullPath = "";
+        if (assetId is "" or "." or ".." || assetId.IndexOfAny(['/', '\\']) >= 0 || Path.IsPathRooted(relativePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var derivativesFolder = Path.GetFullPath(Path.Combine(workFolder, "derivatives"));
+            var assetFolder = Path.GetFullPath(Path.Combine(derivativesFolder, assetId));
+            fullPath = Path.GetFullPath(Path.Combine(workFolder, relativePath));
+            return IsStrictlyInside(derivativesFolder, assetFolder)
+                && IsStrictlyInside(assetFolder, fullPath)
+                && relativePath.IndexOf('\0') < 0;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            fullPath = "";
+            return false;
+        }
+    }
+
+    private static bool IsStrictlyInside(string folder, string path)
+    {
+        var inside = Path.GetRelativePath(folder, path);
+        return !Path.IsPathRooted(inside)
             && inside != "."
             && inside != ".."
             && !inside.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
@@ -147,7 +176,7 @@ public static class UploadCommand
                     // The schema already only allows derivatives/<id>/<file>; this keeps that promise even if it changes.
                     if (!TryResolveDerivative(workFolder, manifest.Id, derivative.Path, out var file))
                     {
-                        AddProblem(manifestPath, $"derivative {derivative.Name} is outside the work folder: {derivative.Path}");
+                        AddProblem(manifestPath, $"derivative {derivative.Name} is outside derivatives/{manifest.Id}/: {derivative.Path}");
                         return;
                     }
 
@@ -168,20 +197,26 @@ public static class UploadCommand
 
                 await UploadManifestAsync(manifest, manifestPath, fingerprint, cancellationToken);
             }
-            catch (Exception ex) when (IsAssetFailure(ex) && !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (IsAssetFailure(ex))
             {
+                // A cancel can surface as the I/O or storage error it caused; the user still asked to stop.
+                cancellationToken.ThrowIfCancellationRequested();
                 AddProblem(manifestPath, $"{ex.GetType().Name}: {ex.Message}");
             }
         }
 
         /// <summary>
         /// What one asset can fail with without saying anything about the others: files, permissions,
-        /// storage, JSON, and an operation cancelled that the user did not cancel (an Azure SDK timeout).
+        /// storage, JSON, an operation cancelled that the user did not cancel (an Azure SDK timeout), and the
+        /// AggregateException Azure.Core's RetryPolicy throws when every try failed with one of those.
         /// Anything else is a bug and stops the run.
         /// </summary>
-        private static bool IsAssetFailure(Exception ex) =>
-            ex is IOException or UnauthorizedAccessException or RequestFailedException or System.Text.Json.JsonException
-                or InvalidDataException or OperationCanceledException;
+        private static bool IsAssetFailure(Exception ex) => ex switch
+        {
+            AggregateException aggregate => aggregate.Flatten().InnerExceptions is { Count: > 0 } inner && inner.All(IsAssetFailure),
+            _ => ex is IOException or UnauthorizedAccessException or RequestFailedException or System.Text.Json.JsonException
+                or InvalidDataException or OperationCanceledException,
+        };
 
         private async Task<bool> UploadOriginalAsync(Manifest manifest, CancellationToken cancellationToken)
         {

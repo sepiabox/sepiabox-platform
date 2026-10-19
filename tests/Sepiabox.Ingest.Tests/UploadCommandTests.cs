@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Azure;
 using Azure.Storage.Blobs;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
@@ -91,7 +92,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
             }
         });
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => UploadCommand.RunAsync(Options(), Service, cancelOnFirstBlock, cancellationToken: cancellation.Token));
+            () => UploadCommand.RunAsync(Options(), Service, cancelOnFirstBlock, cancellation.Token));
         var beforeResume = ReadUploads();
 
         var resumed = await Upload();
@@ -233,7 +234,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         // The schema would refuse these paths first; a permissive validator lets the test reach the path check.
         var result = await Upload(new AcceptsAnyManifest());
 
-        Assert.Contains("is outside the work folder", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Contains($"is outside derivatives/{broken.Id}/", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
         await AssertOnlyUploadedAsync(other.Id);
     }
 
@@ -286,15 +287,23 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.Single(second.Problems);
     }
 
-    [Fact]
-    public async Task A_programming_error_stops_the_upload()
+    public static TheoryData<Exception, Type> ProgrammingErrors => new()
+    {
+        { new InvalidOperationException("bug"), typeof(InvalidOperationException) },
+        // Retries that ended in a bug are still a bug, even next to failures that would only be this asset's.
+        { new AggregateException(new RequestFailedException("busy"), new InvalidOperationException("bug")), typeof(AggregateException) },
+    };
+
+    [Theory]
+    [MemberData(nameof(ProgrammingErrors))]
+    public async Task A_programming_error_stops_the_upload(Exception error, Type expected)
     {
         _drive.Write("a.jpg", TestPhotos.Porto("red"));
         Process();
 
-        var failure = await Record.ExceptionAsync(() => Upload(new ThrowingValidator(new InvalidOperationException("bug"))));
+        var failure = await Record.ExceptionAsync(() => Upload(new ThrowingValidator(error)));
 
-        Assert.IsType<InvalidOperationException>(failure);
+        Assert.IsType(expected, failure);
     }
 
     [Fact]
@@ -303,10 +312,29 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         _drive.Write("a.jpg", TestPhotos.Porto("red"));
         Process();
 
-        // What the Azure SDK throws when a request times out: a TaskCanceledException nobody asked for.
-        var result = await Upload(new ThrowingValidator(new TaskCanceledException("The operation timed out.")));
+        // What Azure.Core's RetryPolicy throws when every try fails: an AggregateException of each try's failure,
+        // here a request that timed out (a TaskCanceledException nobody asked for) and one the service refused.
+        var retriesFailed = new AggregateException(
+            "Retry failed after 2 tries.",
+            new TaskCanceledException("The operation was cancelled because it exceeded the configured timeout."),
+            new RequestFailedException(503, "The server is busy."));
+        var result = await Upload(new ThrowingValidator(retriesFailed));
 
-        Assert.Contains("timed out", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Contains("Retry failed after 2 tries", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_cancel_that_surfaces_as_a_file_error_still_cancels_the_upload()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        Process();
+
+        // A cancelled request can reach the caller as an IOException (the socket was closed under it).
+        using var cancellation = new CancellationTokenSource();
+        var failure = await Record.ExceptionAsync(() => UploadCommand.RunAsync(
+            Options(), Service, null, new ThrowingValidator(new IOException("connection closed"), cancellation), cancellation.Token));
+
+        Assert.IsAssignableFrom<OperationCanceledException>(failure);
     }
 
     /// <summary>Reads any manifest without checking it, so tests can reach the checks behind the schema.</summary>
@@ -315,15 +343,19 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? problem)
         {
             manifest = ManifestJson.Deserialize(json);
-            problem = null;
-            return true;
+            problem = manifest is null ? "the manifest is null" : null;
+            return manifest is not null;
         }
     }
 
-    private sealed class ThrowingValidator(Exception exception) : IManifestValidator
+    /// <summary>Throws while an asset is being uploaded, cancelling the run first when given a source.</summary>
+    private sealed class ThrowingValidator(Exception exception, CancellationTokenSource? cancelFirst = null) : IManifestValidator
     {
-        public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? problem) =>
+        public bool TryValidate(string json, [NotNullWhen(true)] out Manifest? manifest, [NotNullWhen(false)] out string? problem)
+        {
+            cancelFirst?.Cancel();
             throw exception;
+        }
     }
 
     private List<Manifest> Process()
@@ -336,7 +368,9 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
 
     private UploadOptions Options() => new(_work.Path, UploadDestination.Local);
 
-    private Task<UploadResult> Upload(IManifestValidator? validator = null) => UploadCommand.RunAsync(Options(), Service, validator: validator);
+    private Task<UploadResult> Upload(IManifestValidator? validator = null) => validator is null
+        ? UploadCommand.RunAsync(Options(), Service)
+        : UploadCommand.RunAsync(Options(), Service, null, validator, CancellationToken.None);
 
     private List<UploadRecord> ReadUploads()
     {
