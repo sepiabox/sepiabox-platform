@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using ImageMagick;
 using Sepiabox.Ingest.Scanning;
+using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
+using Sepiabox.Pipeline.Models;
 using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Ingest.Processing;
@@ -16,12 +18,14 @@ public sealed record ProcessResult(
     int Skipped,
     IReadOnlyList<ScanProblem> Problems,
     int VideosPending = 0,
-    string? Warning = null);
+    string? Warning = null,
+    int Embedded = 0);
 
 /// <summary>
 /// Describes every photo and video in a folder tree as one manifest per distinct content (D-005, D-014),
-/// with the thumbnails, posters and 720p versions the web shows instead of the originals (D-015).
-/// Source files are only read; results go to the work folder.
+/// with the thumbnails, posters and 720p versions the web shows instead of the originals (D-015), and a
+/// CLIP embedding computed from those thumbnails (S-015). Source files are only read; results go to the
+/// work folder.
 /// </summary>
 public static class ProcessCommand
 {
@@ -40,11 +44,13 @@ public static class ProcessCommand
 
         var ffmpeg = FfmpegTools.Find(options.FfmpegFolder);
         var video = ffmpeg is null ? null : new VideoProcessor(ffmpeg, options.Encoder);
+        var modelFolder = options.ModelFolder ?? ModelFolder.Default();
+        using var embedder = ClipImageEmbedder.TryCreate(modelFolder, options.UseGpu);
 
         using var state = new StateStore(Path.Combine(output, "state.db"));
         var stopwatch = Stopwatch.StartNew();
         var problems = new List<ScanProblem>();
-        int processed = 0, skipped = 0, pending = 0;
+        int processed = 0, skipped = 0, pending = 0, embedded = 0;
 
         foreach (var file in FileTree.Enumerate(root))
         {
@@ -62,6 +68,13 @@ public static class ProcessCommand
             if (unchanged && previous!.Status == FileStatus.Done)
             {
                 skipped++;
+                // The model may have been downloaded after this file was processed: the embedding comes from
+                // the thumbnails in the work folder, so the drive is not read again.
+                if (embedder is not null && previous.Sha256 is { } doneSha256)
+                {
+                    embedded += AddMissingEmbedding(output, ManifestPath(manifestFolder, doneSha256), file.Path, embedder, problems);
+                }
+
                 continue;
             }
 
@@ -88,6 +101,20 @@ public static class ProcessCommand
 
                 var described = Describe(manifestFolder, sha256, kind, file, source);
                 var (manifest, status, derivativeProblem) = AddDerivatives(output, file, described, video, cancellationToken);
+                if (embedder is not null && status == FileStatus.Done)
+                {
+                    (manifest, var embeddingProblem) = WithEmbedding(output, manifest, embedder);
+                    if (embeddingProblem is null)
+                    {
+                        embedded += manifest.Embeddings.ContainsKey(ClipImageEmbedder.ModelKey) ? 1 : 0;
+                    }
+                    else
+                    {
+                        // The file stays Done: the next run adds the embedding from the work folder.
+                        problems.Add(new ScanProblem(file.Path, embeddingProblem));
+                    }
+                }
+
                 Write(ManifestPath(manifestFolder, sha256), manifest);
                 state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, status));
 
@@ -115,11 +142,90 @@ public static class ProcessCommand
             filesDone?.Report(processed + problems.Count);
         }
 
-        var warning = pending > 0
-            ? $"FFmpeg was not found {(options.FfmpegFolder is null ? "on the PATH" : $"in {options.FfmpegFolder}")}. "
-              + $"{pending:N0} videos are described but have no poster or 720p version yet; run process again once FFmpeg is installed."
-            : null;
-        return new ProcessResult(root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning);
+        var warnings = new List<string>();
+        if (pending > 0)
+        {
+            warnings.Add(
+                $"FFmpeg was not found {(options.FfmpegFolder is null ? "on the PATH" : $"in {options.FfmpegFolder}")}. "
+                + $"{pending:N0} videos are described but have no poster or 720p version yet; run process again once FFmpeg is installed.");
+        }
+
+        if (embedder is null)
+        {
+            warnings.Add(
+                $"The CLIP model is not in {modelFolder}, so no embeddings were computed. Run `sepiabox-ingest models download` "
+                + "and then process again: embeddings are added from the work folder without reading the drive again.");
+        }
+        else if (embedder.Warning is not null)
+        {
+            warnings.Add(embedder.Warning);
+        }
+
+        var warning = warnings.Count == 0 ? null : string.Join(Environment.NewLine, warnings);
+        return new ProcessResult(root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded);
+    }
+
+    /// <summary>
+    /// Adds the CLIP embedding when the manifest has none, from the derivative the web shows: the 1280 px
+    /// preview of a photo or the poster of a video. Problem is set when the image could not be embedded.
+    /// </summary>
+    private static (Manifest Manifest, string? Problem) WithEmbedding(string output, Manifest manifest, ClipImageEmbedder embedder)
+    {
+        if (manifest.Embeddings.ContainsKey(ClipImageEmbedder.ModelKey))
+        {
+            return (manifest, null);
+        }
+
+        var name = manifest.Kind == MediaKind.Video ? VideoProcessor.PosterName : ThumbnailGenerator.PreviewName;
+        var derivative = manifest.Derivatives.FirstOrDefault(d => d.Name == name);
+        if (derivative is null)
+        {
+            return (manifest, null);
+        }
+
+        try
+        {
+            var vector = embedder.Embed(Path.Combine(output, derivative.Path));
+            var embeddings = new Dictionary<string, System.Text.Json.Nodes.JsonNode>(manifest.Embeddings.ToDictionary(e => e.Key, e => e.Value))
+            {
+                [ClipImageEmbedder.ModelKey] = System.Text.Json.Nodes.JsonValue.Create(EmbeddingCodec.Encode(vector)),
+            };
+            return (manifest with { Embeddings = embeddings }, null);
+        }
+        catch (Exception ex) when (ex is MagickException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException or IOException)
+        {
+            return (manifest, $"Could not compute the CLIP embedding: {ex.Message}");
+        }
+    }
+
+    private static int AddMissingEmbedding(
+        string output, string manifestPath, string sourcePath, ClipImageEmbedder embedder, List<ScanProblem> problems)
+    {
+        if (!File.Exists(manifestPath))
+        {
+            return 0;
+        }
+
+        var manifest = ManifestJson.Deserialize(File.ReadAllText(manifestPath));
+        if (manifest.Embeddings.ContainsKey(ClipImageEmbedder.ModelKey))
+        {
+            return 0;
+        }
+
+        var (withEmbedding, problem) = WithEmbedding(output, manifest, embedder);
+        if (problem is not null)
+        {
+            problems.Add(new ScanProblem(sourcePath, problem));
+            return 0;
+        }
+
+        if (ReferenceEquals(withEmbedding, manifest))
+        {
+            return 0;
+        }
+
+        Write(manifestPath, withEmbedding);
+        return 1;
     }
 
     private static Manifest Describe(string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source)

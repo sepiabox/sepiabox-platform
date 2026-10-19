@@ -16,7 +16,24 @@ public class ProcessOptionsTests
         new[] { "E:\\", "--out", "work", "--fast" },
         new[] { "E:\\", "--out", "work", "--ffmpeg" },
         new[] { "E:\\", "--out", "work", "--hw", "quicksync" },
+        new[] { "E:\\", "--out", "work", "--models" },
     };
+
+    [Fact]
+    public void Reads_the_models_folder_and_the_gpu_switch()
+    {
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work", "--models", "D:\\models", "--gpu"], out var options, out _));
+        Assert.Equal("D:\\models", options.ModelFolder);
+        Assert.True(options.UseGpu);
+    }
+
+    [Fact]
+    public void Uses_the_default_models_folder_and_the_cpu_by_default()
+    {
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work"], out var options, out _));
+        Assert.Null(options.ModelFolder);
+        Assert.False(options.UseGpu);
+    }
 
     [Fact]
     public void Reads_the_ffmpeg_folder_and_the_nvenc_encoder()

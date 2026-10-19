@@ -8,12 +8,16 @@ namespace Sepiabox.Ingest.Processing;
 /// <param name="SourceName">Name of the drive or folder; null to use the folder name.</param>
 /// <param name="FfmpegFolder">Folder with <c>ffmpeg</c> and <c>ffprobe</c>; null to look on the PATH.</param>
 /// <param name="Encoder">H.264 encoder for the 720p versions.</param>
+/// <param name="ModelFolder">Folder with the downloaded models; null for the default (<c>models download</c>).</param>
+/// <param name="UseGpu">Compute embeddings with CUDA when it is available.</param>
 public sealed record ProcessOptions(
     string Root,
     string OutputPath,
     string? SourceName,
     string? FfmpegFolder = null,
-    VideoEncoder Encoder = VideoEncoder.Software)
+    VideoEncoder Encoder = VideoEncoder.Software,
+    string? ModelFolder = null,
+    bool UseGpu = false)
 {
     public static bool TryParse(
         IReadOnlyList<string> args,
@@ -26,12 +30,14 @@ public sealed record ProcessOptions(
         string? sourceName = null;
         string? ffmpegFolder = null;
         var encoder = VideoEncoder.Software;
+        string? modelFolder = null;
+        var useGpu = false;
 
         for (var i = 0; i < args.Count; i++)
         {
             switch (args[i])
             {
-                case "--out" or "--source-name" or "--ffmpeg" or "--hw" when i + 1 >= args.Count:
+                case "--out" or "--source-name" or "--ffmpeg" or "--hw" or "--models" when i + 1 >= args.Count:
                     error = $"{args[i]} needs a value.";
                     return false;
 
@@ -45,6 +51,14 @@ public sealed record ProcessOptions(
 
                 case "--ffmpeg":
                     ffmpegFolder = args[++i];
+                    break;
+
+                case "--models":
+                    modelFolder = args[++i];
+                    break;
+
+                case "--gpu":
+                    useGpu = true;
                     break;
 
                 case "--hw" when args[i + 1] == "nvenc":
@@ -83,7 +97,7 @@ public sealed record ProcessOptions(
         }
 
         options = new ProcessOptions(
-            root, outputPath, string.IsNullOrWhiteSpace(sourceName) ? null : sourceName.Trim(), ffmpegFolder, encoder);
+            root, outputPath, string.IsNullOrWhiteSpace(sourceName) ? null : sourceName.Trim(), ffmpegFolder, encoder, modelFolder, useGpu);
         error = null;
         return true;
     }

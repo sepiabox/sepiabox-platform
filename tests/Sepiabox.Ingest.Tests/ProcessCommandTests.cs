@@ -239,6 +239,24 @@ public class ProcessCommandTests
     }
 
     // Unit tests must behave the same with or without FFmpeg installed, so they point at a folder without it.
+    [Fact]
+    public void Without_the_clip_model_the_run_succeeds_and_says_how_to_get_it()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var noModels = new TempFolder();
+        drive.Write("2019/praia.jpg", TestPhotos.Porto());
+
+        var result = ProcessCommand.Run(new ProcessOptions(
+            drive.Path, work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None, ModelFolder: noModels.Path));
+
+        Assert.Equal(1, result.Processed);
+        Assert.Equal(0, result.Embedded);
+        Assert.Empty(result.Problems);
+        Assert.Contains("sepiabox-ingest models download", result.Warning, StringComparison.Ordinal);
+        Assert.Empty(Assert.Single(ReadManifests(work)).Embeddings);
+    }
+
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
         ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None));
 
