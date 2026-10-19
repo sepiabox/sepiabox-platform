@@ -14,7 +14,37 @@ public sealed class MediaEndpointsTests
         new RequestFailedException(403, "AuthorizationPermissionMismatch"),
         new AuthenticationFailedException("ManagedIdentityCredential authentication failed."),
         new CredentialUnavailableException("No managed identity endpoint found."),
+        // What Azure.Core's retry policy throws when storage stays unreachable.
+        new AggregateException("Retry failed after 4 tries.", new RequestFailedException(503, "ServerBusy"), new RequestFailedException(503, "ServerBusy")),
+        new AggregateException("Retry failed after 2 tries.", new TaskCanceledException("timeout"), new RequestFailedException(500, "InternalError")),
+        // A network timeout, while the browser is still waiting.
+        new TaskCanceledException("The operation was canceled."),
     ];
+
+    [Fact]
+    public async Task A_programming_error_inside_a_retry_failure_is_not_hidden_as_a_503()
+    {
+        var library = new FakeLibrary();
+        library.Assets[Ids.Of(1)] = Details.Photo(Ids.Of(1));
+        var failure = new AggregateException(new RequestFailedException(503, "ServerBusy"), new InvalidOperationException("bug"));
+
+        await Assert.ThrowsAsync<AggregateException>(() => MediaEndpoints.DerivativeAsync(
+            Ids.Of(1), DerivativeNames.Thumbnail, new DefaultHttpContext(), library, new FailingLinks(failure), NullLogger<Program>.Instance));
+    }
+
+    [Fact]
+    public async Task A_browser_that_went_away_is_not_answered_with_a_503()
+    {
+        var library = new FakeLibrary();
+        library.Assets[Ids.Of(1)] = Details.Photo(Ids.Of(1));
+        using var aborted = new CancellationTokenSource();
+        await aborted.CancelAsync();
+        var http = new DefaultHttpContext { RequestAborted = aborted.Token };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => MediaEndpoints.DerivativeAsync(
+            Ids.Of(1), DerivativeNames.Thumbnail, http, library,
+            new FailingLinks(new TaskCanceledException("client gone", null, aborted.Token)), NullLogger<Program>.Instance));
+    }
 
     [Theory]
     [MemberData(nameof(SigningFailures))]

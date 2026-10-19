@@ -19,7 +19,8 @@ public sealed class PhotoDetailTests : BunitContext
         Assert.Equal($"fotos/{Ids.Of(1)}/original", page.Find("a.button").GetAttribute("href"));
         // Enhanced navigation would fetch the redirect itself, failing on CORS and reading the original twice.
         Assert.Equal("false", page.Find("a.button").GetAttribute("data-enhance-nav"));
-        Assert.True(page.Find("a.button").HasAttribute("download"));
+        // No `download`: the file name comes from Content-Disposition, and a failure page must stay visible.
+        Assert.False(page.Find("a.button").HasAttribute("download"));
         Assert.DoesNotContain("sig=", page.Markup, StringComparison.Ordinal);
     }
 
