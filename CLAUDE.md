@@ -57,6 +57,8 @@ New projects follow the names in `docs/architecture.md` and are added to `Sepiab
 - The user's source files (photos, videos, drives) are only ever opened for reading.
 - Dependencies must have an AGPL-compatible license (MIT, Apache-2.0, BSD). The code is AGPL-3.0; the Sepiabox name and logo are not covered by that license.
 - ML models are never committed; they are downloaded with a pinned SHA-256.
+- Catalog schema changes always add a new migration (`dotnet ef migrations add`); a migration that is on `main` is never edited or regenerated (D-033).
+- Manifest blobs are only written through `ManifestStore.WriteMergedAsync`, never uploaded directly (D-036).
 
 ## Tests
 

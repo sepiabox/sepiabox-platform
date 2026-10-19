@@ -28,7 +28,8 @@
 ### Technical notes
 - Packages: `Microsoft.ML.OnnxRuntime`, `Pgvector.EntityFrameworkCore`.
 - Tests with the model: Integration; cache the model in CI with `actions/cache`.
-- Decisions: D-016.
+- Extend `ManifestMerge` (D-036): `embeddings` merge by model key, the incoming value winning per key, so a manifest from a drive processed with another model version never drops the stored vectors.
+- Decisions: D-016, D-036.
 
 ### Expected tests
 - Unit: preprocessing (tensor and normalization), base64. Integration: real inference and import.
