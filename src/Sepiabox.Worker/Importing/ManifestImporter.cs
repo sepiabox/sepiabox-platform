@@ -15,7 +15,14 @@ namespace Sepiabox.Worker.Importing;
 
 public sealed record ImportProblem(string BlobName, string Reason);
 
-public sealed record ImportResult(int Imported, int Unchanged, IReadOnlyList<ImportProblem> Problems);
+/// <summary>
+/// What an import did. <see cref="Problems"/> are manifests that were not imported and make the exit code
+/// non-zero; <see cref="Warnings"/> are manifests imported without an embedding that could not be stored (D-043).
+/// </summary>
+public sealed record ImportResult(int Imported, int Unchanged, IReadOnlyList<ImportProblem> Problems, IReadOnlyList<ImportProblem>? Warnings = null)
+{
+    public IReadOnlyList<ImportProblem> Warnings { get; init; } = Warnings ?? [];
+}
 
 /// <summary>
 /// Copies manifests from Blob Storage into the catalog (S-008). Each manifest blob is imported once per
@@ -38,6 +45,7 @@ public sealed class ManifestImporter(
         var imported = await db.ManifestImports.AsNoTracking()
             .ToDictionaryAsync(i => i.BlobName, i => i.ETag, StringComparer.Ordinal, cancellationToken);
         var problems = new List<ImportProblem>();
+        var warnings = new List<ImportProblem>();
         int done = 0, unchanged = 0;
 
         await foreach (var blob in manifests.GetBlobsAsync(cancellationToken: cancellationToken))
@@ -53,18 +61,22 @@ public sealed class ManifestImporter(
             if (wasImported)
             {
                 done++;
+                // Imported without an unusable embedding: a warning, reported once, when it is imported (D-043).
+                if (problem is not null)
+                {
+                    Log.EmbeddingLeftOut(logger, blob.Name, problem);
+                    warnings.Add(new ImportProblem(blob.Name, problem));
+                }
             }
-
-            // A manifest that was not imported is reported on every run until someone fixes or deletes it; one
-            // imported without an unusable embedding is reported once, when it is imported (D-043).
-            if (problem is not null)
+            else if (problem is not null)
             {
+                // Not recorded as imported: it is reported on every run until someone fixes or deletes it.
                 Log.ManifestProblem(logger, blob.Name, problem);
                 problems.Add(new ImportProblem(blob.Name, problem));
             }
         }
 
-        return new ImportResult(done, unchanged, problems);
+        return new ImportResult(done, unchanged, problems, warnings);
     }
 
     /// <summary>

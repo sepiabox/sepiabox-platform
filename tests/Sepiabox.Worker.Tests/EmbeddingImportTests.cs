@@ -66,7 +66,7 @@ public sealed class EmbeddingImportTests(CatalogFixture fixture)
     [Theory]
     [InlineData(float.NaN)]
     [InlineData(0f)]
-    public async Task An_unusable_embedding_is_reported_and_left_out_but_the_asset_is_imported(float value)
+    public async Task Imports_the_asset_with_a_warning_when_its_embedding_is_unusable(float value)
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
         var container = await fixture.CreateContainerAsync();
@@ -77,7 +77,8 @@ public sealed class EmbeddingImportTests(CatalogFixture fixture)
         var result = await ImportAsync(db, container);
 
         Assert.Equal(1, result.Imported);
-        Assert.Contains("clip-vit-b32", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Empty(result.Problems);
+        Assert.Contains("clip-vit-b32", Assert.Single(result.Warnings).Reason, StringComparison.Ordinal);
         var asset = await db.Assets.Include(a => a.Sources).Include(a => a.Derivatives).SingleAsync();
         Assert.Single(asset.Sources);
         Assert.Equal(2, asset.Derivatives.Count);
@@ -85,7 +86,7 @@ public sealed class EmbeddingImportTests(CatalogFixture fixture)
     }
 
     [Fact]
-    public async Task An_embedding_of_a_model_the_catalog_does_not_store_is_ignored()
+    public async Task Ignores_the_embedding_when_the_catalog_does_not_store_its_model()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
         var container = await fixture.CreateContainerAsync();
@@ -115,7 +116,7 @@ public sealed class EmbeddingImportTests(CatalogFixture fixture)
 
     // Pgvector.EntityFrameworkCore 0.3.0 is built against EF Core 9; this checks its translation on EF Core 10.
     [Fact]
-    public async Task Ef_core_translates_cosine_distance_on_stored_embeddings()
+    public async Task Translates_cosine_distance_when_queried_through_ef_core_10()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
         var container = await fixture.CreateContainerAsync();
