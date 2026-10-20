@@ -23,7 +23,7 @@ public sealed class AzureWebModelTests(PublishedInfrastructure published) : ICla
         var environment = published.Resource("web")["env"]!.AsObject();
 
         Assert.Equal("/models", environment["Search__ModelFolder"]!.GetValue<string>());
-        Assert.Contains("COPY --chmod=a+rX models/ /models/", File.ReadAllText(Path.Combine(Repository.Root, "infra", "web-models", "Dockerfile")), StringComparison.Ordinal);
+        Assert.Contains("COPY --chmod=755 models/ /models/", File.ReadAllText(Path.Combine(Repository.Root, "infra", "web-models", "Dockerfile")), StringComparison.Ordinal);
     }
 
     [Theory]

@@ -73,14 +73,14 @@ public sealed class WebImageTests
         finally
         {
             await Run("docker", ["rm", "--force", container], check: false);
-            if (Directory.Exists(output))
-            {
-                Directory.Delete(output, recursive: true);
-            }
-
             foreach (var image in images)
             {
                 await Run("docker", ["rmi", "--force", image], check: false);
+            }
+
+            if (Directory.Exists(output))
+            {
+                Directory.Delete(output, recursive: true);
             }
         }
     }

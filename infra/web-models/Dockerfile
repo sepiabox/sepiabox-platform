@@ -5,4 +5,5 @@
 ARG BASE_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0
 FROM ${BASE_IMAGE}
 # Readable by the app's non-root user whatever the files' permissions were where they were downloaded.
-COPY --chmod=a+rX models/ /models/
+# Octal, not a+rX: older BuildKit versions ignore or refuse a symbolic mode.
+COPY --chmod=755 models/ /models/
