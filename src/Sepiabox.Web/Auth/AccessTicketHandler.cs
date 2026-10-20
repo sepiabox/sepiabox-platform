@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication.MicrosoftAccount;
 
 namespace Sepiabox.Web.Auth;
 
@@ -13,7 +14,10 @@ namespace Sepiabox.Web.Auth;
 /// </summary>
 public static partial class AccessTicketHandler
 {
-    /// <summary>The claim Google's <c>verified_email</c> is mapped to; required to be true for Google (D-048).</summary>
+    /// <summary>
+    /// The claim Google's <c>email_verified</c> (user info v3; v2's <c>verified_email</c> is also read) is
+    /// mapped to; required to be true for Google (D-048).
+    /// </summary>
     public const string EmailVerifiedClaim = "email_verified";
 
     public const string LoggerCategory = "Sepiabox.Web.Auth.SignIn";
@@ -23,9 +27,9 @@ public static partial class AccessTicketHandler
         var services = context.HttpContext.RequestServices;
         var principal = context.Principal;
         var email = principal?.FindFirstValue(ClaimTypes.Email);
-        var unverified = !IsEmailVerified(context.Scheme.Name, principal);
+        var verified = IsEmailVerified(context.Scheme.Name, principal);
 
-        if (!unverified && services.GetRequiredService<AccessList>().Allows(email))
+        if (verified && services.GetRequiredService<AccessList>().Allows(email))
         {
             // Stays signed in across browser restarts until 14 days without a visit (D-048).
             context.Properties!.IsPersistent = true;
@@ -33,7 +37,7 @@ public static partial class AccessTicketHandler
         }
 
         // The address itself is not logged: it belongs to someone who is not a user (D-048).
-        LogRefused(Logger(services), context.Scheme.Name, unverified ? "the e-mail is not verified" : "the e-mail is not on the access list");
+        LogRefused(Logger(services), context.Scheme.Name, verified ? "the e-mail is not on the access list" : "the e-mail is not verified");
 
         // Someone already signed in who tries another account loses the earlier session too.
         await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -42,7 +46,8 @@ public static partial class AccessTicketHandler
     }
 
     /// <summary>
-    /// Whether the provider vouches that the address belongs to the person who signed in.
+    /// Whether the provider vouches that the address belongs to the person who signed in; a provider this
+    /// code does not know never does.
     /// </summary>
     private static bool IsEmailVerified(string scheme, ClaimsPrincipal? principal) => scheme switch
     {
@@ -51,7 +56,8 @@ public static partial class AccessTicketHandler
         GoogleDefaults.AuthenticationScheme => string.Equals(principal?.FindFirstValue(EmailVerifiedClaim), "true", StringComparison.Ordinal),
         // Microsoft's consumers endpoint only signs in personal accounts, whose address Microsoft itself
         // owns and confirms, and its user info has no such claim.
-        _ => true,
+        MicrosoftAccountDefaults.AuthenticationScheme => true,
+        _ => false,
     };
 
     public static Task OnRemoteFailureAsync(RemoteFailureContext context)
@@ -65,10 +71,23 @@ public static partial class AccessTicketHandler
         return Task.CompletedTask;
     }
 
+    // The handler's own messages when the callback carries no OAuth error, as fixed categories.
+    private static readonly Dictionary<string, string> KnownFailures = new(StringComparer.Ordinal)
+    {
+        ["Correlation failed."] = "correlation_failed",
+        ["The oauth state was missing or invalid."] = "invalid_state",
+        ["Access was denied by the resource owner or by the remote server."] = "access_denied",
+    };
+
     internal static string ErrorCode(Exception? failure)
     {
         var code = failure?.Data["error"] as string;
-        return code is { Length: > 0 and <= 64 } && code.All(c => char.IsAsciiLetterLower(c) || c == '_') ? code : "none";
+        if (code is { Length: > 0 and <= 64 } && code.All(c => char.IsAsciiLetterLower(c) || c == '_'))
+        {
+            return code;
+        }
+
+        return failure is not null && KnownFailures.TryGetValue(failure.Message, out var known) ? known : "unknown";
     }
 
     private static ILogger Logger(IServiceProvider services) =>

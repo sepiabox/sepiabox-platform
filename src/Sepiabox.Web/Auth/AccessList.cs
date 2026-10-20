@@ -14,6 +14,7 @@ public sealed partial class AccessList
     // Key Vault holds the list as one secret, so a single value may carry several e-mails.
     private static readonly char[] Separators = [',', ';', ' ', '\t', '\r', '\n'];
 
+    // Replaced whole on a reload, never changed in place, so readers always see one complete list.
     private volatile FrozenSet<string> _emails;
 
     public AccessList(IEnumerable<string?> emails) => _emails = Parse(emails);
@@ -26,13 +27,13 @@ public sealed partial class AccessList
     /// reloads. Environment variables and Container Apps secrets never reload: a change there takes effect
     /// with the next restart or revision (docs/operations.md).
     /// </summary>
-    public static AccessList From(IConfiguration configuration, ILogger? logger = null)
+    public static AccessList From(IConfiguration configuration, ILogger<AccessList> logger)
     {
         var access = new AccessList(Read(configuration));
         ChangeToken.OnChange(configuration.GetReloadToken, () =>
         {
             var emails = Parse(Read(configuration));
-            if (emails.Count == 0 && access.Count > 0 && logger is not null)
+            if (emails.Count == 0 && access.Count > 0)
             {
                 LogEmptied(logger, ConfigurationKey);
             }

@@ -44,7 +44,7 @@ public static partial class AuthSetup
         builder.Services.AddSingleton(providers);
         builder.Services.AddSingleton(services => AccessList.From(
             services.GetRequiredService<IConfiguration>(),
-            services.GetRequiredService<ILoggerFactory>().CreateLogger(AccessTicketHandler.LoggerCategory)));
+            services.GetRequiredService<ILogger<AccessList>>()));
         builder.Services.AddSingleton<IAuthorizationHandler, AccessListHandler>();
 
         // In Azure the Container Apps ingress ends TLS and is the only way in, so the forwarded scheme and
@@ -158,6 +158,12 @@ public static partial class AuthSetup
             LogNoProviders(app.Logger);
         }
 
+        // Host filtering is S-032's to configure; until then any Host header reaches the app.
+        if (!app.Environment.IsDevelopment() && app.Configuration["AllowedHosts"] is null or "*")
+        {
+            LogAnyHost(app.Logger);
+        }
+
         return app;
     }
 
@@ -178,12 +184,22 @@ public static partial class AuthSetup
             ? url
             : AppPath(request, "/");
 
+    private static readonly string[] SignInPages = [SignInPath, NoAccessPath, SignOutPath, DevLoginPath];
+
+    // Request headers a browser talking to the app directly never sends; the X-Original-* ones are left
+    // by the forwarded headers middleware when ASPNETCORE_FORWARDEDHEADERS_ENABLED is on.
+    private static readonly string[] ProxyHeaders =
+    [
+        "Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto",
+        "X-Original-For", "X-Original-Host", "X-Original-Proto",
+    ];
+
     private static bool IsSignInPage(HttpRequest request, string url)
     {
-        var path = new PathString(url.Split('?', '#')[0]);
+        // Compared unescaped, as routing will see it: "/%65ntrar" is "/entrar".
+        var path = PathString.FromUriComponent(url.Split('?', '#')[0]);
         return path.StartsWithSegments(request.PathBase, StringComparison.OrdinalIgnoreCase, out var rest)
-            && ((string[])[SignInPath, NoAccessPath, SignOutPath, DevLoginPath])
-                .Any(page => rest.StartsWithSegments(page, StringComparison.OrdinalIgnoreCase));
+            && SignInPages.Any(page => rest.StartsWithSegments(page, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string? EmailVerified(JsonElement user)
@@ -240,13 +256,12 @@ public static partial class AuthSetup
     private static async Task<IResult> DevLoginAsync(HttpContext http, IAntiforgery antiforgery, AccessList access)
     {
         // Meant for a browser on the developer's own computer talking to the app directly: a request from
-        // another address, through a proxy, or for another host name is refused. A best effort for a
+        // another address, with any proxy header, or for another host name is refused. A best effort for a
         // Development-only route, not a security boundary.
         if (!HttpMethods.IsPost(http.Request.Method)
             || http.Connection.RemoteIpAddress is not { } remote
             || !IPAddress.IsLoopback(remote)
-            || http.Request.Headers.ContainsKey("X-Forwarded-For")
-            || http.Request.Headers.ContainsKey("X-Original-For")
+            || ProxyHeaders.Any(http.Request.Headers.ContainsKey)
             || !IsLocalHost(http.Request.Host.Host))
         {
             return BareNotFound(http);
@@ -315,8 +330,9 @@ public static partial class AuthSetup
         return Task.CompletedTask;
     }
 
+    // HostString keeps the brackets of an IPv6 address.
     private static bool IsLocalHost(string host) =>
-        host is "localhost" or "127.0.0.1" or "[::1]" or "::1";
+        host is "localhost" or "127.0.0.1" or "[::1]";
 
     // Status code pages would re-execute a POST as a POST to the /not-found page, which then fails its own
     // antiforgery check with a 400; an empty body with the 404 already set avoids that.
@@ -340,6 +356,9 @@ public static partial class AuthSetup
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Key} is empty: nobody can sign in.")]
     private static partial void LogEmptyAccessList(ILogger logger, string key);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "AllowedHosts is not set: any Host header reaches the app.")]
+    private static partial void LogAnyHost(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No OAuth client is configured (Auth:Google, Auth:Microsoft): nobody can sign in.")]
     private static partial void LogNoProviders(ILogger logger);
