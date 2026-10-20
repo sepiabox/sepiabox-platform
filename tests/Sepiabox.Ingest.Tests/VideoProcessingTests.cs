@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
@@ -84,6 +87,55 @@ public class VideoProcessingTests
         Assert.Equal(3, Assert.Single(ReadManifests(work)).Derivatives.Count);
     }
 
+    [Fact]
+    public void Deinterlaces_and_shows_at_16_9_an_interlaced_anamorphic_camcorder_mod_file()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // What SD camcorders record: MPEG-2 program stream, PAL 720x576 interlaced, flagged 16:9 (SAR 64:45).
+        var clip = Path.Combine(drive.Path, "MOV001.MOD");
+        Run(s_tools.Ffmpeg, [.. Interlaced(720, 576, seconds: 2), "-c:v", "mpeg2video", "-b:v", "5M", "-flags", "+ilme+ildct", "-top", "1", "-aspect", "16:9", "-c:a", "mp2", "-shortest", "-f", "vob", clip]);
+        Assert.Equal(("mpeg2video", "64:45", "tt"), StreamInfo(clip));
+        Assert.True(Combed(clip), "The generated clip should look interlaced.");
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal(("video/mpeg", 1024, 576), (manifest.ContentType, manifest.Width, manifest.Height));
+        Assert.InRange(manifest.DurationSeconds!.Value, 1.9, 2.2);
+        Assert.Equal((1024, 576), Size(manifest, "poster"));
+        Assert.Equal((256, 144), Size(manifest, "thumb-256"));
+
+        var proxy = Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p");
+        Assert.Equal((1024, 576), (proxy.Width, proxy.Height));
+        var proxyPath = Path.Combine(work.Path, proxy.Path);
+        Assert.Equal(("h264", "1:1", "progressive"), StreamInfo(proxyPath));
+        Assert.False(Combed(proxyPath), "The 720p version should be deinterlaced.");
+        Assert.InRange(new VideoProcessor(s_tools).Probe(proxyPath).DurationSeconds!.Value, 1.9, 2.2);
+    }
+
+    [Fact]
+    public void Makes_a_720p_version_of_an_interlaced_anamorphic_1440x1080_mts_file()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // AVCHD and HDV camcorders store 1440x1080 interlaced with SAR 4:3, shown at 1920x1080, with short GOPs.
+        var clip = Path.Combine(drive.Path, "00001.MTS");
+        Run(s_tools.Ffmpeg, [.. Interlaced(1440, 1080, seconds: 2), "-c:v", "libx264", "-preset", "ultrafast", "-g", "12", "-flags", "+ilme+ildct", "-x264-params", "tff=1", "-aspect", "16:9", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "-f", "mpegts", clip]);
+        Assert.Equal(("h264", "4:3", "tt"), StreamInfo(clip));
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal(("video/mp2t", 1920, 1080), (manifest.ContentType, manifest.Width, manifest.Height));
+        Assert.Equal((1280, 720), Size(manifest, "poster"));
+        var proxy = Path.Combine(work.Path, Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p").Path);
+        Assert.Equal(("h264", "1:1", "progressive"), StreamInfo(proxy));
+        Assert.Equal(new VideoProbe(1280, 720, null), new VideoProcessor(s_tools).Probe(proxy) with { DurationSeconds = null });
+    }
+
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
         ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", ModelFolder: TestModels.None));
 
@@ -98,23 +150,61 @@ public class VideoProcessingTests
 
     private static void MakeVideo(string path, int width, int height, int seconds)
     {
-        var info = new ProcessStartInfo(s_tools.Ffmpeg) { RedirectStandardError = true, UseShellExecute = false };
-        foreach (var argument in new[]
-        {
+        Run(s_tools.Ffmpeg,
+        [
             "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
             "-f", "lavfi", "-i", $"testsrc=duration={seconds}:size={width}x{height}:rate=25",
             "-f", "lavfi", "-i", $"sine=frequency=440:duration={seconds}",
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
             path,
-        })
+        ]);
+        Assert.Equal(MediaKind.Video, MediaTypes.Classify(path));
+    }
+
+    // Weaving fields from successive moving frames gives the combing a real interlaced camera records.
+    private static string[] Interlaced(int width, int height, int seconds) =>
+    [
+        "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+        "-f", "lavfi", "-i", $"testsrc2=duration={seconds}:size={width}x{height}:rate=25",
+        "-f", "lavfi", "-i", $"sine=frequency=440:duration={seconds}",
+        "-vf", "tinterlace=interleave_top,fieldorder=tff",
+    ];
+
+    private static (string Codec, string AspectRatio, string FieldOrder) StreamInfo(string path)
+    {
+        var json = Run(s_tools.Ffprobe,
+        [
+            "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name,sample_aspect_ratio,field_order", "-of", "json",
+            path,
+        ]).Output;
+        using var document = JsonDocument.Parse(json);
+        var stream = document.RootElement.GetProperty("streams")[0];
+        return (stream.GetProperty("codec_name").GetString()!, stream.GetProperty("sample_aspect_ratio").GetString()!, stream.GetProperty("field_order").GetString()!);
+    }
+
+    // FFmpeg's idet filter classifies each frame by looking for combing between lines.
+    private static bool Combed(string path)
+    {
+        var errors = Run(s_tools.Ffmpeg, ["-hide_banner", "-nostats", "-nostdin", "-i", path, "-an", "-vf", "idet", "-f", "null", "-"]).Errors;
+        var summary = errors.Split('\n').Last(line => line.Contains("Multi frame detection", StringComparison.Ordinal));
+        var counts = Regex.Matches(summary, @"(\w+):\s+(\d+)").ToDictionary(m => m.Groups[1].Value, m => int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture));
+        return counts["TFF"] + counts["BFF"] > counts["Progressive"];
+    }
+
+    private static (string Output, string Errors) Run(string tool, IEnumerable<string> arguments)
+    {
+        var info = new ProcessStartInfo(tool) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var argument in arguments)
         {
             info.ArgumentList.Add(argument);
         }
 
         using var process = System.Diagnostics.Process.Start(info)!;
-        var errors = process.StandardError.ReadToEnd();
+        var errors = process.StandardError.ReadToEndAsync();
+        var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, errors);
-        Assert.Equal(MediaKind.Video, MediaTypes.Classify(path));
+        Assert.True(process.ExitCode == 0, errors.Result);
+        return (output, errors.Result);
     }
 }

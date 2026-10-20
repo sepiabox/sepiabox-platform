@@ -15,7 +15,10 @@ public enum VideoEncoder
     Nvenc,
 }
 
-/// <summary>Size as shown on screen, after the rotation phones record instead of rotating pixels.</summary>
+/// <summary>
+/// Size as shown on screen: after the rotation phones record instead of rotating pixels, and after the
+/// pixel aspect ratio of anamorphic camcorder and DVD video (720x576 stored, 1024x576 shown for 16:9).
+/// </summary>
 public sealed record VideoProbe(int Width, int Height, double? DurationSeconds);
 
 public sealed class VideoProcessingException : Exception
@@ -90,7 +93,7 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
 
         var frame = Path.Combine(folder, "poster-frame.tmp.png");
         var posterAt = (probe.DurationSeconds ?? 0) * 0.1;
-        Run(tools.Ffmpeg, FfmpegArguments.Frame(sourcePath, posterAt, frame), cancellationToken);
+        Run(tools.Ffmpeg, FfmpegArguments.Frame(sourcePath, posterAt, probe.Width, probe.Height, frame), cancellationToken);
         IReadOnlyList<ManifestDerivative> posters;
         try
         {
@@ -176,16 +179,24 @@ public static class FfmpegArguments
     [
         "-v", "error",
         "-select_streams", "v:0",
-        "-show_entries", "stream=width,height:stream_tags=rotate:stream_side_data=rotation:format=duration",
+        "-show_entries", "stream=width,height,sample_aspect_ratio:stream_tags=rotate:stream_side_data=rotation:format=duration",
         "-of", "json",
         input,
     ];
 
-    public static IReadOnlyList<string> Frame(string input, double atSeconds, string output) =>
+    /// <summary>
+    /// Deinterlaces only frames flagged as interlaced (camcorder footage) and resamples to square pixels at
+    /// the display size, so the still and the 720p version look like the camera's screen. FFmpeg rotates
+    /// before applying filters, so the size is the rotated one.
+    /// </summary>
+    public static string Filter(int width, int height) => $"yadif=deint=interlaced,scale={width}:{height},setsar=1";
+
+    public static IReadOnlyList<string> Frame(string input, double atSeconds, int width, int height, string output) =>
     [
         "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
         "-ss", atSeconds.ToString("0.###", CultureInfo.InvariantCulture),
         "-i", input,
+        "-vf", Filter(width, height),
         "-frames:v", "1",
         "-f", "image2", "-c:v", "png",
         output,
@@ -200,7 +211,7 @@ public static class FfmpegArguments
             "-map", "0:v:0", "-map", "0:a:0?",
             // Drops metadata such as the GPS position phones write into videos.
             "-map_metadata", "-1",
-            "-vf", $"scale={width}:{height}",
+            "-vf", Filter(width, height),
         ];
         arguments.AddRange(encoder == VideoEncoder.Nvenc
             ? ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "28"]
@@ -228,6 +239,7 @@ public static class FfmpegArguments
         var stream = streams[0];
         var width = stream.GetProperty("width").GetInt32();
         var height = stream.GetProperty("height").GetInt32();
+        width = DisplayWidth(width, stream);
         if (Math.Abs(Rotation(stream)) % 180 == 90)
         {
             (width, height) = (height, width);
@@ -241,6 +253,30 @@ public static class FfmpegArguments
                 : null;
 
         return new VideoProbe(width, height, duration);
+    }
+
+    // The pixel aspect ratio applies to stored pixels, before rotation. "0:1" means unknown; a ratio far
+    // outside what any camera records is treated as a broken header rather than squashing the picture.
+    private static int DisplayWidth(int width, JsonElement stream)
+    {
+        if (!stream.TryGetProperty("sample_aspect_ratio", out var value) || value.ValueKind != JsonValueKind.String)
+        {
+            return width;
+        }
+
+        var parts = value.GetString()!.Split(':');
+        if (parts.Length != 2
+            || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var numerator)
+            || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var denominator)
+            || numerator <= 0 || denominator <= 0)
+        {
+            return width;
+        }
+
+        var ratio = (double)numerator / denominator;
+        return ratio is >= 0.25 and <= 4
+            ? Math.Max(1, (int)Math.Round(width * ratio, MidpointRounding.AwayFromZero))
+            : width;
     }
 
     // Newer files carry a display matrix in side data; older ones a "rotate" tag.

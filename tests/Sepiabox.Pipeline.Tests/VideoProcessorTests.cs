@@ -22,7 +22,7 @@ public class VideoProcessorTests
         var arguments = FfmpegArguments.Proxy("in put.mov", 1280, 720, VideoEncoder.Software, "out.mp4");
 
         AssertSequence(arguments, "-i", "in put.mov");
-        AssertSequence(arguments, "-vf", "scale=1280:720");
+        AssertSequence(arguments, "-vf", "yadif=deint=interlaced,scale=1280:720,setsar=1");
         AssertSequence(arguments, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28");
         AssertSequence(arguments, "-c:a", "aac", "-b:a", "96k");
         AssertSequence(arguments, "-movflags", "+faststart");
@@ -42,10 +42,49 @@ public class VideoProcessorTests
     [Fact]
     public void Takes_the_poster_frame_at_the_given_second_with_invariant_formatting()
     {
-        var arguments = FfmpegArguments.Frame("in.mov", 0.3, "frame.png");
+        var arguments = FfmpegArguments.Frame("in.mov", 0.3, 1024, 576, "frame.png");
 
         AssertSequence(arguments, "-ss", "0.3", "-i", "in.mov");
         AssertSequence(arguments, "-frames:v", "1");
+    }
+
+    [Fact]
+    public void Deinterlaces_and_resamples_the_poster_frame_to_square_pixels_at_the_display_size()
+    {
+        var arguments = FfmpegArguments.Frame("clip.mod", 1, 1024, 576, "frame.png");
+
+        AssertSequence(arguments, "-vf", "yadif=deint=interlaced,scale=1024:576,setsar=1");
+    }
+
+    [Fact]
+    public void Asks_ffprobe_for_the_pixel_aspect_ratio()
+    {
+        Assert.Contains("sample_aspect_ratio", FfmpegArguments.Probe("clip.mod")[5]);
+    }
+
+    [Theory]
+    [InlineData(720, 576, "64:45", 1024)]
+    [InlineData(720, 576, "16:15", 768)]
+    [InlineData(720, 480, "8:9", 640)]
+    [InlineData(720, 480, "32:27", 853)]
+    [InlineData(1440, 1080, "4:3", 1920)]
+    [InlineData(1920, 1080, "1:1", 1920)]
+    [InlineData(720, 576, "0:1", 720)]
+    [InlineData(720, 576, "N/A", 720)]
+    [InlineData(720, 576, "1000:1", 720)]
+    public void Applies_the_pixel_aspect_ratio_to_the_width(int width, int height, string ratio, int expectedWidth)
+    {
+        var json = $$"""{ "streams": [ { "width": {{width}}, "height": {{height}}, "sample_aspect_ratio": "{{ratio}}" } ], "format": {} }""";
+
+        Assert.Equal(new VideoProbe(expectedWidth, height, null), FfmpegArguments.ParseProbe(json));
+    }
+
+    [Fact]
+    public void Applies_the_pixel_aspect_ratio_before_rotation()
+    {
+        const string Json = """{ "streams": [ { "width": 1440, "height": 1080, "sample_aspect_ratio": "4:3", "tags": { "rotate": "90" } } ], "format": {} }""";
+
+        Assert.Equal(new VideoProbe(1080, 1920, null), FfmpegArguments.ParseProbe(Json));
     }
 
     [Fact]
