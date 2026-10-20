@@ -9,7 +9,10 @@ public static class DerivativeNames
     /// <summary>A video's still frame, shown where a photo shows its preview.</summary>
     public const string Poster = "poster";
 
-    public static readonly IReadOnlyList<string> Served = [Thumbnail, Preview, Poster];
+    /// <summary>A video's 720p H.264 version, the one the browser plays (D-015).</summary>
+    public const string Proxy = "proxy-720p";
+
+    public static readonly IReadOnlyList<string> Served = [Thumbnail, Preview, Poster, Proxy];
 
     public static bool IsServed(string name) => Served.Contains(name, StringComparer.Ordinal);
 }

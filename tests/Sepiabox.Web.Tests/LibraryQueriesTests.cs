@@ -74,6 +74,32 @@ public sealed class LibraryQueriesTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task A_video_comes_back_with_its_length_poster_and_whether_it_can_be_played()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.Add(CatalogData.Video(Ids.Of(13), new DateTime(2020, 8, 9)));
+        db.Assets.Add(CatalogData.Video(Ids.Of(14), new DateTime(2020, 8, 8), withProxy: false));
+        db.Assets.Add(CatalogData.Photo(Ids.Of(15), new DateTime(2020, 8, 7)));
+        await db.SaveChangesAsync();
+        var queries = Queries(db);
+
+        var timeline = await queries.GetTimelinePageAsync(1);
+        var playable = await queries.GetAssetAsync(Ids.Of(13));
+        var processing = await queries.GetAssetAsync(Ids.Of(14));
+        var photo = await queries.GetAssetAsync(Ids.Of(15));
+
+        Assert.Equal([3.0, 3.0, null], timeline.Items.Select(i => i.DurationSeconds));
+        Assert.NotNull(playable);
+        Assert.True(playable.HasProxy);
+        Assert.Equal(DerivativeNames.Poster, playable.PreviewName);
+        Assert.Equal(3.0, playable.DurationSeconds);
+        Assert.NotNull(processing);
+        Assert.False(processing.HasProxy);
+        Assert.False(photo!.HasProxy);
+        Assert.Equal($"{Ids.Of(13)}/proxy-720p.mp4", await queries.GetDerivativeBlobPathAsync(Ids.Of(13), DerivativeNames.Proxy));
+    }
+
+    [Fact]
     public async Task Derivative_and_original_lookups_find_blob_path_file_name_and_type()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();

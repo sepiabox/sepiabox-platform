@@ -3,15 +3,18 @@ using Sepiabox.Catalog;
 
 namespace Sepiabox.Web.Services;
 
-/// <summary>One thumbnail on the timeline.</summary>
-public sealed record TimelineItem(string Id, string Kind, DateTime? CapturedAt, bool HasThumbnail);
+/// <summary>One thumbnail on the timeline; <c>DurationSeconds</c> is null for photos and videos of unknown length.</summary>
+public sealed record TimelineItem(string Id, string Kind, DateTime? CapturedAt, bool HasThumbnail, double? DurationSeconds = null);
 
 /// <summary>A page of the timeline; <see cref="HasMore"/> says whether an older page exists.</summary>
 public sealed record TimelinePage(int Page, IReadOnlyList<TimelineItem> Items, bool HasMore);
 
 public sealed record AssetSourceDetail(string Type, string Name, string Path);
 
-/// <summary>One asset for the detail page. <c>PreviewName</c> is the derivative shown large: the photo preview, or the video poster.</summary>
+/// <summary>
+/// One asset for the detail page. <c>PreviewName</c> is the derivative shown large: the photo preview, or the
+/// video poster. <c>HasProxy</c> says whether a video's 720p version exists, so it can be played.
+/// </summary>
 public sealed record AssetDetail(
     string Id,
     string Kind,
@@ -21,7 +24,9 @@ public sealed record AssetDetail(
     int? Width,
     int? Height,
     string? PreviewName,
-    IReadOnlyList<AssetSourceDetail> Sources);
+    IReadOnlyList<AssetSourceDetail> Sources,
+    double? DurationSeconds = null,
+    bool HasProxy = false);
 
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
 public sealed record OriginalFile(string FileName, string ContentType);
@@ -101,14 +106,14 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
         // Written in SQL because LINQ cannot say NULLS LAST, and this order must match ix_assets_timeline
         // exactly for a page to be an index range scan. One extra row tells whether another page follows.
         var rows = await db.Database.SqlQuery<TimelineRow>($"""
-            SELECT a.id, a.kind, a.captured_at,
+            SELECT a.id, a.kind, a.captured_at, a.duration_seconds,
                    EXISTS (SELECT 1 FROM derivatives d WHERE d.asset_id = a.id AND d.name = {DerivativeNames.Thumbnail}) AS has_thumbnail
             FROM assets a
             ORDER BY a.captured_at DESC NULLS LAST, a.id
             OFFSET {offset} LIMIT {PageSize + 1}
             """).ToListAsync(cancellationToken);
 
-        var items = rows.Take(PageSize).Select(r => new TimelineItem(r.Id, r.Kind, r.CapturedAt, r.HasThumbnail)).ToList();
+        var items = rows.Take(PageSize).Select(r => new TimelineItem(r.Id, r.Kind, r.CapturedAt, r.HasThumbnail, r.DurationSeconds)).ToList();
         return new TimelinePage(page, items, HasNextPage(page, rows.Count));
     }
 
@@ -139,7 +144,9 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
             asset.Width,
             asset.Height,
             preview,
-            [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path))]);
+            [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path))],
+            asset.DurationSeconds,
+            asset.Derivatives.Any(d => d.Name == DerivativeNames.Proxy));
     }
 
     public async Task<string?> GetDerivativeBlobPathAsync(string id, string name, CancellationToken cancellationToken = default)
@@ -173,5 +180,5 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
     private static IEnumerable<AssetSource> OrderSources(IEnumerable<AssetSource> sources) =>
         sources.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.Path, StringComparer.Ordinal);
 
-    private sealed record TimelineRow(string Id, string Kind, DateTime? CapturedAt, bool HasThumbnail);
+    private sealed record TimelineRow(string Id, string Kind, DateTime? CapturedAt, double? DurationSeconds, bool HasThumbnail);
 }

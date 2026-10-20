@@ -13,6 +13,12 @@ public interface ISasUrlFactory
     /// <summary>A thumbnail, preview or poster in the <c>derivatives</c> container.</summary>
     Task<Uri> ForDerivativeAsync(string blobPath, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// A video's 720p version in the <c>derivatives</c> container, with a link that outlasts playback: the
+    /// browser keeps fetching ranges of it for as long as the video plays or sits paused.
+    /// </summary>
+    Task<Uri> ForVideoAsync(string blobPath, CancellationToken cancellationToken = default);
+
     /// <summary>The original in the <c>originals</c> container, downloaded under its source file name.</summary>
     Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default);
 }
@@ -38,20 +44,26 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
     /// </summary>
     public static readonly TimeSpan DerivativeCacheDuration = DerivativeLifetime - DerivativeWindow - TimeSpan.FromMinutes(1);
 
+    /// <summary>
+    /// Video links expire at the end of the 5-minute window they were signed in plus this (3 h 55 to 4 h
+    /// left), so a long camcorder tape, or one paused for a while, still plays to the end (D-049).
+    /// </summary>
+    public static readonly TimeSpan VideoLifetime = TimeSpan.FromHours(4);
+
     public static readonly TimeSpan OriginalLifetime = TimeSpan.FromMinutes(5);
 
-    private static readonly TimeSpan s_delegationKeyLifetime = TimeSpan.FromHours(1);
+    // Longer than the longest link, so a key can be reused for a while before it is too close to expiry.
+    private static readonly TimeSpan s_delegationKeyLifetime = TimeSpan.FromHours(6);
     private static readonly TimeSpan s_clockSkew = TimeSpan.FromMinutes(5);
 
     private readonly SemaphoreSlim _keyLock = new(1, 1);
     private volatile UserDelegationKey? _delegationKey;
 
-    public Task<Uri> ForDerivativeAsync(string blobPath, CancellationToken cancellationToken = default)
-    {
-        var now = time.GetUtcNow();
-        var windowStart = new DateTimeOffset(now.UtcTicks - (now.UtcTicks % DerivativeWindow.Ticks), TimeSpan.Zero);
-        return CreateAsync(StorageContainers.Derivatives, blobPath, windowStart + DerivativeLifetime, configure: null, cancellationToken);
-    }
+    public Task<Uri> ForDerivativeAsync(string blobPath, CancellationToken cancellationToken = default) =>
+        CreateAsync(StorageContainers.Derivatives, blobPath, WindowStart() + DerivativeLifetime, configure: null, cancellationToken);
+
+    public Task<Uri> ForVideoAsync(string blobPath, CancellationToken cancellationToken = default) =>
+        CreateAsync(StorageContainers.Derivatives, blobPath, WindowStart() + VideoLifetime, configure: null, cancellationToken);
 
     public Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default) =>
         CreateAsync(StorageContainers.Originals, assetId, time.GetUtcNow() + OriginalLifetime, sas =>
@@ -62,6 +74,13 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
         }, cancellationToken);
 
     public void Dispose() => _keyLock.Dispose();
+
+    // Links signed in the same window are identical, so the browser cache can reuse them.
+    private DateTimeOffset WindowStart()
+    {
+        var now = time.GetUtcNow();
+        return new DateTimeOffset(now.UtcTicks - (now.UtcTicks % DerivativeWindow.Ticks), TimeSpan.Zero);
+    }
 
     private async Task<Uri> CreateAsync(
         string container, string blobName, DateTimeOffset expiresOn, Action<BlobSasBuilder>? configure, CancellationToken cancellationToken)
@@ -111,7 +130,7 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
         }
     }
 
-    // A key must outlive every link signed with it.
+    // A key must outlive every link signed with it: a user delegation SAS stops working when its key expires.
     private bool IsStillGood(UserDelegationKey key) =>
-        key.SignedExpiresOn - time.GetUtcNow() >= DerivativeLifetime + s_clockSkew;
+        key.SignedExpiresOn - time.GetUtcNow() >= VideoLifetime + s_clockSkew;
 }

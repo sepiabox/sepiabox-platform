@@ -43,6 +43,35 @@ public sealed class SasUrlFactoryTests
     }
 
     [Fact]
+    public async Task Video_link_is_read_only_and_lasts_four_hours_from_its_window()
+    {
+        using var links = new SasUrlFactory(new BlobServiceClient("UseDevelopmentStorage=true"), new FixedTime(s_now));
+
+        var url = await links.ForVideoAsync($"{Ids.Of(4)}/proxy-720p.mp4");
+
+        var query = HttpUtility.ParseQueryString(url.Query);
+        Assert.Equal("r", query["sp"]);
+        Assert.Equal("b", query["sr"]);
+        Assert.Equal(new DateTimeOffset(2026, 10, 19, 16, 0, 0, TimeSpan.Zero), Expiry(url));
+        Assert.EndsWith($"/derivatives/{Ids.Of(4)}/proxy-720p.mp4", url.AbsolutePath, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_user_delegation_key_outlives_the_video_links_signed_with_it()
+    {
+        var service = new DelegationOnlyService();
+        using var links = new SasUrlFactory(service, new FixedTime(s_now));
+
+        var video = await links.ForVideoAsync($"{Ids.Of(5)}/proxy-720p.mp4");
+        var thumbnail = await links.ForDerivativeAsync($"{Ids.Of(5)}/thumb-256.webp");
+
+        Assert.Equal(1, service.KeyRequests);
+        var keyExpiry = DateTimeOffset.Parse(HttpUtility.ParseQueryString(video.Query)["ske"]!, CultureInfo.InvariantCulture);
+        Assert.True(keyExpiry >= Expiry(video), $"The key expires at {keyExpiry:O}, before the link ({Expiry(video):O}).");
+        Assert.Equal("https", HttpUtility.ParseQueryString(thumbnail.Query)["spr"]);
+    }
+
+    [Fact]
     public async Task Original_link_downloads_under_its_source_name_and_expires_in_5_minutes()
     {
         using var links = new SasUrlFactory(new BlobServiceClient("UseDevelopmentStorage=true"), new FixedTime(s_now));
