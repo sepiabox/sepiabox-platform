@@ -280,11 +280,11 @@ public static class AzureInfrastructure
     }
 
     /// <summary>
-    /// The event-driven import (S-033): KEDA starts one execution when the queue has a message, with the jobs'
+    /// The event-driven import (S-033): KEDA starts one execution when the queue has a message, with the import
     /// identity, and the execution imports until the queue is empty. One at a time, so two imports never
     /// race on the same asset.
     /// </summary>
-    public static Action<AzureResourceInfrastructure, ContainerAppJob> ConfigureImportJob(BicepOutputReference jobsIdentityId) =>
+    public static Action<AzureResourceInfrastructure, ContainerAppJob> ConfigureImportJob(BicepOutputReference importIdentityId) =>
         (infrastructure, job) =>
         {
             ArgumentNullException.ThrowIfNull(job);
@@ -312,8 +312,9 @@ public static class AzureInfrastructure
                                 new PropertyExpression("namespace", new StringLiteralExpression(ServiceBusName)),
                                 new PropertyExpression("queueName", new StringLiteralExpression(ManifestsQueueName)),
                                 new PropertyExpression("messageCount", new StringLiteralExpression("1"))),
-                            // KEDA reads the queue's length as the jobs' identity, which has no keys to leak.
-                            Identity = jobsIdentityId.AsProvisioningParameter(infrastructure, "jobs_identity_id"),
+                            // KEDA reads the queue's length as the import identity, with no keys to leak; reading
+                            // it needs the Manage claim, hence Data Owner on the queue (D-063).
+                            Identity = importIdentityId.AsProvisioningParameter(infrastructure, "import_identity_id"),
                         },
                     },
                 },

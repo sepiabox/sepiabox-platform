@@ -54,7 +54,7 @@ public sealed class ManifestImporter(
                 continue;
             }
 
-            var (wasImported, problem) = await ImportBlobAsync(manifests, blob.Name, rethrowDownloadFailures: false, cancellationToken);
+            var (wasImported, problem) = await ImportBlobAsync(manifests, blob.Name, transientFailuresThrow: false, cancellationToken);
             if (Record(blob.Name, wasImported, problem, problems, warnings))
             {
                 done++;
@@ -67,14 +67,15 @@ public sealed class ManifestImporter(
     /// <summary>
     /// Imports the one manifest an event named (S-033). A manifest imported before is imported again, which
     /// changes nothing (D-032); a manifest gone by now is neither imported nor a problem. A failure to download
-    /// it is thrown, not reported, so the event is delivered again instead of being dropped.
+    /// it, and a unique violation from another import saving the same new asset at the same time, are thrown,
+    /// not reported, so the event is delivered again instead of being dropped.
     /// </summary>
     public async Task<ImportResult> ImportOneAsync(BlobContainerClient manifests, string blobName, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(manifests);
         var problems = new List<ImportProblem>();
         var warnings = new List<ImportProblem>();
-        var (wasImported, problem) = await ImportBlobAsync(manifests, blobName, rethrowDownloadFailures: true, cancellationToken);
+        var (wasImported, problem) = await ImportBlobAsync(manifests, blobName, transientFailuresThrow: true, cancellationToken);
         var done = Record(blobName, wasImported, problem, problems, warnings) ? 1 : 0;
         return new ImportResult(done, 0, problems, warnings);
     }
@@ -109,7 +110,7 @@ public sealed class ManifestImporter(
     /// means an embedding was left out.
     /// </summary>
     private async Task<(bool Imported, string? Problem)> ImportBlobAsync(
-        BlobContainerClient manifests, string blobName, bool rethrowDownloadFailures, CancellationToken cancellationToken)
+        BlobContainerClient manifests, string blobName, bool transientFailuresThrow, CancellationToken cancellationToken)
     {
         string json, etag;
         try
@@ -123,7 +124,7 @@ public sealed class ManifestImporter(
             // Deleted between the listing and the download: nothing left to import.
             return (false, null);
         }
-        catch (RequestFailedException ex) when (!rethrowDownloadFailures)
+        catch (RequestFailedException ex) when (!transientFailuresThrow)
         {
             return (false, $"could not be downloaded: {ex.Message}");
         }
@@ -163,7 +164,9 @@ public sealed class ManifestImporter(
         // that fails says something about the database. SaveAsync writes only through SaveChangesAsync
         // (no ExecuteUpdate, ExecuteSql or explicit transaction), so no data error escapes unwrapped;
         // a raw write added there needs its own catch.
-        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException && IsDataError(ex.InnerException))
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException && IsDataError(ex.InnerException)
+            // In queue mode a race with another import is not this manifest's fault: the event comes back.
+            && !(transientFailuresThrow && ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }))
         {
             return (false, $"could not be saved: {Describe(ex.InnerException!)}");
         }

@@ -13,6 +13,8 @@ readonly location="francecentral"
 readonly resource_group="rg-sepiabox"
 readonly postgres_server="sepiabox-pg"
 readonly migrate_job="sepiabox-migrate"
+readonly service_bus="sepiabox-sb"
+readonly queue="manifests"
 # The job's replica timeout is 10 minutes; the default leaves time for a cold start of the environment.
 # Both can be overridden, which the tests use to avoid waiting.
 readonly migrate_timeout_seconds="${SEPIABOX_MIGRATE_TIMEOUT_SECONDS:-900}"
@@ -58,6 +60,29 @@ fi
 export SEPIABOX_DEPLOY_SCRIPT=1
 
 azd provision --no-prompt
+
+# From here until the import jobs run the new image, the queue keeps every upload's events but nothing
+# receives them, so no import runs old code against a new schema or the reverse (D-063). Provisioning
+# comes first because it creates the queue and would set it active again. Whatever happens next, the queue
+# is made active again on the way out: a failed migration leaves the old schema, which the old import
+# image expects, and a queue left paused would hold every upload until someone noticed.
+queue_paused=false
+resume_queue() {
+  if [[ "$queue_paused" == true ]]; then
+    if az servicebus queue update --resource-group "$resource_group" --namespace-name "$service_bus" \
+      --name "$queue" --status Active --output none; then
+      queue_paused=false
+      echo "Queue $queue receives again."
+    else
+      echo "Could not make the queue receive again; run: az servicebus queue update --resource-group $resource_group --namespace-name $service_bus --name $queue --status Active" >&2
+    fi
+  fi
+}
+trap resume_queue EXIT
+az servicebus queue update --resource-group "$resource_group" --namespace-name "$service_bus" \
+  --name "$queue" --status ReceiveDisabled --output none
+queue_paused=true
+
 azd deploy migrate --no-prompt
 
 execution=$(az containerapp job start --name "$migrate_job" --resource-group "$resource_group" --query name --output tsv)
@@ -99,5 +124,6 @@ echo "Migrations applied."
 
 azd deploy import --no-prompt
 azd deploy import-all --no-prompt
+resume_queue
 
 azd deploy web --no-prompt

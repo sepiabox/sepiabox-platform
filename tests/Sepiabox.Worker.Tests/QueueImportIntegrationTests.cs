@@ -68,7 +68,7 @@ public sealed class QueueImportIntegrationTests(CatalogFixture fixture)
     }
 
     [Fact]
-    public async Task A_storage_failure_gives_the_message_back_and_fails_the_run()
+    public async Task A_storage_failure_leaves_the_message_to_its_lock_and_fails_the_run()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
         // Nothing listens there: the download fails, which says nothing about the manifest.
@@ -79,12 +79,13 @@ public sealed class QueueImportIntegrationTests(CatalogFixture fixture)
 
         await Assert.ThrowsAnyAsync<Exception>(() => Import(queue, db, unreachable).RunAsync(CancellationToken.None));
 
-        Assert.Equal(["message-0"], queue.Abandoned);
+        // It comes back when its lock expires, not at once (D-063).
+        Assert.Empty(queue.Abandoned);
         Assert.Empty(queue.Completed);
     }
 
     [Fact]
-    public async Task A_database_failure_gives_the_message_back_and_fails_the_run()
+    public async Task A_database_failure_leaves_the_message_to_its_lock_and_fails_the_run()
     {
         // An empty database without the catalog's tables: saving fails for every manifest alike.
         await using var db = await fixture.CreateEmptyDatabaseAsync();
@@ -95,14 +96,41 @@ public sealed class QueueImportIntegrationTests(CatalogFixture fixture)
 
         await Assert.ThrowsAnyAsync<Exception>(() => Import(queue, db, container).RunAsync(CancellationToken.None));
 
-        Assert.Equal(["message-0"], queue.Abandoned);
+        // It comes back when its lock expires, not at once (D-063).
+        Assert.Empty(queue.Abandoned);
         Assert.Empty(queue.Completed);
     }
+
+    [Fact]
+    public async Task A_race_with_another_import_comes_back_instead_of_being_reported()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await container.GetBlobClient(s_manifest)
+            .UploadAsync(BinaryData.FromString(ManifestJson.Serialize(Photo(Source("HD da Ana", "2019/praia.jpg")))));
+        // As when import-all inserts the same new asset at the same moment (SQLSTATE 23505).
+        await db.Database.ExecuteSqlRawAsync($$"""
+            CREATE FUNCTION duplicate_asset() RETURNS trigger LANGUAGE plpgsql AS
+            $$ BEGIN RAISE EXCEPTION 'duplicate by test' USING ERRCODE = 'unique_violation'; END $$;
+            CREATE TRIGGER duplicate BEFORE INSERT ON assets FOR EACH ROW EXECUTE FUNCTION duplicate_asset();
+            """);
+        var queue = new InMemoryBlobEventQueue(new BlobCreated(BlobLayout.ManifestsContainer, s_manifest));
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => Import(queue, db, container).RunAsync(CancellationToken.None));
+
+        Assert.Empty(queue.Completed);
+        // import --once reports the same failure as a problem of the manifest and goes on.
+        var once = await Importer(db).ImportOnceAsync(container, CancellationToken.None);
+        Assert.Equal(s_manifest, Assert.Single(once.Problems).BlobName);
+    }
+
+    private static ManifestImporter Importer(CatalogDbContext db) =>
+        new(db, new ManifestValidator(), TimeProvider.System, NullLogger<ManifestImporter>.Instance);
 
     private static QueueImport Import(IBlobEventQueue queue, CatalogDbContext db, BlobContainerClient container) =>
         new(
             queue,
-            new ManifestImporter(db, new ManifestValidator(), TimeProvider.System, NullLogger<ManifestImporter>.Instance),
-            container,
+            (blobName, token) => Importer(db).ImportOneAsync(container, blobName, token),
+            QueueImportOptions.Default with { IdleWait = TimeSpan.Zero },
             NullLogger<QueueImport>.Instance);
 }

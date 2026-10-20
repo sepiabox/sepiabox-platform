@@ -25,8 +25,32 @@ public interface IBlobEventQueue
     Task CompleteAsync(BlobEventMessage message, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Puts the message back to be received again; after the queue's maximum delivery count it is
+    /// Puts the message back to be received again at once; after the queue's maximum delivery count it is
     /// dead-lettered instead.
     /// </summary>
     Task AbandonAsync(BlobEventMessage message, CancellationToken cancellationToken);
+
+    /// <summary>Keeps the message locked to this receiver for another lock period.</summary>
+    Task RenewLockAsync(BlobEventMessage message, CancellationToken cancellationToken);
+
+    /// <summary>Moves the message to the dead-letter queue, with the reason it could not be handled.</summary>
+    Task DeadLetterAsync(BlobEventMessage message, string reason, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// The message's lock expired before it was settled: the queue delivers it again (or already has), so it can
+/// no longer be settled here.
+/// </summary>
+public sealed class BlobEventLockLostException(string message, Exception? innerException)
+    : Exception(message, innerException)
+{
+    public BlobEventLockLostException()
+        : this("The message's lock was lost.", null)
+    {
+    }
+
+    public BlobEventLockLostException(string message)
+        : this(message, null)
+    {
+    }
 }

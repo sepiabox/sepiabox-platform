@@ -18,6 +18,7 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
         ["7f951dda-4ed3-4680-a7ca-43fe172d538d"] = "AcrPull",
         ["69a216fc-b8fb-44d8-bc22-1f3c2cd27a39"] = "Azure Service Bus Data Sender",
         ["4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0"] = "Azure Service Bus Data Receiver",
+        ["090c5cfd-751d-490a-894a-3ce6f1109419"] = "Azure Service Bus Data Owner",
     };
 
     [Fact]
@@ -32,10 +33,11 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
                 "aca_mi.properties.principalId: AcrPull on registries registry",
                 // The uploaders, one assignment per id in uploaderPrincipalIds.
                 "id: Storage Blob Data Contributor on storageAccounts storage",
-                // The worker's jobs read blobs, only the database vault (migrate's connection) and the queue.
-                "jobs-identity: Azure Service Bus Data Receiver on queues manifests",
-                "jobs-identity: Key Vault Secrets User on vaults database-vault",
-                "jobs-identity: Storage Blob Data Reader on storageAccounts storage",
+                // The import jobs read blobs and the queue; KEDA reads its length with the Manage claim (D-063).
+                "import-identity: Azure Service Bus Data Owner on queues manifests",
+                "import-identity: Storage Blob Data Reader on storageAccounts storage",
+                // The migrate job reads only the database vault (its connection).
+                "migrate-identity: Key Vault Secrets User on vaults database-vault",
                 // Event Grid's system topic delivers storage events to the queue (S-033).
                 "storageEvents.identity.principalId: Azure Service Bus Data Sender on queues manifests",
                 // The web reads blobs, writes only the key ring, reads the owner's secrets and uses one key.

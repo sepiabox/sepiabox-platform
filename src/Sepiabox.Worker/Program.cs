@@ -88,7 +88,18 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         // The Azure implementation of the queue (D-051): Event Grid's events, delivered to Service Bus.
         await using var queue = CreateServiceBusQueue(services.GetRequiredService<IConfiguration>());
         var manifestsContainer = services.GetRequiredService<BlobServiceClient>().GetBlobContainerClient(BlobLayout.ManifestsContainer);
-        var fromQueue = await ActivatorUtilities.CreateInstance<QueueImport>(services, queue, manifestsContainer).RunAsync(cancellationToken);
+        var importer = services.GetRequiredService<ManifestImporter>();
+        var configuration = services.GetRequiredService<IConfiguration>();
+        var options = QueueImportOptions.Default with
+        {
+            MaxDeliveryCount = configuration.GetValue("ServiceBus:MaxDeliveryCount", QueueImportOptions.Default.MaxDeliveryCount),
+        };
+        var fromQueue = await new QueueImport(
+                queue,
+                (blobName, token) => importer.ImportOneAsync(manifestsContainer, blobName, token),
+                options,
+                services.GetRequiredService<ILogger<QueueImport>>())
+            .RunAsync(cancellationToken);
         Log.ImportFinished(logger, fromQueue.Imported, fromQueue.Unchanged, fromQueue.Problems.Count, fromQueue.Warnings.Count);
         return fromQueue.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }

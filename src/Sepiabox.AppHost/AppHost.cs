@@ -1,3 +1,4 @@
+using System.Globalization;
 using Aspire.Hosting.Azure;
 using Azure.Provisioning.KeyVault;
 using Azure.Provisioning.Storage;
@@ -87,8 +88,11 @@ else
     // Declared rather than left to Aspire so they too are pinned to the region.
     var webIdentity = builder.AddAzureUserAssignedIdentity("web-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
-    // Shared by the worker's jobs: migrate, import and import-all (S-033), and GeoNames later (S-059).
-    var jobsIdentity = builder.AddAzureUserAssignedIdentity("jobs-identity")
+    // One identity per kind of worker job (D-063): migrate reads only the database vault; the import jobs
+    // read storage and the queue and never see the administrator's password.
+    var migrateIdentity = builder.AddAzureUserAssignedIdentity("migrate-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    var importIdentity = builder.AddAzureUserAssignedIdentity("import-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
 
     // The application role's connection, for the web and the import jobs: they read and write rows, never
@@ -99,16 +103,15 @@ else
 
     // Runs `sepiabox-worker migrate` once per deploy, before the new web revision and import jobs
     // (scripts/deploy.sh). It connects as the administrator, applies the migrations and then creates or
-    // updates the application role (S-058). The roles here are the jobs' identity's, declared once: read
-    // access to storage for the imports, and of the vaults only the database one, so never the Anthropic key.
+    // updates the application role (S-058). Of the vaults it reads only the database one, so never the
+    // Anthropic key, and it needs no storage.
     builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.MigrateResourceName)
         .WithArgs("migrate")
         .WithReferenceEnvironment(ConnectionStringsOnly)
         .WithReference(catalog)
         .WithEnvironment("Catalog__AppRole__Name", AzureInfrastructure.AppRoleName)
         .WithEnvironment("Catalog__AppRole__Password", appRolePassword)
-        .WithAzureUserAssignedIdentity(jobsIdentity)
-        .WithRoleAssignments(storage, StorageBuiltInRole.StorageBlobDataReader)
+        .WithAzureUserAssignedIdentity(migrateIdentity)
         .WithRoleAssignments(databaseVault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureMigrateJob);
 
@@ -122,10 +125,10 @@ else
         .WithParameter("storageName", storage.GetOutput("name"))
         .WithParameter("serviceBusName", serviceBus.GetOutput("name"))
         .WithParameter("queueName", AzureInfrastructure.ManifestsQueueName)
-        .WithParameter("jobsPrincipalId", jobsIdentity.Resource.PrincipalId);
+        .WithParameter("importPrincipalId", importIdentity.Resource.PrincipalId);
 
-    // The namespace by host name rather than a reference, which would grant the jobs Aspire's default
-    // (owner) roles on it; the receiver role on the queue is in events.bicep.
+    // The namespace by host name rather than a reference, which would grant Aspire's default roles on the
+    // whole namespace; the import identity's role on the queue alone is in events.bicep.
     builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.ImportResourceName)
         .WithArgs("import", "--from-queue")
         .WithReferenceEnvironment(ConnectionStringsOnly)
@@ -133,17 +136,19 @@ else
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
         .WithEnvironment("ServiceBus__Namespace", AzureInfrastructure.ServiceBusHostName)
         .WithEnvironment("ServiceBus__Queue", AzureInfrastructure.ManifestsQueueName)
-        .WithAzureUserAssignedIdentity(jobsIdentity)
-        // The identity's roles are declared once, on the migrate job; none are added here.
-        .WithRoleAssignments(storage, [])
-        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureImportJob(jobsIdentity.Resource.Id));
+        .WithEnvironment("ServiceBus__MaxDeliveryCount", AzureInfrastructure.ManifestsMaxDeliveryCount.ToString(CultureInfo.InvariantCulture))
+        .WithAzureUserAssignedIdentity(importIdentity)
+        // The import identity's role on storage, declared once here for both import jobs.
+        .WithRoleAssignments(storage, StorageBuiltInRole.StorageBlobDataReader)
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureImportJob(importIdentity.Resource.Id));
 
     builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.ImportAllResourceName)
         .WithArgs("import", "--once")
         .WithReferenceEnvironment(ConnectionStringsOnly)
         .WithReference(blobs)
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
-        .WithAzureUserAssignedIdentity(jobsIdentity)
+        .WithAzureUserAssignedIdentity(importIdentity)
+        // The same identity as the import job, whose role on storage is declared there.
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureImportAllJob);
 

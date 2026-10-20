@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Sepiabox.AppHost.Tests;
 
 /// <summary>Manifests imported when they arrive (S-033), checked on the published Bicep and manifest.</summary>
@@ -62,9 +60,9 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
         Assert.Contains("type: 'azure-servicebus'", trigger, StringComparison.Ordinal);
         Assert.Contains("namespace: 'sepiabox-sb'", trigger, StringComparison.Ordinal);
         Assert.Contains("queueName: 'manifests'", trigger, StringComparison.Ordinal);
-        // KEDA reads the queue as the jobs' identity, with no connection string.
-        Assert.Contains("identity: jobs_identity_id", trigger, StringComparison.Ordinal);
-        Assert.Equal("{jobs-identity.outputs.id}", parameters["jobs_identity_id"]!.GetValue<string>());
+        // KEDA reads the queue as the import identity, with no connection string.
+        Assert.Contains("identity: import_identity_id", trigger, StringComparison.Ordinal);
+        Assert.Equal("{import-identity.outputs.id}", parameters["import_identity_id"]!.GetValue<string>());
         Assert.DoesNotContain("auth:", trigger, StringComparison.Ordinal);
         Assert.Equal("1800", job.Property("replicaTimeout"));
         Assert.Equal("0", job.Property("replicaRetryLimit"));
@@ -110,13 +108,28 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
         Assert.Equal("manifests", environment["ServiceBus__Queue"]!.GetValue<string>());
     }
 
-    [Fact]
-    public void Every_worker_job_uses_the_one_jobs_identity_when_published()
+    [Theory]
+    [InlineData("migrate", "migrate-identity")]
+    [InlineData("import", "import-identity")]
+    [InlineData("import-all", "import-identity")]
+    public void Migrate_and_import_jobs_run_as_separate_identities_when_published(string job, string identity)
     {
-        foreach (var file in new[] { "migrate", "import", "import-all" }.Select(r => r + "-containerapp.module.bicep"))
-        {
-            Assert.Matches(new Regex(@"\{jobs-identity\.outputs\.id\}"), published.ModuleParameters[file].ToJsonString());
-        }
+        // Only migrate's identity reads the database vault; only the import identity reads storage and the
+        // queue (the exact roles are in AzureAccessTests).
+        var parameters = published.ModuleParameters[job + "-containerapp.module.bicep"].ToJsonString();
+        var other = identity == "migrate-identity" ? "import-identity" : "migrate-identity";
+
+        Assert.Contains("{" + identity + ".outputs.id}", parameters, StringComparison.Ordinal);
+        Assert.DoesNotContain(other, parameters, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Import_job_dead_letters_after_the_queue_s_delivery_count_when_published()
+    {
+        var environment = published.Resource("import")["env"]!.AsObject();
+
+        Assert.Equal("5", environment["ServiceBus__MaxDeliveryCount"]!.GetValue<string>());
+        Assert.Equal("5", published.The("Microsoft.ServiceBus/namespaces/queues").Property("maxDeliveryCount"));
     }
 
     private string[] Arguments(string resource) =>
