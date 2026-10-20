@@ -2,10 +2,12 @@ using System.Diagnostics;
 using ImageMagick;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Pipeline.Embeddings;
+using Sepiabox.Pipeline.Faces;
 using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Models;
+using Sepiabox.Pipeline.Processing;
 using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Ingest.Processing;
@@ -14,7 +16,9 @@ namespace Sepiabox.Ingest.Processing;
 /// What a process run did. <see cref="Problems"/> are files that could not be described and make the exit code
 /// non-zero. <see cref="EmbeddingProblems"/> are files that were processed but have no embedding because it could
 /// not be computed: warnings, not failures, since an embedding is optional and the next run tries again.
-/// <see cref="Embedded"/> counts the embeddings added in this run, to new or unchanged files.
+/// <see cref="Embedded"/> counts the embeddings added in this run, to new or unchanged files. With <c>--faces</c>,
+/// <see cref="FacesChecked"/> counts the files checked for faces in this run, <see cref="FacesFound"/> the faces found
+/// in them, and <see cref="FaceProblems"/> the files that could not be checked, which are warnings too.
 /// </summary>
 public sealed record ProcessResult(
     string Root,
@@ -27,9 +31,14 @@ public sealed record ProcessResult(
     string? Warning = null,
     int Embedded = 0,
     IReadOnlyList<EmbeddingProblem>? EmbeddingProblems = null,
-    IReadOnlyList<LeftOutFile>? LeftOut = null)
+    IReadOnlyList<LeftOutFile>? LeftOut = null,
+    int FacesChecked = 0,
+    int FacesFound = 0,
+    IReadOnlyList<EmbeddingProblem>? FaceProblems = null)
 {
     public IReadOnlyList<EmbeddingProblem> EmbeddingProblems { get; init; } = EmbeddingProblems ?? [];
+
+    public IReadOnlyList<EmbeddingProblem> FaceProblems { get; init; } = FaceProblems ?? [];
 
     /// <summary>Files with a video extension that hold no video, found in this run or earlier; they are not catalogued.</summary>
     public IReadOnlyList<LeftOutFile> LeftOut { get; init; } = LeftOut ?? [];
@@ -40,28 +49,34 @@ public sealed record ProcessResult(
 /// <summary>
 /// Describes every photo and video in a folder tree as one manifest per distinct content (D-005, D-014),
 /// with the thumbnails, posters and 720p versions the web shows instead of the originals (D-015), and a
-/// CLIP embedding computed from those thumbnails (S-015). Source files are only read; results go to the
-/// work folder.
+/// CLIP embedding computed from those thumbnails (S-015) and, only with <c>--faces</c>, the faces in them (S-018).
+/// Source files are only read; results go to the work folder.
 /// </summary>
 public static class ProcessCommand
 {
     public const string LocalSourceType = "local";
 
     /// <summary>
-    /// Processes <see cref="ProcessOptions.Root"/> with the CLIP model when it is downloaded. <paramref name="filesDone"/>
+    /// Processes <see cref="ProcessOptions.Root"/> with the CLIP model when it is downloaded, and the face models when
+    /// <see cref="ProcessOptions.Faces"/> is set. <paramref name="filesDone"/>
     /// is called after each photo or video, processed or not, so a long run over unchanged files shows activity.
     /// </summary>
     public static ProcessResult Run(ProcessOptions options, IProgress<int>? filesDone = null, CancellationToken cancellationToken = default)
     {
         // A wrong folder fails before the model is checked, which can take seconds the first time.
         var (root, output) = Resolve(options);
-        using var embedder = ClipImageEmbedder.TryCreate(options.ModelFolder ?? ModelFolder.Default(), out var embedderWarning);
-        return Run(options, root, output, embedder, embedderWarning, TimeProvider.System, filesDone, cancellationToken);
+        var models = options.ModelFolder ?? ModelFolder.Default();
+        using var embedder = ClipImageEmbedder.TryCreate(models, out var embedderWarning);
+        string? facesWarning = null;
+        using var faces = options.Faces ? FaceDetector.TryCreate(models, out facesWarning) : null;
+        return Run(options, root, output, embedder, embedderWarning, faces, facesWarning, TimeProvider.System, filesDone, cancellationToken);
     }
 
     /// <summary>
     /// The same with a given embedder, or none; <paramref name="embedderWarning"/> says why there is none.
     /// <paramref name="clock"/> gives "now" for the plausibility of capture dates (D-046); the system clock when null.
+    /// <paramref name="faces"/> is used only when <see cref="ProcessOptions.Faces"/> is set, so the opt-in is decided
+    /// here and nowhere else; <paramref name="facesWarning"/> says why there is no detector.
     /// </summary>
     internal static ProcessResult Run(
         ProcessOptions options,
@@ -69,10 +84,13 @@ public static class ProcessCommand
         string? embedderWarning,
         IProgress<int>? filesDone = null,
         TimeProvider? clock = null,
+        IFaceDetector? faces = null,
+        string? facesWarning = null,
         CancellationToken cancellationToken = default)
     {
         var (root, output) = Resolve(options);
-        return Run(options, root, output, embedder, embedderWarning, clock ?? TimeProvider.System, filesDone, cancellationToken);
+        return Run(
+            options, root, output, embedder, embedderWarning, faces, facesWarning, clock ?? TimeProvider.System, filesDone, cancellationToken);
     }
 
     /// <summary>The folder to read, which must exist, and the work folder, both as full paths.</summary>
@@ -85,10 +103,14 @@ public static class ProcessCommand
         string output,
         IImageEmbedder? embedder,
         string? embedderWarning,
+        IFaceDetector? faceDetector,
+        string? facesWarning,
         TimeProvider clock,
         IProgress<int>? filesDone,
         CancellationToken cancellationToken)
     {
+        // Faces are biometric data: without --faces nothing looks for them, whatever detector was passed in.
+        var faces = options.Faces ? faceDetector : null;
         var manifestFolder = Path.Combine(output, "manifests");
         Directory.CreateDirectory(manifestFolder);
         DeleteAbandonedManifests(manifestFolder);
@@ -104,40 +126,79 @@ public static class ProcessCommand
         var stopwatch = Stopwatch.StartNew();
         var problems = new List<ScanProblem>();
         var embeddingProblems = new List<EmbeddingProblem>();
-        int processed = 0, skipped = 0, pending = 0, embedded = 0, handled = 0;
+        var faceProblems = new List<EmbeddingProblem>();
+        int processed = 0, skipped = 0, pending = 0, embedded = 0, handled = 0, facesChecked = 0, facesFound = 0;
         var leftOut = new List<LeftOutFile>();
         // By asset, so the same photo in two folders counts once.
-        var withoutDerivative = new HashSet<string>(StringComparer.Ordinal);
+        var withoutPreviewForEmbedding = new HashSet<string>(StringComparer.Ordinal);
+        var withoutPreviewForFaces = new HashSet<string>(StringComparer.Ordinal);
         var withoutManifest = new HashSet<string>(StringComparer.Ordinal);
 
-        // An embedding never decides a file's status: whatever goes wrong is a warning for that file, and the
+        // An embedding or faces never decide a file's status: whatever goes wrong is a warning for that file, and the
         // next run tries again from the work folder.
-        // Added is counted by the caller once the manifest is written.
-        EmbeddingOutcome? AddEmbedding(string sourcePath, string assetId, Func<EmbeddingOutcome> add)
+        const string EmbeddingFailed = "Could not compute the embedding";
+        const string FacesFailed = "Could not detect faces";
+        const string UpdateFailed = "Could not update its manifest";
+
+        // For a new file: Added is counted by the caller once the manifest is written.
+        EmbeddingOutcome? AddEmbedding(string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
+            Record(sourcePath, assetId, Try(sourcePath, embeddingProblems, EmbeddingFailed, add), embeddingProblems, withoutPreviewForEmbedding);
+
+        EmbeddingOutcome? AddFaces(string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
+            Record(sourcePath, assetId, Try(sourcePath, faceProblems, FacesFailed, add), faceProblems, withoutPreviewForFaces);
+
+        // An unchanged file: its manifest is read once, both are added in memory and it is written once.
+        void AddToUnchanged(string sourcePath, string assetId)
+        {
+            var path = ManifestPath(manifestFolder, assetId);
+            // Neither step in particular failed when this throws, so the message names the manifest, not a step.
+            var outcome = Try(
+                sourcePath, embedder is not null ? embeddingProblems : faceProblems, UpdateFailed,
+                () => WorkFolderManifest.TryAdd(path, output, embedder, faces));
+            Record(sourcePath, assetId, outcome?.Embedding, embeddingProblems, withoutPreviewForEmbedding);
+            embedded += outcome?.Embedding?.Status == EmbeddingStatus.Added ? 1 : 0;
+            CountFaces(Record(sourcePath, assetId, outcome?.Faces, faceProblems, withoutPreviewForFaces));
+        }
+
+        T? Try<T>(string sourcePath, List<EmbeddingProblem> optionalProblems, string what, Func<T> add)
+            where T : class
         {
             try
             {
-                var outcome = add();
-                switch (outcome.Status)
-                {
-                    case EmbeddingStatus.NoDerivative:
-                        withoutDerivative.Add(assetId);
-                        break;
-                    case EmbeddingStatus.ManifestMissing:
-                        withoutManifest.Add(assetId);
-                        break;
-                    case EmbeddingStatus.Failed:
-                        embeddingProblems.Add(new EmbeddingProblem(sourcePath, outcome.Category!, outcome.Problem!));
-                        break;
-                }
-
-                return outcome;
+                return add();
             }
             catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
             {
-                embeddingProblems.Add(new EmbeddingProblem(
-                    sourcePath, $"Could not compute the embedding ({ex.GetType().Name})", $"Could not compute the embedding: {ex.Message}"));
+                optionalProblems.Add(new EmbeddingProblem(sourcePath, $"{what} ({ex.GetType().Name})", $"{what}: {ex.Message}"));
                 return null;
+            }
+        }
+
+        EmbeddingOutcome? Record(
+            string sourcePath, string assetId, EmbeddingOutcome? outcome, List<EmbeddingProblem> optionalProblems, HashSet<string> withoutPreview)
+        {
+            switch (outcome?.Status)
+            {
+                case EmbeddingStatus.NoDerivative:
+                    withoutPreview.Add(assetId);
+                    break;
+                case EmbeddingStatus.ManifestMissing:
+                    withoutManifest.Add(assetId);
+                    break;
+                case EmbeddingStatus.Failed:
+                    optionalProblems.Add(new EmbeddingProblem(sourcePath, outcome.Category!, outcome.Problem!));
+                    break;
+            }
+
+            return outcome;
+        }
+
+        void CountFaces(EmbeddingOutcome? outcome)
+        {
+            if (outcome?.Status == EmbeddingStatus.Added)
+            {
+                facesChecked++;
+                facesFound += outcome.Manifest!.Faces.Count;
             }
         }
 
@@ -171,12 +232,11 @@ public static class ProcessCommand
                 && previous.Sha256 is { } doneSha256 && File.Exists(ManifestPath(manifestFolder, doneSha256)))
             {
                 skipped++;
-                // The model may have been downloaded after this file was processed: the embedding comes from
-                // the thumbnails in the work folder, so the drive is not read again.
-                if (embedder is not null)
+                // The model may have been downloaded, or --faces given, after this file was processed: both come
+                // from the thumbnails in the work folder, so the drive is not read again.
+                if (embedder is not null || faces is not null)
                 {
-                    var outcome = AddEmbedding(file.Path, doneSha256, () => ManifestEmbeddings.TryAddToFile(ManifestPath(manifestFolder, doneSha256), output, embedder));
-                    embedded += outcome?.Status == EmbeddingStatus.Added ? 1 : 0;
+                    AddToUnchanged(file.Path, doneSha256);
                 }
 
                 return;
@@ -231,8 +291,17 @@ public static class ProcessCommand
                         manifest = outcome?.Manifest ?? manifest;
                     }
 
+                    EmbeddingOutcome? facesOutcome = null;
+                    if (faces is not null && status == FileStatus.Done)
+                    {
+                        var withDerivatives = manifest;
+                        facesOutcome = AddFaces(file.Path, sha256, () => ManifestFaces.TryAdd(withDerivatives, output, faces));
+                        manifest = facesOutcome?.Manifest ?? manifest;
+                    }
+
                     ManifestJson.WriteFile(ManifestPath(manifestFolder, sha256), manifest);
                     embedded += embeddingAdded ? 1 : 0;
+                    CountFaces(facesOutcome);
                 }
 
                 // NotVideo is remembered too, with its reason, so an unchanged file is not read again.
@@ -276,12 +345,24 @@ public static class ProcessCommand
             warnings.Add(embedderWarning);
         }
 
-        // One line each for all of them: a work folder whose files were deleted would otherwise list every file.
-        if (withoutDerivative.Count > 0)
+        if (options.Faces && faces is null && facesWarning is not null)
         {
+            warnings.Add(facesWarning);
+        }
+
+        // One line each for all of them: a work folder whose files were deleted would otherwise list every file.
+        var withoutPreview = withoutPreviewForEmbedding.Union(withoutPreviewForFaces).Count();
+        if (withoutPreview > 0)
+        {
+            var missing = (withoutPreviewForEmbedding.Count > 0, withoutPreviewForFaces.Count > 0) switch
+            {
+                (true, true) => "have no embedding or were not checked for faces",
+                (false, true) => "were not checked for faces",
+                _ => "have no embedding",
+            };
             warnings.Add(
-                $"{withoutDerivative.Count:N0} photos and videos have no preview or poster in the work folder, so they have no embedding. "
-                + "Keep the work folder until embeddings are computed.");
+                $"{withoutPreview:N0} photos and videos have no preview or poster in the work folder, so they {missing}. "
+                + "Keep the work folder until they are processed.");
         }
 
         if (withoutManifest.Count > 0)
@@ -292,7 +373,8 @@ public static class ProcessCommand
 
         var warning = warnings.Count == 0 ? null : string.Join(Environment.NewLine, warnings);
         return new ProcessResult(
-            root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems, leftOut);
+            root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems, leftOut,
+            facesChecked, facesFound, faceProblems);
     }
 
     /// <summary>

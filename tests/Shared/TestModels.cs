@@ -20,6 +20,11 @@ internal static class TestModels
 
     public static bool ClipAvailable =>
         File.Exists(ModelFolder.PathOf(Folder, ModelCatalog.Get(ModelCatalog.ClipVision)));
+
+    /// <summary>Both face models, YuNet and SFace (S-018).</summary>
+    public static bool FacesAvailable =>
+        File.Exists(ModelFolder.PathOf(Folder, ModelCatalog.Get(ModelCatalog.YuNet)))
+        && File.Exists(ModelFolder.PathOf(Folder, ModelCatalog.Get(ModelCatalog.SFace)));
 }
 
 /// <summary>A fact that needs the CLIP model: skipped when it is not downloaded, unless CI requires it.</summary>
@@ -42,6 +47,18 @@ internal sealed class ClipTheoryAttribute : TheoryAttribute
         if (!TestModels.ClipAvailable && !TestModels.Required)
         {
             Skip = $"The CLIP model is not in {TestModels.Folder}; run `sepiabox-ingest models download`.";
+        }
+    }
+}
+
+/// <summary>A fact that needs the YuNet and SFace models: skipped when they are not downloaded, unless CI requires them.</summary>
+internal sealed class FacesFactAttribute : FactAttribute
+{
+    public FacesFactAttribute()
+    {
+        if (!TestModels.FacesAvailable && !TestModels.Required)
+        {
+            Skip = $"The face models are not in {TestModels.Folder}; run `sepiabox-ingest models download`.";
         }
     }
 }

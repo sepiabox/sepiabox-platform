@@ -54,6 +54,15 @@ public class ProcessOptionsTests
     }
 
     [Fact]
+    public void Detects_faces_only_when_asked_with_faces()
+    {
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work", "--faces"], out var options, out _));
+        Assert.True(options.Faces);
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work"], out var defaults, out _));
+        Assert.False(defaults.Faces);
+    }
+
+    [Fact]
     public void Uses_the_software_encoder_and_the_path_by_default()
     {
         Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work"], out var options, out _));

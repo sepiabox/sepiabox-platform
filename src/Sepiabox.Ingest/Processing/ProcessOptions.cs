@@ -11,6 +11,7 @@ namespace Sepiabox.Ingest.Processing;
 /// <param name="ModelFolder">Folder with the downloaded models; null for the default (<c>models download</c>).</param>
 /// <param name="RetryLeftOut">Read again the files earlier runs left out as holding no video, even when unchanged.</param>
 /// <param name="ListLeftOut">List every file left out by earlier runs, not just how many.</param>
+/// <param name="Faces">Detect faces (S-018). Off by default: faces are biometric data, so the user opts in.</param>
 public sealed record ProcessOptions(
     string Root,
     string OutputPath,
@@ -19,7 +20,8 @@ public sealed record ProcessOptions(
     VideoEncoder Encoder = VideoEncoder.Software,
     string? ModelFolder = null,
     bool RetryLeftOut = false,
-    bool ListLeftOut = false)
+    bool ListLeftOut = false,
+    bool Faces = false)
 {
     public static bool TryParse(
         IReadOnlyList<string> args,
@@ -35,6 +37,7 @@ public sealed record ProcessOptions(
         string? modelFolder = null;
         var retryLeftOut = false;
         var listLeftOut = false;
+        var faces = false;
 
         for (var i = 0; i < args.Count; i++)
         {
@@ -66,6 +69,10 @@ public sealed record ProcessOptions(
 
                 case "--list-left-out":
                     listLeftOut = true;
+                    break;
+
+                case "--faces":
+                    faces = true;
                     break;
 
                 case "--hw" when args[i + 1] == "nvenc":
@@ -105,7 +112,7 @@ public sealed record ProcessOptions(
 
         options = new ProcessOptions(
             root, outputPath, string.IsNullOrWhiteSpace(sourceName) ? null : sourceName.Trim(), ffmpegFolder, encoder, modelFolder,
-            retryLeftOut, listLeftOut);
+            retryLeftOut, listLeftOut, faces);
         error = null;
         return true;
     }

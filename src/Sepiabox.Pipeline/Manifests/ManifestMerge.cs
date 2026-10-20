@@ -22,6 +22,8 @@ public static class ManifestMerge
             ? (existing, incoming)
             : (incoming, existing);
 
+        var faces = FacesOf(existing, incoming);
+
         return description with
         {
             // Ranked by source, so the date does not depend on which drive uploads first (D-046).
@@ -29,7 +31,62 @@ public static class ManifestMerge
             Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
             Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
             Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),
+            FacesProcessed = faces.FacesProcessed,
+            Faces = faces.Faces,
+            FacesVersion = FacesVersionOf(faces, existing, incoming),
         };
+    }
+
+    /// <summary>
+    /// The side whose faces the merge keeps (S-018, D-047). Faces are opt-in: a work folder processed without
+    /// --faces knows nothing about them, so it never replaces faces another one found. When both sides looked, the
+    /// choice depends only on the faces, never on which side is incoming, so uploads of the same asset from two
+    /// computers converge on one blob instead of flipping it: the newer face pipeline wins, then more faces, then
+    /// the larger list in <see cref="ManifestFace.Order"/>. That is a maximum over a total order, so merges
+    /// in any order and grouping give the same faces.
+    /// </summary>
+    private static Manifest FacesOf(Manifest existing, Manifest incoming)
+    {
+        if (existing.FacesProcessed != incoming.FacesProcessed)
+        {
+            return existing.FacesProcessed ? existing : incoming;
+        }
+
+        if (!existing.FacesProcessed)
+        {
+            return incoming;
+        }
+
+        var order = existing.EffectiveFacesVersion.CompareTo(incoming.EffectiveFacesVersion);
+        order = order != 0 ? order : existing.Faces.Count.CompareTo(incoming.Faces.Count);
+        // Only a shortcut: equal lists also compare as 0 below, since the order gives 0 exactly for equal faces.
+        if (order == 0 && !existing.Faces.SequenceEqual(incoming.Faces))
+        {
+            for (var i = 0; order == 0 && i < existing.Faces.Count; i++)
+            {
+                order = ManifestFace.Order.Compare(existing.Faces[i], incoming.Faces[i]);
+            }
+        }
+
+        return order > 0 ? existing : incoming;
+    }
+
+    /// <summary>
+    /// The stored <c>facesVersion</c> of the merge, the same in either order: none without faces processed; otherwise
+    /// the chosen version, written out whenever either side that found those same faces wrote it. A tie between faces
+    /// written before the field existed (read as 1) and the same faces at version 1 then always stores 1.
+    /// </summary>
+    private static int? FacesVersionOf(Manifest chosen, Manifest existing, Manifest incoming)
+    {
+        if (!chosen.FacesProcessed)
+        {
+            return null;
+        }
+
+        var written = new[] { existing, incoming }.Any(side =>
+            side.FacesProcessed && side.FacesVersion is not null
+            && side.EffectiveFacesVersion == chosen.EffectiveFacesVersion && side.Faces.SequenceEqual(chosen.Faces));
+        return written ? chosen.EffectiveFacesVersion : null;
     }
 
     /// <summary>

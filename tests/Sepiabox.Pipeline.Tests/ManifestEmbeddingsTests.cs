@@ -101,16 +101,6 @@ public sealed class ManifestEmbeddingsTests : IDisposable
     }
 
     [Fact]
-    public void Gives_a_category_without_the_file_details_when_a_manifest_is_corrupt()
-    {
-        var path = _work.Write("manifests/corrupt.json", "{ not json"u8.ToArray());
-
-        var outcome = ManifestEmbeddings.TryAddToFile(path, _work.Path, new FakeEmbedder());
-
-        Assert.Equal("Could not read its manifest (JsonException)", outcome.Category);
-    }
-
-    [Fact]
     public void Lets_out_of_memory_through_when_the_embedder_runs_out()
     {
         // InsufficientMemoryException is an OutOfMemoryException that code may throw itself.
@@ -189,60 +179,6 @@ public sealed class ManifestEmbeddingsTests : IDisposable
         var outcome = ManifestEmbeddings.TryAdd(manifest, _work.Path, new FakeEmbedder());
 
         Assert.Equal(["aa-model", "clip-vit-b32", "zz-model"], outcome.Manifest!.Embeddings.Keys);
-    }
-
-    [Fact]
-    public void A_manifest_file_is_rewritten_with_the_embedding()
-    {
-        var path = WriteManifest(WithDerivativeFiles(TestManifests.Photo(Source())));
-
-        var outcome = ManifestEmbeddings.TryAddToFile(path, _work.Path, new FakeEmbedder());
-
-        Assert.Equal(EmbeddingStatus.Added, outcome.Status);
-        Assert.True(ManifestJson.Deserialize(File.ReadAllText(path)).Embeddings.ContainsKey(ClipImageEmbedder.ModelKey));
-    }
-
-    [Fact]
-    public void A_manifest_file_that_needs_nothing_is_not_rewritten()
-    {
-        var path = WriteManifest(TestManifests.Photo(Source()));
-        var before = File.ReadAllText(path);
-        File.SetLastWriteTimeUtc(path, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-
-        var outcome = ManifestEmbeddings.TryAddToFile(path, _work.Path, new FakeEmbedder());
-
-        Assert.Equal(EmbeddingStatus.NoDerivative, outcome.Status);
-        Assert.Equal(before, File.ReadAllText(path));
-        Assert.Equal(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc), File.GetLastWriteTimeUtc(path));
-    }
-
-    [Fact]
-    public void A_corrupt_manifest_file_is_reported_and_left_as_it_is()
-    {
-        var path = _work.Write("manifests/corrupt.json", "{ not json"u8.ToArray());
-
-        var outcome = ManifestEmbeddings.TryAddToFile(path, _work.Path, new FakeEmbedder());
-
-        Assert.Equal(EmbeddingStatus.Failed, outcome.Status);
-        Assert.Null(outcome.Manifest);
-        Assert.Contains("Could not read its manifest", outcome.Problem, StringComparison.Ordinal);
-        Assert.Equal("{ not json", File.ReadAllText(path));
-    }
-
-    [Fact]
-    public void Reports_a_missing_manifest_when_the_file_is_gone()
-    {
-        var outcome = ManifestEmbeddings.TryAddToFile(Path.Combine(_work.Path, "manifests", "gone.json"), _work.Path, new FakeEmbedder());
-
-        Assert.Equal(EmbeddingStatus.ManifestMissing, outcome.Status);
-    }
-
-    [Fact]
-    public void Reports_a_missing_manifest_when_its_folder_is_gone()
-    {
-        var outcome = ManifestEmbeddings.TryAddToFile(Path.Combine(_work.Path, "nowhere", "gone.json"), _work.Path, new FakeEmbedder());
-
-        Assert.Equal(EmbeddingStatus.ManifestMissing, outcome.Status);
     }
 
     [Fact]

@@ -1,0 +1,23 @@
+{
+  "opencv": "4.10.0",
+  "box": [
+    141.84,
+    48.23,
+    69.81,
+    89.0
+  ],
+  "landmarks": [
+    157.76,
+    81.4,
+    192.32,
+    81.89,
+    173.73,
+    99.47,
+    159.68,
+    112.8,
+    189.26,
+    112.24
+  ],
+  "score": 0.9342,
+  "embedding": "NiMdPH1Q9r0CyO49o2QvPt/USj1E/567p5noPbS5nDzkhyg93j6yPTK7n73JEUE9q5yvvWrUKT1e5gY7O1XTPAJQyz2fZjs9vgEevJe6873RzoE98K/8vPkeJL0jbJU9uoKwvb00gzzB5+29pVIcu70hb7uKbQQ+GnJkPWOcCj1IPDY8fWSIPUrrlz33qIA9FlfAvUzb6T38gJM9WYfTPc92sTwjf0i+WpCbvsgQH75WA229Y5y3vDZlEj5o+sQ9tlUJPXoBEz6CLPC76CvYvQ4H4r2LVue74zpZvhztQjsIIxO+0VIGvY0xBb2e+Qk+mX+HvOXxXzwBgIa+1WgiPdHhUDwombs8y1tsOw1XjDz60eQ9YLmdvLRnVz4wQem9SEirPVzWB76eAWM9di8Svvh7fT17Ei887JNevQSkhbzTedy9igY+PY7Har34AoY9+MxcPWLgQ76LlaY9t92EvQRdp70ZRE+9zEkHvuiforuj6g48KGs+vSS/kj2KtW88/d/BPBpvTr37IVk6qrNVPfG7zLxidA699wmnPGfqEzwwgjW9uhYpvgS6wDxkAV08V+pDPDZhx71OuEO9ELzZPMkXq73hDaG7cTLwPOltjjyd2T28suIyPeyXKbpwUfy8ZQAmPqj67L3YUpK8rb0PPQ6eEz62M729ZqTevedwA7w="
+}

@@ -6,8 +6,8 @@ namespace Sepiabox.Ingest.Processing;
 public sealed record EmbeddingProblem(string Path, string Category, string Detail);
 
 /// <summary>
-/// Prints the files that have no embedding, grouped by category: a model problem usually hits thousands of files,
-/// each with its own message, and a few examples say as much as the full list.
+/// Prints the files that have no embedding, or were not checked for faces, grouped by category: a model problem
+/// usually hits thousands of files, each with its own message, and a few examples say as much as the full list.
 /// </summary>
 public static class EmbeddingWarnings
 {
@@ -15,14 +15,17 @@ public static class EmbeddingWarnings
 
     public const int Reasons = 10;
 
-    public static void Write(IReadOnlyList<EmbeddingProblem> problems, TextWriter output)
+    /// <param name="problems">The files and why.</param>
+    /// <param name="output">Where to write.</param>
+    /// <param name="missing">What these files still lack, after "N files".</param>
+    public static void Write(IReadOnlyList<EmbeddingProblem> problems, TextWriter output, string missing = "have no embedding yet")
     {
         if (problems.Count == 0)
         {
             return;
         }
 
-        output.WriteLine($"Warning: {Files(problems.Count)} have no embedding yet; the next run tries again:");
+        output.WriteLine($"Warning: {Files(problems.Count)} {missing}; the next run tries again:");
         var groups = problems.GroupBy(p => p.Category, StringComparer.Ordinal)
             .OrderByDescending(g => g.Count())
             .ThenBy(g => g.Key, StringComparer.Ordinal)

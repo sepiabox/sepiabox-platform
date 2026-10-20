@@ -41,55 +41,12 @@ public sealed class ClipImageEmbedder : IImageEmbedder, IDisposable
     /// </summary>
     public static ClipImageEmbedder? TryCreate(string modelFolder, ModelInfo model, out string? warning)
     {
-        const string Forgotten = "Its verification was removed, so the next run checks its SHA-256 again.";
         const string Download =
             "Run `sepiabox-ingest models download` and process again: embeddings are added from the work folder "
             + "without reading the drive again.";
-        var path = ModelFolder.PathOf(modelFolder, model);
-        if (!File.Exists(path))
-        {
-            warning = $"The CLIP model is not in {modelFolder}, so no embeddings were computed. {Download}";
-            return null;
-        }
-
-        try
-        {
-            if (!ModelVerifier.Verify(model, path, trustMarker: true, out var actual, out _))
-            {
-                warning = $"{path} has SHA-256 {actual}, not the {model.Sha256} pinned in models.json, so no embeddings were computed. {Download}";
-                return null;
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            warning = $"Could not read {path} ({ex.Message}), so no embeddings were computed. {Download}";
-            return null;
-        }
-
-        InferenceSession session;
-        try
-        {
-            session = new InferenceSession(path);
-        }
-        catch (OnnxRuntimeException ex)
-        {
-            // Matching the pin but unusable: whatever the marker said, the next run checks the file again.
-            ModelVerifier.Forget(path);
-            warning = $"ONNX Runtime could not load {path} ({ex.Message}), so no embeddings were computed. {Forgotten} {Download}";
-            return null;
-        }
-
-        if (!session.OutputMetadata.ContainsKey(OutputName))
-        {
-            var found = string.Join(", ", session.OutputMetadata.Keys);
-            session.Dispose();
-            ModelVerifier.Forget(path);
-            warning = $"{path} has no {OutputName} output (it has {found}), so no embeddings were computed. {Forgotten} {Download}";
-            return null;
-        }
-
-        warning = null;
-        return new ClipImageEmbedder(session);
+        var session = ModelSession.TryOpen(
+            modelFolder, model, "The CLIP model", "so no embeddings were computed", Download, [], [OutputName], out warning);
+        return session is null ? null : new ClipImageEmbedder(session);
     }
 
     public float[] Embed(string path)

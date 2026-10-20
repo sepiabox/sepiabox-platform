@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Sepiabox.Pipeline.Embeddings;
+using Sepiabox.Pipeline.Faces;
 using Sepiabox.Pipeline.Models;
 
 namespace Sepiabox.Pipeline.Tests;
@@ -113,6 +114,30 @@ public sealed class ModelVerifierTests : IDisposable
         Assert.Null(embedder);
         Assert.Contains("is not in", warning, StringComparison.Ordinal);
         Assert.Contains("sepiabox-ingest models download", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Missing_face_models_give_a_warning_to_download_them()
+    {
+        using var detector = FaceDetector.TryCreate(_folder.Path, out var warning);
+
+        Assert.Null(detector);
+        Assert.Contains("YuNet", warning, StringComparison.Ordinal);
+        Assert.Contains("so no faces were detected", warning, StringComparison.Ordinal);
+        Assert.Contains("sepiabox-ingest models download", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_garbage_file_in_place_of_the_face_detection_model_gives_a_warning_to_download_it()
+    {
+        var yunet = ModelCatalog.Get(ModelCatalog.YuNet);
+        _folder.Write(yunet.File, s_garbage);
+
+        using var detector = FaceDetector.TryCreate(_folder.Path, out var warning);
+
+        Assert.Null(detector);
+        Assert.Contains("SHA-256", warning, StringComparison.Ordinal);
+        Assert.Contains(yunet.File, warning, StringComparison.Ordinal);
     }
 
     private static string Sha256(byte[] content) => Convert.ToHexStringLower(SHA256.HashData(content));

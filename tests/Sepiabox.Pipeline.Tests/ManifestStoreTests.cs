@@ -77,6 +77,34 @@ public sealed class ManifestStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Does_not_write_again_when_the_same_faces_are_uploaded()
+    {
+        var manifest = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9)] };
+        await _store.WriteMergedAsync(_container, manifest, CancellationToken.None);
+        var etag = (await Blob().GetPropertiesAsync()).Value.ETag;
+
+        var reread = ManifestJson.Deserialize(ManifestJson.Serialize(manifest));
+        var result = await _store.WriteMergedAsync(_container, reread, CancellationToken.None);
+
+        Assert.Equal(ManifestWriteStatus.Unchanged, result.Status);
+        Assert.Equal(etag, (await Blob().GetPropertiesAsync()).Value.ETag);
+    }
+
+    [Fact]
+    public async Task Uploads_of_different_faces_from_two_computers_settle_on_one_blob()
+    {
+        var ana = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.91)] };
+        var jonathas = Photo(Source("HD do Jonathas", "b.jpg")) with { FacesProcessed = true, Faces = [Face(0.93, axis: 1)] };
+        await _store.WriteMergedAsync(_container, ana, CancellationToken.None);
+        await _store.WriteMergedAsync(_container, jonathas, CancellationToken.None);
+        var etag = (await Blob().GetPropertiesAsync()).Value.ETag;
+
+        Assert.Equal(ManifestWriteStatus.Unchanged, (await _store.WriteMergedAsync(_container, ana, CancellationToken.None)).Status);
+        Assert.Equal(ManifestWriteStatus.Unchanged, (await _store.WriteMergedAsync(_container, jonathas, CancellationToken.None)).Status);
+        Assert.Equal(etag, (await Blob().GetPropertiesAsync()).Value.ETag);
+    }
+
+    [Fact]
     public async Task A_stored_manifest_that_cannot_be_read_is_a_problem_and_is_left_alone()
     {
         await Blob().UploadAsync(BinaryData.FromString("{ \"id\": 42 }"));

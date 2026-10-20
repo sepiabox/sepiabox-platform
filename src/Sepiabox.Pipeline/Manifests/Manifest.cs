@@ -7,8 +7,7 @@ namespace Sepiabox.Pipeline.Manifests;
 
 /// <summary>
 /// Everything known about one asset, written once by the pipeline and imported by the cloud (D-014).
-/// Schema: <c>docs/schemas/manifest.v1.json</c>. Later stories fill <see cref="Embeddings"/>
-/// and <see cref="Faces"/>.
+/// Schema: <c>docs/schemas/manifest.v1.json</c>.
 /// </summary>
 public sealed record Manifest
 {
@@ -67,9 +66,25 @@ public sealed record Manifest
 
     public IReadOnlyDictionary<string, JsonNode> Embeddings { get; init; } = new Dictionary<string, JsonNode>();
 
+    /// <summary>
+    /// Whether faces were looked for (<c>process --faces</c>, S-018). False means unknown, not "no faces": face
+    /// detection is opt-in, so <see cref="Faces"/> is then always empty.
+    /// </summary>
     public bool FacesProcessed { get; init; }
 
-    public IReadOnlyList<JsonObject> Faces { get; init; } = [];
+    public IReadOnlyList<ManifestFace> Faces { get; init; } = [];
+
+    /// <summary>
+    /// Which face pipeline found <see cref="Faces"/> (D-047): bumped whenever the face models or their preprocessing
+    /// change, so newer faces replace older ones in a merge. Written only next to <c>facesProcessed: true</c>; faces
+    /// written before the field existed read as version 1.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? FacesVersion { get; init; }
+
+    /// <summary><see cref="FacesVersion"/> with a missing value read as 1, the first face pipeline.</summary>
+    [JsonIgnore]
+    public int EffectiveFacesVersion => FacesVersion ?? 1;
 }
 
 /// <summary>One place where the asset's bytes were found.</summary>

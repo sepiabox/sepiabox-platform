@@ -13,6 +13,14 @@ internal static class TestManifests
     public static ManifestDerivative Derivative(string name, int width, int height) =>
         new(name, $"derivatives/{PhotoId}/{name}.webp", width, height, "image/webp");
 
+    /// <summary>A face with a valid 128-value unit embedding along <paramref name="axis"/>, so faces can differ.</summary>
+    public static ManifestFace Face(double score, int axis = 0)
+    {
+        var embedding = new float[128];
+        embedding[axis] = 1f;
+        return new ManifestFace([0.1, 0.2, 0.3, 0.4], score, Sepiabox.Pipeline.Embeddings.EmbeddingCodec.Encode(embedding));
+    }
+
     public static Manifest Photo(ManifestSource source) => new()
     {
         Id = PhotoId,

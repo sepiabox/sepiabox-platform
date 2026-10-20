@@ -246,12 +246,230 @@ public sealed class ManifestMergeTests
     }
 
     [Fact]
+    public void A_manifest_processed_without_faces_never_erases_the_stored_faces()
+    {
+        var withFaces = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9)] };
+        var withoutFaces = Photo(Source("HD do Jonathas", "c.jpg"));
+
+        var merged = ManifestMerge.Merge(withFaces, withoutFaces);
+
+        Assert.True(merged.FacesProcessed);
+        Assert.Equal(0.9, Assert.Single(merged.Faces).Score);
+        Assert.Equal(2, merged.Sources.Count);
+    }
+
+    [Fact]
+    public void Takes_the_incoming_faces_when_the_stored_manifest_has_none_processed()
+    {
+        var merged = ManifestMerge.Merge(
+            Photo(Source("HD da Ana", "a.jpg")),
+            Photo(Source("HD do Jonathas", "c.jpg")) with { FacesProcessed = true, Faces = [Face(0.85)] });
+
+        Assert.True(merged.FacesProcessed);
+        Assert.Equal(0.85, Assert.Single(merged.Faces).Score);
+    }
+
+    [Fact]
+    public void Takes_the_side_with_more_faces_in_either_order_when_both_were_processed()
+    {
+        var two = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9), Face(0.8, axis: 1)] };
+        var none = Photo(Source("HD do Jonathas", "c.jpg")) with { FacesProcessed = true, Faces = [] };
+
+        Assert.Equal(2, ManifestMerge.Merge(two, none).Faces.Count);
+        Assert.Equal(2, ManifestMerge.Merge(none, two).Faces.Count);
+    }
+
+    [Fact]
+    public void Merges_faces_to_the_same_json_in_either_order_when_both_found_as_many()
+    {
+        // Two computers whose previews differ slightly: re-uploading from either must not flip the stored blob.
+        var ana = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.91)] };
+        var jonathas = Photo(Source("HD do Jonathas", "c.jpg")) with { FacesProcessed = true, Faces = [Face(0.93, axis: 2)] };
+
+        var one = ManifestMerge.Merge(ana, jonathas);
+        var other = ManifestMerge.Merge(jonathas, ana);
+
+        Assert.Equal(ManifestJson.Serialize(one), ManifestJson.Serialize(other));
+        Assert.Equal(ManifestJson.Serialize(one), ManifestJson.Serialize(ManifestMerge.Merge(one, ana)));
+        Assert.Equal(ManifestJson.Serialize(one), ManifestJson.Serialize(ManifestMerge.Merge(one, jonathas)));
+    }
+
+    [Fact]
+    public void A_newer_face_pipeline_replaces_older_faces_in_either_order_even_with_fewer_faces()
+    {
+        var older = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9), Face(0.85, axis: 1)] };
+        var newer = Photo(Source("HD do Jonathas", "c.jpg")) with { FacesProcessed = true, FacesVersion = 2, Faces = [Face(0.95, axis: 2)] };
+
+        foreach (var merged in new[] { ManifestMerge.Merge(older, newer), ManifestMerge.Merge(newer, older) })
+        {
+            Assert.Equal(2, merged.FacesVersion);
+            Assert.Equal(0.95, Assert.Single(merged.Faces).Score);
+        }
+    }
+
+    [Fact]
+    public void Faces_written_before_the_version_field_count_as_version_1()
+    {
+        var unversioned = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9), Face(0.85, axis: 1)] };
+        var first = Photo(Source("HD do Jonathas", "c.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = [Face(0.95)] };
+
+        Assert.Equal(1, unversioned.EffectiveFacesVersion);
+        Assert.Equal(2, ManifestMerge.Merge(first, unversioned).Faces.Count);
+        Assert.Equal(2, ManifestMerge.Merge(unversioned, first).Faces.Count);
+    }
+
+    public static TheoryData<string, Manifest[]> Scenarios => new()
+    {
+        {
+            "a tie between two computers, with an unversioned and a versioned copy of the winner",
+            [
+                Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = [Face(0.91)] },
+                Photo(Source("HD do Jonathas", "b.jpg")) with { FacesProcessed = true, Faces = [Face(0.93, axis: 1)] },
+                Photo(Source("HD antigo", "c.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = [Face(0.93, axis: 1)] },
+                Photo(Source("Pen", "d.jpg")),
+            ]
+        },
+        {
+            "a newer pipeline among them",
+            [
+                Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.91), Face(0.8, axis: 4)] },
+                Photo(Source("HD do Jonathas", "b.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = [Face(0.93, axis: 1)] },
+                Photo(Source("HD antigo", "c.jpg")) with { FacesProcessed = true, FacesVersion = 2, Faces = [Face(0.7, axis: 5)] },
+                Photo(Source("Pen", "d.jpg")),
+            ]
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(Scenarios))]
+    public void Merges_faces_to_the_same_result_whatever_the_order_and_grouping(string scenario, Manifest[] manifests)
+    {
+        var results = (
+            from order in Permutations(manifests)
+            from merged in new[]
+            {
+                ManifestMerge.Merge(ManifestMerge.Merge(ManifestMerge.Merge(order[0], order[1]), order[2]), order[3]),
+                ManifestMerge.Merge(order[0], ManifestMerge.Merge(order[1], ManifestMerge.Merge(order[2], order[3]))),
+                ManifestMerge.Merge(ManifestMerge.Merge(order[0], order[1]), ManifestMerge.Merge(order[2], order[3])),
+            }
+            select FacesOf(merged)).Distinct().ToList();
+
+        Assert.True(results.Count == 1, $"{scenario}: {string.Join(" | ", results)}");
+    }
+
+    [Fact]
+    public void Merges_equal_faces_with_and_without_a_version_to_the_same_json_in_either_order()
+    {
+        var unversioned = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9)] };
+        var versioned = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = [Face(0.9)] };
+
+        var one = ManifestJson.Serialize(ManifestMerge.Merge(unversioned, versioned));
+        var other = ManifestJson.Serialize(ManifestMerge.Merge(versioned, unversioned));
+
+        Assert.Equal(one, other);
+        Assert.Equal(1, ManifestMerge.Merge(unversioned, versioned).FacesVersion);
+        Assert.Null(ManifestMerge.Merge(unversioned, unversioned).FacesVersion);
+    }
+
+    [Fact]
+    public void Writes_no_faces_version_when_neither_side_processed_faces()
+    {
+        var notProcessed = Photo(Source("HD da Ana", "a.jpg"));
+
+        Assert.Null(ManifestMerge.Merge(notProcessed, notProcessed with { Sources = [Source("Pen", "b.jpg")] }).FacesVersion);
+    }
+
+    [Fact]
+    public void Orders_faces_consistently_with_equality_on_edge_values()
+    {
+        var zero = new ManifestFace([0.0, 0.2, 0.3, 0.4], 0.0, "AAAA");
+        var negativeZero = new ManifestFace([-0.0, 0.2, 0.3, 0.4], -0.0, "AAAA");
+
+        Assert.Equal(zero, negativeZero);
+        Assert.Equal(zero.GetHashCode(), negativeZero.GetHashCode());
+        Assert.Equal(0, ManifestFace.Order.Compare(zero, negativeZero));
+        Assert.DoesNotContain("-0", System.Text.Json.JsonSerializer.Serialize(negativeZero, ManifestJson.Options), StringComparison.Ordinal);
+
+        var shorter = zero with { Box = [0.0, 0.2, 0.3] };
+        Assert.NotEqual(zero, shorter);
+        Assert.True(ManifestFace.Order.Compare(shorter, zero) < 0);
+        Assert.True(ManifestFace.Order.Compare(zero with { Embedding = "AAAB" }, zero) > 0);
+        Assert.True(ManifestFace.Order.Compare(null, zero) < 0);
+        Assert.Equal(0, ManifestFace.Order.Compare(null, null));
+    }
+
+    [Fact]
+    public void Merging_a_manifest_with_itself_changes_nothing()
+    {
+        var manifest = ManifestMerge.Canonical(
+            Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9), Face(0.85, axis: 3)] });
+
+        Assert.Equal(ManifestJson.Serialize(manifest), ManifestJson.Serialize(ManifestMerge.Merge(manifest, manifest)));
+    }
+
+    [Fact]
+    public void Faces_read_twice_from_the_same_json_are_equal()
+    {
+        var json = ManifestJson.Serialize(Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9)] });
+
+        var first = ManifestJson.Deserialize(json).Faces;
+        var second = ManifestJson.Deserialize(json).Faces;
+
+        Assert.Equal(first, second);
+        Assert.Equal(first[0].GetHashCode(), second[0].GetHashCode());
+        Assert.NotEqual(first[0], first[0] with { Box = [0.1, 0.2, 0.3, 0.5] });
+    }
+
+    [Fact]
+    public void A_face_keeps_its_own_copy_of_the_box()
+    {
+        var box = new List<double> { 0.1, 0.2, 0.3, 0.4 };
+        var face = new ManifestFace(box, 0.9, "AAAA");
+        var changed = face with { Box = box };
+
+        box[0] = 0.9;
+
+        Assert.Equal([0.1, 0.2, 0.3, 0.4], face.Box);
+        Assert.Equal([0.1, 0.2, 0.3, 0.4], changed.Box);
+        Assert.Throws<ArgumentNullException>(() => new ManifestFace(null!, 0.9, "AAAA"));
+    }
+
+    [Fact]
+    public void Keeps_faces_unprocessed_when_neither_side_looked_for_them()
+    {
+        var merged = ManifestMerge.Merge(Photo(Source("HD da Ana", "a.jpg")), Photo(Source("HD do Jonathas", "c.jpg")));
+
+        Assert.False(merged.FacesProcessed);
+        Assert.Empty(merged.Faces);
+    }
+
+    [Fact]
+    public void Keeps_the_faces_of_a_described_photo_when_the_incoming_run_could_not_make_thumbnails()
+    {
+        var described = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9)] };
+        var failed = Photo(Source("HD do Jonathas", "a.jpg")) with { Width = null, Derivatives = [] };
+
+        Assert.Single(ManifestMerge.Merge(described, failed).Faces);
+        Assert.Single(ManifestMerge.Merge(failed, described).Faces);
+    }
+
+    [Fact]
     public void Refuses_to_merge_different_assets()
     {
         var other = Photo(Source("HD da Ana", "a.jpg")) with { Id = new string('f', 64) };
 
         Assert.Throws<ArgumentException>(() => ManifestMerge.Merge(Photo(Source("HD da Ana", "a.jpg")), other));
     }
+
+    private static ManifestFace Face(double score, int axis = 0) => TestManifests.Face(score, axis);
+
+    private static IEnumerable<Manifest[]> Permutations(Manifest[] items) =>
+        items.Length <= 1
+            ? [items]
+            : items.SelectMany((first, i) => Permutations([.. items[..i], .. items[(i + 1)..]]).Select(rest => (Manifest[])[first, .. rest]));
+
+    private static string FacesOf(Manifest manifest) =>
+        $"{manifest.FacesProcessed} {manifest.FacesVersion} {System.Text.Json.JsonSerializer.Serialize(manifest.Faces, ManifestJson.Options)}";
 
     private static (DateTime?, CaptureDateSource?) DateOf(Manifest manifest) => (manifest.CapturedAt, manifest.CapturedAtSource);
 

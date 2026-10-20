@@ -12,6 +12,11 @@
   "dependentSchemas": {
     "capturedAtSource": { "properties": { "capturedAt": { "type": "string" } } }
   },
+  "if": { "properties": { "facesProcessed": { "const": false } } },
+  "then": {
+    "properties": { "faces": { "maxItems": 0 } },
+    "not": { "required": ["facesVersion"] }
+  },
   "properties": {
     "schemaVersion": { "const": 1 },
     "id": {
@@ -105,11 +110,38 @@
         }
       }
     },
-    "facesProcessed": { "type": "boolean" },
+    "facesProcessed": {
+      "description": "Whether faces were looked for (process --faces, S-018). False means unknown, so faces is then empty.",
+      "type": "boolean"
+    },
+    "facesVersion": {
+      "description": "Which face pipeline found the faces (D-047), bumped whenever the face models or their preprocessing change; the newer version wins a merge. Optional: only next to facesProcessed true, and absent from faces written before the field existed, which read as 1.",
+      "type": "integer",
+      "minimum": 1
+    },
     "faces": {
-      "description": "Detected faces, filled from S-018.",
+      "description": "Faces found in the preview or poster (S-018), best first. Box: left, top, width and height relative to the upright derivative (0..1); map it with a derivative's width and height, never the manifest's, which describe the original as stored. Embedding: base64 of 128 float32 little-endian values (SFace), L2-normalized.",
       "type": "array",
-      "items": { "type": "object" }
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["box", "score", "embedding"],
+        "properties": {
+          "box": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "embedding": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+            "minLength": 684,
+            "maxLength": 684
+          }
+        }
+      }
     }
   }
 }

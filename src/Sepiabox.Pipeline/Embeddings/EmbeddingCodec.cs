@@ -40,27 +40,44 @@ public static class EmbeddingCodec
     /// </summary>
     public static void Normalize(Span<float> values)
     {
+        if (TryScale(values) is { } problem)
+        {
+            throw new EmbeddingException(problem);
+        }
+    }
+
+    /// <summary>
+    /// Like <see cref="Normalize"/>, but false instead of an exception for a vector that cannot be normalized, which is
+    /// then left unchanged.
+    /// </summary>
+    public static bool TryNormalize(Span<float> values) => TryScale(values) is null;
+
+    // The one normalization: divides by the double-precision norm, or says why it cannot and changes nothing.
+    private static string? TryScale(Span<float> values)
+    {
         double sum = 0;
         foreach (var value in values)
         {
             if (!float.IsFinite(value))
             {
-                throw new EmbeddingException($"The embedding has a value that is not finite ({value}).");
+                return $"The embedding has a value that is not finite ({value}).";
             }
 
             sum += (double)value * value;
         }
 
-        var norm = Math.Sqrt(sum);
-        if (norm == 0)
+        if (sum == 0)
         {
-            throw new EmbeddingException("The embedding is a zero vector, which has no direction.");
+            return "The embedding is a zero vector, which has no direction.";
         }
 
+        var norm = Math.Sqrt(sum);
         for (var i = 0; i < values.Length; i++)
         {
             values[i] = (float)(values[i] / norm);
         }
+
+        return null;
     }
 
     /// <summary>A normalized copy of <paramref name="values"/>; see <see cref="Normalize"/>.</summary>
