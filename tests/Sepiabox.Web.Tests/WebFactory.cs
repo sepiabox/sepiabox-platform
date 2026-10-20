@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sepiabox.Web.Services;
@@ -31,7 +32,7 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>The app with an in-memory library instead of PostgreSQL.</summary>
     public WebFactory(FakeLibrary library)
     {
-        // Every query goes to the fake; only /health tries it, and a closed port fails at once.
+        // Never opened: every query goes to the fake, and /health uses a fake check.
         _catalogConnectionString = "Host=127.0.0.1;Port=1;Database=unused;Timeout=2";
         _library = library;
     }
@@ -71,6 +72,16 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             if (_library is not null)
             {
                 services.AddSingleton<ILibraryQueries>(_library);
+                // No database or storage behind the fake: their checks become one that always passes.
+                services.PostConfigure<HealthCheckServiceOptions>(options =>
+                {
+                    foreach (var check in options.Registrations.Where(r => !r.Tags.Contains("live")).ToList())
+                    {
+                        options.Registrations.Remove(check);
+                    }
+
+                    options.Registrations.Add(new HealthCheckRegistration("fake", new AlwaysHealthy(), null, null));
+                });
             }
 
             if (KeyRing is not null)
@@ -116,6 +127,12 @@ internal sealed class LocalBrowser : IStartupFilter
         });
         next(app);
     };
+}
+
+internal sealed class AlwaysHealthy : IHealthCheck
+{
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
+        Task.FromResult(HealthCheckResult.Healthy());
 }
 
 internal static class TestUsers

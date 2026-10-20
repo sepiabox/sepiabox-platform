@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Microsoft.Net.Http.Headers;
 using Sepiabox.Web.Auth;
 
 namespace Sepiabox.Web.Tests;
@@ -40,9 +41,9 @@ internal static partial class SignInWeb
 
     public static Uri Url(string path) => new(path, UriKind.Relative);
 
-    public static string? SessionCookie(HttpResponseMessage response) =>
+    public static SetCookieHeaderValue? SessionCookie(HttpResponseMessage response) =>
         response.Headers.TryGetValues("Set-Cookie", out var cookies)
-            ? cookies.FirstOrDefault(cookie => cookie.StartsWith(AuthSetup.CookieName + "=", StringComparison.Ordinal))
+            ? SetCookieHeaderValue.ParseList(cookies.ToList()).FirstOrDefault(cookie => cookie.Name == AuthSetup.CookieName)
             : null;
 
     /// <summary>Opens <paramref name="page"/> as a browser would and returns the antiforgery token of its form.</summary>

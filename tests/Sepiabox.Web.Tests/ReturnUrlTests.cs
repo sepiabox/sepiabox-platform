@@ -15,6 +15,12 @@ public sealed class ReturnUrlTests
     [InlineData("/\t/evil.example/", "/")]
     [InlineData("https://evil.example/", "/")]
     [InlineData("fotos", "/")]
+    [InlineData("/entrar", "/")]
+    [InlineData("/ENTRAR/google?returnUrl=%2F", "/")]
+    [InlineData("/sem-acesso", "/")]
+    [InlineData("/sair", "/")]
+    [InlineData("/dev-login", "/")]
+    [InlineData("/entrarx", "/entrarx")]
     public void Keeps_return_urls_on_this_site(string? requested, string expected) =>
         Assert.Equal(expected, AuthSetup.LocalReturnUrl(new DefaultHttpContext().Request, requested));
 

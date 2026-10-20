@@ -51,17 +51,29 @@ public sealed class DevLoginTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Fact]
-    public async Task Answers_404_for_dev_login_from_another_computer()
+    [Theory]
+    [InlineData("192.0.2.10", null, "localhost", false)]
+    // Claiming loopback in a header changes nothing: Development never reads forwarded headers...
+    [InlineData("192.0.2.10", "127.0.0.1", "localhost", false)]
+    // ...and even with ASPNETCORE_FORWARDEDHEADERS_ENABLED, a forwarded request is not a local browser.
+    [InlineData("192.0.2.10", "127.0.0.1", "localhost", true)]
+    [InlineData("127.0.0.1", null, "app.example.com", false)]
+    public async Task Answers_404_for_dev_login_from_another_computer_or_through_a_proxy(string remote, string? forwardedFor, string host, bool forwardedHeadersEnabled)
     {
-        await using var web = Create();
+        await using var web = Create(settings: forwardedHeadersEnabled ? new() { ["FORWARDEDHEADERS_ENABLED"] = "true" } : null);
 
         var context = await web.Server.SendAsync(http =>
         {
-            http.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.10");
+            http.Connection.RemoteIpAddress = IPAddress.Parse(remote);
             http.Request.Method = HttpMethods.Post;
+            http.Request.Host = new HostString(host);
             http.Request.Path = "/dev-login";
             http.Request.ContentType = "application/x-www-form-urlencoded";
+            if (forwardedFor is not null)
+            {
+                http.Request.Headers["X-Forwarded-For"] = forwardedFor;
+            }
+
             http.Request.Body = new MemoryStream("email=ana%40example.com"u8.ToArray());
         });
 
@@ -92,7 +104,7 @@ public sealed class DevLoginTests
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
         Assert.Equal("/?pagina=1", login.Headers.Location!.OriginalString);
         // A persistent cookie (with an expiry) that survives closing the browser.
-        Assert.Contains("expires=", SessionCookie(login), StringComparison.Ordinal);
+        Assert.True(SessionCookie(login)!.Expires > DateTimeOffset.UtcNow.AddDays(13));
 
         var token = await FormTokenAsync(http, "/");
         using var signOut = await http.PostAsync(Url("/sair"), new FormUrlEncodedContent(new Dictionary<string, string>
@@ -148,7 +160,8 @@ public sealed class DevLoginTests
             {
                 using var http = before.CreateAnonymousClient();
                 using var login = await DevLoginAsync(http, TestUsers.Allowed);
-                cookie = SessionCookie(login)!.Split(';')[0];
+                var session = SessionCookie(login)!;
+                cookie = $"{session.Name}={session.Value}";
             }
 
             // The next revision, with the same keys, no longer lists that e-mail.

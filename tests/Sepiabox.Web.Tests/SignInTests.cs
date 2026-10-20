@@ -1,7 +1,10 @@
 using System.Net;
 using System.Web;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.MicrosoftAccount;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Sepiabox.Web.Auth;
@@ -147,10 +150,9 @@ public sealed class SignInTests
         await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
-        // The fake library's database is a closed port, so the probe reports it rather than redirecting.
         using var response = await http.GetAsync(Url("/health"));
 
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -163,6 +165,21 @@ public sealed class SignInTests
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal("/fotos/abc", response.Headers.Location!.AbsolutePath);
+    }
+
+    [Theory]
+    [InlineData("%2Fentrar")]
+    [InlineData("%2Fsem-acesso")]
+    [InlineData("%2Fsair")]
+    public async Task Sends_a_user_who_already_has_access_home_instead_of_back_to_a_sign_in_page(string returnUrl)
+    {
+        await using var web = Create();
+        using var http = web.CreateSignedInClient(followRedirects: false);
+
+        using var response = await http.GetAsync(Url($"/entrar?ReturnUrl={returnUrl}"));
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/", response.Headers.Location!.AbsolutePath);
     }
 
     [Fact]
@@ -200,20 +217,48 @@ public sealed class SignInTests
     }
 
     [Fact]
-    public async Task Asks_google_to_return_over_https_when_the_ingress_forwarded_https()
+    public async Task Asks_google_to_return_over_https_to_the_browsers_host_whatever_x_forwarded_host_says()
     {
         await using var web = Create(environment: "Production", settings: BothClients);
         using var http = web.CreateAnonymousClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, Url("/entrar/google"));
         request.Headers.Add("X-Forwarded-Proto", "https");
-        request.Headers.Add("X-Forwarded-Host", "app.example.com");
         request.Headers.Add("X-Forwarded-For", "203.0.113.7");
+        // The ingress keeps the browser's Host; a forwarded host from anyone else must not move the callback.
+        request.Headers.Add("X-Forwarded-Host", "evil.example");
 
         using var response = await http.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var query = HttpUtility.ParseQueryString(response.Headers.Location!.Query);
-        Assert.Equal("https://app.example.com/signin-google", query["redirect_uri"]);
+        Assert.Equal("https://localhost/signin-google", query["redirect_uri"]);
+    }
+
+    [Theory]
+    [InlineData("Production", CookieSecurePolicy.Always)]
+    [InlineData("Development", CookieSecurePolicy.SameAsRequest)]
+    public async Task Keeps_the_session_in_a_secure_persistent_cookie(string environment, CookieSecurePolicy secure)
+    {
+        await using var web = Create(environment: environment);
+
+        var cookie = web.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(CookieAuthenticationDefaults.AuthenticationScheme);
+
+        Assert.Equal(AuthSetup.CookieName, cookie.Cookie.Name);
+        Assert.Equal(secure, cookie.Cookie.SecurePolicy);
+        Assert.True(cookie.Cookie.HttpOnly);
+        Assert.Equal(SameSiteMode.Lax, cookie.Cookie.SameSite);
+        Assert.Equal(TimeSpan.FromDays(14), cookie.ExpireTimeSpan);
+        Assert.True(cookie.SlidingExpiration);
+    }
+
+    [Fact]
+    public async Task Checks_the_access_list_again_on_interactive_circuits()
+    {
+        await using var web = Create();
+        await using var scope = web.Services.CreateAsyncScope();
+
+        Assert.IsType<AccessListRevalidation>(scope.ServiceProvider.GetRequiredService<AuthenticationStateProvider>());
     }
 
     [Fact]

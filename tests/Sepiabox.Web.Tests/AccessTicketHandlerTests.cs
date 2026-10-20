@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.MicrosoftAccount;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Net.Http.Headers;
 using Sepiabox.Web.Auth;
 
 namespace Sepiabox.Web.Tests;
@@ -22,8 +23,9 @@ public sealed class AccessTicketHandlerTests
         Assert.Equal(StatusCodes.Status302Found, context.Response.StatusCode);
         Assert.Equal("/sem-acesso", context.Response.Headers.Location.ToString());
         // The only session cookie written is the one that deletes an earlier session.
-        var cookie = Assert.Single(context.Response.Headers.SetCookie, c => c!.StartsWith(AuthSetup.CookieName + "=", StringComparison.Ordinal));
-        Assert.Contains("expires=Thu, 01 Jan 1970", cookie, StringComparison.Ordinal);
+        var cookies = SetCookieHeaderValue.ParseList(context.Response.Headers.SetCookie.OfType<string>().ToList());
+        var cookie = Assert.Single(cookies, c => c.Name == AuthSetup.CookieName);
+        Assert.True(cookie.Expires < DateTimeOffset.UtcNow);
     }
 
     [Fact]
@@ -37,10 +39,14 @@ public sealed class AccessTicketHandlerTests
         Assert.Equal("/sem-acesso", context.Response.Headers.Location.ToString());
     }
 
-    [Fact]
-    public async Task Refuses_a_google_email_on_the_list_that_google_says_is_not_verified()
+    [Theory]
+    [InlineData("false")]
+    [InlineData("True")]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task Refuses_a_google_email_on_the_list_unless_google_says_it_is_verified(string? emailVerified)
     {
-        var context = TicketFor(TestUsers.Allowed, emailVerified: "false");
+        var context = TicketFor(TestUsers.Allowed, emailVerified);
 
         await AccessTicketHandler.OnTicketReceivedAsync(context);
 
@@ -49,8 +55,9 @@ public sealed class AccessTicketHandlerTests
     }
 
     [Theory]
-    [InlineData("ana@example.com", null, false)]
+    [InlineData("ana@example.com", "true", false)]
     [InlineData("ANA@Example.COM", "true", false)]
+    // Microsoft has no such claim; its consumers endpoint is what makes the address trustworthy.
     [InlineData("ana@example.com", null, true)]
     public async Task Lets_a_sign_in_on_the_list_continue_and_keeps_it_across_browser_restarts(string email, string? emailVerified, bool microsoft)
     {
@@ -75,6 +82,19 @@ public sealed class AccessTicketHandlerTests
 
         Assert.True(context.Result?.Handled);
         Assert.Equal("/app/entrar?erro=1", http.Response.Headers.Location.ToString());
+    }
+
+    [Theory]
+    [InlineData("access_denied", "access_denied")]
+    [InlineData("Access denied for ana@example.com", "none")]
+    [InlineData("", "none")]
+    [InlineData(null, "none")]
+    public void Logs_only_a_well_formed_oauth_error_code(string? error, string expected)
+    {
+        var failure = new AuthenticationFailureException("failed");
+        failure.Data["error"] = error;
+
+        Assert.Equal(expected, AccessTicketHandler.ErrorCode(failure));
     }
 
     private static DefaultHttpContext Http()

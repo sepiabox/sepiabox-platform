@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Sepiabox.Web.Auth;
 
 namespace Sepiabox.Web.Tests;
@@ -79,6 +80,22 @@ public sealed class AccessListTests
 
         Assert.False(access.Allows("ana@example.com"));
         Assert.True(access.Allows("bruno@example.com"));
+    }
+
+    [Fact]
+    public void Warns_when_a_reload_empties_the_list()
+    {
+        var configuration = (IConfigurationRoot)Configuration(new() { [AccessList.ConfigurationKey] = "ana@example.com" });
+        var log = new ListLogger();
+        var access = AccessList.From(configuration, log);
+
+        configuration[AccessList.ConfigurationKey] = "";
+        configuration.Reload();
+
+        Assert.Equal(0, access.Count);
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Contains(AccessList.ConfigurationKey, entry.Message, StringComparison.Ordinal);
     }
 
     private static IConfiguration Configuration(Dictionary<string, string?> values) =>
