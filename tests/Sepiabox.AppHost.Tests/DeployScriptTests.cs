@@ -369,20 +369,22 @@ public sealed class DeployScriptTests : IDisposable
             "Succeeded", dotenv: dotenv, extra: shellVariable is null ? null : new() { [shellVariable] = "" });
 
         Assert.Equal(1, result.ExitCode);
-        Assert.Contains("azd env unset", result.Error, StringComparison.Ordinal);
+        Assert.Contains("delete its line from .azure/<environment>/.env", result.Error, StringComparison.Ordinal);
         Assert.DoesNotContain(Calls(), call => call.StartsWith("azd provision", StringComparison.Ordinal)
             || call.StartsWith("azd env config set", StringComparison.Ordinal)
             || call.StartsWith("az servicebus", StringComparison.Ordinal));
     }
 
     [UnixTheory]
-    [InlineData("")]
-    [InlineData("sepiabox-web.example.com")]
-    [InlineData("FAIL")]
-    public async Task Deploy_refuses_to_bind_a_custom_domain_the_web_does_not_have_yet(string hostnames)
+    [InlineData("", "SniEnabled")]
+    [InlineData("sepiabox-web.example.com", "SniEnabled")]
+    [InlineData("FAIL", "SniEnabled")]
+    // Set by hand locally in another case; the workflow normalizes it, deploy.sh must not rely on that.
+    [InlineData("", "snienabled")]
+    public async Task Deploy_refuses_to_bind_a_custom_domain_the_web_does_not_have_yet(string hostnames, string binding)
     {
         var result = await RunDeployAsync(
-            "Succeeded", config: "customDomain=app.example.com customDomainBinding=SniEnabled uploaderPrincipalIds=", hostnames: hostnames);
+            "Succeeded", config: $"customDomain=app.example.com customDomainBinding={binding} uploaderPrincipalIds=", hostnames: hostnames);
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("set SniEnabled and deploy again", result.Error, StringComparison.Ordinal);

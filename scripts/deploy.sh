@@ -37,7 +37,7 @@ for name in AZURE_CUSTOM_DOMAIN AZURE_CUSTOM_DOMAIN_BINDING AZURE_UPLOADER_PRINC
   dotenv_value=$(azd env get-value "$name" 2>/dev/null) || dotenv_value=""
   if [[ -n "$dotenv_value" || -n "${!name+set}" ]]; then
     echo "$name is set (in the azd environment or this shell); azd would use it instead of infra.parameters." >&2
-    echo "Remove it (azd env unset $name, or unset $name) and use azd env config set infra.parameters.<name> (docs/operations.md)." >&2
+    echo "Remove it (delete its line from .azure/<environment>/.env, or unset $name in the shell) and use azd env config set infra.parameters.<name> (docs/operations.md)." >&2
     exit 1
   fi
 done
@@ -77,7 +77,7 @@ parameter_value() {
 # certificate for a host name the app does not have: the host name must come first, with the binding Disabled.
 web_app="sepiabox-web"
 custom_domain=$(parameter_value customDomain)
-if [[ -n "$custom_domain" && "$(parameter_value customDomainBinding)" == "SniEnabled" ]]; then
+if [[ -n "$custom_domain" && "$(parameter_value customDomainBinding | tr "[:upper:]" "[:lower:]")" == "snienabled" ]]; then
   # No group or no web yet, or a failed query: not on the app, which only costs a deploy with Disabled.
   hostnames=$(az containerapp hostname list --name "$web_app" --resource-group "$resource_group" \
     --query "[].name" --output tsv 2>/dev/null) || hostnames=""
