@@ -7,7 +7,7 @@
 {
     <PageTitle>@Title · Sepiabox</PageTitle>
 
-    <p class="back"><a href="@BackLink">← Linha do tempo</a></p>
+    <p class="back"><a href="@BackLink">@Text["Detail_Back"]</a></p>
 
     <div class="detail">
         <figure class="preview">
@@ -17,11 +17,11 @@
             }
             else if (_asset.PreviewName is { } preview)
             {
-                <img src="fotos/@_asset.Id/@preview" alt="@AssetKinds.Label(_asset.Kind)" />
+                <img src="fotos/@_asset.Id/@preview" alt="@Text.KindLabel(_asset.Kind)" />
             }
             else
             {
-                <span class="placeholder">Sem pré-visualização</span>
+                <span class="placeholder">@Text["Detail_NoPreview"]</span>
             }
         </figure>
 
@@ -30,24 +30,24 @@
             <dl>
                 @if (Camera is { } camera)
                 {
-                    <dt>Câmara</dt>
+                    <dt>@Text["Detail_Camera"]</dt>
                     <dd>@camera</dd>
                 }
                 @if (_asset.Width is { } width && _asset.Height is { } height)
                 {
-                    <dt>Dimensões</dt>
+                    <dt>@Text["Detail_Dimensions"]</dt>
                     <dd class="mono">@width × @height</dd>
                 }
                 @if (AssetKinds.IsVideo(_asset.Kind) && VideoDurations.Format(_asset.DurationSeconds) is { } duration)
                 {
-                    <dt>Duração</dt>
+                    <dt>@Text["Detail_Duration"]</dt>
                     <dd class="mono">@duration</dd>
                 }
-                <dt>Tipo</dt>
-                <dd>@AssetKinds.Label(_asset.Kind)</dd>
+                <dt>@Text["Detail_Type"]</dt>
+                <dd>@Text.KindLabel(_asset.Kind)</dd>
             </dl>
 
-            <h2>Onde está</h2>
+            <h2>@Text["Detail_Sources"]</h2>
             <ul class="sources">
                 @foreach (var source in _asset.Sources)
                 {
@@ -57,7 +57,7 @@
 
             @* Not an enhanced navigation: Blazor would fetch the redirect itself, fail on CORS and read the original twice.
                No `download` attribute: Content-Disposition names the file, and a failure message must stay visible. *@
-            <p><a class="button" href="fotos/@_asset.Id/original" data-enhance-nav="false">Descarregar o original</a></p>
+            <p><a class="button" href="fotos/@_asset.Id/original" data-enhance-nav="false">@Text["Detail_DownloadOriginal"]</a></p>
         </section>
     </div>
 }
@@ -82,9 +82,9 @@
         }
     }
 
-    private string Title => _asset?.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle;
+    private string Title => Text.DateOrNoDate(_asset?.CapturedAt);
 
-    private string VideoLabel => _asset?.CapturedAt is { } at ? $"Vídeo de {PortugueseDates.DateAndTime(at)}" : "Vídeo sem data";
+    private string VideoLabel => _asset?.CapturedAt is { } at ? Text["Detail_VideoFrom", Text.DateAndTime(at)] : Text["Detail_UndatedVideo"];
 
     private string BackLink => LibraryQueries.ParsePage(Pagina) is > 1 and var page ? $"./?pagina={page}" : "./";
 

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
@@ -175,14 +176,23 @@ public static partial class AuthSetup
     /// another site, or is one of the sign-in pages themselves (which would loop).
     /// </summary>
     public static string LocalReturnUrl(HttpRequest request, string? url) =>
+        IsLocal(url) && !IsSignInPage(request, url)
+            ? url
+            : AppPath(request, "/");
+
+    /// <summary>
+    /// A full local path, sign-in pages included (the language switch returns to the page it was used on),
+    /// or the app's home when it is missing or could lead to another site.
+    /// </summary>
+    public static string LocalUrl(HttpRequest request, string? url) =>
+        IsLocal(url) ? url : AppPath(request, "/");
+
+    private static bool IsLocal([NotNullWhen(true)] string? url) =>
         url is not null
         && url.StartsWith('/')
         && (url.Length == 1 || url[1] is not ('/' or '\\'))
         // Browsers drop tabs and line breaks, which would turn "/\t/host" into "//host".
-        && !url.Any(char.IsControl)
-        && !IsSignInPage(request, url)
-            ? url
-            : AppPath(request, "/");
+        && !url.Any(char.IsControl);
 
     private static readonly string[] SignInPages = [SignInPath, NoAccessPath, SignOutPath, DevLoginPath];
 

@@ -323,14 +323,43 @@ main {
     cursor: pointer;
 }
 
-.user {
+.top-end {
+    display: flex;
+    align-items: center;
+    gap: 16px;
     margin-left: auto;
+}
+
+.user {
     font-family: var(--font-mono);
     font-size: 0.875rem;
 }
 
 .sign-out {
-    margin: 0 0 0 16px;
+    margin: 0;
+}
+
+.language {
+    display: flex;
+    gap: 4px;
+    margin: 0;
+}
+
+.language button {
+    padding: 4px 8px;
+    background: none;
+    color: var(--cyanotype);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font: inherit;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.language button[aria-pressed="true"] {
+    color: var(--developer);
+    border-color: var(--mat);
+    cursor: default;
 }
 
 .sign-out button {

@@ -2,6 +2,7 @@ using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Web.Auth;
 using Sepiabox.Web.Components;
+using Sepiabox.Web.Localization;
 using Sepiabox.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,6 +22,7 @@ builder.Services.AddSingleton<ISasUrlFactory, SasUrlFactory>();
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 
 builder.AddSepiaboxAuth();
+builder.Services.AddSepiaboxLocalization();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -28,6 +30,8 @@ builder.Services.AddRazorComponents()
 var app = builder.Build();
 
 app.UseSepiaboxForwardedHeaders();
+// Before the error and status code pages, so they too are in the visitor's language (D-050).
+app.UseRequestLocalization();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -44,6 +48,7 @@ app.UseAntiforgery();
 // Styles, fonts and scripts hold nothing private, and the sign-in page needs them before sign-in.
 app.MapStaticAssets().AllowAnonymous();
 app.MapSepiaboxAuth();
+app.MapLanguageSwitch();
 app.MapMediaEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

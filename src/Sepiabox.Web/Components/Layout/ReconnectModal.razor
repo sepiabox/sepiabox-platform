@@ -7,25 +7,25 @@
             <div></div>
         </div>
         <p class="components-reconnect-first-attempt-visible">
-            A restabelecer a ligação…
+            @Text["Reconnect_FirstAttempt"]
         </p>
         <p class="components-reconnect-repeated-attempt-visible">
-            Sem ligação. Nova tentativa dentro de <span id="components-seconds-to-next-attempt"></span> segundos.
+            @Text["Reconnect_RepeatedBefore"] <span id="components-seconds-to-next-attempt"></span> @Text["Reconnect_RepeatedAfter"]
         </p>
         <p class="components-reconnect-failed-visible">
-            Não foi possível restabelecer a ligação.<br />Tente novamente ou recarregue a página.
+            @Text["Reconnect_Failed"]<br />@Text["Reconnect_TryAgainOrReload"]
         </p>
         <button id="components-reconnect-button" class="components-reconnect-failed-visible">
-            Tentar novamente
+            @Text["Reconnect_Retry"]
         </button>
         <p class="components-pause-visible">
-            A sessão foi pausada pelo servidor.
+            @Text["Reconnect_Paused"]
         </p>
         <p class="components-resume-failed-visible">
-            Não foi possível retomar a sessão.<br />Tente novamente ou recarregue a página.
+            @Text["Reconnect_ResumeFailed"]<br />@Text["Reconnect_TryAgainOrReload"]
         </p>
         <button id="components-resume-button" class="components-pause-visible components-resume-failed-visible">
-            Retomar
+            @Text["Reconnect_Resume"]
         </button>
     </div>
 </dialog>

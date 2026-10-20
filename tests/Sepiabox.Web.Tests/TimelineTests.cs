@@ -5,7 +5,7 @@ using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
 
-public sealed class TimelineTests : BunitContext
+public sealed class TimelineTests : LocalizedContext
 {
     [Fact]
     public void Assets_from_three_months_show_three_month_groups_newest_first()
@@ -18,7 +18,7 @@ public sealed class TimelineTests : BunitContext
         var page = Render<Timeline>();
 
         var titles = page.FindAll("section.month h2").Select(h => h.TextContent).ToList();
-        Assert.Equal(["outubro de 2026", "agosto de 2026", "dezembro de 2025"], titles);
+        Assert.Equal(["October 2026", "August 2026", "December 2025"], titles);
         Assert.Equal(3, page.FindAll("ul.grid img").Count);
     }
 
@@ -39,7 +39,7 @@ public sealed class TimelineTests : BunitContext
     }
 
     [Fact]
-    public void An_asset_without_a_date_appears_last_under_sem_data()
+    public void An_asset_without_a_date_appears_last_under_no_date()
     {
         Use(new FakeLibrary(
             new TimelineItem(Ids.Of(4), AssetKinds.Photo, null, true, DurationSeconds: null),
@@ -49,7 +49,7 @@ public sealed class TimelineTests : BunitContext
 
         var groups = page.FindAll("section.month");
         Assert.Equal(2, groups.Count);
-        Assert.Equal("Sem data", groups[^1].QuerySelector("h2")!.TextContent);
+        Assert.Equal("No date", groups[^1].QuerySelector("h2")!.TextContent);
         Assert.Contains($"fotos/{Ids.Of(4)}", groups[^1].InnerHtml, StringComparison.Ordinal);
     }
 
@@ -75,7 +75,9 @@ public sealed class TimelineTests : BunitContext
         var page = Render<Timeline>();
 
         Assert.Equal("./?pagina=2", page.Find("nav.pages a").GetAttribute("href"));
-        Assert.Contains("sem miniatura", page.Find("ul.grid .placeholder").TextContent, StringComparison.Ordinal);
+        Assert.Equal("Older →", page.Find("nav.pages a").TextContent);
+        Assert.Equal("Pages", page.Find("nav.pages").GetAttribute("aria-label"));
+        Assert.Contains("without a thumbnail", page.Find("ul.grid .placeholder").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -85,7 +87,8 @@ public sealed class TimelineTests : BunitContext
 
         var page = Render<Timeline>();
 
-        Assert.Contains("sepiabox-ingest", page.Find("p.empty").TextContent, StringComparison.Ordinal);
+        Assert.Equal("No photos yet. Use sepiabox-ingest to upload the ones on the external drive.", page.Find("p.empty").TextContent);
+        Assert.Equal("Photos and videos", page.Find("h1").TextContent);
     }
 
     [Fact]
@@ -96,7 +99,7 @@ public sealed class TimelineTests : BunitContext
         var page = RenderPage(5);
 
         var message = page.Find("p.empty");
-        Assert.Contains("Não há mais fotos", message.TextContent, StringComparison.Ordinal);
+        Assert.Equal("No more photos. Back to the start", message.TextContent);
         Assert.Equal("./", message.QuerySelector("a")!.GetAttribute("href"));
     }
 
@@ -143,6 +146,68 @@ public sealed class TimelineTests : BunitContext
         var page = Render<Timeline>();
 
         Assert.Equal(["./?vista=grelha", "./?vista=grelha&pagina=3"], page.FindAll("nav.pages a").Select(a => a.GetAttribute("href")));
+    }
+
+    [Fact]
+    public void Month_headings_and_the_no_date_group_are_in_brazilian_portuguese_when_the_culture_is_pt_br()
+    {
+        using var culture = Cultures.Use(Cultures.BrazilianPortuguese);
+        Use(new FakeLibrary(
+            new TimelineItem(Ids.Of(20), AssetKinds.Photo, new DateTime(2019, 7, 14, 10, 32, 0), true, DurationSeconds: null),
+            new TimelineItem(Ids.Of(21), AssetKinds.Photo, null, true, DurationSeconds: null)));
+
+        var page = Render<Timeline>();
+
+        Assert.Equal(["julho de 2019", "Sem data"], page.FindAll("section.month h2").Select(h => h.TextContent));
+        Assert.Equal("Fotos e vídeos", page.Find("h1").TextContent);
+        Assert.Equal("Páginas", page.Find("nav.pages").GetAttribute("aria-label"));
+    }
+
+    [Fact]
+    public void July_2019_is_headed_july_2019_in_english()
+    {
+        Use(new FakeLibrary(new TimelineItem(Ids.Of(22), AssetKinds.Photo, new DateTime(2019, 7, 14, 10, 32, 0), true, DurationSeconds: null)));
+
+        var page = Render<Timeline>();
+
+        Assert.Equal("July 2019", page.Find("section.month h2").TextContent);
+    }
+
+    [Fact]
+    public void The_empty_and_end_of_list_messages_are_in_brazilian_portuguese_when_the_culture_is_pt_br()
+    {
+        using var culture = Cultures.Use(Cultures.BrazilianPortuguese);
+        Use(new FakeLibrary(new TimelineItem(Ids.Of(23), AssetKinds.Photo, new DateTime(2026, 1, 1), true, DurationSeconds: null)));
+
+        var beyond = RenderPage(5);
+
+        Assert.Equal("Não há mais fotos. Voltar ao início", beyond.Find("p.empty").TextContent);
+    }
+
+    [Fact]
+    public void An_empty_library_says_how_to_add_photos_in_brazilian_portuguese_when_the_culture_is_pt_br()
+    {
+        using var culture = Cultures.Use(Cultures.BrazilianPortuguese);
+        Use(new FakeLibrary());
+
+        var page = Render<Timeline>();
+
+        Assert.Equal("Ainda não há fotos. Use sepiabox-ingest para enviar as do HD externo.", page.Find("p.empty").TextContent);
+    }
+
+    [Fact]
+    public void Paging_links_are_in_brazilian_portuguese_when_the_culture_is_pt_br()
+    {
+        using var culture = Cultures.Use(Cultures.BrazilianPortuguese);
+        Use(new FakeLibrary(
+            new TimelineItem(Ids.Of(24), AssetKinds.Photo, new DateTime(2026, 1, 3), true, DurationSeconds: null),
+            new TimelineItem(Ids.Of(25), AssetKinds.Photo, new DateTime(2026, 1, 2), true, DurationSeconds: null),
+            new TimelineItem(Ids.Of(26), AssetKinds.Photo, new DateTime(2026, 1, 1), true, DurationSeconds: null))
+        { PageSize = 1 });
+
+        var page = RenderPage(2);
+
+        Assert.Equal(["← Mais recentes", "Mais antigas →"], page.FindAll("nav.pages a").Select(a => a.TextContent));
     }
 
     private void Use(FakeLibrary library) => Services.AddSingleton<ILibraryQueries>(library);

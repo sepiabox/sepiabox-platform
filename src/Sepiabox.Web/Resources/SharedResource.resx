@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Format_MonthAndYear" xml:space="preserve">
+    <value>MMMM yyyy</value>
+    <comment>Timeline month heading: a .NET date format; month names come from the culture.</comment>
+  </data>
+  <data name="Format_DateAndTime" xml:space="preserve">
+    <value>MMMM d, yyyy, HH:mm</value>
+    <comment>Capture date and time: a .NET date format; month names come from the culture.</comment>
+  </data>
+  <data name="NoDate" xml:space="preserve">
+    <value>No date</value>
+    <comment>Timeline group and title for assets without a capture date.</comment>
+  </data>
+  <data name="Kind_Photo" xml:space="preserve">
+    <value>Photo</value>
+  </data>
+  <data name="Kind_Video" xml:space="preserve">
+    <value>Video</value>
+  </data>
+  <data name="Language_Label" xml:space="preserve">
+    <value>Language</value>
+    <comment>Accessible name of the language switch.</comment>
+  </data>
+  <data name="Language_English" xml:space="preserve">
+    <value>English</value>
+    <comment>Always in its own language.</comment>
+  </data>
+  <data name="Language_BrazilianPortuguese" xml:space="preserve">
+    <value>Português (Brasil)</value>
+    <comment>Always in its own language.</comment>
+  </data>
+  <data name="Layout_UnexpectedError" xml:space="preserve">
+    <value>An unexpected error has occurred.</value>
+  </data>
+  <data name="Layout_Reload" xml:space="preserve">
+    <value>Reload</value>
+  </data>
+  <data name="Layout_Dismiss" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="SignOut" xml:space="preserve">
+    <value>Sign out</value>
+  </data>
+  <data name="Reconnect_FirstAttempt" xml:space="preserve">
+    <value>Reconnecting…</value>
+  </data>
+  <data name="Reconnect_RepeatedBefore" xml:space="preserve">
+    <value>Connection lost. Trying again in</value>
+    <comment>Followed by the number of seconds.</comment>
+  </data>
+  <data name="Reconnect_RepeatedAfter" xml:space="preserve">
+    <value>seconds.</value>
+    <comment>After the number of seconds.</comment>
+  </data>
+  <data name="Reconnect_Failed" xml:space="preserve">
+    <value>Couldn't reconnect.</value>
+  </data>
+  <data name="Reconnect_TryAgainOrReload" xml:space="preserve">
+    <value>Try again or reload the page.</value>
+  </data>
+  <data name="Reconnect_Retry" xml:space="preserve">
+    <value>Try again</value>
+  </data>
+  <data name="Reconnect_Paused" xml:space="preserve">
+    <value>The server paused the session.</value>
+  </data>
+  <data name="Reconnect_ResumeFailed" xml:space="preserve">
+    <value>Couldn't resume the session.</value>
+  </data>
+  <data name="Reconnect_Resume" xml:space="preserve">
+    <value>Resume</value>
+  </data>
+  <data name="Error_Title" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="Error_Heading" xml:space="preserve">
+    <value>Something went wrong.</value>
+  </data>
+  <data name="Error_Text" xml:space="preserve">
+    <value>The request couldn't be completed. Please try again shortly.</value>
+  </data>
+  <data name="Error_RequestId" xml:space="preserve">
+    <value>Request ID:</value>
+  </data>
+  <data name="NotFound_Title" xml:space="preserve">
+    <value>Page not found</value>
+  </data>
+  <data name="NotFound_Text" xml:space="preserve">
+    <value>This page doesn't exist.</value>
+  </data>
+  <data name="NoAccess_Title" xml:space="preserve">
+    <value>No access</value>
+  </data>
+  <data name="NoAccess_Text" xml:space="preserve">
+    <value>This account doesn't have access to Sepiabox. Ask whoever manages the library to add it, or sign in with another account.</value>
+  </data>
+  <data name="NoAccess_SignOutAndSwitch" xml:space="preserve">
+    <value>Sign out and sign in with another account</value>
+  </data>
+  <data name="NoAccess_SwitchAccount" xml:space="preserve">
+    <value>Sign in with another account</value>
+  </data>
+  <data name="NotAuthorized_Text" xml:space="preserve">
+    <value>This session no longer has access to Sepiabox.</value>
+    <comment>Shown inside a live session whose access ended.</comment>
+  </data>
+  <data name="SignIn_Title" xml:space="preserve">
+    <value>Sign in</value>
+    <comment>Page title, heading and the Development form's button.</comment>
+  </data>
+  <data name="SignIn_Text" xml:space="preserve">
+    <value>Sepiabox is private. Sign in with the Google or Microsoft account that has access.</value>
+  </data>
+  <data name="SignIn_Failed" xml:space="preserve">
+    <value>Couldn't sign in. Please try again.</value>
+  </data>
+  <data name="SignIn_WithGoogle" xml:space="preserve">
+    <value>Sign in with Google</value>
+  </data>
+  <data name="SignIn_WithMicrosoft" xml:space="preserve">
+    <value>Sign in with Microsoft</value>
+  </data>
+  <data name="SignIn_DevEmail" xml:space="preserve">
+    <value>E-mail (development only)</value>
+  </data>
+  <data name="SignIn_NotConfigured" xml:space="preserve">
+    <value>Sign-in isn't set up yet.</value>
+  </data>
+  <data name="Timeline_Heading" xml:space="preserve">
+    <value>Photos and videos</value>
+  </data>
+  <data name="Timeline_Loading" xml:space="preserve">
+    <value>Loading…</value>
+  </data>
+  <data name="Timeline_EmptyBefore" xml:space="preserve">
+    <value>No photos yet. Use</value>
+    <comment>Followed by the command name sepiabox-ingest.</comment>
+  </data>
+  <data name="Timeline_EmptyAfter" xml:space="preserve">
+    <value>to upload the ones on the external drive.</value>
+    <comment>After the command name sepiabox-ingest.</comment>
+  </data>
+  <data name="Timeline_NoMore" xml:space="preserve">
+    <value>No more photos.</value>
+  </data>
+  <data name="Timeline_BackToStart" xml:space="preserve">
+    <value>Back to the start</value>
+  </data>
+  <data name="Timeline_Pages" xml:space="preserve">
+    <value>Pages</value>
+    <comment>Accessible name of the paging links.</comment>
+  </data>
+  <data name="Timeline_Newer" xml:space="preserve">
+    <value>← Newer</value>
+  </data>
+  <data name="Timeline_Older" xml:space="preserve">
+    <value>Older →</value>
+  </data>
+  <data name="MediaCard_NoThumbnail" xml:space="preserve">
+    <value>{0} without a thumbnail</value>
+    <comment>{0} is Photo or Video.</comment>
+  </data>
+  <data name="MediaCard_Duration" xml:space="preserve">
+    <value>duration {0}</value>
+    <comment>Part of a card's accessible name; {0} is like 1:15.</comment>
+  </data>
+  <data name="Detail_Back" xml:space="preserve">
+    <value>← Timeline</value>
+  </data>
+  <data name="Detail_NoPreview" xml:space="preserve">
+    <value>No preview</value>
+  </data>
+  <data name="Detail_Camera" xml:space="preserve">
+    <value>Camera</value>
+  </data>
+  <data name="Detail_Dimensions" xml:space="preserve">
+    <value>Dimensions</value>
+  </data>
+  <data name="Detail_Duration" xml:space="preserve">
+    <value>Duration</value>
+  </data>
+  <data name="Detail_Type" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="Detail_Sources" xml:space="preserve">
+    <value>Where it is</value>
+    <comment>Heading of the list of drives and folders that hold the file.</comment>
+  </data>
+  <data name="Detail_DownloadOriginal" xml:space="preserve">
+    <value>Download the original</value>
+  </data>
+  <data name="Detail_VideoFrom" xml:space="preserve">
+    <value>Video from {0}</value>
+    <comment>Accessible name of the player; {0} is the date and time.</comment>
+  </data>
+  <data name="Detail_UndatedVideo" xml:space="preserve">
+    <value>Undated video</value>
+  </data>
+  <data name="Video_Processing" xml:space="preserve">
+    <value>Video still processing</value>
+  </data>
+  <data name="Video_PlaybackFailed" xml:space="preserve">
+    <value>Couldn't play the video. Download the original.</value>
+    <comment>Shown under the player by video.js (from data-message) when playback fails for good.</comment>
+  </data>
+  <data name="Download_Unavailable" xml:space="preserve">
+    <value>Couldn't prepare the download. Please try again shortly.</value>
+    <comment>Plain-text answer when the original's link cannot be signed.</comment>
+  </data>
+</root>

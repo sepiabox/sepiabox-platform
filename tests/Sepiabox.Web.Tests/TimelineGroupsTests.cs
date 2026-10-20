@@ -15,22 +15,16 @@ public sealed class TimelineGroupsTests
             new(Ids.Of(4), AssetKinds.Photo, new DateTime(2020, 1, 1), false, DurationSeconds: null),
         ]);
 
-        Assert.Equal(["janeiro de 2020", "julho de 2019", "Sem data"], groups.Select(g => g.Title));
+        Assert.Equal([new DateOnly(2020, 1, 1), new DateOnly(2019, 7, 1), (DateOnly?)null], groups.Select(g => g.Month));
         Assert.Equal([Ids.Of(3), Ids.Of(1)], groups[1].Items.Select(i => i.Id));
     }
 
     [Fact]
-    public void No_sem_data_group_when_every_asset_has_a_date()
+    public void No_undated_group_when_every_asset_has_a_date()
     {
         var groups = TimelineGroups.ByMonth([new(Ids.Of(1), AssetKinds.Photo, new DateTime(2024, 3, 9), false, DurationSeconds: null)]);
 
-        Assert.Equal(["março de 2024"], groups.Select(g => g.Title));
-    }
-
-    [Fact]
-    public void Formats_a_date_and_time_in_portuguese()
-    {
-        Assert.Equal("14 de julho de 2019, 10:32", PortugueseDates.DateAndTime(new DateTime(2019, 7, 14, 10, 32, 5)));
+        Assert.Equal([new DateOnly(2024, 3, 1)], groups.Select(g => g.Month));
     }
 
     [Theory]

@@ -3,9 +3,9 @@ using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
 
-public sealed class VideoPlayerTests : BunitContext
+public sealed class VideoPlayerTests : LocalizedContext
 {
-    private const string Label = "Vídeo de 9 de agosto de 2020, 18:05";
+    private const string Label = "Video from August 9, 2020, 18:05";
 
     [Fact]
     public void Plays_the_720p_version_through_the_signing_endpoint_with_its_poster_when_it_exists()
@@ -36,7 +36,7 @@ public sealed class VideoPlayerTests : BunitContext
         Assert.False(message.HasAttribute("hidden"));
         Assert.Equal("alert", message.GetAttribute("role"));
         Assert.Equal(string.Empty, message.InnerHtml);
-        Assert.Equal("Não foi possível reproduzir o vídeo. Descarregue o original.", message.GetAttribute("data-message"));
+        Assert.Equal("Couldn't play the video. Download the original.", message.GetAttribute("data-message"));
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public sealed class VideoPlayerTests : BunitContext
         Assert.Equal($"fotos/{Ids.Of(4)}/poster", poster.GetAttribute("src"));
         Assert.Equal(Label, poster.GetAttribute("alt"));
         var processing = player.Find(".processing");
-        Assert.Equal("Vídeo ainda em processamento", processing.TextContent);
+        Assert.Equal("Video still processing", processing.TextContent);
         // Static text, present when the page loads: nothing to announce as a change.
         Assert.False(processing.HasAttribute("role"));
     }
@@ -70,6 +70,26 @@ public sealed class VideoPlayerTests : BunitContext
 
         Assert.Empty(player.FindAll("video"));
         Assert.Empty(player.FindAll("img"));
+        Assert.Equal("Video still processing", player.Find(".processing").TextContent);
+    }
+
+    [Fact]
+    public void Gives_video_js_the_error_message_in_brazilian_portuguese_when_the_culture_is_pt_br()
+    {
+        using var culture = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var player = RenderPlayer(Ids.Of(6), DerivativeNames.Poster, hasProxy: true);
+
+        Assert.Equal("Não foi possível reproduzir o vídeo. Baixe o original.", player.Find(".player-error").GetAttribute("data-message"));
+    }
+
+    [Fact]
+    public void Says_it_is_still_processing_in_brazilian_portuguese_when_the_culture_is_pt_br()
+    {
+        using var culture = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var player = RenderPlayer(Ids.Of(7), posterName: null, hasProxy: false);
+
         Assert.Equal("Vídeo ainda em processamento", player.Find(".processing").TextContent);
     }
 

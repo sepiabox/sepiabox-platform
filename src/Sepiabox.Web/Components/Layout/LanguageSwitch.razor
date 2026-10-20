@@ -1,0 +1,28 @@
+@using System.Globalization
+@inject NavigationManager Navigation
+@* A form post with an antiforgery token, like sign-out. It stores the choice in the culture cookie and comes back
+   to this page with a full load (no enhanced form post), so every part of the page, and any circuit started
+   from it, is in the new language (D-050). *@
+<form class="language" method="post" action="language" data-enhance="false" aria-label="@Text["Language_Label"]">
+    <AntiforgeryToken />
+    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+    @foreach (var (culture, name) in Choices)
+    {
+        <button type="submit" name="culture" value="@culture" lang="@culture" aria-pressed="@(IsCurrent(culture) ? "true" : "false")">@name</button>
+    }
+</form>
+
+@code {
+    private IEnumerable<(string Culture, string Name)> Choices =>
+    [
+        (WebLocalization.English, Text["Language_English"]),
+        (WebLocalization.BrazilianPortuguese, Text["Language_BrazilianPortuguese"]),
+    ];
+
+    // The page as the browser asked for it (with the app's base path and the query), also when a not-found page
+    // or the error page is rendered in its place.
+    private string ReturnUrl => new Uri(Navigation.Uri).PathAndQuery;
+
+    private static bool IsCurrent(string culture) =>
+        string.Equals(CultureInfo.CurrentUICulture.Name, culture, StringComparison.OrdinalIgnoreCase);
+}

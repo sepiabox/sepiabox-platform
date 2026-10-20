@@ -7,7 +7,7 @@
     }
     else
     {
-        <span class="placeholder">@AssetKinds.Label(Item.Kind) sem miniatura</span>
+        <span class="placeholder">@Text["MediaCard_NoThumbnail", Text.KindLabel(Item.Kind)]</span>
     }
     @if (AssetKinds.IsVideo(Item.Kind))
     {
@@ -19,7 +19,7 @@
             </span>
         }
         @* A video of unknown length still says it is a video. *@
-        <span class="badge">@(Duration ?? AssetKinds.Label(Item.Kind))</span>
+        <span class="badge">@(Duration ?? Text.KindLabel(Item.Kind))</span>
     }
 </a>
 
@@ -37,8 +37,8 @@
     private string Description =>
         string.Join(", ", new[]
         {
-            AssetKinds.Label(Item.Kind),
-            Duration is { } duration ? $"duração {duration}" : null,
-            Item.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle,
+            Text.KindLabel(Item.Kind),
+            Duration is { } duration ? Text["MediaCard_Duration", duration].Value : null,
+            Text.DateOrNoDate(Item.CapturedAt),
         }.Where(part => part is not null));
 }

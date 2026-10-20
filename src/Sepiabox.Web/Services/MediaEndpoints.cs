@@ -1,5 +1,6 @@
 using Azure;
 using Azure.Identity;
+using Microsoft.Extensions.Localization;
 
 namespace Sepiabox.Web.Services;
 
@@ -51,7 +52,8 @@ public static partial class MediaEndpoints
     }
 
     public static async Task<IResult> OriginalAsync(
-        string id, HttpContext http, ILibraryQueries library, ISasUrlFactory links, ILogger<Program> log)
+        string id, HttpContext http, ILibraryQueries library, ISasUrlFactory links, IStringLocalizer<SharedResource> text,
+        ILogger<Program> log)
     {
         if (!AssetIds.IsValid(id))
         {
@@ -75,7 +77,7 @@ public static partial class MediaEndpoints
             LogOriginalSigningFailed(log, ex, id);
             Unavailable(http);
             return Results.Text(
-                "Não foi possível preparar o download. Tente novamente daqui a pouco.",
+                text["Download_Unavailable"],
                 "text/plain; charset=utf-8",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }

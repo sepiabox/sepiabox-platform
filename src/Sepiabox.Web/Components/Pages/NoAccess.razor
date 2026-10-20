@@ -2,20 +2,20 @@
 @attribute [AllowAnonymous]
 @* Static server rendering, like the sign-in page. *@
 
-<PageTitle>Sem acesso · Sepiabox</PageTitle>
+<PageTitle>@Text["NoAccess_Title"] · Sepiabox</PageTitle>
 
 <section class="auth">
-    <h1>Sem acesso</h1>
-    <p>Esta conta não tem acesso ao Sepiabox. Peça a quem gere a biblioteca para a adicionar, ou entre com outra conta.</p>
+    <h1>@Text["NoAccess_Title"]</h1>
+    <p>@Text["NoAccess_Text"]</p>
 
     <div class="providers">
         @if (_signedIn)
         {
-            <SignOutButton Label="Sair e entrar com outra conta" />
+            <SignOutButton Label="@Text["NoAccess_SignOutAndSwitch"]" />
         }
         else
         {
-            <a class="button" href="entrar">Entrar com outra conta</a>
+            <a class="button" href="entrar">@Text["NoAccess_SwitchAccount"]</a>
         }
     </div>
 </section>

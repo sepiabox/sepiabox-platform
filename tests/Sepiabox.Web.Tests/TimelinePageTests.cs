@@ -1,7 +1,5 @@
 using System.Net;
 
-using Sepiabox.Web.Services;
-
 namespace Sepiabox.Web.Tests;
 
 [Collection(CatalogGroup.Name)]
@@ -9,6 +7,9 @@ namespace Sepiabox.Web.Tests;
 public sealed class TimelinePageTests(CatalogFixture catalog)
 {
     private static readonly DateTime PhotoDate = new(2026, 10, 1);
+
+    // The month heading in English, the language of a request without a culture cookie or Accept-Language.
+    private const string PhotoMonth = "October 2026";
 
     [Fact]
     public async Task The_timeline_renders_against_a_real_catalog_without_storage_links()
@@ -18,7 +19,7 @@ public sealed class TimelinePageTests(CatalogFixture catalog)
 
         var html = await http.GetStringAsync(new Uri("/", UriKind.Relative));
 
-        Assert.Contains(PortugueseDates.MonthAndYear(PhotoDate.Year, PhotoDate.Month), html, StringComparison.Ordinal);
+        Assert.Contains(PhotoMonth, html, StringComparison.Ordinal);
         Assert.Contains($"fotos/{Ids.Of(12)}/thumb-256", html, StringComparison.Ordinal);
         Assert.DoesNotContain("sig=", html, StringComparison.Ordinal);
     }
@@ -35,16 +36,16 @@ public sealed class TimelinePageTests(CatalogFixture catalog)
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("Não há mais fotos", html, StringComparison.Ordinal);
+        Assert.Contains("No more photos", html, StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData("?pagina=abc", null)]
-    [InlineData("?pagina=99999999999", "Não há mais fotos")]
+    [InlineData("?pagina=99999999999", "No more photos")]
     public async Task Malformed_or_huge_page_numbers_are_not_errors(string query, string? expected)
     {
         // Null means page 1, which shows the photo's month.
-        expected ??= PortugueseDates.MonthAndYear(PhotoDate.Year, PhotoDate.Month);
+        expected ??= PhotoMonth;
         await using var web = await WebWithPhotoAsync();
         using var http = web.CreateSignedInClient();
 

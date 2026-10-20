@@ -2,15 +2,15 @@
 @attribute [AllowAnonymous]
 @using System.Diagnostics
 
-<PageTitle>Erro</PageTitle>
+<PageTitle>@Text["Error_Title"]</PageTitle>
 
-<h1>Algo correu mal.</h1>
-<p>Não foi possível concluir o pedido. Tente novamente daqui a pouco.</p>
+<h1>@Text["Error_Heading"]</h1>
+<p>@Text["Error_Text"]</p>
 
 @if (ShowRequestId)
 {
     <p>
-        <strong>Código do pedido:</strong> <code>@RequestId</code>
+        <strong>@Text["Error_RequestId"]</strong> <code>@RequestId</code>
     </p>
 }
 
