@@ -54,22 +54,10 @@ public sealed class ManifestImporter(
                 continue;
             }
 
-            var (wasImported, problem) = await ImportBlobAsync(manifests, blob.Name, cancellationToken);
-            if (wasImported)
+            var (wasImported, problem) = await ImportBlobAsync(manifests, blob.Name, rethrowDownloadFailures: false, cancellationToken);
+            if (Record(blob.Name, wasImported, problem, problems, warnings))
             {
                 done++;
-                // Imported without an unusable embedding: a warning, reported once, when it is imported (D-043).
-                if (problem is not null)
-                {
-                    Log.EmbeddingLeftOut(logger, blob.Name, problem);
-                    warnings.Add(new ImportProblem(blob.Name, problem));
-                }
-            }
-            else if (problem is not null)
-            {
-                // Not recorded as imported: it is reported on every run until someone fixes or deletes it.
-                Log.ManifestProblem(logger, blob.Name, problem);
-                problems.Add(new ImportProblem(blob.Name, problem));
             }
         }
 
@@ -77,11 +65,51 @@ public sealed class ManifestImporter(
     }
 
     /// <summary>
+    /// Imports the one manifest an event named (S-033). A manifest imported before is imported again, which
+    /// changes nothing (D-032); a manifest gone by now is neither imported nor a problem. A failure to download
+    /// it is thrown, not reported, so the event is delivered again instead of being dropped.
+    /// </summary>
+    public async Task<ImportResult> ImportOneAsync(BlobContainerClient manifests, string blobName, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(manifests);
+        var problems = new List<ImportProblem>();
+        var warnings = new List<ImportProblem>();
+        var (wasImported, problem) = await ImportBlobAsync(manifests, blobName, rethrowDownloadFailures: true, cancellationToken);
+        var done = Record(blobName, wasImported, problem, problems, warnings) ? 1 : 0;
+        return new ImportResult(done, 0, problems, warnings);
+    }
+
+    /// <summary>Logs and lists what happened to one manifest; true when it was imported.</summary>
+    private bool Record(string blobName, bool imported, string? problem, List<ImportProblem> problems, List<ImportProblem> warnings)
+    {
+        if (imported)
+        {
+            // Imported without an unusable embedding: a warning, reported once, when it is imported (D-043).
+            if (problem is not null)
+            {
+                Log.EmbeddingLeftOut(logger, blobName, problem);
+                warnings.Add(new ImportProblem(blobName, problem));
+            }
+
+            return true;
+        }
+
+        if (problem is not null)
+        {
+            // Not recorded as imported: it is reported on every run until someone fixes or deletes it.
+            Log.ManifestProblem(logger, blobName, problem);
+            problems.Add(new ImportProblem(blobName, problem));
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Imports one manifest blob. Neither imported nor a problem means the blob was gone; imported with a problem
     /// means an embedding was left out.
     /// </summary>
     private async Task<(bool Imported, string? Problem)> ImportBlobAsync(
-        BlobContainerClient manifests, string blobName, CancellationToken cancellationToken)
+        BlobContainerClient manifests, string blobName, bool rethrowDownloadFailures, CancellationToken cancellationToken)
     {
         string json, etag;
         try
@@ -95,7 +123,7 @@ public sealed class ManifestImporter(
             // Deleted between the listing and the download: nothing left to import.
             return (false, null);
         }
-        catch (RequestFailedException ex)
+        catch (RequestFailedException ex) when (!rethrowDownloadFailures)
         {
             return (false, $"could not be downloaded: {ex.Message}");
         }

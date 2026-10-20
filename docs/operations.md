@@ -7,7 +7,7 @@ Steps that need a person, because they depend on accounts, consents or external 
 | Step | Needed for | Where |
 |---|---|---|
 | Azure subscription billed in EUR, with Owner access to the `rg-sepiabox` resource group | S-029 onwards (deploy) | Azure portal |
-| Resource providers registered on the subscription, once, by someone with rights on the subscription (the deploy identity only has rights on `rg-sepiabox`, and a deploy that needs an unregistered provider fails, as the first sepiabox-infra deploy did on `Microsoft.Automation`): Azure portal → Subscriptions → your subscription → Settings → Resource providers → select each and Register; or `az provider register --namespace <name>` for each of `Microsoft.Automation`, `Microsoft.OperationalInsights`, `Microsoft.Insights`, `Microsoft.AlertsManagement`, `Microsoft.CostManagement`, `Microsoft.App`, `Microsoft.DBforPostgreSQL`, `Microsoft.Storage`, `Microsoft.KeyVault`, `Microsoft.ContainerRegistry`, `Microsoft.ManagedIdentity`. Check with `az provider show --namespace <name> --query registrationState -o tsv` (`Registered`) | S-029 onwards (deploy), S-030, S-031, S-032 | Azure portal → Subscriptions |
+| Resource providers registered on the subscription, once, by someone with rights on the subscription (the deploy identity only has rights on `rg-sepiabox`, and a deploy that needs an unregistered provider fails, as the first sepiabox-infra deploy did on `Microsoft.Automation`): Azure portal → Subscriptions → your subscription → Settings → Resource providers → select each and Register; or `az provider register --namespace <name>` for each of `Microsoft.Automation`, `Microsoft.OperationalInsights`, `Microsoft.Insights`, `Microsoft.AlertsManagement`, `Microsoft.CostManagement`, `Microsoft.App`, `Microsoft.DBforPostgreSQL`, `Microsoft.Storage`, `Microsoft.KeyVault`, `Microsoft.ContainerRegistry`, `Microsoft.ManagedIdentity`, `Microsoft.ServiceBus`, `Microsoft.EventGrid`. Check with `az provider show --namespace <name> --query registrationState -o tsv` (`Registered`) | S-029 onwards (deploy), S-030, S-031, S-032, S-033 | Azure portal → Subscriptions |
 | Entra ID app registration with a federated credential (OIDC) for `sepiabox/sepiabox-platform` and `sepiabox/sepiabox-infra`, environment `production` | S-029, S-034 | Azure portal → Entra ID |
 | GitHub variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` and a `production` environment with manual approval | S-029, S-034 | GitHub → Settings |
 | GitHub variable `BUDGET_ALERT_EMAILS` in `sepiabox-infra`: comma-separated e-mails that receive the budget and cost-anomaly alerts | S-029 | GitHub → sepiabox-infra → Settings → Variables |
@@ -37,7 +37,7 @@ Checks only a person can do. A story whose automated criteria pass is `done` and
 | After `scripts/deploy.sh` (see "Deploying to Azure"): (1) `az containerapp job execution list --name sepiabox-migrate --resource-group rg-sepiabox --query "[0].{status:properties.status,end:properties.endTime}" -o table` shows `Succeeded`, and its end time is before the `createdTime` of the web's newest revision in `az containerapp revision list --name sepiabox-web --resource-group rg-sepiabox --query "[].{name:name,created:properties.createdTime}" -o table`. (2) With `host=$(az containerapp show --name sepiabox-web --resource-group rg-sepiabox --query properties.configuration.ingress.fqdn -o tsv)`, `curl -s -o /dev/null -w "%{http_code}\n" https://$host/health` prints `200` (the first call after scale to zero can take up to a minute). (3) `curl -s -o /dev/null -w "%{http_code}\n" http://$host/health` prints `301` or `308` (the ingress sends plain HTTP to HTTPS). (4) `curl -s -o /dev/null -w "%{http_code}\n" -H "Host: example.com" https://$host/health` does not print `200` (`AllowedHosts`; the ingress itself may answer 404) | S-032 |
 | After the first deploy has settled (the web may restart a few times while its Key Vault role propagates, see "Secrets in Azure"), the owner's secrets are in Key Vault and the default host's `/signin-google` and `/signin-microsoft` are on the OAuth clients: sign in with Google and with Microsoft on `https://<Container Apps default host>`; restart the web (`az containerapp revision restart --name sepiabox-web --resource-group rg-sepiabox --revision $(az containerapp show --name sepiabox-web --resource-group rg-sepiabox --query properties.latestRevisionName -o tsv)`) and reload: still signed in; deploy again (a new revision) and reload: still signed in; then try an account not on the list: it lands on the no-access page. Also check the key ring exists: the `dataprotection` container has a `keys.xml` blob (Azure portal → storage account → Containers) | S-058 |
 | The same on `https://app.sepiabox.com` once the custom domain is set | S-035 |
-| `upload` one folder to Azure: its assets appear in the cloud timeline without running anything else; the dead-letter count stays 0 | S-033 |
+| After a deploy and `sepiabox-import-all` (see "Automatic import"): `upload` one small folder to Azure; within a few minutes, without running anything else, `az containerapp job execution list --name sepiabox-import --resource-group rg-sepiabox --query "[0].properties.status" -o tsv` shows `Succeeded`, its assets appear in the timeline at the Container Apps default host, and the dead-letter count (see "Automatic import") is `0` | S-033 |
 | After the GeoNames job (`az containerapp job start --name sepiabox-geonames --resource-group rg-sepiabox`): a photo taken in Lisbon shows "Lisbon" on its detail page in Azure | S-059 |
 | The first description search after a cold start answers within 30 s, later ones within 2 s | S-056 |
 | MVP acceptance on the real data: after uploading the drive and the import finishing, ask in the web a few counting questions (photos per year, videos per year, items with no date) and compare each answer with `sepiabox-ingest report` on every work folder that was uploaded, in upload order; no test data is ever uploaded to Azure | S-054 |
@@ -55,10 +55,11 @@ azd env select sepiabox
 
 It refuses to start unless the selected azd environment is `sepiabox` in `francecentral`, then:
 
-1. `azd provision`: PostgreSQL `sepiabox-pg` (B1ms, 32 GB, auto-grow off, PostgreSQL 17, `vector` and `postgis` allowed), the storage account with its private containers (`originals`, `derivatives`, `manifests`, `incoming`, `exports`, `dataprotection`), Key Vault, the container registry (Basic), Application Insights on `sepiabox-logs`, the Container Apps environment and the two managed identities. The first run asks nothing: azd generates the PostgreSQL login and password and keeps them in `.azure/`.
+1. `azd provision`: PostgreSQL `sepiabox-pg` (B1ms, 32 GB, auto-grow off, PostgreSQL 17, `vector` and `postgis` allowed), the storage account with its private containers (`originals`, `derivatives`, `manifests`, `incoming`, `exports`, `dataprotection`), Key Vault, the container registry (Basic), Application Insights on `sepiabox-logs`, the Container Apps environment, the two managed identities (web and jobs), the Service Bus namespace `sepiabox-sb` (Basic) with its `manifests` queue, and the Event Grid system topic that sends new manifests to it (S-033). The first run asks nothing: azd generates the PostgreSQL login and password and keeps them in `.azure/`.
 2. `azd deploy migrate`: builds the worker image and updates the `sepiabox-migrate` Container Apps job (manual trigger, 10 minutes, no retries).
 3. Starts one execution of `sepiabox-migrate` (`sepiabox-worker migrate` against the cloud database) and waits for it, up to 15 minutes.
-4. Only if it succeeded, `azd deploy web`: builds the web image and creates the `sepiabox-web` revision (0–1 replicas, HTTPS ingress, `AllowedHosts` = its default host).
+4. Only if it succeeded, `azd deploy import` and `azd deploy import-all`: the import jobs (S-033), which expect the new schema and never migrate (D-063).
+5. Then `azd deploy web`: builds the web image and creates the `sepiabox-web` revision (0–1 replicas, HTTPS ingress, `AllowedHosts` = its default host).
 
 If the migration fails, is stopped or times out, the script stops before step 4 and the running web is left as it was; the job's logs are in the `sepiabox-logs` workspace (table `ContainerAppConsoleLogs_CL`, container `migrate`). Fix the cause and run the script again: migrations already applied are skipped. `azd up` and a bare `azd deploy` are refused by the `predeploy` hook in `azure.yaml`, since they would start the web before the migrations.
 
@@ -73,7 +74,7 @@ If the migration fails, is stopped or times out, the script stops before step 4 
 3. Build and push the worker image: `az acr login --name <registry name>` (from `azd env get-values`, `AZURE_CONTAINER_REGISTRY_ENDPOINT` without `.azurecr.io`), then `dotnet publish src/Sepiabox.Worker -c Release -t:PublishContainer -p:ContainerRegistry=<registry endpoint> -p:ContainerRepository=sepiabox/migrate -p:ContainerImageTag=$(git rev-parse --short HEAD)`.
 4. Create or update the job: `az deployment group create --resource-group rg-sepiabox --template-file .azure/publish/migrate-containerapp.module.bicep --parameters migrate_containerimage=<registry endpoint>/sepiabox/migrate:<tag> ...`, giving every other parameter of the module its value from `azd env get-values`: the `AZURE_CONTAINER_APPS_ENVIRONMENT_*` and `AZURE_CONTAINER_REGISTRY_*` values give the `aca_outputs_*` parameters, and the vault and identity outputs give `vault_outputs_name` and `migrate_identity_outputs_*`.
 5. Run the job and wait for it as the script does: `az containerapp job start --name sepiabox-migrate --resource-group rg-sepiabox`, then `az containerapp job execution show ... --query properties.status` until `Succeeded`.
-6. Only then the web: the same as steps 3 and 4 with `src/Sepiabox.Web`, repository `sepiabox/web` and `web-containerapp.module.bicep`.
+6. Only then the import jobs and the web: the same as steps 3 and 4 with the worker image (repository `sepiabox/import`) and `import-containerapp.module.bicep`, then `import-all-containerapp.module.bicep`, and with `src/Sepiabox.Web`, repository `sepiabox/web` and `web-containerapp.module.bicep`.
 
 After the first deploy, record here which of the two behaviours azd showed (single-resource deploys and the job worked, or the manual steps were needed), so the script can be fixed if needed.
 
@@ -109,6 +110,27 @@ On the first deploy, and whenever the web's identity is new, its role on the vau
 ## MVP acceptance on the real data
 
 After uploading the drive to Azure (below) and the automatic import finishing, run `sepiabox-ingest report <workdir>...` on every work folder you have uploaded, in the order you uploaded them (an asset in several folders counts once and takes its date from the last one, as the cloud does): it counts unique assets per year and kind, and the undated ones, from its manifests, the same unit as the catalog (an exact duplicate counts once; `scan` counts files instead). Then open the app and ask, in English and in Portuguese: photos per year for three years, videos per year for two years, and how many items have no date. Each answer must equal `report`'s number. A difference is reported as an issue with the question, both numbers and the year. Cities are not part of this check (`report` has no place names). No test data is ever uploaded to Azure for this (S-054, D-056).
+
+## Automatic import
+
+Every manifest `upload` writes is imported without anything else to run (S-033, D-063): Event Grid sends the storage account's BlobCreated events for the `manifests` container to the `manifests` queue of `sepiabox-sb` (Service Bus Basic), and the `sepiabox-import` job, woken by KEDA within about 30 seconds of a message, imports until the queue is empty (one execution at a time, up to 30 minutes, then it scales back to zero). An import that fails because of the database or storage gives the message back; after 5 deliveries it goes to the dead-letter queue. A manifest that is itself invalid is logged and not retried.
+
+**Backfill and reconcile.** `sepiabox-import-all` imports every new or changed manifest in the container (`import --once`; what is already imported is skipped). Run it once after the first deploy, for manifests uploaded before this story, and whenever the dead-letter count is not zero or the queue was disabled (the €45 shutdown disables it; Event Grid then retries for 24 hours and gives up):
+
+```bash
+az containerapp job start --name sepiabox-import-all --resource-group rg-sepiabox
+az containerapp job execution list --name sepiabox-import-all --resource-group rg-sepiabox --query "[0].properties.status" -o tsv
+```
+
+**Dead letters.** Check the count:
+
+```bash
+az servicebus queue show --resource-group rg-sepiabox --namespace-name sepiabox-sb --name manifests --query countDetails.deadLetterMessageCount
+```
+
+When it is not `0`: find why in the job's logs (the `sepiabox-logs` workspace, table `ContainerAppConsoleLogs_CL`, container `import`; a database that was stopped or a failed deploy are the usual causes), fix the cause, then run `sepiabox-import-all`, which imports whatever the dead-lettered messages named. Then empty the dead-letter queue: Azure portal → `sepiabox-sb` → Queues → `manifests` → Service Bus Explorer → Dead-letter → Purge (your account needs *Azure Service Bus Data Owner* on the namespace for it). A manifest reported as invalid by both jobs needs a new `process` and `upload` of its file.
+
+**If manifests wait and the job never starts.** The job's scale rule reads the queue's length with the jobs' identity (`jobs-identity`), which has *Azure Service Bus Data Receiver* on the queue. If `az containerapp job execution list --name sepiabox-import --resource-group rg-sepiabox` stays empty while messages wait (`az servicebus queue show ... --query countDetails.activeMessageCount`), look for scale rule errors in the environment's system logs (`ContainerAppSystemLogs_CL`) and report them: KEDA may need more than the receiver role to read the length. Meanwhile `sepiabox-import-all` imports them.
 
 ## Uploading the drive to Azure
 
@@ -173,4 +195,4 @@ Without any OAuth client, in Development, `/sign-in` shows an e-mail field inste
 
 ## Emergency shutdown
 
-See `sepiabox-infra/scripts/emergency-stop.sh` (turns off web traffic, stops PostgreSQL and disables the queue; keeps the data).
+See `sepiabox-infra/scripts/emergency-stop.sh` (turns off web traffic, stops PostgreSQL and disables the queue; keeps the data). After `resume.sh`, run `sepiabox-import-all` (see "Automatic import") for the manifests uploaded while the queue was disabled.

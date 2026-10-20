@@ -16,6 +16,8 @@ public sealed class DeployScriptTests : IDisposable
     private const string JobStop =
         $"az containerapp job stop --name sepiabox-migrate --resource-group {ShutdownRunbook.ResourceGroup} --job-execution-name sepiabox-migrate-run1";
     private const string DeployWeb = "azd deploy web --no-prompt";
+    private const string DeployImport = "azd deploy import --no-prompt";
+    private const string DeployImportAll = "azd deploy import-all --no-prompt";
 
     private readonly string _stubs = Path.Combine(Path.GetTempPath(), "sepiabox-deploy-" + Guid.NewGuid().ToString("N"));
     private readonly string _calls;
@@ -84,12 +86,12 @@ public sealed class DeployScriptTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Equal(
-            ["azd provision --no-prompt", "azd deploy migrate --no-prompt", JobStart, JobStatus, DeployWeb],
+            ["azd provision --no-prompt", "azd deploy migrate --no-prompt", JobStart, JobStatus, DeployImport, DeployImportAll, DeployWeb],
             Calls().Where(call => !call.StartsWith("azd env", StringComparison.Ordinal)
                 && !call.StartsWith("az group", StringComparison.Ordinal)
                 && !call.StartsWith("az postgres", StringComparison.Ordinal)));
         // What azure.yaml's predeploy hook checks, so that only this script deploys.
-        Assert.Equal(["1", "1"], File.ReadAllLines(_calls + ".guard"));
+        Assert.Equal(["1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
         Assert.Contains("Migrations applied.", result.Output, StringComparison.Ordinal);
     }
 
@@ -118,6 +120,8 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("azd deploy migrate --no-prompt", Calls());
         Assert.DoesNotContain(DeployWeb, Calls());
+        Assert.DoesNotContain(DeployImport, Calls());
+        Assert.DoesNotContain(DeployImportAll, Calls());
         Assert.Contains(
             $"ended as {statuses.Split(' ')[^1]}; the web was not deployed.", result.Error, StringComparison.Ordinal);
     }
@@ -134,6 +138,8 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Equal(1, result.ExitCode);
         Assert.Contains(JobStop, Calls());
         Assert.DoesNotContain(DeployWeb, Calls());
+        Assert.DoesNotContain(DeployImport, Calls());
+        Assert.DoesNotContain(DeployImportAll, Calls());
         Assert.Contains("did not finish in 1s", result.Error, StringComparison.Ordinal);
         Assert.Contains(message, result.Error, StringComparison.Ordinal);
         Assert.Contains("may be partly applied", result.Error, StringComparison.Ordinal);
@@ -148,6 +154,8 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Contains("returned no execution name", result.Error, StringComparison.Ordinal);
         Assert.DoesNotContain(Calls(), call => call.StartsWith("az containerapp job execution", StringComparison.Ordinal));
         Assert.DoesNotContain(DeployWeb, Calls());
+        Assert.DoesNotContain(DeployImport, Calls());
+        Assert.DoesNotContain(DeployImportAll, Calls());
     }
 
     [UnixFact]

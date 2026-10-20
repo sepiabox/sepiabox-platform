@@ -19,12 +19,12 @@ Every manifest sent from the PC must be imported without intervention and withou
 - Processing files without a manifest (S-036).
 
 ### Acceptance criteria
-- [ ] Given an Event Grid BlobCreated payload, then the worker extracts the manifest name.
-- [ ] Given an event from another container, then it is ignored.
-- [ ] Given the generated Bicep, then the subscription has the `subjectBeginsWith` filter and the queue has `maxDeliveryCount` 5.
-- [ ] Given the generated Bicep, then the job has parallelism 1.
-- [ ] Given the generated Bicep, then the namespace is `sepiabox-sb` and the queue `manifests` (a test compares them with S-030's runbook constants).
-- [ ] Given the generated Bicep, then `sepiabox-import-all` exists with a manual trigger and the worker identity has exactly the roles in Scope.
+- [x] Given an Event Grid BlobCreated payload, then the worker extracts the manifest name.
+- [x] Given an event from another container, then it is ignored.
+- [x] Given the generated Bicep, then the subscription has the `subjectBeginsWith` filter and the queue has `maxDeliveryCount` 5.
+- [x] Given the generated Bicep, then the job has parallelism 1.
+- [x] Given the generated Bicep, then the namespace is `sepiabox-sb` and the queue `manifests` (a test compares them with S-030's runbook constants).
+- [x] Given the generated Bicep, then `sepiabox-import-all` exists with a manual trigger and the worker identity has exactly the roles in Scope.
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), when I `upload` one folder to Azure, then its assets appear in the cloud catalog (the timeline at the Container Apps default host) without running anything else, and the dead-letter count stays 0.
 
 ### Technical notes

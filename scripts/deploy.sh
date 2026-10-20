@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploys Sepiabox to Azure (S-032) in the only safe order: the infrastructure, the migrate job's new
 # image, one run of `sepiabox-worker migrate` against the cloud database, and only when it succeeded the
-# web's new revision. A failed or stuck migration stops here and the running web is left as it was.
+# import jobs (S-033), which expect the new schema and never migrate (D-063), and the web's new revision.
+# A failed or stuck migration stops here and the running jobs and web are left as they were.
 #
 # Needs azd, the Azure CLI with the containerapp extension, the .NET SDK and Docker, signed in to both
 # CLIs, and the azd environment `sepiabox` in francecentral (docs/operations.md).
@@ -95,5 +96,8 @@ while true; do
   sleep "$poll_seconds"
 done
 echo "Migrations applied."
+
+azd deploy import --no-prompt
+azd deploy import-all --no-prompt
 
 azd deploy web --no-prompt

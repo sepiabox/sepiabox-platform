@@ -1,3 +1,5 @@
+using Azure.Identity;
+using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -9,6 +11,8 @@ using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
 using Sepiabox.Worker;
+using Sepiabox.Worker.Azure;
+using Sepiabox.Worker.Events;
 using Sepiabox.Worker.Importing;
 
 if (args is ["-h" or "--help" or "help"])
@@ -40,7 +44,7 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
     // come from the environment, which is how Aspire and Container Apps pass them.
     var builder = Host.CreateApplicationBuilder();
     builder.AddServiceDefaults();
-    if (command.Action == WorkerAction.ImportOnce)
+    if (command.Action is WorkerAction.ImportOnce or WorkerAction.ImportFromQueue)
     {
         builder.AddAzureBlobServiceClient("blobs");
         builder.Services.AddSingleton<ManifestValidator>();
@@ -79,6 +83,16 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         }
     }
 
+    if (command.Action == WorkerAction.ImportFromQueue)
+    {
+        // The Azure implementation of the queue (D-051): Event Grid's events, delivered to Service Bus.
+        await using var queue = CreateServiceBusQueue(services.GetRequiredService<IConfiguration>());
+        var manifestsContainer = services.GetRequiredService<BlobServiceClient>().GetBlobContainerClient(BlobLayout.ManifestsContainer);
+        var fromQueue = await ActivatorUtilities.CreateInstance<QueueImport>(services, queue, manifestsContainer).RunAsync(cancellationToken);
+        Log.ImportFinished(logger, fromQueue.Imported, fromQueue.Unchanged, fromQueue.Problems.Count, fromQueue.Warnings.Count);
+        return fromQueue.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
+    }
+
     if (command.Action != WorkerAction.ImportOnce)
     {
         return ExitCodes.Success;
@@ -88,4 +102,19 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
     var result = await services.GetRequiredService<ManifestImporter>().ImportOnceAsync(manifests, cancellationToken);
     Log.ImportFinished(logger, result.Imported, result.Unchanged, result.Problems.Count, result.Warnings.Count);
     return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
+}
+
+static ServiceBusBlobEventQueue CreateServiceBusQueue(IConfiguration configuration)
+{
+    var ns = configuration["ServiceBus:Namespace"] ?? throw new InvalidOperationException("ServiceBus:Namespace is not set.");
+    var queue = configuration["ServiceBus:Queue"] ?? throw new InvalidOperationException("ServiceBus:Queue is not set.");
+    // The job's managed identity, named by AZURE_CLIENT_ID, which the AppHost sets. The client is owned by the
+    // receiver's queue only for this command, so it is disposed with it.
+    var client = new ServiceBusClient(ns, new DefaultAzureCredential());
+    var receiver = client.CreateReceiver(queue, new ServiceBusReceiverOptions
+    {
+        ReceiveMode = ServiceBusReceiveMode.PeekLock,
+        PrefetchCount = 0,
+    });
+    return new ServiceBusBlobEventQueue(client, receiver);
 }
