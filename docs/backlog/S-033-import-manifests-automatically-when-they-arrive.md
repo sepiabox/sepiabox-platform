@@ -1,6 +1,6 @@
 ## S-033 — Import manifests automatically when they arrive
 **Epic:** Cloud and costs
-**Depends on:** S-032, S-008
+**Depends on:** S-032, S-008, S-058
 **Priority:** High
 **Size:** M
 
@@ -12,7 +12,7 @@ Every manifest sent from the PC must be imported without intervention and withou
 - Event Grid: system topic for the Storage account; `BlobCreated` subscription filtered by `subjectBeginsWith: /blobServices/default/containers/manifests/` → queue.
 - Worker as an event-driven Container Apps Job (KEDA `azure-servicebus`): parallelism 1, one execution at a time, 30 min timeout, 1 vCPU / 2 GiB; the `import --from-queue` command processes messages until the queue is empty.
 - Backfill and reconcile: a manual-trigger job `sepiabox-import-all` (same image) running `sepiabox-worker import --once`, for manifests uploaded before this story and after a message was dead-lettered; the import is idempotent (D-032, D-034).
-- Worker job identity (both jobs): *Storage Blob Data Reader* on the storage account, *Azure Service Bus Data Receiver* on the `manifests` queue (event-driven job only), *Key Vault Secrets User* for the catalog connection.
+- Worker job identity (both jobs, from S-058): adds *Azure Service Bus Data Receiver* on the `manifests` queue for the event-driven job.
 - `docs/operations.md`: how to start `sepiabox-import-all`, and how to check the dead-letter count (`az servicebus queue show --namespace-name sepiabox-sb --name manifests --query countDetails.deadLetterMessageCount`) and what to do when it is not zero.
 
 ### Out of scope

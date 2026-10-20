@@ -25,7 +25,7 @@
 - [ ] Given a counting answer, when it is displayed, then the card shows the number and the sentence, in English and in pt-BR.
 - [ ] Given a count with a `visual` filter, when it is executed, then no number is returned and the UI shows the results with the explanation.
 - [ ] Given 3 undated assets and a count with `years=[2019]`, when it is displayed, then the card shows "3 items have no date" next to the number.
-- [ ] Given the golden set of S-025, when at least 10 counting questions (English and Brazilian Portuguese: by year, kind, place, source, "on this day") with their expected DSL are added, then they pass in CI (recorded) and in the required live run before `done`, as in S-025.
+- [ ] Given the golden set of S-025, when at least 10 counting questions (English and Brazilian Portuguese: by year, kind, place, source, "on this day") with their expected DSL are added, then they pass in CI (recorded) and in the required live run before `done`, compared by meaning as in S-025: the expected and returned DSL are counted against the seeded fixture catalog and the numbers must be equal (one recorded retry per question).
 
 ### Technical notes
 - Extends `search.v1.json`, the executor and the prompt.

@@ -11,7 +11,7 @@ The CLIP text encoder turns "snow" into a vector comparable with the photo embed
 - Text model `Xenova/clip-vit-base-patch32` (`onnx/text_model.onnx`, `vocab.json`, `merges.txt`) in `models.json`.
 - CLIP BPE tokenizer in C# (lowercase, CLIP regex, `</w>` suffix, start 49406, end 49407, length 77).
 - DSL: `visual: { "text": "snow", "minScore": 0.2 }`; sorts by similarity, combinable with the other filters.
-- UI: "Describe (in English)" box in the search bar ("Descrever (em inglês)" in pt-BR).
+- UI: "Describe (in English)" box in the search bar ("Descrever (em inglês)" in pt-BR), hidden in every environment while the text model is missing or failed to load (S-056 adds Production's health reporting and the API's 503).
 
 ### Out of scope
 - Translation from Portuguese (S-025).
@@ -21,6 +21,7 @@ The CLIP text encoder turns "snow" into a vector comparable with the photo embed
 - [ ] Given a text, then the embedding has 512 values and norm 1.
 - [ ] Given assets with known synthetic embeddings, when I search with a vector close to one of them, then that one comes first.
 - [ ] Given `visual` with `years=[2019]`, then only assets from 2019 come back, sorted by similarity.
+- [ ] Given the web without the text model, when the timeline renders, then the description box is not shown and the other filters work.
 
 ### Technical notes
 - Try `Microsoft.ML.Tokenizers` (BPE with end-of-word suffix); if it does not reproduce the reference ids, implement CLIP's BPE (~150 lines).

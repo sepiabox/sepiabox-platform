@@ -1,6 +1,6 @@
 ## S-035 — Serve the app at app.sepiabox.com
 **Epic:** Cloud and costs
-**Depends on:** S-032
+**Depends on:** S-032, S-058
 **Priority:** Low
 **Size:** S
 
