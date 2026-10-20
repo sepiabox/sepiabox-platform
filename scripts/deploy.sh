@@ -14,7 +14,7 @@ readonly location="francecentral"
 readonly resource_group="rg-sepiabox"
 readonly postgres_server="sepiabox-pg"
 readonly migrate_job="sepiabox-migrate"
-readonly service_bus="sepiabox-sb"
+readonly service_bus="sepiabox-bus"
 readonly queue="manifests"
 # The job's replica timeout is 10 minutes; the default leaves time for a cold start of the environment.
 # Both can be overridden, which the tests use to avoid waiting.
