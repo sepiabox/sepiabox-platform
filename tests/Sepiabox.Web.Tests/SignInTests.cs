@@ -42,7 +42,7 @@ public sealed class SignInTests
         using var response = await http.GetAsync(Url("/"));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("Sair", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Contains("Sign out", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -196,11 +196,11 @@ public sealed class SignInTests
 
         var html = await http.GetStringAsync(Url("/entrar?ReturnUrl=%2Ffotos%2Fabc"));
 
-        Assert.Contains("Entrar com Google", html, StringComparison.Ordinal);
-        Assert.Contains("Entrar com Microsoft", html, StringComparison.Ordinal);
+        Assert.Contains("Sign in with Google", html, StringComparison.Ordinal);
+        Assert.Contains("Sign in with Microsoft", html, StringComparison.Ordinal);
         Assert.Contains("href=\"entrar/google?returnUrl=%2Ffotos%2Fabc\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("dev-login", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("Não foi possível entrar", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("class=\"error\"", html, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -339,7 +339,7 @@ public sealed class SignInTests
         Assert.Equal("/entrar?erro=1", callback.Headers.Location!.OriginalString);
         Assert.Null(SessionCookie(callback));
         var page = await http.GetStringAsync(Url("/entrar?erro=1"));
-        Assert.Contains("Não foi possível entrar", page, StringComparison.Ordinal);
+        Assert.Contains("Couldn&#x27;t sign in", page, StringComparison.Ordinal);
     }
 
     [Theory]

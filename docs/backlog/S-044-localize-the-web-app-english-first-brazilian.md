@@ -22,15 +22,15 @@ The owner decided that the app UI is English by default and localizable, with Br
 - Storing a per-user language preference in the catalog (the cookie is enough for two users).
 
 ### Acceptance criteria
-- [ ] Given a request with `Accept-Language: en-US` and no culture cookie, when the timeline renders, then its text is English and `<html lang="en">`.
-- [ ] Given `Accept-Language: pt-PT` (or `pt-BR`, or `pt`), when the timeline renders, then its text is Brazilian Portuguese and `<html lang="pt-BR">`.
-- [ ] Given `Accept-Language: de-DE`, when a page renders, then it is English.
-- [ ] Given a culture cookie for `en` and `Accept-Language: pt-BR`, when a page renders, then it is English (the explicit choice wins).
-- [ ] Given the language switch, when I choose Português (Brasil) on the photo detail, then I return to the same photo with the text in `pt-BR`.
-- [ ] Given each culture, when the timeline groups July 2019, then the heading is "July 2019" in English and "julho de 2019" in `pt-BR`; and the detail page shows the date and time in that culture's format.
-- [ ] Given the `pt-BR` resources, when they are checked, then every key of the English resources has a non-empty `pt-BR` value and none uses the pt-PT words listed in D-050 or "descarregar" in any form (a test over the `.resx` files).
-- [ ] Given the pages listed in Scope, when bUnit renders each in both cultures, then the expected text appears and no Portuguese literal remains in the Razor components, scripts or C# of `Sepiabox.Web` (a source check for the known literals).
-- [ ] Given a video without a proxy, when its detail page renders in each culture, then the processing message is in that culture; and the player's `data-message` is in that culture.
+- [x] Given a request with `Accept-Language: en-US` and no culture cookie, when the timeline renders, then its text is English and `<html lang="en">`.
+- [x] Given `Accept-Language: pt-PT` (or `pt-BR`, or `pt`), when the timeline renders, then its text is Brazilian Portuguese and `<html lang="pt-BR">`.
+- [x] Given `Accept-Language: de-DE`, when a page renders, then it is English.
+- [x] Given a culture cookie for `en` and `Accept-Language: pt-BR`, when a page renders, then it is English (the explicit choice wins).
+- [x] Given the language switch, when I choose Português (Brasil) on the photo detail, then I return to the same photo with the text in `pt-BR`.
+- [x] Given each culture, when the timeline groups July 2019, then the heading is "July 2019" in English and "julho de 2019" in `pt-BR`; and the detail page shows the date and time in that culture's format.
+- [x] Given the `pt-BR` resources, when they are checked, then every key of the English resources has a non-empty `pt-BR` value and none uses the pt-PT words listed in D-050 or "descarregar" in any form (a test over the `.resx` files).
+- [x] Given the pages listed in Scope, when bUnit renders each in both cultures, then the expected text appears and no Portuguese literal remains in the Razor components, scripts or C# of `Sepiabox.Web` (a source check for the known literals).
+- [x] Given a video without a proxy, when its detail page renders in each culture, then the processing message is in that culture; and the player's `data-message` is in that culture.
 
 ### Technical notes
 - The build sets `InvariantGlobalization` in `Directory.Build.props`, where `new CultureInfo("pt-BR")` throws and culture formatting is invariant. Turn it off for `Sepiabox.Web` only (the other projects keep it) and check that the web's container base image includes ICU (the default `aspnet` Debian/Ubuntu images do; chiseled or Alpine images need the ICU variant); a test that `CultureInfo.GetCultureInfo("pt-BR").DateTimeFormat.MonthNames[6]` is "julho" guards it. If ICU is unavailable, keep explicit month names per culture in the resources instead, and record the choice.
@@ -38,7 +38,7 @@ The owner decided that the app UI is English by default and localizable, with Br
 - In interactive server components the circuit keeps the culture of the request that started it; the switch reloads the page (forced navigation), so no circuit-level culture change is needed.
 - One `.resx` per component folder or a shared `Resources/SharedResource.resx`, whichever keeps keys simplest; English text as the neutral resource, `pt-BR` as the satellite.
 - Keep the existing tests' intent; they assert English text by default and add `pt-BR` cases where a page has text.
-- Decisions: D-048, D-049, D-050.
+- Decisions: D-048, D-049, D-050, D-058.
 
 ### Expected tests
 - Unit: culture selection (cookie, `pt*` mapping, fallback), resource completeness and the pt-PT word check, date formatting per culture.

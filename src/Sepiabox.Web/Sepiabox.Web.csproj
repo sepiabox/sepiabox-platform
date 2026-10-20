@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <!-- The UI formats dates per culture (en, pt-BR), which needs ICU's culture data (D-050, D-058). -->
+    <InvariantGlobalization>false</InvariantGlobalization>
     <!-- OAuth clients and the access list come from user secrets locally (docs/operations.md). -->
     <UserSecretsId>sepiabox-web-553a6207-0978-4b84-ab9b-8648b5110515</UserSecretsId>
   </PropertyGroup>

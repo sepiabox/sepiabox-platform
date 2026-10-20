@@ -30,8 +30,16 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
 
     public int? RequestedPage { get; private set; }
 
+    /// <summary>Thrown by the timeline query, to reach the error page.</summary>
+    public Exception? TimelineFailure { get; init; }
+
     public Task<TimelinePage> GetTimelinePageAsync(int page, CancellationToken cancellationToken = default)
     {
+        if (TimelineFailure is not null)
+        {
+            return Task.FromException<TimelinePage>(TimelineFailure);
+        }
+
         RequestedPage = page;
         var slice = items.Skip((page - 1) * PageSize).Take(PageSize).ToList();
         return Task.FromResult(new TimelinePage(page, slice, items.Length > page * PageSize));

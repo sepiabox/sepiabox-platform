@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Format_MonthAndYear" xml:space="preserve">
+    <value>MMMM 'de' yyyy</value>
+  </data>
+  <data name="Format_DateAndTime" xml:space="preserve">
+    <value>d 'de' MMMM 'de' yyyy, HH:mm</value>
+  </data>
+  <data name="NoDate" xml:space="preserve">
+    <value>Sem data</value>
+  </data>
+  <data name="Kind_Photo" xml:space="preserve">
+    <value>Foto</value>
+  </data>
+  <data name="Kind_Video" xml:space="preserve">
+    <value>Vídeo</value>
+  </data>
+  <data name="Language_Label" xml:space="preserve">
+    <value>Idioma</value>
+  </data>
+  <data name="Language_English" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="Language_BrazilianPortuguese" xml:space="preserve">
+    <value>Português (Brasil)</value>
+  </data>
+  <data name="Layout_UnexpectedError" xml:space="preserve">
+    <value>Ocorreu um erro inesperado.</value>
+  </data>
+  <data name="Layout_Reload" xml:space="preserve">
+    <value>Recarregar</value>
+  </data>
+  <data name="Layout_Dismiss" xml:space="preserve">
+    <value>Fechar</value>
+  </data>
+  <data name="SignOut" xml:space="preserve">
+    <value>Sair</value>
+  </data>
+  <data name="Reconnect_FirstAttempt" xml:space="preserve">
+    <value>Reconectando…</value>
+  </data>
+  <data name="Reconnect_RepeatedBefore" xml:space="preserve">
+    <value>Sem conexão. Nova tentativa em</value>
+  </data>
+  <data name="Reconnect_RepeatedAfter" xml:space="preserve">
+    <value>segundos.</value>
+  </data>
+  <data name="Reconnect_Failed" xml:space="preserve">
+    <value>Não foi possível reconectar.</value>
+  </data>
+  <data name="Reconnect_TryAgainOrReload" xml:space="preserve">
+    <value>Tente novamente ou recarregue a página.</value>
+  </data>
+  <data name="Reconnect_Retry" xml:space="preserve">
+    <value>Tentar novamente</value>
+  </data>
+  <data name="Reconnect_Paused" xml:space="preserve">
+    <value>A sessão foi pausada pelo servidor.</value>
+  </data>
+  <data name="Reconnect_ResumeFailed" xml:space="preserve">
+    <value>Não foi possível retomar a sessão.</value>
+  </data>
+  <data name="Reconnect_Resume" xml:space="preserve">
+    <value>Retomar</value>
+  </data>
+  <data name="Error_Title" xml:space="preserve">
+    <value>Erro</value>
+  </data>
+  <data name="Error_Heading" xml:space="preserve">
+    <value>Algo deu errado.</value>
+  </data>
+  <data name="Error_Text" xml:space="preserve">
+    <value>Não foi possível concluir a solicitação. Tente novamente daqui a pouco.</value>
+  </data>
+  <data name="Error_RequestId" xml:space="preserve">
+    <value>Código da solicitação:</value>
+  </data>
+  <data name="NotFound_Title" xml:space="preserve">
+    <value>Página não encontrada</value>
+  </data>
+  <data name="NotFound_Text" xml:space="preserve">
+    <value>Esta página não existe.</value>
+  </data>
+  <data name="NoAccess_Title" xml:space="preserve">
+    <value>Sem acesso</value>
+  </data>
+  <data name="NoAccess_Text" xml:space="preserve">
+    <value>Esta conta não tem acesso ao Sepiabox. Peça a quem administra a biblioteca para adicioná-la ou entre com outra conta.</value>
+  </data>
+  <data name="NoAccess_SignOutAndSwitch" xml:space="preserve">
+    <value>Sair e entrar com outra conta</value>
+  </data>
+  <data name="NoAccess_SwitchAccount" xml:space="preserve">
+    <value>Entrar com outra conta</value>
+  </data>
+  <data name="NotAuthorized_Text" xml:space="preserve">
+    <value>Esta sessão não tem mais acesso ao Sepiabox.</value>
+  </data>
+  <data name="SignIn_Title" xml:space="preserve">
+    <value>Entrar</value>
+  </data>
+  <data name="SignIn_Text" xml:space="preserve">
+    <value>O Sepiabox é privado. Entre com a conta Google ou Microsoft que tem acesso.</value>
+  </data>
+  <data name="SignIn_Failed" xml:space="preserve">
+    <value>Não foi possível entrar. Tente novamente.</value>
+  </data>
+  <data name="SignIn_WithGoogle" xml:space="preserve">
+    <value>Entrar com o Google</value>
+  </data>
+  <data name="SignIn_WithMicrosoft" xml:space="preserve">
+    <value>Entrar com a Microsoft</value>
+  </data>
+  <data name="SignIn_DevEmail" xml:space="preserve">
+    <value>E-mail (só em desenvolvimento)</value>
+  </data>
+  <data name="SignIn_NotConfigured" xml:space="preserve">
+    <value>A entrada ainda não está configurada.</value>
+  </data>
+  <data name="Timeline_Heading" xml:space="preserve">
+    <value>Fotos e vídeos</value>
+  </data>
+  <data name="Timeline_Loading" xml:space="preserve">
+    <value>Carregando…</value>
+  </data>
+  <data name="Timeline_EmptyBefore" xml:space="preserve">
+    <value>Ainda não há fotos. Use</value>
+  </data>
+  <data name="Timeline_EmptyAfter" xml:space="preserve">
+    <value>para enviar as do HD externo.</value>
+  </data>
+  <data name="Timeline_NoMore" xml:space="preserve">
+    <value>Não há mais fotos.</value>
+  </data>
+  <data name="Timeline_BackToStart" xml:space="preserve">
+    <value>Voltar ao início</value>
+  </data>
+  <data name="Timeline_Pages" xml:space="preserve">
+    <value>Páginas</value>
+  </data>
+  <data name="Timeline_Newer" xml:space="preserve">
+    <value>← Mais recentes</value>
+  </data>
+  <data name="Timeline_Older" xml:space="preserve">
+    <value>Mais antigas →</value>
+  </data>
+  <data name="MediaCard_NoThumbnail" xml:space="preserve">
+    <value>{0} sem miniatura</value>
+  </data>
+  <data name="MediaCard_Duration" xml:space="preserve">
+    <value>duração {0}</value>
+  </data>
+  <data name="Detail_Back" xml:space="preserve">
+    <value>← Linha do tempo</value>
+  </data>
+  <data name="Detail_NoPreview" xml:space="preserve">
+    <value>Sem prévia</value>
+  </data>
+  <data name="Detail_Camera" xml:space="preserve">
+    <value>Câmera</value>
+  </data>
+  <data name="Detail_Dimensions" xml:space="preserve">
+    <value>Dimensões</value>
+  </data>
+  <data name="Detail_Duration" xml:space="preserve">
+    <value>Duração</value>
+  </data>
+  <data name="Detail_Type" xml:space="preserve">
+    <value>Tipo</value>
+  </data>
+  <data name="Detail_Sources" xml:space="preserve">
+    <value>Onde está</value>
+  </data>
+  <data name="Detail_DownloadOriginal" xml:space="preserve">
+    <value>Baixar o original</value>
+  </data>
+  <data name="Detail_VideoFrom" xml:space="preserve">
+    <value>Vídeo de {0}</value>
+  </data>
+  <data name="Detail_UndatedVideo" xml:space="preserve">
+    <value>Vídeo sem data</value>
+  </data>
+  <data name="Video_Processing" xml:space="preserve">
+    <value>Vídeo ainda em processamento</value>
+  </data>
+  <data name="Video_PlaybackFailed" xml:space="preserve">
+    <value>Não foi possível reproduzir o vídeo. Baixe o original.</value>
+  </data>
+  <data name="Download_Unavailable" xml:space="preserve">
+    <value>Não foi possível preparar o download. Tente novamente daqui a pouco.</value>
+  </data>
+</root>

@@ -5,12 +5,15 @@
         <img src="symbol.svg" alt="" width="28" height="28" />
         <span>sepiabox</span>
     </a>
-    <AuthorizeView>
-        <Authorized>
-            <span class="user">@context.User.FindFirst(ClaimTypes.Email)?.Value</span>
-            <SignOutButton />
-        </Authorized>
-    </AuthorizeView>
+    <div class="top-end">
+        <AuthorizeView>
+            <Authorized>
+                <span class="user">@context.User.FindFirst(ClaimTypes.Email)?.Value</span>
+                <SignOutButton />
+            </Authorized>
+        </AuthorizeView>
+        <LanguageSwitch />
+    </div>
 </header>
 
 <main>
@@ -18,7 +21,7 @@
 </main>
 
 <div id="blazor-error-ui" data-nosnippet>
-    Ocorreu um erro inesperado.
-    <a href="." class="reload">Recarregar</a>
-    <button type="button" class="dismiss" aria-label="Fechar">🗙</button>
+    @Text["Layout_UnexpectedError"]
+    <a href="." class="reload">@Text["Layout_Reload"]</a>
+    <button type="button" class="dismiss" aria-label="@Text["Layout_Dismiss"]">🗙</button>
 </div>

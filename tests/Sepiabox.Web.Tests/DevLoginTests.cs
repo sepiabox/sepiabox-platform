@@ -106,6 +106,8 @@ public sealed class DevLoginTests
         using var response = await http.PostAsync(Url("/dev-login"), new FormUrlEncodedContent(new Dictionary<string, string> { ["email"] = TestUsers.Allowed }));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // Bare: not re-executed into a page by status code pages.
+        Assert.Empty(await response.Content.ReadAsStringAsync());
         Assert.Null(SessionCookie(response));
     }
 
@@ -147,6 +149,7 @@ public sealed class DevLoginTests
         using var signOut = await http.PostAsync(Url("/sair"), new FormUrlEncodedContent([]));
 
         Assert.Equal(HttpStatusCode.BadRequest, signOut.StatusCode);
+        Assert.Empty(await signOut.Content.ReadAsStringAsync());
         using var timeline = await http.GetAsync(Url("/"));
         Assert.Equal(HttpStatusCode.OK, timeline.StatusCode);
     }

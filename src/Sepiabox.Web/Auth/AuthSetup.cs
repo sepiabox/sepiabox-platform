@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -175,14 +177,25 @@ public static partial class AuthSetup
     /// another site, or is one of the sign-in pages themselves (which would loop).
     /// </summary>
     public static string LocalReturnUrl(HttpRequest request, string? url) =>
+        IsLocal(url) && !IsSignInPage(request, url)
+            ? url
+            : AppPath(request, "/");
+
+    /// <summary>
+    /// A full local path, sign-in pages included (the language switch returns to the page it was used on),
+    /// or the app's home when it is missing or could lead to another site.
+    /// </summary>
+    public static string LocalUrl(HttpRequest request, string? url) =>
+        IsLocal(url) ? url : AppPath(request, "/");
+
+    private static bool IsLocal([NotNullWhen(true)] string? url) =>
         url is not null
         && url.StartsWith('/')
         && (url.Length == 1 || url[1] is not ('/' or '\\'))
         // Browsers drop tabs and line breaks, which would turn "/\t/host" into "//host".
         && !url.Any(char.IsControl)
-        && !IsSignInPage(request, url)
-            ? url
-            : AppPath(request, "/");
+        // The app's own links are escaped; anything else could not go into a Location header (a 500).
+        && Ascii.IsValid(url);
 
     private static readonly string[] SignInPages = [SignInPath, NoAccessPath, SignOutPath, DevLoginPath];
 
@@ -245,7 +258,7 @@ public static partial class AuthSetup
     {
         if (!await antiforgery.IsRequestValidAsync(http))
         {
-            return Results.BadRequest();
+            return BareStatus(http, StatusCodes.Status400BadRequest);
         }
 
         await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -269,7 +282,7 @@ public static partial class AuthSetup
 
         if (!http.Request.HasFormContentType || !await antiforgery.IsRequestValidAsync(http))
         {
-            return Results.BadRequest();
+            return BareStatus(http, StatusCodes.Status400BadRequest);
         }
 
         var form = await http.Request.ReadFormAsync(http.RequestAborted);
@@ -336,9 +349,15 @@ public static partial class AuthSetup
 
     // Status code pages would re-execute a POST as a POST to the /not-found page, which then fails its own
     // antiforgery check with a 400; an empty body with the 404 already set avoids that.
-    private static IResult BareNotFound(HttpContext http)
+    private static IResult BareNotFound(HttpContext http) => BareStatus(http, StatusCodes.Status404NotFound);
+
+    /// <summary>
+    /// An empty answer with this status, never re-executed into a page by status code pages: for a form post
+    /// that was refused (a bad antiforgery token) or a request a script or an <c>&lt;img&gt;</c> made.
+    /// </summary>
+    internal static IResult BareStatus(HttpContext http, int statusCode)
     {
-        Bare(http, StatusCodes.Status404NotFound);
+        Bare(http, statusCode);
         return Results.Empty;
     }
 

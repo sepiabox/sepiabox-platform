@@ -62,22 +62,26 @@ public sealed class MediaEndpointsTests
         Assert.Equal("60", http.Response.Headers.RetryAfter.ToString());
     }
 
-    [Fact]
-    public async Task A_failed_signing_of_the_original_explains_it_in_portuguese()
+    [Theory]
+    [InlineData(Cultures.English, "Couldn't prepare the download. Please try again shortly.")]
+    [InlineData(Cultures.BrazilianPortuguese, "Não foi possível preparar o download. Tente novamente daqui a pouco.")]
+    public async Task A_failed_signing_of_the_original_explains_it_in_the_culture(string culture, string expected)
     {
+        using var scope = Cultures.Use(culture);
         var library = new FakeLibrary();
         library.Assets[Ids.Of(2)] = Details.Photo(Ids.Of(2));
 
         var http = new DefaultHttpContext();
 
         var result = await MediaEndpoints.OriginalAsync(
-            Ids.Of(2), http, library, new FailingLinks(new CredentialUnavailableException("no identity")), NullLogger<Program>.Instance);
+            Ids.Of(2), http, library, new FailingLinks(new CredentialUnavailableException("no identity")), Cultures.Text(),
+            NullLogger<Program>.Instance);
 
         var text = Assert.IsType<ContentHttpResult>(result);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, text.StatusCode);
         Assert.Equal("no-store", http.Response.Headers.CacheControl.ToString());
         Assert.Equal("60", http.Response.Headers.RetryAfter.ToString());
-        Assert.Contains("download", text.ResponseContent, StringComparison.Ordinal);
+        Assert.Equal(expected, text.ResponseContent);
     }
 
     [Theory]

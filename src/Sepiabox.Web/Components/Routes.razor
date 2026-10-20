@@ -4,9 +4,9 @@
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
             <NotAuthorized>
                 <section class="auth">
-                    <h1>Sem acesso</h1>
-                    <p>Esta sessão já não tem acesso ao Sepiabox.</p>
-                    <a class="button" href="entrar" data-enhance-nav="false">Entrar</a>
+                    <h1>@Text["NoAccess_Title"]</h1>
+                    <p>@Text["NotAuthorized_Text"]</p>
+                    <a class="button" href="entrar" data-enhance-nav="false">@Text["SignIn_Title"]</a>
                 </section>
             </NotAuthorized>
         </AuthorizeRouteView>
