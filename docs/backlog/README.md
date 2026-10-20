@@ -58,7 +58,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-044 | [Localize the web app: English first, Brazilian Portuguese](S-044-localize-the-web-app-english-first-brazilian.md) | Web app | S-011 | High | M | `done` |
-| S-055 | [Rename the web routes to English](S-055-rename-the-web-routes-to-english.md) | Web app | S-044 | High | S | `todo` |
+| S-055 | [Rename the web routes to English](S-055-rename-the-web-routes-to-english.md) | Web app | S-044 | High | S | `done` |
 | S-053 | [Read video locations from QuickTime metadata](S-053-read-video-locations-from-quicktime-metadata.md) | Local ingest | S-004 | High | S | `todo` |
 
 ### Sprint 4 — The app in Azure

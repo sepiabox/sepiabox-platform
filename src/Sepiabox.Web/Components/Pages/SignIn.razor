@@ -1,4 +1,4 @@
-@page "/entrar"
+@page "/sign-in"
 @attribute [AllowAnonymous]
 @inject SignInProviders Providers
 @inject IAuthorizationService Authorization
@@ -63,7 +63,7 @@
     private string? Error { get; set; }
 
     private string Return => AuthSetup.LocalReturnUrl(
-        HttpContext?.Request ?? throw new InvalidOperationException("/entrar is only rendered on the server."),
+        HttpContext?.Request ?? throw new InvalidOperationException("/sign-in is only rendered on the server."),
         ReturnUrl);
 
     protected override async Task OnInitializedAsync()
@@ -78,5 +78,5 @@
     }
 
     private string ProviderLink(string provider) =>
-        $"entrar/{provider}?returnUrl={Uri.EscapeDataString(Return)}";
+        $"sign-in/{provider}?returnUrl={Uri.EscapeDataString(Return)}";
 }

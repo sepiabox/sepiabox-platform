@@ -1,4 +1,4 @@
-@page "/fotos/{Id}"
+@page "/photos/{Id}"
 @inject ILibraryQueries Library
 @inject NavigationManager Navigation
 @* Static server rendering (no @rendermode): the page is plain HTML with links, nothing interactive. *@
@@ -17,7 +17,7 @@
             }
             else if (_asset.PreviewName is { } preview)
             {
-                <img src="fotos/@_asset.Id/@preview" alt="@Text.KindLabel(_asset.Kind)" />
+                <img src="photos/@_asset.Id/@preview" alt="@Text.KindLabel(_asset.Kind)" />
             }
             else
             {
@@ -57,7 +57,7 @@
 
             @* Not an enhanced navigation: Blazor would fetch the redirect itself, fail on CORS and read the original twice.
                No `download` attribute: Content-Disposition names the file, and a failure message must stay visible. *@
-            <p><a class="button" href="fotos/@_asset.Id/original" data-enhance-nav="false">@Text["Detail_DownloadOriginal"]</a></p>
+            <p><a class="button" href="photos/@_asset.Id/original" data-enhance-nav="false">@Text["Detail_DownloadOriginal"]</a></p>
         </section>
     </div>
 }
@@ -67,8 +67,8 @@
     public string Id { get; set; } = string.Empty;
 
     /// <summary>The timeline page the visitor came from, so "back" returns there.</summary>
-    [SupplyParameterFromQuery(Name = "pagina")]
-    public string? Pagina { get; set; }
+    [SupplyParameterFromQuery(Name = "page")]
+    public string? PageQuery { get; set; }
 
     private AssetDetail? _asset;
 
@@ -86,7 +86,7 @@
 
     private string VideoLabel => _asset?.CapturedAt is { } at ? Text["Detail_VideoFrom", Text.DateAndTime(at)] : Text["Detail_UndatedVideo"];
 
-    private string BackLink => LibraryQueries.ParsePage(Pagina) is > 1 and var page ? $"./?pagina={page}" : "./";
+    private string BackLink => LibraryQueries.ParsePage(PageQuery) is > 1 and var page ? $"./?page={page}" : "./";
 
     private string? Camera =>
         string.Join(' ', new[] { _asset?.CameraMake, _asset?.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s))) is { Length: > 0 } text

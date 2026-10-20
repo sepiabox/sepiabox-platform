@@ -11,7 +11,7 @@
 {
     <div class="player">
         <video data-player controls preload="metadata" playsinline aria-label="@Label"
-               src="fotos/@AssetId/@DerivativeNames.Proxy" poster="@PosterUrl"></video>
+               src="photos/@AssetId/@DerivativeNames.Proxy" poster="@PosterUrl"></video>
         @* Empty, and so hidden by CSS, until video.js fills it; screen readers announce the text as it appears. *@
         <p class="player-error" role="alert" data-message="@Text["Video_PlaybackFailed"]"></p>
     </div>
@@ -41,5 +41,5 @@ else
     [Parameter]
     public bool HasProxy { get; set; }
 
-    private string? PosterUrl => PosterName is { } name ? $"fotos/{AssetId}/{name}" : null;
+    private string? PosterUrl => PosterName is { } name ? $"photos/{AssetId}/{name}" : null;
 }

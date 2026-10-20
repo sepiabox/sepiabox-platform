@@ -119,14 +119,14 @@ public sealed class AuthPagesTests : LocalizedContext
     public void The_language_switch_offers_both_languages_and_returns_to_the_same_page(string culture, string englishPressed, string portuguesePressed)
     {
         using var scope = Cultures.Use(culture);
-        Services.GetRequiredService<NavigationManager>().NavigateTo($"/fotos/{Ids.Of(1)}?pagina=2");
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{Ids.Of(1)}?page=2");
 
         var form = Render<LanguageSwitch>().Find("form.language");
 
         Assert.Equal("post", form.GetAttribute("method"));
         Assert.Equal("language", form.GetAttribute("action"));
         Assert.Equal("false", form.GetAttribute("data-enhance"));
-        Assert.Equal($"/fotos/{Ids.Of(1)}?pagina=2", form.QuerySelector("input[name=returnUrl]")!.GetAttribute("value"));
+        Assert.Equal($"/photos/{Ids.Of(1)}?page=2", form.QuerySelector("input[name=returnUrl]")!.GetAttribute("value"));
         Assert.NotNull(form.QuerySelector("input[name=__RequestVerificationToken]"));
         var buttons = form.QuerySelectorAll("button[name=culture]");
         Assert.Equal(["en", "pt-BR"], buttons.Select(b => b.GetAttribute("value")));
@@ -139,7 +139,7 @@ public sealed class AuthPagesTests : LocalizedContext
     {
         Services.AddSingleton(providers);
         Services.AddSingleton<IWebHostEnvironment>(new FakeEnvironment(environment));
-        Services.GetRequiredService<NavigationManager>().NavigateTo("/entrar" + query);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/sign-in" + query);
         var http = new DefaultHttpContext();
         return Render<SignIn>(p => p.AddCascadingValue<HttpContext>(http));
     }

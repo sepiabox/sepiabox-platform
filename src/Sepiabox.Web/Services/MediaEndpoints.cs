@@ -7,15 +7,15 @@ namespace Sepiabox.Web.Services;
 /// <summary>
 /// The only way the browser reaches blobs: each request is answered with a redirect to a link signed at
 /// that moment, so pages never carry links that expire while they are open (D-039). The access list
-/// protects them like any page: an anonymous request is sent to <c>/entrar</c> and someone not on the
+/// protects them like any page: an anonymous request is sent to <c>/sign-in</c> and someone not on the
 /// list gets 403, before any link is signed (D-048).
 /// </summary>
 public static partial class MediaEndpoints
 {
     public static IEndpointRouteBuilder MapMediaEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/fotos/{id}/original", OriginalAsync);
-        endpoints.MapGet("/fotos/{id}/{derivative}", DerivativeAsync);
+        endpoints.MapGet("/photos/{id}/original", OriginalAsync);
+        endpoints.MapGet("/photos/{id}/{derivative}", DerivativeAsync);
         return endpoints;
     }
 

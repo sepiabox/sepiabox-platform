@@ -9,8 +9,8 @@ namespace Sepiabox.Web.Auth;
 /// <summary>
 /// The events of the Google and Microsoft handlers. When a provider hands back a signed-in user, before
 /// the session cookie is written, an e-mail that is not on the access list (or that Google says is not
-/// verified) never gets a cookie: the response goes to <c>/sem-acesso</c>. A sign-in that fails at the
-/// provider (cancelled, expired, tampered with) goes back to <c>/entrar</c> with a short message.
+/// verified) never gets a cookie: the response goes to <c>/no-access</c>. A sign-in that fails at the
+/// provider (cancelled, expired, tampered with) goes back to <c>/sign-in</c> with a short message.
 /// </summary>
 public static partial class AccessTicketHandler
 {

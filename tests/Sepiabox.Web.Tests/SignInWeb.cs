@@ -57,10 +57,10 @@ internal static partial class SignInWeb
         return match.Groups["token"].Value;
     }
 
-    /// <summary>Fills in the e-mail on /entrar and submits it, as a developer would.</summary>
+    /// <summary>Fills in the e-mail on /sign-in and submits it, as a developer would.</summary>
     public static async Task<HttpResponseMessage> DevLoginAsync(HttpClient http, string email, string returnUrl = "/", string? forwardedFor = null)
     {
-        var token = await FormTokenAsync(http, "/entrar");
+        var token = await FormTokenAsync(http, "/sign-in");
         using var request = new HttpRequestMessage(HttpMethod.Post, Url("/dev-login"))
         {
             Content = new FormUrlEncodedContent(new Dictionary<string, string>

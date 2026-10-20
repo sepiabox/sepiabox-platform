@@ -20,13 +20,13 @@ public sealed class TimelinePageTests(CatalogFixture catalog)
         var html = await http.GetStringAsync(new Uri("/", UriKind.Relative));
 
         Assert.Contains(PhotoMonth, html, StringComparison.Ordinal);
-        Assert.Contains($"fotos/{Ids.Of(12)}/thumb-256", html, StringComparison.Ordinal);
+        Assert.Contains($"photos/{Ids.Of(12)}/thumb-256", html, StringComparison.Ordinal);
         Assert.DoesNotContain("sig=", html, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData("?pagina=999999999")]
-    [InlineData("?pagina=2")]
+    [InlineData("?page=999999999")]
+    [InlineData("?page=2")]
     public async Task A_page_beyond_the_end_says_there_are_no_more_photos(string query)
     {
         await using var web = await WebWithPhotoAsync();
@@ -40,8 +40,8 @@ public sealed class TimelinePageTests(CatalogFixture catalog)
     }
 
     [Theory]
-    [InlineData("?pagina=abc", null)]
-    [InlineData("?pagina=99999999999", "No more photos")]
+    [InlineData("?page=abc", null)]
+    [InlineData("?page=99999999999", "No more photos")]
     public async Task Malformed_or_huge_page_numbers_are_not_errors(string query, string? expected)
     {
         // Null means page 1, which shows the photo's month.
@@ -61,9 +61,9 @@ public sealed class TimelinePageTests(CatalogFixture catalog)
         await using var web = await WebWithPhotoAsync();
         using var http = web.CreateSignedInClient();
 
-        var html = await http.GetStringAsync(new Uri($"/fotos/{Ids.Of(12)}", UriKind.Relative));
+        var html = await http.GetStringAsync(new Uri($"/photos/{Ids.Of(12)}", UriKind.Relative));
 
-        Assert.Contains($"fotos/{Ids.Of(12)}/original", html, StringComparison.Ordinal);
+        Assert.Contains($"photos/{Ids.Of(12)}/original", html, StringComparison.Ordinal);
         Assert.DoesNotContain("sig=", html, StringComparison.Ordinal);
     }
 

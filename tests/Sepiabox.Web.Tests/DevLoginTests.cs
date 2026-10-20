@@ -101,7 +101,7 @@ public sealed class DevLoginTests
     {
         await using var web = Create();
         using var http = web.CreateAnonymousClient();
-        await FormTokenAsync(http, "/entrar");
+        await FormTokenAsync(http, "/sign-in");
 
         using var response = await http.PostAsync(Url("/dev-login"), new FormUrlEncodedContent(new Dictionary<string, string> { ["email"] = TestUsers.Allowed }));
 
@@ -117,23 +117,23 @@ public sealed class DevLoginTests
         await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
-        using var login = await DevLoginAsync(http, "ANA@example.com", "/?pagina=1");
+        using var login = await DevLoginAsync(http, "ANA@example.com", "/?page=1");
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
-        Assert.Equal("/?pagina=1", login.Headers.Location!.OriginalString);
+        Assert.Equal("/?page=1", login.Headers.Location!.OriginalString);
         // A persistent cookie (with an expiry) that survives closing the browser.
         Assert.True(SessionCookie(login)!.Expires > DateTimeOffset.UtcNow.AddDays(13));
 
         var token = await FormTokenAsync(http, "/");
-        using var signOut = await http.PostAsync(Url("/sair"), new FormUrlEncodedContent(new Dictionary<string, string>
+        using var signOut = await http.PostAsync(Url("/sign-out"), new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["__RequestVerificationToken"] = token,
         }));
         Assert.Equal(HttpStatusCode.Redirect, signOut.StatusCode);
-        Assert.Equal("/entrar", signOut.Headers.Location!.OriginalString);
+        Assert.Equal("/sign-in", signOut.Headers.Location!.OriginalString);
 
         using var after = await http.GetAsync(Url("/"));
         Assert.Equal(HttpStatusCode.Redirect, after.StatusCode);
-        Assert.Equal("/entrar", after.Headers.Location!.AbsolutePath);
+        Assert.Equal("/sign-in", after.Headers.Location!.AbsolutePath);
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public sealed class DevLoginTests
         // The page holds the form, so the browser already has the antiforgery cookie; only the field is missing.
         await FormTokenAsync(http, "/");
 
-        using var signOut = await http.PostAsync(Url("/sair"), new FormUrlEncodedContent([]));
+        using var signOut = await http.PostAsync(Url("/sign-out"), new FormUrlEncodedContent([]));
 
         Assert.Equal(HttpStatusCode.BadRequest, signOut.StatusCode);
         Assert.Empty(await signOut.Content.ReadAsStringAsync());
@@ -155,7 +155,7 @@ public sealed class DevLoginTests
     }
 
     [Fact]
-    public async Task Sends_dev_login_for_an_email_not_on_the_list_to_sem_acesso_without_a_session()
+    public async Task Sends_dev_login_for_an_email_not_on_the_list_to_no_access_without_a_session()
     {
         await using var web = Create();
         using var http = web.CreateAnonymousClient();
@@ -163,12 +163,12 @@ public sealed class DevLoginTests
         using var login = await DevLoginAsync(http, TestUsers.Stranger);
 
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
-        Assert.Equal("/sem-acesso", login.Headers.Location!.OriginalString);
+        Assert.Equal("/no-access", login.Headers.Location!.OriginalString);
         Assert.Null(SessionCookie(login));
     }
 
     [Fact]
-    public async Task Answers_403_and_sem_acesso_to_a_real_session_cookie_whose_email_left_the_list()
+    public async Task Answers_403_and_no_access_to_a_real_session_cookie_whose_email_left_the_list()
     {
         var keyRing = Directory.CreateTempSubdirectory("sepiabox-keys-");
         try
@@ -186,8 +186,8 @@ public sealed class DevLoginTests
             await using var after = Create(accessEmails: TestUsers.Other, keyRing: keyRing);
             using var browser = after.CreateClientWithCookie(cookie);
 
-            using var thumbnail = await browser.GetAsync(Url($"/fotos/{Photo}/thumb-256"));
-            using var original = await browser.GetAsync(Url($"/fotos/{Photo}/original"));
+            using var thumbnail = await browser.GetAsync(Url($"/photos/{Photo}/thumb-256"));
+            using var original = await browser.GetAsync(Url($"/photos/{Photo}/original"));
             using var api = await browser.GetAsync(Url("/api/anything"));
             using var page = await browser.GetAsync(Url("/"));
 
@@ -195,7 +195,7 @@ public sealed class DevLoginTests
             Assert.Equal(HttpStatusCode.Forbidden, original.StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, api.StatusCode);
             Assert.Equal(HttpStatusCode.Redirect, page.StatusCode);
-            Assert.Equal("/sem-acesso", page.Headers.Location!.AbsolutePath);
+            Assert.Equal("/no-access", page.Headers.Location!.AbsolutePath);
         }
         finally
         {

@@ -12,11 +12,11 @@ public sealed class PhotoDetailTests : LocalizedContext
     {
         var page = RenderDetail(Details.Photo(Ids.Of(1), new DateTime(2019, 7, 14, 10, 32, 0)));
 
-        Assert.Equal($"fotos/{Ids.Of(1)}/preview-1280", page.Find("figure.preview img").GetAttribute("src"));
+        Assert.Equal($"photos/{Ids.Of(1)}/preview-1280", page.Find("figure.preview img").GetAttribute("src"));
         Assert.Equal("July 14, 2019, 10:32", page.Find("h1").TextContent);
         Assert.Contains("Apple iPhone 15", page.Markup, StringComparison.Ordinal);
         Assert.Contains("HD Ana", page.Find("ul.sources").TextContent, StringComparison.Ordinal);
-        Assert.Equal($"fotos/{Ids.Of(1)}/original", page.Find("a.button").GetAttribute("href"));
+        Assert.Equal($"photos/{Ids.Of(1)}/original", page.Find("a.button").GetAttribute("href"));
         Assert.Equal("Download the original", page.Find("a.button").TextContent);
         Assert.Contains("Camera", page.Find("dl").TextContent, StringComparison.Ordinal);
         Assert.Equal("← Timeline", page.Find("p.back a").TextContent);
@@ -33,12 +33,12 @@ public sealed class PhotoDetailTests : LocalizedContext
         var page = RenderDetail(Details.Video(Ids.Of(2)));
 
         var video = page.Find("figure.preview video");
-        Assert.Equal($"fotos/{Ids.Of(2)}/proxy-720p", video.GetAttribute("src"));
-        Assert.Equal($"fotos/{Ids.Of(2)}/poster", video.GetAttribute("poster"));
+        Assert.Equal($"photos/{Ids.Of(2)}/proxy-720p", video.GetAttribute("src"));
+        Assert.Equal($"photos/{Ids.Of(2)}/poster", video.GetAttribute("poster"));
         Assert.Equal("Video from August 9, 2020, 18:05", video.GetAttribute("aria-label"));
         Assert.Contains("Video", page.Find("dl").TextContent, StringComparison.Ordinal);
         Assert.Contains("0:03", page.Find("dl").TextContent, StringComparison.Ordinal);
-        Assert.Equal($"fotos/{Ids.Of(2)}/original", page.Find("a.button").GetAttribute("href"));
+        Assert.Equal($"photos/{Ids.Of(2)}/original", page.Find("a.button").GetAttribute("href"));
         Assert.DoesNotContain("sig=", page.Markup, StringComparison.Ordinal);
     }
 
@@ -48,7 +48,7 @@ public sealed class PhotoDetailTests : LocalizedContext
         var page = RenderDetail(Details.Video(Ids.Of(6), hasProxy: false));
 
         Assert.Empty(page.FindAll("video"));
-        Assert.Equal($"fotos/{Ids.Of(6)}/poster", page.Find("figure.preview img").GetAttribute("src"));
+        Assert.Equal($"photos/{Ids.Of(6)}/poster", page.Find("figure.preview img").GetAttribute("src"));
         Assert.Equal("Video still processing", page.Find("figure.preview .processing").TextContent);
     }
 
@@ -131,18 +131,18 @@ public sealed class PhotoDetailTests : LocalizedContext
     [Fact]
     public void The_back_link_returns_to_the_timeline_page_the_visitor_came_from()
     {
-        var page = RenderDetail(Details.Photo(Ids.Of(5), new DateTime(2020, 1, 1)), pagina: 3);
+        var page = RenderDetail(Details.Photo(Ids.Of(5), new DateTime(2020, 1, 1)), pageNumber: 3);
 
-        Assert.Equal("./?pagina=3", page.Find("p.back a").GetAttribute("href"));
+        Assert.Equal("./?page=3", page.Find("p.back a").GetAttribute("href"));
     }
 
-    private IRenderedComponent<PhotoDetail> RenderDetail(AssetDetail asset, int? pagina = null)
+    private IRenderedComponent<PhotoDetail> RenderDetail(AssetDetail asset, int? pageNumber = null)
     {
         var library = new FakeLibrary();
         library.Assets[asset.Id] = asset;
         Services.AddSingleton<ILibraryQueries>(library);
-        var query = pagina is { } page ? $"?pagina={page}" : string.Empty;
-        Services.GetRequiredService<NavigationManager>().NavigateTo($"/fotos/{asset.Id}{query}");
+        var query = pageNumber is { } number ? $"?page={number}" : string.Empty;
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}{query}");
         return Render<PhotoDetail>(p => p.Add(d => d.Id, asset.Id));
     }
 }

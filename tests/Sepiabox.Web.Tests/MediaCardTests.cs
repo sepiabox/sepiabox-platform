@@ -11,7 +11,7 @@ public sealed class MediaCardTests : LocalizedContext
         var card = RenderCard(new TimelineItem(Ids.Of(1), AssetKinds.Video, new DateTime(2020, 8, 9, 18, 5, 0), true, 3));
 
         // A video's thumbnail is made from its poster.
-        Assert.Equal($"fotos/{Ids.Of(1)}/thumb-256", card.Find("img").GetAttribute("src"));
+        Assert.Equal($"photos/{Ids.Of(1)}/thumb-256", card.Find("img").GetAttribute("src"));
         Assert.Single(card.FindAll(".play svg"));
         Assert.Equal("true", card.Find(".play").GetAttribute("aria-hidden"));
         Assert.Equal("0:03", card.Find(".badge").TextContent);
@@ -35,7 +35,7 @@ public sealed class MediaCardTests : LocalizedContext
 
         Assert.Empty(card.FindAll(".play"));
         Assert.Empty(card.FindAll(".badge"));
-        Assert.Equal($"fotos/{Ids.Of(3)}", card.Find("a.thumb").GetAttribute("href"));
+        Assert.Equal($"photos/{Ids.Of(3)}", card.Find("a.thumb").GetAttribute("href"));
     }
 
     [Fact]
@@ -72,5 +72,5 @@ public sealed class MediaCardTests : LocalizedContext
     }
 
     private IRenderedComponent<MediaCard> RenderCard(TimelineItem item) =>
-        Render<MediaCard>(p => p.Add(c => c.Item, item).Add(c => c.Href, $"fotos/{item.Id}"));
+        Render<MediaCard>(p => p.Add(c => c.Item, item).Add(c => c.Href, $"photos/{item.Id}"));
 }

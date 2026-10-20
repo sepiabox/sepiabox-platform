@@ -13,8 +13,8 @@ public sealed class VideoPlayerTests : LocalizedContext
         var player = RenderPlayer(Ids.Of(1), DerivativeNames.Poster, hasProxy: true);
 
         var video = player.Find(".player video");
-        Assert.Equal($"fotos/{Ids.Of(1)}/proxy-720p", video.GetAttribute("src"));
-        Assert.Equal($"fotos/{Ids.Of(1)}/poster", video.GetAttribute("poster"));
+        Assert.Equal($"photos/{Ids.Of(1)}/proxy-720p", video.GetAttribute("src"));
+        Assert.Equal($"photos/{Ids.Of(1)}/poster", video.GetAttribute("poster"));
         Assert.Equal(Label, video.GetAttribute("aria-label"));
         Assert.True(video.HasAttribute("controls"));
         // Only the length and first frame on opening the page, not the whole file.
@@ -55,7 +55,7 @@ public sealed class VideoPlayerTests : LocalizedContext
         Assert.Empty(player.FindAll("video"));
         Assert.Empty(player.FindAll(".player-error"));
         var poster = player.Find("img");
-        Assert.Equal($"fotos/{Ids.Of(4)}/poster", poster.GetAttribute("src"));
+        Assert.Equal($"photos/{Ids.Of(4)}/poster", poster.GetAttribute("src"));
         Assert.Equal(Label, poster.GetAttribute("alt"));
         var processing = player.Find(".processing");
         Assert.Equal("Video still processing", processing.TextContent);

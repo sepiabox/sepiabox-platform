@@ -12,7 +12,7 @@ namespace Sepiabox.Web.Tests;
 public sealed class AccessTicketHandlerTests
 {
     [Fact]
-    public async Task Creates_no_session_and_redirects_to_sem_acesso_when_the_email_is_not_on_the_list()
+    public async Task Creates_no_session_and_redirects_to_no_access_when_the_email_is_not_on_the_list()
     {
         var context = TicketFor(TestUsers.Stranger);
 
@@ -21,7 +21,7 @@ public sealed class AccessTicketHandlerTests
         // Handled means the remote handler stops here: it never signs in.
         Assert.True(context.Result?.Handled);
         Assert.Equal(StatusCodes.Status302Found, context.Response.StatusCode);
-        Assert.Equal("/sem-acesso", context.Response.Headers.Location.ToString());
+        Assert.Equal("/no-access", context.Response.Headers.Location.ToString());
         // The only session cookie written is the one that deletes an earlier session.
         var cookies = SetCookieHeaderValue.ParseList(context.Response.Headers.SetCookie.OfType<string>().ToList());
         var cookie = Assert.Single(cookies, c => c.Name == AuthSetup.CookieName);
@@ -36,7 +36,7 @@ public sealed class AccessTicketHandlerTests
         await AccessTicketHandler.OnTicketReceivedAsync(context);
 
         Assert.True(context.Result?.Handled);
-        Assert.Equal("/sem-acesso", context.Response.Headers.Location.ToString());
+        Assert.Equal("/no-access", context.Response.Headers.Location.ToString());
     }
 
     [Theory]
@@ -51,7 +51,7 @@ public sealed class AccessTicketHandlerTests
         await AccessTicketHandler.OnTicketReceivedAsync(context);
 
         Assert.True(context.Result?.Handled);
-        Assert.Equal("/sem-acesso", context.Response.Headers.Location.ToString());
+        Assert.Equal("/no-access", context.Response.Headers.Location.ToString());
     }
 
     [Theory]
@@ -71,7 +71,7 @@ public sealed class AccessTicketHandlerTests
     }
 
     [Fact]
-    public async Task Sends_a_failed_sign_in_back_to_entrar_with_a_message()
+    public async Task Sends_a_failed_sign_in_back_to_sign_in_with_a_message()
     {
         var http = Http();
         http.Request.PathBase = "/app";
@@ -81,7 +81,7 @@ public sealed class AccessTicketHandlerTests
         await AccessTicketHandler.OnRemoteFailureAsync(context);
 
         Assert.True(context.Result?.Handled);
-        Assert.Equal("/app/entrar?erro=1", http.Response.Headers.Location.ToString());
+        Assert.Equal("/app/sign-in?error=1", http.Response.Headers.Location.ToString());
     }
 
     [Theory]
@@ -116,7 +116,7 @@ public sealed class AccessTicketHandlerTests
         await AccessTicketHandler.OnTicketReceivedAsync(context);
 
         Assert.True(context.Result?.Handled);
-        Assert.Equal("/sem-acesso", context.Response.Headers.Location.ToString());
+        Assert.Equal("/no-access", context.Response.Headers.Location.ToString());
     }
 
     private static TicketReceivedContext TicketFor(string? email, string? emailVerified = null, bool microsoft = false, string? scheme = null)

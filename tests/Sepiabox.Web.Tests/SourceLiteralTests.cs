@@ -4,8 +4,7 @@ namespace Sepiabox.Web.Tests;
 
 /// <summary>
 /// UI text lives only in the resource files (D-050): no Portuguese is left in the web's Razor components,
-/// C# or scripts. Routes are English only after S-055, so Portuguese route segments (fotos, entrar,
-/// sem-acesso, sair, pagina, erro) are not checked here.
+/// C# or scripts, and none of the Portuguese routes S-055 renamed (D-050).
 /// </summary>
 public sealed class SourceLiteralTests
 {
@@ -19,6 +18,7 @@ public sealed class SourceLiteralTests
         "Código do pedido", "Página não encontrada", "Esta página", "Esta conta", "Esta sessão", "Peça a quem",
         "outra conta", "só em desenvolvimento", "ainda não está configurada", "Não foi possível", "em processamento",
         "janeiro", "julho", "dezembro", "de 20",
+        "fotos", "entrar", "sem-acesso", "sair", "pagina", "\"erro\"",
     ];
 
     // Letters Portuguese uses and English does not; none belongs in code, comments or markup outside resources.

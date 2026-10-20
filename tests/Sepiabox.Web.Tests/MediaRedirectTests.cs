@@ -15,7 +15,7 @@ public sealed class MediaRedirectTests(CatalogFixture catalog)
         using var http = web.CreateSignedInClient(followRedirects: false);
 
         var before = DateTimeOffset.UtcNow;
-        using var response = await http.GetAsync(new Uri($"/fotos/{Ids.Of(1)}/thumb-256", UriKind.Relative));
+        using var response = await http.GetAsync(new Uri($"/photos/{Ids.Of(1)}/thumb-256", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.True(response.Headers.CacheControl?.Private);
@@ -35,7 +35,7 @@ public sealed class MediaRedirectTests(CatalogFixture catalog)
         await using var web = await WebWithPhotoAsync(Ids.Of(2));
         using var http = web.CreateSignedInClient(followRedirects: false);
 
-        using var response = await http.GetAsync(new Uri($"/fotos/{Ids.Of(2)}/original", UriKind.Relative));
+        using var response = await http.GetAsync(new Uri($"/photos/{Ids.Of(2)}/original", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.True(response.Headers.CacheControl?.NoStore);
@@ -46,12 +46,12 @@ public sealed class MediaRedirectTests(CatalogFixture catalog)
     }
 
     [Theory]
-    [InlineData("/fotos/{0}")]
-    [InlineData("/fotos/not-an-id")]
-    [InlineData("/fotos/{0}/thumb-256")]
-    [InlineData("/fotos/{0}/original")]
-    [InlineData("/fotos/{1}/poster")]
-    [InlineData("/fotos/{1}/proxy-720p")]
+    [InlineData("/photos/{0}")]
+    [InlineData("/photos/not-an-id")]
+    [InlineData("/photos/{0}/thumb-256")]
+    [InlineData("/photos/{0}/original")]
+    [InlineData("/photos/{1}/poster")]
+    [InlineData("/photos/{1}/proxy-720p")]
     public async Task Anything_that_does_not_exist_is_a_404(string path)
     {
         await using var web = await WebWithPhotoAsync(Ids.Of(3));
