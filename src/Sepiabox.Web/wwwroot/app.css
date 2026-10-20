@@ -199,6 +199,25 @@ main {
     border-radius: 2px;
 }
 
+.play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin: -20px 0 0 -20px;
+    background: rgb(35 26 20 / 0.7);
+    color: var(--white);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.play svg {
+    fill: currentColor;
+}
+
 .pages {
     display: flex;
     justify-content: space-between;
@@ -227,10 +246,22 @@ main {
     min-height: 240px;
 }
 
-.preview img {
+.preview img,
+.preview video {
     display: block;
     width: 100%;
     height: auto;
+}
+
+.preview video {
+    max-height: 80vh;
+    background: var(--developer);
+}
+
+.processing {
+    margin: 0;
+    padding: 16px;
+    font-weight: 600;
 }
 
 .facts h1 {

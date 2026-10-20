@@ -1,0 +1,32 @@
+@* A video on the detail page. The sources are the web's own media addresses, which redirect to a freshly
+   signed storage link (D-039, D-049), so the page never holds a link that could expire while it is open. *@
+
+@if (HasProxy)
+{
+    <video controls preload="metadata" playsinline src="fotos/@AssetId/@DerivativeNames.Proxy" poster="@PosterUrl">
+        <p>Este navegador não consegue reproduzir o vídeo.</p>
+    </video>
+}
+else
+{
+    @if (PosterUrl is { } poster)
+    {
+        <img src="@poster" alt="@AssetKinds.Label(AssetKinds.Video)" />
+    }
+    <p class="processing" role="status">Vídeo ainda em processamento</p>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string AssetId { get; set; } = string.Empty;
+
+    /// <summary>The poster derivative, or null when the video has none yet.</summary>
+    [Parameter]
+    public string? PosterName { get; set; }
+
+    /// <summary>Whether the 720p version exists; until it does, there is nothing the browser can play.</summary>
+    [Parameter]
+    public bool HasProxy { get; set; }
+
+    private string? PosterUrl => PosterName is { } name ? $"fotos/{AssetId}/{name}" : null;
+}

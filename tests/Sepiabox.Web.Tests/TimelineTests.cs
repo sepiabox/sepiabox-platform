@@ -23,6 +23,22 @@ public sealed class TimelineTests : BunitContext
     }
 
     [Fact]
+    public void A_3_second_video_shows_a_play_icon_and_0_03_on_its_card()
+    {
+        Use(new FakeLibrary(
+            new TimelineItem(Ids.Of(15), AssetKinds.Video, new DateTime(2020, 8, 9, 18, 5, 0), true, DurationSeconds: 3),
+            new TimelineItem(Ids.Of(16), AssetKinds.Photo, new DateTime(2020, 8, 8), true)));
+
+        var page = Render<Timeline>();
+
+        var cards = page.FindAll("a.thumb");
+        Assert.Equal($"fotos/{Ids.Of(15)}", cards[0].GetAttribute("href"));
+        Assert.Equal("0:03", cards[0].QuerySelector(".badge")!.TextContent);
+        Assert.NotNull(cards[0].QuerySelector(".play"));
+        Assert.Null(cards[1].QuerySelector(".play"));
+    }
+
+    [Fact]
     public void An_asset_without_a_date_appears_last_under_sem_data()
     {
         Use(new FakeLibrary(
