@@ -166,6 +166,37 @@ public sealed class PlacesTests(CatalogFixture fixture) : IDisposable
         Assert.Equal((null, null, null), await PlaceAsync(db, madrid));
     }
 
+    [Fact]
+    public async Task Places_refresh_never_overwrites_the_place_of_an_asset_moved_meanwhile()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, PhotoAt(PhotoId, 41.18, -8.69));
+        await ImportAsync(db, container);
+        await LoadAsync(db, GeoNamesSample.Write(_folder));
+        // An import moves the asset to Lisbon, and names it, while refresh resolves the old location.
+        var moving = new MovingResolver(new PostgisPlaceResolver(db), () => db.Database.ExecuteSqlRawAsync($$"""
+            UPDATE assets SET location = 'SRID=4326;POINT(-9.14 38.72)'::geography,
+              place_city = 'Lisbon', place_region = 'Lisbon', place_country = 'Portugal'
+            WHERE id = '{{PhotoId}}'
+            """));
+
+        var named = await new PlacesRefresh(db, moving, all: true).RunAsync(CancellationToken.None);
+
+        Assert.Equal(0, named);
+        Assert.Equal(("Lisbon", "Lisbon", "Portugal"), await PlaceAsync(db, PhotoId));
+    }
+
+    private sealed class MovingResolver(IPlaceResolver inner, Func<Task> move) : IPlaceResolver
+    {
+        public async Task<Place?> ResolveAsync(NetTopologySuite.Geometries.Point location, CancellationToken cancellationToken)
+        {
+            var place = await inner.ResolveAsync(location, cancellationToken);
+            await move();
+            return place;
+        }
+    }
+
     private static NetTopologySuite.Geometries.Point Point(double latitude, double longitude) =>
         new(longitude, latitude) { SRID = 4326 };
 

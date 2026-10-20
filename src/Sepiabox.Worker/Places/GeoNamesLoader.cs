@@ -7,8 +7,9 @@ namespace Sepiabox.Worker.Places;
 /// <summary>
 /// <c>geonames load</c> (S-012): replaces the <c>geonames</c> table with a dump's cities, in one transaction,
 /// so loading the same files again leaves the same rows and a failed load leaves the old ones. Plain EF Core
-/// (D-051) apart from <c>TRUNCATE</c>, which leaves no dead rows behind on every reload; it needs the table's
-/// owner, the administrator, which is who runs the load (D-066).
+/// (D-051). <c>DELETE</c>, not <c>TRUNCATE</c>: TRUNCATE would lock the table against readers for the whole load,
+/// so imports looking up places would time out; with DELETE they keep reading the old cities until the commit
+/// (D-066). The dead rows are then vacuumed, which needs the table's owner, the administrator that runs the load.
 /// </summary>
 public sealed class GeoNamesLoader(CatalogDbContext db)
 {
@@ -23,7 +24,7 @@ public sealed class GeoNamesLoader(CatalogDbContext db)
     {
         ArgumentNullException.ThrowIfNull(cities);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await db.Database.ExecuteSqlRawAsync("TRUNCATE geonames", cancellationToken);
+        await db.GeoNames.ExecuteDeleteAsync(cancellationToken);
 
         var loaded = 0;
         foreach (var batch in cities.Chunk(BatchSize))
@@ -45,6 +46,9 @@ public sealed class GeoNamesLoader(CatalogDbContext db)
         }
 
         await transaction.CommitAsync(cancellationToken);
+
+        // Outside the transaction, as VACUUM requires; autovacuum would get there too, this just does it now.
+        await db.Database.ExecuteSqlRawAsync("VACUUM (ANALYZE) geonames", cancellationToken);
         return loaded;
     }
 }

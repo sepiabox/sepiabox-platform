@@ -198,7 +198,7 @@ public sealed class ManifestImporter(
         SetPlace(asset, await places.ResolveAsync(location, cancellationToken));
     }
 
-    internal static void SetPlace(Asset asset, Place? place)
+    private static void SetPlace(Asset asset, Place? place)
     {
         asset.PlaceCity = place?.City;
         asset.PlaceRegion = place?.Region;

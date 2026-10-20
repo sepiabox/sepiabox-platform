@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Sepiabox.Catalog;
-using Sepiabox.Worker.Importing;
 
 namespace Sepiabox.Worker.Places;
 
@@ -22,8 +21,10 @@ public sealed class PlacesRefresh(CatalogDbContext db, IPlaceResolver places, bo
         {
             // By id, so assets left without a place (none within 50 km) are not read again in this run.
             var batch = await db.Assets
+                .AsNoTracking()
                 .Where(a => a.Location != null && (all || a.PlaceCity == null) && (after == null || string.Compare(a.Id, after) > 0))
                 .OrderBy(a => a.Id)
+                .Select(a => new { a.Id, Location = a.Location! })
                 .Take(BatchSize)
                 .ToListAsync(cancellationToken);
             if (batch.Count == 0)
@@ -33,20 +34,29 @@ public sealed class PlacesRefresh(CatalogDbContext db, IPlaceResolver places, bo
 
             foreach (var asset in batch)
             {
-                var place = await places.ResolveAsync(asset.Location!, cancellationToken);
-                if (place is not null || all)
+                var place = await places.ResolveAsync(asset.Location, cancellationToken);
+                if (place is null && !all)
                 {
-                    ManifestImporter.SetPlace(asset, place);
+                    continue;
                 }
 
-                if (place is not null)
+                // Only while the location is still the one read: an import that moved the asset meanwhile has
+                // already named the new location, and must not be overwritten with the old one's place.
+                var read = asset.Location;
+                var updated = await db.Assets
+                    .Where(a => a.Id == asset.Id && a.Location == read)
+                    .ExecuteUpdateAsync(
+                        set => set
+                            .SetProperty(a => a.PlaceCity, place == null ? null : place.City)
+                            .SetProperty(a => a.PlaceRegion, place == null ? null : place.Region)
+                            .SetProperty(a => a.PlaceCountry, place == null ? null : place.Country),
+                        cancellationToken);
+                if (updated == 1 && place is not null)
                 {
                     named++;
                 }
             }
 
-            await db.SaveChangesAsync(cancellationToken);
-            db.ChangeTracker.Clear();
             after = batch[^1].Id;
         }
     }
