@@ -14,7 +14,10 @@ public sealed record CameraInfo(string? Make, string? Model);
 /// The capture date as the file writes it, unfiltered: a camera with a reset clock gives 1980-01-01. Never record
 /// it as is; resolve it with <see cref="CaptureDate.Resolve"/>, which also falls back to the file's path (D-046).
 /// </param>
-/// <param name="Location">Where it was taken, from GPS.</param>
+/// <param name="Location">
+/// Where it was taken: EXIF GPS for a photo, the QuickTime ISO 6709 position for a phone video. Videos whose position
+/// MetadataExtractor does not expose get it from ffprobe when <c>process</c> probes them (<see cref="Video.VideoProbe"/>).
+/// </param>
 /// <param name="Camera">Make and model.</param>
 /// <param name="Width">Width in pixels.</param>
 /// <param name="Height">Height in pixels.</param>
@@ -62,12 +65,15 @@ public static class MetadataReader
     private static GeoPoint? ReadLocation(IReadOnlyList<MetadataExtractor.Directory> directories)
     {
         var gps = directories.OfType<GpsDirectory>().FirstOrDefault();
-        if (gps is null || !gps.TryGetGeoLocation(out var location) || location.IsZero)
+        if (gps is not null && gps.TryGetGeoLocation(out var location) && !location.IsZero)
         {
-            return null;
+            return new GeoPoint(Math.Round(location.Latitude, 6), Math.Round(location.Longitude, 6));
         }
 
-        return new GeoPoint(Math.Round(location.Latitude, 6), Math.Round(location.Longitude, 6));
+        // Both the user-data ©xyz atom and the com.apple.quicktime.location.ISO6709 key land in this tag.
+        return directories.OfType<QuickTimeMetadataHeaderDirectory>()
+            .Select(quickTime => Iso6709.Parse(quickTime.GetString(QuickTimeMetadataHeaderDirectory.TagGpsLocation)))
+            .FirstOrDefault(point => point is not null);
     }
 
     private static CameraInfo? ReadCamera(IReadOnlyList<MetadataExtractor.Directory> directories)

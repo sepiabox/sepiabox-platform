@@ -20,8 +20,10 @@ public enum VideoEncoder
 /// Size as shown on screen: after the rotation phones record instead of rotating pixels, and after the
 /// pixel aspect ratio of anamorphic camcorder and DVD video (720x576 stored, 1024x576 shown for 16:9).
 /// <c>VideoStream</c> is which video stream holds the footage, counting video streams only, so cover art is skipped.
+/// <c>Location</c> is the ISO 6709 position in the container's tags (<see cref="Iso6709"/>), for the videos whose
+/// position MetadataExtractor does not expose, such as an MP4's 3GPP <c>loci</c> box.
 /// </summary>
-public sealed record VideoProbe(int Width, int Height, double? DurationSeconds, int VideoStream = 0);
+public sealed record VideoProbe(int Width, int Height, double? DurationSeconds, int VideoStream = 0, GeoPoint? Location = null);
 
 public sealed class VideoProcessingException : Exception
 {
@@ -294,6 +296,10 @@ public static class VideoScale
 /// <summary>Command lines for ffprobe and ffmpeg, as argument lists.</summary>
 public static class FfmpegArguments
 {
+    // The Apple key first: iPhones write it, and it is the one Photos shows. FFmpeg reports the ©xyz atom and the
+    // 3GPP loci box as "location".
+    private static readonly string[] s_locationTags = ["com.apple.quicktime.location.ISO6709", "location"];
+
     /// <summary>
     /// <paramref name="thorough"/> reads up to 100 MB and 100 seconds before deciding which streams the file
     /// has, instead of FFmpeg's few megabytes and seconds.
@@ -303,7 +309,7 @@ public static class FfmpegArguments
         "-v", "error",
         .. thorough ? (string[])["-probesize", "100M", "-analyzeduration", "100M"] : [],
         "-select_streams", "v",
-        "-show_entries", "stream=width,height,sample_aspect_ratio:stream_disposition=attached_pic:stream_tags=rotate:stream_side_data=rotation:format=duration",
+        "-show_entries", $"stream=width,height,sample_aspect_ratio:stream_disposition=attached_pic:stream_tags=rotate:stream_side_data=rotation:format=duration:format_tags={string.Join(',', s_locationTags)}",
         "-of", "json",
         input,
     ];
@@ -406,7 +412,19 @@ public static class FfmpegArguments
                 ? Math.Round(seconds, 3)
                 : null;
 
-        return new VideoProbe(width, height, duration, videoStream);
+        return new VideoProbe(width, height, duration, videoStream, Location(root));
+    }
+
+    private static GeoPoint? Location(JsonElement root)
+    {
+        if (!root.TryGetProperty("format", out var format) || !format.TryGetProperty("tags", out var tags) || tags.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return s_locationTags
+            .Select(name => tags.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? Iso6709.Parse(value.GetString()) : null)
+            .FirstOrDefault(point => point is not null);
     }
 
     private static bool IsAttachedPicture(JsonElement stream) =>

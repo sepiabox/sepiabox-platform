@@ -97,6 +97,44 @@ public class VideoProcessingTests
         Assert.Equal(3, Assert.Single(ReadManifests(work)).Derivatives.Count);
     }
 
+    [Theory]
+    // FFmpeg writes an MP4's location as a 3GPP loci box, which only ffprobe reads.
+    [InlineData("android.mp4", "location")]
+    // And a MOV's in the user-data ©xyz atom, which MetadataExtractor reads.
+    [InlineData("older-iphone.mov", "location")]
+    // The Apple key goes into udta/meta here, which only ffprobe reads; iPhones put it in moov/meta (MetadataReaderTests).
+    [InlineData("IMG_0001.MOV", "com.apple.quicktime.location.ISO6709")]
+    public void Records_the_location_a_phone_video_carries(string name, string tag)
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // Without use_metadata_tags FFmpeg drops tags it has no atom for, such as the Apple key.
+        string[] keys = tag == "location" ? [] : ["-movflags", "use_metadata_tags"];
+        MakeVideo(Path.Combine(drive.Path, name), 640, 360, seconds: 1, [.. keys, "-metadata", $"{tag}=+38.7223-009.1393+010.000/"]);
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal(new GeoPoint(38.7223, -9.1393), manifest.Location);
+        Assert.Equal(3, manifest.Derivatives.Count);
+        // The 720p version still drops it (D-029).
+        var proxy = Path.Combine(work.Path, Assert.Single(manifest.Derivatives, d => d.Name == VideoProcessor.ProxyName).Path);
+        Assert.Null(new VideoProcessor(s_tools).Probe(proxy).Location);
+    }
+
+    [Fact]
+    public void Has_no_location_when_a_video_records_the_null_island_position()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        MakeVideo(Path.Combine(drive.Path, "nofix.mp4"), 640, 360, seconds: 1, "-metadata", "location=+00.0000+000.0000/");
+
+        Process(drive, work);
+
+        Assert.Null(Assert.Single(ReadManifests(work)).Location);
+    }
+
     [Fact]
     public void Dates_an_undated_mpeg_clip_from_its_folder_and_file_name_when_processed()
     {
@@ -570,7 +608,8 @@ public class VideoProcessingTests
         return (derivative.Width, derivative.Height);
     }
 
-    private static void MakeVideo(string path, int width, int height, int seconds)
+    // Output holds extra output options, such as -metadata.
+    private static void MakeVideo(string path, int width, int height, int seconds, params string[] output)
     {
         Run(s_tools.Ffmpeg,
         [
@@ -578,6 +617,7 @@ public class VideoProcessingTests
             "-f", "lavfi", "-i", $"testsrc=duration={seconds}:size={width}x{height}:rate=25",
             "-f", "lavfi", "-i", $"sine=frequency=440:duration={seconds}",
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+            .. output,
             path,
         ]);
         Assert.Equal(MediaKind.Video, MediaTypes.Classify(path));
