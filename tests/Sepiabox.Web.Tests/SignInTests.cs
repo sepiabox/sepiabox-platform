@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
 using Sepiabox.Web.Auth;
 using static Sepiabox.Web.Tests.SignInWeb;
 
@@ -247,7 +248,7 @@ public sealed class SignInTests
         Assert.Equal(AuthSetup.CookieName, cookie.Cookie.Name);
         Assert.Equal(secure, cookie.Cookie.SecurePolicy);
         Assert.True(cookie.Cookie.HttpOnly);
-        Assert.Equal(SameSiteMode.Lax, cookie.Cookie.SameSite);
+        Assert.Equal(Microsoft.AspNetCore.Http.SameSiteMode.Lax, cookie.Cookie.SameSite);
         Assert.Equal(TimeSpan.FromDays(14), cookie.ExpireTimeSpan);
         Assert.True(cookie.SlidingExpiration);
     }
@@ -278,6 +279,45 @@ public sealed class SignInTests
         Assert.Equal($"{AuthSetup.MicrosoftConsumers}/authorize", microsoft.AuthorizationEndpoint);
         Assert.Equal($"{AuthSetup.MicrosoftConsumers}/token", microsoft.TokenEndpoint);
         Assert.Contains(google.ClaimActions, action => action.ClaimType == AccessTicketHandler.EmailVerifiedClaim);
+    }
+
+    [Theory]
+    [InlineData("""{"sub":"1","email":"Ana@Example.com","email_verified":true}""", "/fotos/abc")]
+    [InlineData("""{"id":"1","email":"ana@example.com","verified_email":true}""", "/fotos/abc")]
+    [InlineData("""{"sub":"1","email":"ana@example.com"}""", "/sem-acesso")]
+    [InlineData("""{"sub":"1","email":"ana@example.com","email_verified":false}""", "/sem-acesso")]
+    [InlineData("""{"sub":"1","email":"stranger@example.com","email_verified":true}""", "/sem-acesso")]
+    public async Task Signs_in_through_the_real_google_handler_only_with_a_verified_email_on_the_list(string userInfo, string landsOn)
+    {
+        using var google = new FakeGoogle(userInfo);
+        await using var web = Create(settings: BothClients, googleBackchannel: google);
+        using var http = web.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = false });
+
+        // The button: the handler writes its correlation cookie and sends the browser to Google with a state.
+        using var challenge = await http.GetAsync(Url("/entrar/google?returnUrl=%2Ffotos%2Fabc"));
+        var state = HttpUtility.ParseQueryString(challenge.Headers.Location!.Query)["state"];
+        var correlation = SetCookieHeaderValue.ParseList(challenge.Headers.GetValues("Set-Cookie").ToList())
+            .Single(cookie => cookie.Name.StartsWith(".AspNetCore.Correlation.", StringComparison.Ordinal));
+
+        // Google sends the browser back with a code; the handler redeems it and reads the user info.
+        using var back = new HttpRequestMessage(HttpMethod.Get, Url($"/signin-google?code=fake-code&state={Uri.EscapeDataString(state!)}"));
+        back.Headers.Add("Cookie", $"{correlation.Name}={correlation.Value}");
+        using var callback = await http.SendAsync(back);
+
+        Assert.Equal([GoogleDefaults.TokenEndpoint, GoogleDefaults.UserInformationEndpoint], google.Calls);
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        Assert.Equal(landsOn, callback.Headers.Location!.OriginalString);
+        var session = SessionCookie(callback);
+        if (landsOn == "/sem-acesso")
+        {
+            // At most the cookie that deletes an earlier session.
+            Assert.True(session is null || session.Value.Length == 0);
+        }
+        else
+        {
+            Assert.True(session!.Value.Length > 0);
+            Assert.True(session.Expires > DateTimeOffset.UtcNow.AddDays(13));
+        }
     }
 
     [Theory]

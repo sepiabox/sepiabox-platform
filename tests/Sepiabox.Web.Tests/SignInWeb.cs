@@ -26,7 +26,8 @@ internal static partial class SignInWeb
         string environment = "Development",
         string accessEmails = TestUsers.Allowed,
         Dictionary<string, string>? settings = null,
-        DirectoryInfo? keyRing = null)
+        DirectoryInfo? keyRing = null,
+        HttpMessageHandler? googleBackchannel = null)
     {
         var library = new FakeLibrary();
         library.Assets[Photo] = Details.Photo(Photo);
@@ -36,6 +37,7 @@ internal static partial class SignInWeb
             AccessEmails = accessEmails,
             Settings = settings ?? [],
             KeyRing = keyRing,
+            GoogleBackchannel = googleBackchannel,
         };
     }
 
@@ -56,15 +58,24 @@ internal static partial class SignInWeb
     }
 
     /// <summary>Fills in the e-mail on /entrar and submits it, as a developer would.</summary>
-    public static async Task<HttpResponseMessage> DevLoginAsync(HttpClient http, string email, string returnUrl = "/")
+    public static async Task<HttpResponseMessage> DevLoginAsync(HttpClient http, string email, string returnUrl = "/", string? forwardedFor = null)
     {
         var token = await FormTokenAsync(http, "/entrar");
-        return await http.PostAsync(Url("/dev-login"), new FormUrlEncodedContent(new Dictionary<string, string>
+        using var request = new HttpRequestMessage(HttpMethod.Post, Url("/dev-login"))
         {
-            ["__RequestVerificationToken"] = token,
-            ["email"] = email,
-            ["returnUrl"] = returnUrl,
-        }));
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["__RequestVerificationToken"] = token,
+                ["email"] = email,
+                ["returnUrl"] = returnUrl,
+            }),
+        };
+        if (forwardedFor is not null)
+        {
+            request.Headers.Add("X-Forwarded-For", forwardedFor);
+        }
+
+        return await http.SendAsync(request);
     }
 
     [GeneratedRegex("name=\"__RequestVerificationToken\" value=\"(?<token>[^\"]+)\"")]

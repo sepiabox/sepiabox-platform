@@ -85,13 +85,15 @@ public sealed class AccessTicketHandlerTests
     }
 
     [Theory]
-    [InlineData("access_denied", "access_denied")]
-    [InlineData("Access denied for ana@example.com", "none")]
-    [InlineData("", "none")]
-    [InlineData(null, "none")]
-    public void Logs_only_a_well_formed_oauth_error_code(string? error, string expected)
+    [InlineData("access_denied", "failed", "access_denied")]
+    [InlineData("Access denied for ana@example.com", "failed", "unknown")]
+    [InlineData("", "failed", "unknown")]
+    [InlineData(null, "Correlation failed.", "correlation_failed")]
+    [InlineData(null, "The oauth state was missing or invalid.", "invalid_state")]
+    [InlineData(null, "Something about ana@example.com", "unknown")]
+    public void Logs_only_a_well_formed_oauth_error_code_or_a_known_failure(string? error, string message, string expected)
     {
-        var failure = new AuthenticationFailureException("failed");
+        var failure = new AuthenticationFailureException(message);
         failure.Data["error"] = error;
 
         Assert.Equal(expected, AccessTicketHandler.ErrorCode(failure));
@@ -106,7 +108,18 @@ public sealed class AccessTicketHandlerTests
         return new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
     }
 
-    private static TicketReceivedContext TicketFor(string? email, string? emailVerified = null, bool microsoft = false)
+    [Fact]
+    public async Task Refuses_a_sign_in_from_a_provider_it_does_not_know()
+    {
+        var context = TicketFor(TestUsers.Allowed, "true", scheme: "Other");
+
+        await AccessTicketHandler.OnTicketReceivedAsync(context);
+
+        Assert.True(context.Result?.Handled);
+        Assert.Equal("/sem-acesso", context.Response.Headers.Location.ToString());
+    }
+
+    private static TicketReceivedContext TicketFor(string? email, string? emailVerified = null, bool microsoft = false, string? scheme = null)
     {
         var http = Http();
         List<Claim> claims = email is null ? [] : [new Claim(ClaimTypes.Email, email)];
@@ -116,10 +129,10 @@ public sealed class AccessTicketHandlerTests
         }
 
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "oauth"));
-        var scheme = microsoft
+        var authenticationScheme = microsoft
             ? new AuthenticationScheme(MicrosoftAccountDefaults.AuthenticationScheme, null, typeof(MicrosoftAccountHandler))
-            : new AuthenticationScheme(GoogleDefaults.AuthenticationScheme, null, typeof(GoogleHandler));
+            : new AuthenticationScheme(scheme ?? GoogleDefaults.AuthenticationScheme, null, typeof(GoogleHandler));
         RemoteAuthenticationOptions options = microsoft ? new MicrosoftAccountOptions() : new GoogleOptions();
-        return new TicketReceivedContext(http, scheme, options, new AuthenticationTicket(principal, new AuthenticationProperties(), scheme.Name));
+        return new TicketReceivedContext(http, authenticationScheme, options, new AuthenticationTicket(principal, new AuthenticationProperties(), authenticationScheme.Name));
     }
 }

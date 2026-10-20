@@ -21,6 +21,8 @@ public sealed class ReturnUrlTests
     [InlineData("/sair", "/")]
     [InlineData("/dev-login", "/")]
     [InlineData("/entrarx", "/entrarx")]
+    [InlineData("/%65ntrar", "/")]
+    [InlineData("/sem%2Dacesso?x=1", "/")]
     public void Keeps_return_urls_on_this_site(string? requested, string expected) =>
         Assert.Equal(expected, AuthSetup.LocalReturnUrl(new DefaultHttpContext().Request, requested));
 
@@ -34,5 +36,7 @@ public sealed class ReturnUrlTests
         // A ReturnUrl from the cookie handler already carries the path base and is kept as it is.
         Assert.Equal("/app/fotos/abc", AuthSetup.LocalReturnUrl(request, "/app/fotos/abc"));
         Assert.Equal("/app/sem-acesso", AuthSetup.AppPath(request, AuthSetup.NoAccessPath));
+        Assert.Equal("/app/", AuthSetup.LocalReturnUrl(request, "/app/entrar"));
+        Assert.Equal("/app/", AuthSetup.LocalReturnUrl(request, "/APP/%65ntrar?ReturnUrl=%2F"));
     }
 }

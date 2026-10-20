@@ -1,4 +1,5 @@
 using Azure;
+using Microsoft.Extensions.Logging;
 using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
@@ -67,15 +68,15 @@ internal static class Details
 }
 
 /// <summary>Keeps what was logged, so a test can check a warning.</summary>
-internal sealed class ListLogger : Microsoft.Extensions.Logging.ILogger
+internal sealed class ListLogger<T> : ILogger<T>
 {
-    public List<(Microsoft.Extensions.Logging.LogLevel Level, string Message)> Entries { get; } = [];
+    public List<(LogLevel Level, string Message)> Entries { get; } = [];
 
     public IDisposable? BeginScope<TState>(TState state)
         where TState : notnull => null;
 
-    public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+    public bool IsEnabled(LogLevel logLevel) => true;
 
-    public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
         Entries.Add((logLevel, formatter(state, exception)));
 }

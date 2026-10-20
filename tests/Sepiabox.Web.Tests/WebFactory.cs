@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
@@ -51,6 +52,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// </summary>
     public DirectoryInfo? KeyRing { get; init; }
 
+    /// <summary>Answers the Google handler's server-to-server calls (token and user info) instead of Google.</summary>
+    public HttpMessageHandler? GoogleBackchannel { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder
@@ -65,7 +69,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
 
         builder.ConfigureTestServices(services =>
         {
-            services.AddSingleton<IStartupFilter, LocalBrowser>();
+            // First, so it runs before the host's own filters (such as ASPNETCORE_FORWARDEDHEADERS_ENABLED's),
+            // as a real connection's address would.
+            services.Insert(0, ServiceDescriptor.Singleton<IStartupFilter, LocalBrowser>());
             services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, TestSignIn>(TestSignIn.SchemeName, null);
             // Only authentication changes: challenges and 403s still go through the app's cookie handler.
             services.PostConfigure<AuthenticationOptions>(options => options.DefaultAuthenticateScheme = TestSignIn.SchemeName);
@@ -82,6 +88,13 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
 
                     options.Registrations.Add(new HealthCheckRegistration("fake", new AlwaysHealthy(), null, null));
                 });
+            }
+
+            if (GoogleBackchannel is not null)
+            {
+                // Backchannel, not BackchannelHttpHandler: by post-configure time the handler's own client exists.
+                services.PostConfigure<GoogleOptions>(GoogleDefaults.AuthenticationScheme,
+                    options => options.Backchannel = new HttpClient(GoogleBackchannel, disposeHandler: false));
             }
 
             if (KeyRing is not null)

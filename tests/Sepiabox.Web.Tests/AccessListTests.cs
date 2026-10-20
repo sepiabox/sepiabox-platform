@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Web.Auth;
 
 namespace Sepiabox.Web.Tests;
@@ -38,7 +39,7 @@ public sealed class AccessListTests
     [InlineData(" , ; ")]
     public void Refuses_everyone_when_the_list_is_empty_or_missing(string? configured)
     {
-        var access = AccessList.From(Configuration(new() { [AccessList.ConfigurationKey] = configured }));
+        var access = AccessList.From(Configuration(new() { [AccessList.ConfigurationKey] = configured }), NullLogger<AccessList>.Instance);
 
         Assert.Equal(0, access.Count);
         Assert.False(access.Allows("ana@example.com"));
@@ -50,7 +51,7 @@ public sealed class AccessListTests
         var access = AccessList.From(Configuration(new()
         {
             [AccessList.ConfigurationKey] = "ana@example.com, bruno@example.com;carla@example.com\ndavi@example.com",
-        }));
+        }), NullLogger<AccessList>.Instance);
 
         Assert.Equal(4, access.Count);
         Assert.All(["ana@example.com", "bruno@example.com", "carla@example.com", "davi@example.com"], email => Assert.True(access.Allows(email)));
@@ -63,7 +64,7 @@ public sealed class AccessListTests
         {
             [$"{AccessList.ConfigurationKey}:0"] = "ana@example.com",
             [$"{AccessList.ConfigurationKey}:1"] = "BRUNO@example.com",
-        }));
+        }), NullLogger<AccessList>.Instance);
 
         Assert.Equal(2, access.Count);
         Assert.True(access.Allows("bruno@example.com"));
@@ -73,7 +74,7 @@ public sealed class AccessListTests
     public void Follows_the_configuration_when_it_reloads()
     {
         var configuration = (IConfigurationRoot)Configuration(new() { [AccessList.ConfigurationKey] = "ana@example.com" });
-        var access = AccessList.From(configuration);
+        var access = AccessList.From(configuration, NullLogger<AccessList>.Instance);
 
         configuration[AccessList.ConfigurationKey] = "bruno@example.com";
         configuration.Reload();
@@ -86,7 +87,7 @@ public sealed class AccessListTests
     public void Warns_when_a_reload_empties_the_list()
     {
         var configuration = (IConfigurationRoot)Configuration(new() { [AccessList.ConfigurationKey] = "ana@example.com" });
-        var log = new ListLogger();
+        var log = new ListLogger<AccessList>();
         var access = AccessList.From(configuration, log);
 
         configuration[AccessList.ConfigurationKey] = "";

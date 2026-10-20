@@ -81,6 +81,21 @@ public sealed class DevLoginTests
         Assert.DoesNotContain(context.Response.Headers.SetCookie, cookie => cookie!.StartsWith("sepiabox-auth=", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("127.0.0.1", false)]
+    [InlineData(null, true)]
+    public async Task Refuses_a_forwarded_dev_login_from_loopback_when_forwarded_headers_are_enabled(string? forwardedFor, bool signsIn)
+    {
+        // ASPNETCORE_FORWARDEDHEADERS_ENABLED: the middleware consumes X-Forwarded-For and leaves X-Original-For.
+        await using var web = Create(settings: new() { ["FORWARDEDHEADERS_ENABLED"] = "true" });
+        using var http = web.CreateAnonymousClient();
+
+        using var login = await DevLoginAsync(http, TestUsers.Allowed, forwardedFor: forwardedFor);
+
+        Assert.Equal(signsIn ? HttpStatusCode.Redirect : HttpStatusCode.NotFound, login.StatusCode);
+        Assert.Equal(signsIn, SessionCookie(login) is not null);
+    }
+
     [Fact]
     public async Task Refuses_a_dev_login_without_the_antiforgery_token()
     {
