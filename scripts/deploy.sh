@@ -23,6 +23,13 @@ readonly poll_seconds="${SEPIABOX_MIGRATE_POLL_SECONDS:-10}"
 
 cd "$(dirname "$0")/.."
 
+# web-models.sh would push the web's base image there instead of the environment's registry, which the web's
+# revision could not pull from.
+if [[ -n "${SEPIABOX_REGISTRY:-}" ]]; then
+  echo "SEPIABOX_REGISTRY is set (it is only for tests of scripts/web-models.sh); unset it and run again." >&2
+  exit 1
+fi
+
 # azd names the resource group rg-<environment> and creates it in the environment's region.
 if [[ "$(azd env get-value AZURE_ENV_NAME)" != "$environment_name" ]]; then
   echo "Select the azd environment '$environment_name' first: azd env select $environment_name" >&2

@@ -5,3 +5,10 @@
 *.sh text eol=lf
 Dockerfile text eol=lf
 models/models.json text eol=lf
+# Never converted or diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.woff2 binary
+*.gz binary
+*.onnx binary

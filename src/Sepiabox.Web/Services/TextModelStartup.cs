@@ -21,24 +21,24 @@ public sealed class TextModelHealthCheck(IQueryEmbedder embedder) : IHealthCheck
 /// <summary>
 /// Loads the CLIP text model as the web starts (S-056, D-071), in the background so sign-in and the timeline answer at
 /// once after a cold start: verifying and opening the model and embedding one short text. A description search that
-/// arrives meanwhile waits for this load rather than starting another. A missing or unusable model is logged once as
-/// an error and the web carries on. The working set after loading is logged too, the measure for the web's 1 GiB.
+/// arrives meanwhile waits for this load rather than starting another. A missing or unusable model, or any other failure
+/// to load it, is logged once as an error and the web carries on: this service never stops the host. The working set after loading is logged too, the measure for the web's 1 GiB.
 /// </summary>
 public sealed partial class TextModelWarmUp(IQueryEmbedder embedder, ILogger<TextModelWarmUp> log) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var folder = embedder is ClipQueryEmbedder clip ? clip.ModelFolder : "(not a folder)";
-        if (!embedder.IsAvailable)
-        {
-            // The embedder remembers no missing files (they may still arrive), so this is the one report of it.
-            LogMissing(log, folder);
-            return;
-        }
-
         var started = TimeProvider.System.GetTimestamp();
         try
         {
+            if (!embedder.IsAvailable)
+            {
+                // The embedder remembers no missing files (they may still arrive), so this is the one report of it.
+                LogMissing(log, folder);
+                return;
+            }
+
             // Off the start-up path: verifying and opening ~250 MB takes seconds.
             await Task.Run(() => embedder.Embed("a photo"), stoppingToken);
             var milliseconds = TimeProvider.System.GetElapsedTime(started).TotalMilliseconds;
@@ -53,7 +53,15 @@ public sealed partial class TextModelWarmUp(IQueryEmbedder embedder, ILogger<Tex
         {
             // The web is stopping.
         }
+        catch (Exception ex)
+        {
+            // A failed background service stops the host by default: the web must keep serving everything else.
+            LogFailed(log, ex);
+        }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Search by description is off: the CLIP text model could not be loaded.")]
+    private static partial void LogFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Search by description is off: the CLIP text model or its tokenizer is not in {Folder}.")]
     private static partial void LogMissing(ILogger logger, string folder);

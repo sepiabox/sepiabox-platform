@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # The web's base image (S-056, D-071): ASP.NET Core plus the CLIP text model, its tokenizer and models.json in one
 # layer of their own. scripts/web-models.sh fills the build context with the files `models download` verified
 # against their pinned SHA-256 and tags the image by models.json and the base image, so the web's releases reuse

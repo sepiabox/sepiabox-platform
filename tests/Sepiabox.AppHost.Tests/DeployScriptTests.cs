@@ -276,6 +276,16 @@ public sealed class DeployScriptTests : IDisposable
     }
 
     [UnixFact]
+    public async Task Deploy_refuses_to_start_when_sepiabox_registry_is_set()
+    {
+        var result = await RunDeployAsync("Succeeded", registry: "localhost:5000");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("SEPIABOX_REGISTRY", result.Error, StringComparison.Ordinal);
+        Assert.Empty(Calls());
+    }
+
+    [UnixFact]
     public async Task Deploy_leaves_the_web_alone_when_the_job_start_returns_no_execution()
     {
         var result = await RunDeployAsync("Succeeded", execution: "");
@@ -492,9 +502,11 @@ public sealed class DeployScriptTests : IDisposable
         string failingDeploy = "",
         string resume = "",
         string modelsImage = "PRESENT",
-        string download = "") =>
+        string download = "",
+        string registry = "") =>
         RunAsync("bash", [Path.Combine(Repository.Root, "scripts", "deploy.sh")], new()
         {
+            ["SEPIABOX_REGISTRY"] = registry,
             ["PATH"] = _stubs + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
             ["CALLS"] = _calls,
             ["STUB_STATUSES"] = statuses,

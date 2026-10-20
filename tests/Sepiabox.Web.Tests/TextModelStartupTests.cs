@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -98,6 +99,48 @@ public sealed class TextModelStartupTests
         Assert.True(started, "The web waited for the model to load before taking requests.");
         await warmUp.ExecuteTask!;
         Assert.Single(embedder.Texts);
+    }
+
+    [Fact]
+    public async Task Logs_one_error_and_keeps_going_when_loading_throws_something_unexpected()
+    {
+        var log = new ListLogger<TextModelWarmUp>();
+        var embedder = new FakeQueryEmbedder(embed: _ => throw new DllNotFoundException("onnxruntime"));
+
+        await WarmUpAsync(new TextModelWarmUp(embedder, log));
+
+        var error = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Error, error.Level);
+    }
+
+    [Fact]
+    public async Task Keeps_the_host_running_and_reports_degraded_when_the_model_loader_throws_something_unexpected()
+    {
+        var log = new ListLogger<ClipQueryEmbedder>();
+        using var host = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IQueryEmbedder>(new ClipQueryEmbedder(
+                    "unused",
+                    (out string? warning, out ClipLoadFailure failure) => throw new DllNotFoundException("onnxruntime"),
+                    () => true,
+                    log,
+                    failuresAreErrors: true));
+                services.AddHostedService<TextModelWarmUp>();
+                services.AddHealthChecks().AddCheck<TextModelHealthCheck>(TextModelHealthCheck.Name);
+            })
+            .Build();
+
+        await host.StartAsync();
+        await host.Services.GetServices<IHostedService>().OfType<TextModelWarmUp>().Single().ExecuteTask!;
+        var health = await host.Services.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+
+        Assert.False(host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.IsCancellationRequested);
+        Assert.Equal(HealthStatus.Degraded, health.Status);
+        var error = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Error, error.Level);
+        Assert.Contains("DllNotFoundException", error.Message, StringComparison.Ordinal);
+        await host.StopAsync();
     }
 
     private static async Task WarmUpAsync(TextModelWarmUp warmUp)

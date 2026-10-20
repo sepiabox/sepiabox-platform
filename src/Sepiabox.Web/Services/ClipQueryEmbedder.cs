@@ -108,7 +108,20 @@ public sealed partial class ClipQueryEmbedder : IQueryEmbedder, IDisposable
 
             if (CanTry(state))
             {
-                var encoder = _load(out var warning, out var failure);
+                ITextEncoder? encoder;
+                string? warning;
+                ClipLoadFailure failure;
+                try
+                {
+                    encoder = _load(out warning, out failure);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // ONNX Runtime's native library missing, a model that crashes the session, anything TryCreate did
+                    // not foresee: kept off until a restart like an invalid file, never thrown at the caller as is.
+                    (encoder, warning, failure) = (null, $"The CLIP text model could not be loaded ({ex.GetType().Name}: {ex.Message}).", ClipLoadFailure.Invalid);
+                }
+
                 if (encoder is not null)
                 {
                     _state = new State(encoder, null, null);

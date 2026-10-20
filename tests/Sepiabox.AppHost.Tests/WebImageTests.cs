@@ -14,18 +14,26 @@ public sealed class WebImageTests
 {
     private const string WebRepository = "sepiabox-web-test";
 
+    // Pinned: the test should not change because the registry image did.
+    private const string Registry = "registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373";
+
     [WebImageFact]
     public async Task Two_releases_share_the_model_layer_and_carry_the_pinned_model_readable_by_the_app()
     {
-        var container = (await Run("docker", ["run", "--detach", "--publish", "127.0.0.1::5000", "registry:2"])).Trim();
+        var container = (await Run("docker", ["run", "--detach", "--publish", "127.0.0.1::5000", Registry])).Trim();
         var images = new List<string>();
         var output = Path.Combine(Path.GetTempPath(), "sepiabox-web-image-" + Guid.NewGuid().ToString("N"));
+
+        // From a copy of the repository, so the Release restore and build for linux-x64 (the ingest's in
+        // web-models.sh, the web's here) never rewrite the obj folders the other test projects are using.
+        var copy = Path.Combine(output, "repository");
         try
         {
+            await CopyRepositoryAsync(copy);
             var port = (await Run("docker", ["port", container, "5000/tcp"])).Split('\n')[0].Split(':')[^1].Trim();
             var registry = $"localhost:{port}";
 
-            var modelsImage = (await Run("bash", [Path.Combine(Repository.Root, "scripts", "web-models.sh")], new() { ["SEPIABOX_REGISTRY"] = registry })).Trim();
+            var modelsImage = (await Run("bash", [Path.Combine(copy, "scripts", "web-models.sh")], new() { ["SEPIABOX_REGISTRY"] = registry })).Trim();
             images.Add(modelsImage);
             foreach (var release in new[] { "one", "two" })
             {
@@ -33,7 +41,7 @@ public sealed class WebImageTests
                 await Run(
                     "dotnet",
                     [
-                        "publish", Path.Combine(Repository.Root, "src", "Sepiabox.Web", "Sepiabox.Web.csproj"), "--configuration", "Release",
+                        "publish", Path.Combine(copy, "src", "Sepiabox.Web", "Sepiabox.Web.csproj"), "--configuration", "Release",
                         "--runtime", "linux-x64", "--self-contained", "false", "-t:PublishContainer",
                         $"-p:ContainerRegistry={registry}", $"-p:ContainerRepository={WebRepository}", $"-p:ContainerImageTag={release}",
                         $"-p:InformationalVersion=1.0.0+{release}",
@@ -74,6 +82,25 @@ public sealed class WebImageTests
             {
                 await Run("docker", ["rmi", "--force", image], check: false);
             }
+        }
+    }
+
+    /// <summary>The tracked and untracked, not ignored, files: the sources as they are, without bin and obj.</summary>
+    private static async Task CopyRepositoryAsync(string destination)
+    {
+        var files = await Run("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
+        foreach (var file in files.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var source = Path.Combine(Repository.Root, file);
+            if (!File.Exists(source))
+            {
+                // Deleted in the working tree but still in the index.
+                continue;
+            }
+
+            var target = Path.Combine(destination, file);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(source, target);
         }
     }
 
