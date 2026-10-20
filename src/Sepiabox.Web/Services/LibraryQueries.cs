@@ -73,6 +73,8 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
         ["video/quicktime"] = ".mov",
         ["video/x-msvideo"] = ".avi",
         ["video/x-matroska"] = ".mkv",
+        ["video/mpeg"] = ".mpg",
+        ["video/mp2t"] = ".mts",
     };
 
     /// <summary>

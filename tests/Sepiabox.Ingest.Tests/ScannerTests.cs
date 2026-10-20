@@ -31,6 +31,23 @@ public class ScannerTests
     }
 
     [Fact]
+    public void Counts_camcorder_files_as_videos_when_the_extension_is_mod_or_tod()
+    {
+        using var folder = new TempFolder();
+        folder.Write("2008-05-01/MOV001.MOD", RandomBytes(4_000, seed: 7));
+        folder.Write("2009-07-12/MOV002.TOD", RandomBytes(6_000, seed: 8));
+
+        var result = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false));
+
+        Assert.Equal(new KindTotals(2, 10_000), result.Totals[MediaKind.Video]);
+        Assert.Equal(new KindTotals(0, 0), result.Totals[MediaKind.Other]);
+        Assert.Equal(1, result.FilesByExtension[".mod"]);
+        Assert.Equal(1, result.FilesByExtension[".tod"]);
+        Assert.Equal(2, result.MediaByYear[ScanResult.UnknownYear]);
+        Assert.Empty(result.Problems);
+    }
+
+    [Fact]
     public void Groups_photos_by_the_year_they_were_taken()
     {
         using var folder = new TempFolder();

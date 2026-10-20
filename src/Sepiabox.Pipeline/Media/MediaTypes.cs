@@ -12,6 +12,8 @@ public static class MediaTypes
     private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".mp4", ".mov", ".m4v", ".avi", ".mkv", ".3gp", ".mts", ".m2ts", ".wmv", ".mpg", ".mpeg",
+        // Camcorder and DVD formats (D-045)
+        ".mod", ".tod", ".m2t", ".vob", ".dv",
     };
 
     private static readonly Dictionary<string, string> ContentTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -45,6 +47,11 @@ public static class MediaTypes
         [".wmv"] = "video/x-ms-wmv",
         [".mpg"] = "video/mpeg",
         [".mpeg"] = "video/mpeg",
+        [".mod"] = "video/mpeg",
+        [".tod"] = "video/mp2t",
+        [".m2t"] = "video/mp2t",
+        [".vob"] = "video/mpeg",
+        [".dv"] = "video/x-dv",
     };
 
     /// <summary>MIME type from the extension; generic binary for anything that is not a photo or video.</summary>
