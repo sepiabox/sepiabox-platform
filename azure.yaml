@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+# azd reads the infrastructure from the AppHost. Deploy with scripts/deploy.sh, never `azd up` or a bare
+# `azd deploy`: the script runs the migrate job before the web's new revision (S-032, docs/operations.md).
+name: sepiabox
+services:
+  app:
+    language: dotnet
+    project: ./src/Sepiabox.AppHost/Sepiabox.AppHost.csproj
+    host: containerapp
+hooks:
+  # Refuses a deploy that does not come from scripts/deploy.sh, which sets SEPIABOX_DEPLOY_SCRIPT.
+  predeploy:
+    posix:
+      shell: sh
+      run: '[ "$SEPIABOX_DEPLOY_SCRIPT" = "1" ] || { echo "Deploy with scripts/deploy.sh: it migrates the database before the web starts." >&2; exit 1; }'
+    windows:
+      shell: pwsh
+      run: 'if ($env:SEPIABOX_DEPLOY_SCRIPT -ne "1") { Write-Error "Deploy with scripts/deploy.sh: it migrates the database before the web starts."; exit 1 }'

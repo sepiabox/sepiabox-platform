@@ -18,12 +18,12 @@ The AppHost describes the infrastructure; `azd` provisions it in France Central 
 - Event triggering (S-033), CI/CD (S-034), domain (S-035).
 
 ### Acceptance criteria
-- [ ] Given `azd infra synth` (or AppHost publishing), when the generated Bicep is inspected, then it has PostgreSQL B1ms, auto-grow off, region `francecentral` and `allowBlobPublicAccess: false` (verified by a test).
-- [ ] Given the generated Bicep, when it is inspected, then the web app has `minReplicas: 0`.
-- [ ] Given the generated Bicep, then the web Container App is named `sepiabox-web` and the PostgreSQL server `sepiabox-pg`, the names S-030's runbook stops (a test compares them with the runbook's constants).
-- [ ] Given the generated infrastructure, when it is inspected, then it has a Container Apps job that runs `sepiabox-worker migrate` with a manual trigger, and no always-on container app for the worker.
-- [ ] Given a deploy, when the new web revision starts, then `sepiabox-worker migrate` has completed successfully against the cloud database first (deploy step order in `azure.yaml` or the deploy workflow).
-- [ ] Given the generated infrastructure, when it is inspected, then the web is reached only through the Container Apps ingress (HTTPS only, no other exposed port), which the web's forwarded-header handling relies on (enabled by the web outside Development, D-048); verified by a test on the Bicep.
+- [x] Given `azd infra synth` (or AppHost publishing), when the generated Bicep is inspected, then it has PostgreSQL B1ms, auto-grow off, region `francecentral` and `allowBlobPublicAccess: false` (verified by a test).
+- [x] Given the generated Bicep, when it is inspected, then the web app has `minReplicas: 0`.
+- [x] Given the generated Bicep, then the web Container App is named `sepiabox-web` and the PostgreSQL server `sepiabox-pg`, the names S-030's runbook stops (a test compares them with the runbook's constants).
+- [x] Given the generated infrastructure, when it is inspected, then it has a Container Apps job that runs `sepiabox-worker migrate` with a manual trigger, and no always-on container app for the worker.
+- [x] Given a deploy, when the new web revision starts, then `sepiabox-worker migrate` has completed successfully against the cloud database first (deploy step order in `azure.yaml` or the deploy workflow).
+- [x] Given the generated infrastructure, when it is inspected, then the web is reached only through the Container Apps ingress (HTTPS only, no other exposed port), which the web's forwarded-header handling relies on (enabled by the web outside Development, D-048); verified by a test on the Bicep.
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), when I call `GET /health` on the Container Apps default host, then it responds 200.
 
 ### Technical notes

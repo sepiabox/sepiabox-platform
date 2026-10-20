@@ -22,6 +22,8 @@ Guidance for agents working in `sepiabox-platform`. Read [docs/architecture.md](
 | Run the ingest CLI | `dotnet run --project src/Sepiabox.Ingest -- scan <folder>` |
 | Add a catalog migration | `dotnet ef migrations add <Name> --project src/Sepiabox.Catalog --output-dir Migrations` |
 | Run the local environment (needs Docker) | `dotnet run --project src/Sepiabox.AppHost` |
+| Generate the Azure manifest and Bicep (offline) | `dotnet run --project src/Sepiabox.AppHost -- --publisher manifest --output-path <folder>` |
+| Deploy to Azure (owner, needs azd and az) | `./scripts/deploy.sh` |
 
 Before pushing, the build must have zero warnings (warnings are errors) and the format check must pass.
 
@@ -37,6 +39,8 @@ src/
   Sepiabox.AppHost/    .NET Aspire AppHost: PostgreSQL, Azurite and the web, locally and for azd
   Sepiabox.ServiceDefaults/  health checks and OpenTelemetry shared by the services
 infra/postgres/        PostgreSQL image with pgvector and PostGIS
+scripts/deploy.sh      the only way to deploy: azd provision, migrate job, then the web (D-061)
+azure.yaml             azd project: the AppHost is the infrastructure
 tests/
   Sepiabox.<Project>.Tests/   one xUnit project per source project
   Shared/              helpers compiled into the test projects (Catalog/ holds the PostgreSQL + Azurite fixture)

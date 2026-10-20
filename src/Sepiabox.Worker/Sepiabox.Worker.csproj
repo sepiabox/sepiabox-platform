@@ -5,6 +5,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>sepiabox-worker</AssemblyName>
     <RootNamespace>Sepiabox.Worker</RootNamespace>
+    <!-- azd builds the migrate job's image with the SDK's container support, which a console app opts into. -->
+    <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
   </PropertyGroup>
 
   <ItemGroup>

@@ -5,6 +5,9 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <!-- The UI formats dates per culture (en, pt-BR), which needs ICU's culture data (D-050, D-058). -->
     <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- The default aspnet image has ICU; a chiseled one would need its -extra variant (D-058). Named here so
+         the image azd builds cannot drift to one without it. -->
+    <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
     <!-- OAuth clients and the access list come from user secrets locally (docs/operations.md). -->
     <UserSecretsId>sepiabox-web-553a6207-0978-4b84-ab9b-8648b5110515</UserSecretsId>
   </PropertyGroup>

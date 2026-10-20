@@ -1,0 +1,189 @@
+using System.Text.RegularExpressions;
+
+namespace Sepiabox.AppHost.Tests;
+
+/// <summary>
+/// The infrastructure azd provisions from the AppHost (S-032), checked on the published Bicep.
+/// </summary>
+public sealed class AzurePublishTests(PublishedInfrastructure published) : IClassFixture<PublishedInfrastructure>
+{
+    private const string PostgresServer = "Microsoft.DBforPostgreSQL/flexibleServers";
+    private const string ContainerApp = "Microsoft.App/containerApps";
+    private const string ContainerAppJob = "Microsoft.App/jobs";
+
+    [Fact]
+    public void Postgres_is_a_burstable_B1ms_server_with_32_GB_and_no_auto_grow_when_published()
+    {
+        var server = published.The(PostgresServer);
+        var sku = server.Block("sku");
+        var storage = server.Block("storage");
+
+        Assert.Contains("name: 'Standard_B1ms'", sku, StringComparison.Ordinal);
+        Assert.Contains("tier: 'Burstable'", sku, StringComparison.Ordinal);
+        Assert.Contains("storageSizeGB: 32", storage, StringComparison.Ordinal);
+        Assert.Contains("autoGrow: 'Disabled'", storage, StringComparison.Ordinal);
+        Assert.Equal("'17'", server.Property("version"));
+        Assert.Equal("'francecentral'", server.Property("location"));
+    }
+
+    [Fact]
+    public void Postgres_allows_the_vector_and_postgis_extensions_when_published()
+    {
+        var configuration = Assert.Single(
+            published.Declarations("Microsoft.DBforPostgreSQL/flexibleServers/configurations"));
+
+        Assert.Equal("'azure.extensions'", configuration.Property("name"));
+        Assert.Equal("'VECTOR,POSTGIS'", configuration.Property("value"));
+    }
+
+    [Fact]
+    public void Storage_blocks_public_access_and_has_every_private_container_when_published()
+    {
+        var account = published.The("Microsoft.Storage/storageAccounts");
+        var containers = published.Declarations("Microsoft.Storage/storageAccounts/blobServices/containers");
+
+        Assert.Equal("false", account.Property("allowBlobPublicAccess"));
+        Assert.Equal("'francecentral'", account.Property("location"));
+        Assert.Equal(
+            ["dataprotection", "derivatives", "exports", "incoming", "manifests", "originals"],
+            containers.Select(c => c.Property("name")!.Trim('\'')).Order(StringComparer.Ordinal));
+        Assert.All(containers, c => Assert.Equal("'None'", c.Property("publicAccess")));
+    }
+
+    [Fact]
+    public void Every_resource_is_in_France_Central_when_published()
+    {
+        // A resource left on the `location` parameter would follow whatever region the azd environment names.
+        var located = published.Modules.Values
+            .SelectMany(BicepResource.Parse)
+            .Where(r => !r.IsExisting && r.Property("location") is not null)
+            .ToList();
+
+        Assert.NotEmpty(located);
+        Assert.All(located, r => Assert.True(
+            r.Property("location") == "'francecentral'", $"{r.Identifier} ({r.Type}) is in {r.Property("location")}."));
+    }
+
+    [Fact]
+    public void Web_scales_to_zero_with_at_most_one_replica_when_published()
+    {
+        var scale = WebApp().Block("scale");
+
+        Assert.Contains("minReplicas: 0", scale, StringComparison.Ordinal);
+        Assert.Contains("maxReplicas: 1", scale, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Web_is_reached_only_through_the_https_ingress_when_published()
+    {
+        var web = WebApp();
+        var ingress = web.Block("ingress");
+
+        Assert.Contains("external: true", ingress, StringComparison.Ordinal);
+        Assert.Contains("allowInsecure: false", ingress, StringComparison.Ordinal);
+        Assert.Contains("transport: 'http'", ingress, StringComparison.Ordinal);
+        Assert.DoesNotContain("exposedPort", ingress, StringComparison.Ordinal);
+        Assert.DoesNotContain("additionalPortMappings", ingress, StringComparison.Ordinal);
+        Assert.DoesNotContain("ipSecurityRestrictions", ingress, StringComparison.Ordinal);
+        // The ingress is the only way in, so no other app or job exposes anything.
+        Assert.All(
+            published.Declarations(ContainerApp).Concat(published.Declarations(ContainerAppJob)).Where(r => r != web),
+            r => Assert.DoesNotContain("ingress", r.Body, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Web_accepts_only_the_container_apps_default_host_when_published()
+    {
+        var allowedHosts = Regex.Match(
+            WebApp().Body, @"name: 'AllowedHosts'\s+value: '(?<value>[^']+)'", RegexOptions.Singleline);
+
+        Assert.True(allowedHosts.Success, "The web has no AllowedHosts setting.");
+        Assert.Equal(
+            "sepiabox-web.${aca_outputs_azure_container_apps_environment_default_domain}",
+            allowedHosts.Groups["value"].Value);
+    }
+
+    [Fact]
+    public void Resource_names_are_the_ones_the_shutdown_runbook_stops_when_published()
+    {
+        Assert.Equal(Quoted(ShutdownRunbook.WebApp), published.The(ContainerApp).Property("name"));
+        Assert.Equal(Quoted(ShutdownRunbook.PostgresServer), published.The(PostgresServer).Property("name"));
+    }
+
+    [Fact]
+    public void Migrations_run_as_a_manual_job_of_the_worker_when_published()
+    {
+        var job = published.The(ContainerAppJob);
+        var migrate = published.Resource("migrate");
+
+        Assert.Equal("'sepiabox-migrate'", job.Property("name"));
+        Assert.Equal("'Manual'", job.Property("triggerType"));
+        Assert.Equal("600", job.Property("replicaTimeout"));
+        Assert.Equal("0", job.Property("replicaRetryLimit"));
+        Assert.Contains("parallelism: 1", job.Block("manualTriggerConfig"), StringComparison.Ordinal);
+        Assert.Matches(@"args: \[\s+'migrate'\s+\]", job.Body);
+        Assert.EndsWith("Sepiabox.Worker.csproj", migrate["path"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal("migrate", Assert.Single(migrate["args"]!.AsArray())!.GetValue<string>());
+    }
+
+    [Fact]
+    public void No_worker_is_published_as_an_always_on_container_app()
+    {
+        // Published as projects, the run-once workers would become always-on Container Apps (D-034).
+        var names = published.Manifest["resources"]!.AsObject().Select(r => r.Key).ToList();
+
+        Assert.Contains("web", names);
+        Assert.DoesNotContain(names, name => name.StartsWith("worker", StringComparison.Ordinal));
+        Assert.Equal("'sepiabox-web'", Assert.Single(published.Declarations(ContainerApp)).Property("name"));
+    }
+
+    [Fact]
+    public void Apps_read_the_catalog_connection_only_as_a_key_vault_reference_when_published()
+    {
+        var apps = published.Declarations(ContainerApp).Concat(published.Declarations(ContainerAppJob)).ToList();
+
+        Assert.Equal(2, apps.Count);
+        Assert.All(apps, app =>
+        {
+            Assert.Matches(@"name: 'ConnectionStrings__catalog'\s+secretRef: 'connectionstrings--catalog'", app.Body);
+            Assert.Matches(@"name: 'connectionstrings--catalog'\s+identity: \w+\s+keyVaultUrl: ", app.Body);
+            // The password parameter must not be written into the app as a value of its own.
+            Assert.DoesNotContain("pg_password_value", app.Body, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Telemetry_goes_to_application_insights_on_the_capped_workspace_when_published()
+    {
+        var insights = published.The("Microsoft.Insights/components");
+        var workspaces = published.Modules.Values.SelectMany(BicepResource.Parse)
+            .Where(r => r.Type == "Microsoft.OperationalInsights/workspaces")
+            .ToList();
+
+        Assert.Equal("logs_outputs_loganalyticsworkspaceid", insights.Property("WorkspaceResourceId"));
+        // The workspace with the daily cap is sepiabox-infra's (S-031); publishing never creates another.
+        Assert.NotEmpty(workspaces);
+        Assert.All(workspaces, w =>
+        {
+            Assert.True(w.IsExisting);
+            Assert.Equal("'sepiabox-logs'", w.Property("name"));
+        });
+        Assert.Contains(
+            "APPLICATIONINSIGHTS_CONNECTION_STRING", published.Resource("web")["env"]!.AsObject().Select(e => e.Key));
+    }
+
+    [Fact]
+    public void Registry_is_basic_and_the_environment_has_no_managed_dashboard_when_published()
+    {
+        var registry = published.The("Microsoft.ContainerRegistry/registries");
+
+        Assert.Contains("name: 'Basic'", registry.Block("sku"), StringComparison.Ordinal);
+        Assert.Single(published.Declarations("Microsoft.App/managedEnvironments"));
+        Assert.Empty(published.Declarations("Microsoft.App/managedEnvironments/dotNetComponents"));
+        Assert.Single(published.Declarations("Microsoft.KeyVault/vaults"));
+    }
+
+    private BicepResource WebApp() => published.The(ContainerApp);
+
+    private static string Quoted(string value) => "'" + value + "'";
+}
