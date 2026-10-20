@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Web.Components;
@@ -10,7 +9,7 @@ builder.AddServiceDefaults();
 
 // Both integrations also register health checks, so /health covers the database and blob storage.
 // EF uses this same data source, so the app and its health check share one pool.
-builder.AddNpgsqlDataSource("catalog", configureDataSourceBuilder: dataSource => dataSource.UseNetTopologySuite());
+builder.AddNpgsqlDataSource("catalog", configureDataSourceBuilder: dataSource => CatalogDbContext.ConfigureDataSource(dataSource));
 builder.AddAzureBlobServiceClient("blobs");
 
 // Pages render on the server per request, so each query gets its own short-lived context.

@@ -16,7 +16,24 @@ public class ProcessOptionsTests
         new[] { "E:\\", "--out", "work", "--fast" },
         new[] { "E:\\", "--out", "work", "--ffmpeg" },
         new[] { "E:\\", "--out", "work", "--hw", "quicksync" },
+        new[] { "E:\\", "--out", "work", "--models" },
+        // The shipped ONNX Runtime package runs on the CPU only (D-042).
+        new[] { "E:\\", "--out", "work", "--gpu" },
     };
+
+    [Fact]
+    public void Reads_the_models_folder()
+    {
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work", "--models", "D:\\models"], out var options, out _));
+        Assert.Equal("D:\\models", options.ModelFolder);
+    }
+
+    [Fact]
+    public void Uses_the_default_models_folder_by_default()
+    {
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work"], out var options, out _));
+        Assert.Null(options.ModelFolder);
+    }
 
     [Fact]
     public void Reads_the_ffmpeg_folder_and_the_nvenc_encoder()

@@ -18,6 +18,11 @@ Steps that need a person, because they depend on accounts, consents or external 
 | GitHub Pages enabled on `sepiabox-site` with source "GitHub Actions", then "Enforce HTTPS" once the certificate is issued; DNS: A records for `@` and a CNAME for `www` (values in the sepiabox-site README) | S-042 | GitHub → sepiabox-site → Settings → Pages; GoDaddy |
 | List of allowed e-mails (`Access:Emails`) in Key Vault | S-010, S-032 | Key Vault |
 
+## Ingesting a drive
+
+- Run `sepiabox-ingest models download` once per computer before `process`, so embeddings are computed in the same pass.
+- Keep the `process` work folder (`manifests/` and `derivatives/`) until every file has its embedding, and its faces once S-018 is done: a later `process` run adds them from the previews in the work folder without the drive, but cannot once they are deleted. The summary has no "have no embedding" or "no preview or poster" warning when nothing is left to add.
+
 ## OAuth redirect URLs
 
 - Local: `https://localhost:<port>/signin-google`, `/signin-microsoft`

@@ -1,6 +1,9 @@
+using Sepiabox.Ingest;
+using Sepiabox.Ingest.Models;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Ingest.Uploading;
+using Sepiabox.Pipeline.Models;
 
 const string Usage = """
     Usage: sepiabox-ingest <command> [options]
@@ -12,6 +15,7 @@ const string Usage = """
       upload <dir> --destination local|azure
                                      Send a process work folder to Blob Storage: originals, then
                                      thumbnails and videos, then manifests. Running again resumes.
+      models download                Download the ML models (CLIP) and check their SHA-256.
 
     Options for scan:
       --report <file>  Also write the full result, with every duplicate and problem, as JSON.
@@ -22,6 +26,11 @@ const string Usage = """
       --source-name <name>  Name of this drive or folder, such as "HD da Ana". Default: the folder name.
       --ffmpeg <folder>     Folder with ffmpeg and ffprobe. Default: look on the PATH.
       --hw nvenc            Encode the 720p versions on an NVIDIA GPU.
+      --models <folder>     Folder with the downloaded models. Default: where models download puts them.
+
+    Options for models download:
+      --models <folder>     Where to put the models. Default: %LOCALAPPDATA%\Sepiabox\models on
+                            Windows, ~/.sepiabox/models elsewhere (or SEPIABOX_MODELS).
 
     Options for upload:
       --destination local   Azurite, or the connection string in SEPIABOX_BLOB_CONNECTION.
@@ -49,6 +58,7 @@ try
         "scan" => await RunScan(args[1..], cancellation.Token),
         "process" => RunProcess(args[1..], cancellation.Token),
         "upload" => await RunUpload(args[1..], cancellation.Token),
+        "models" => await RunModels(args[1..], cancellation.Token),
         _ => UsageError($"Unknown command '{args[0]}'."),
     };
 }
@@ -71,7 +81,7 @@ static async Task<int> RunScan(string[] args, CancellationToken cancellationToke
         return UsageError(error);
     }
 
-    var progress = new Progress<int>(count => Console.Error.Write($"\r{count:N0} files read..."));
+    var progress = new ConsoleProgress<int>(count => Console.Error.Write($"\r{count:N0} files read..."));
     var result = Scanner.Scan(options, progress, cancellationToken);
     Console.Error.WriteLine();
 
@@ -95,11 +105,14 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
         return UsageError(error);
     }
 
-    var progress = new Progress<int>(count => Console.Error.Write($"\r{count:N0} photos and videos processed..."));
+    var progress = new ConsoleProgress<int>(count => Console.Error.Write($"\r{count:N0} photos and videos checked..."));
     var result = ProcessCommand.Run(options, progress, cancellationToken);
     Console.Error.WriteLine();
 
-    Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
+    Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, embeddings added {result.Embedded:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
+    // Warnings, not failures: the files are processed and the next run computes their embeddings again.
+    EmbeddingWarnings.Write(result.EmbeddingProblems, Console.Error);
+
     Console.WriteLine($"Manifests: {result.ManifestFolder}");
     if (result.Warning is not null)
     {
@@ -121,7 +134,7 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
         return UsageError(error);
     }
 
-    var progress = new Progress<long>(bytes => Console.Error.Write($"\r{ScanReport.FormatBytes(bytes)} sent..."));
+    var progress = new ConsoleProgress<long>(bytes => Console.Error.Write($"\r{ScanReport.FormatBytes(bytes)} sent..."));
     var result = await UploadCommand.RunAsync(options, UploadCommand.CreateClient(options), progress, cancellationToken);
     Console.Error.WriteLine();
 
@@ -132,6 +145,41 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
     }
 
     return result.Problems.Count == 0 ? 0 : 1;
+}
+
+static async Task<int> RunModels(string[] args, CancellationToken cancellationToken)
+{
+    if (!ModelsOptions.TryParse(args, out var options, out var error))
+    {
+        return UsageError(error);
+    }
+
+    var folder = options.Folder ?? ModelFolder.Default();
+    // No overall timeout: the downloader abandons a stalled connection instead (ModelDownloader).
+    using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+    var downloader = new ModelDownloader(http);
+    var failed = false;
+    foreach (var model in ModelCatalog.All)
+    {
+        try
+        {
+            var progress = new ConsoleProgress<long>(bytes => Console.Error.Write($"\r{model.Name}: {ScanReport.FormatBytes(bytes)}..."));
+            var outcome = await downloader.EnsureAsync(model, folder, progress, cancellationToken);
+            Console.Error.WriteLine();
+            Console.WriteLine(outcome == ModelDownloader.Outcome.Downloaded
+                ? $"{model.Name}: downloaded and verified ({model.License})."
+                : $"{model.Name}: already present and verified.");
+        }
+        catch (Exception ex) when (ex is ModelIntegrityException or HttpRequestException or IOException or TimeoutException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine($"{model.Name}: {ex.Message}");
+            failed = true;
+        }
+    }
+
+    Console.WriteLine($"Models folder: {folder}");
+    return failed ? 1 : 0;
 }
 
 static int UsageError(string message)

@@ -21,8 +21,8 @@ public sealed class UploadThenImportTests(CatalogFixture fixture)
         using var jonathasWork = new TempFolder();
         anaDrive.Write("2019/praia.jpg", TestPhotos.Porto("red"));
         jonathasDrive.Write("Fotos/IMG_0001.jpg", TestPhotos.Porto("red"));
-        ProcessCommand.Run(new ProcessOptions(anaDrive.Path, anaWork.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None));
-        ProcessCommand.Run(new ProcessOptions(jonathasDrive.Path, jonathasWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None));
+        ProcessCommand.Run(new ProcessOptions(anaDrive.Path, anaWork.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
+        ProcessCommand.Run(new ProcessOptions(jonathasDrive.Path, jonathasWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
         var id = Path.GetFileNameWithoutExtension(Assert.Single(Directory.GetFiles(Path.Combine(anaWork.Path, "manifests"), "*.json")));
         await UploadCommand.RunAsync(new UploadOptions(anaWork.Path, UploadDestination.Local), fixture.Blobs);
         await UploadCommand.RunAsync(new UploadOptions(jonathasWork.Path, UploadDestination.Local), fixture.Blobs);

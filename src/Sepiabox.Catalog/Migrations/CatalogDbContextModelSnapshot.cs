@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using Pgvector;
 using Sepiabox.Catalog;
 
 #nullable disable
@@ -22,6 +23,7 @@ namespace Sepiabox.Catalog.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Sepiabox.Catalog.Asset", b =>
@@ -92,6 +94,34 @@ namespace Sepiabox.Catalog.Migrations
                     NpgsqlIndexBuilderExtensions.HasNullSortOrder(b.HasIndex("CapturedAt", "Id"), new[] { NullSortOrder.NullsLast, NullSortOrder.NullsLast });
 
                     b.ToTable("assets", (string)null);
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.AssetEmbedding", b =>
+                {
+                    b.Property<string>("AssetId")
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("asset_id");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("model");
+
+                    b.Property<Vector>("Embedding")
+                        .IsRequired()
+                        .HasColumnType("vector(512)")
+                        .HasColumnName("embedding");
+
+                    b.HasKey("AssetId", "Model")
+                        .HasName("pk_asset_embeddings");
+
+                    b.HasIndex("Embedding")
+                        .HasDatabaseName("ix_asset_embeddings_embedding");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
+
+                    b.ToTable("asset_embeddings", (string)null);
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.AssetSource", b =>
@@ -190,6 +220,16 @@ namespace Sepiabox.Catalog.Migrations
                         .HasName("pk_manifest_imports");
 
                     b.ToTable("manifest_imports", (string)null);
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.AssetEmbedding", b =>
+                {
+                    b.HasOne("Sepiabox.Catalog.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_asset_embeddings_assets_asset_id");
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.AssetSource", b =>

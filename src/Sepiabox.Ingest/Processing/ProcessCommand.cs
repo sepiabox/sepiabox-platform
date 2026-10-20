@@ -1,13 +1,21 @@
 using System.Diagnostics;
 using ImageMagick;
 using Sepiabox.Ingest.Scanning;
+using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
+using Sepiabox.Pipeline.Models;
 using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Ingest.Processing;
 
+/// <summary>
+/// What a process run did. <see cref="Problems"/> are files that could not be described and make the exit code
+/// non-zero. <see cref="EmbeddingProblems"/> are files that were processed but have no embedding because it could
+/// not be computed: warnings, not failures, since an embedding is optional and the next run tries again.
+/// <see cref="Embedded"/> counts the embeddings added in this run, to new or unchanged files.
+/// </summary>
 public sealed record ProcessResult(
     string Root,
     string ManifestFolder,
@@ -16,23 +24,63 @@ public sealed record ProcessResult(
     int Skipped,
     IReadOnlyList<ScanProblem> Problems,
     int VideosPending = 0,
-    string? Warning = null);
+    string? Warning = null,
+    int Embedded = 0,
+    IReadOnlyList<EmbeddingProblem>? EmbeddingProblems = null)
+{
+    public IReadOnlyList<EmbeddingProblem> EmbeddingProblems { get; init; } = EmbeddingProblems ?? [];
+}
 
 /// <summary>
 /// Describes every photo and video in a folder tree as one manifest per distinct content (D-005, D-014),
-/// with the thumbnails, posters and 720p versions the web shows instead of the originals (D-015).
-/// Source files are only read; results go to the work folder.
+/// with the thumbnails, posters and 720p versions the web shows instead of the originals (D-015), and a
+/// CLIP embedding computed from those thumbnails (S-015). Source files are only read; results go to the
+/// work folder.
 /// </summary>
 public static class ProcessCommand
 {
     public const string LocalSourceType = "local";
 
+    /// <summary>
+    /// Processes <see cref="ProcessOptions.Root"/> with the CLIP model when it is downloaded. <paramref name="filesDone"/>
+    /// is called after each photo or video, processed or not, so a long run over unchanged files shows activity.
+    /// </summary>
     public static ProcessResult Run(ProcessOptions options, IProgress<int>? filesDone = null, CancellationToken cancellationToken = default)
     {
-        var root = FileTree.ResolveRoot(options.Root);
-        var output = Path.GetFullPath(options.OutputPath);
+        // A wrong folder fails before the model is checked, which can take seconds the first time.
+        var (root, output) = Resolve(options);
+        using var embedder = ClipImageEmbedder.TryCreate(options.ModelFolder ?? ModelFolder.Default(), out var embedderWarning);
+        return Run(options, root, output, embedder, embedderWarning, filesDone, cancellationToken);
+    }
+
+    /// <summary>The same with a given embedder, or none; <paramref name="embedderWarning"/> says why there is none.</summary>
+    internal static ProcessResult Run(
+        ProcessOptions options,
+        IImageEmbedder? embedder,
+        string? embedderWarning,
+        IProgress<int>? filesDone = null,
+        CancellationToken cancellationToken = default)
+    {
+        var (root, output) = Resolve(options);
+        return Run(options, root, output, embedder, embedderWarning, filesDone, cancellationToken);
+    }
+
+    /// <summary>The folder to read, which must exist, and the work folder, both as full paths.</summary>
+    private static (string Root, string Output) Resolve(ProcessOptions options) =>
+        (FileTree.ResolveRoot(options.Root), Path.GetFullPath(options.OutputPath));
+
+    private static ProcessResult Run(
+        ProcessOptions options,
+        string root,
+        string output,
+        IImageEmbedder? embedder,
+        string? embedderWarning,
+        IProgress<int>? filesDone,
+        CancellationToken cancellationToken)
+    {
         var manifestFolder = Path.Combine(output, "manifests");
         Directory.CreateDirectory(manifestFolder);
+        DeleteAbandonedManifests(manifestFolder);
 
         // A drive root such as "E:\" has no folder name to fall back on.
         var sourceName = options.SourceName ?? NullIfEmpty(Path.GetFileName(Path.TrimEndingDirectorySeparator(root))) ?? root;
@@ -44,7 +92,42 @@ public static class ProcessCommand
         using var state = new StateStore(Path.Combine(output, "state.db"));
         var stopwatch = Stopwatch.StartNew();
         var problems = new List<ScanProblem>();
-        int processed = 0, skipped = 0, pending = 0;
+        var embeddingProblems = new List<EmbeddingProblem>();
+        int processed = 0, skipped = 0, pending = 0, embedded = 0, handled = 0;
+        // By asset, so the same photo in two folders counts once.
+        var withoutDerivative = new HashSet<string>(StringComparer.Ordinal);
+        var withoutManifest = new HashSet<string>(StringComparer.Ordinal);
+
+        // An embedding never decides a file's status: whatever goes wrong is a warning for that file, and the
+        // next run tries again from the work folder.
+        // Added is counted by the caller once the manifest is written.
+        EmbeddingOutcome? AddEmbedding(string sourcePath, string assetId, Func<EmbeddingOutcome> add)
+        {
+            try
+            {
+                var outcome = add();
+                switch (outcome.Status)
+                {
+                    case EmbeddingStatus.NoDerivative:
+                        withoutDerivative.Add(assetId);
+                        break;
+                    case EmbeddingStatus.ManifestMissing:
+                        withoutManifest.Add(assetId);
+                        break;
+                    case EmbeddingStatus.Failed:
+                        embeddingProblems.Add(new EmbeddingProblem(sourcePath, outcome.Category!, outcome.Problem!));
+                        break;
+                }
+
+                return outcome;
+            }
+            catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
+            {
+                embeddingProblems.Add(new EmbeddingProblem(
+                    sourcePath, $"Could not compute the embedding ({ex.GetType().Name})", $"Could not compute the embedding: {ex.Message}"));
+                return null;
+            }
+        }
 
         foreach (var file in FileTree.Enumerate(root))
         {
@@ -56,20 +139,42 @@ public static class ProcessCommand
                 continue;
             }
 
+            try
+            {
+                ProcessFile(file, kind);
+            }
+            finally
+            {
+                filesDone?.Report(++handled);
+            }
+        }
+
+        void ProcessFile(FoundFile file, MediaKind kind)
+        {
             var modifiedTicks = file.ModifiedAt.UtcTicks;
             var previous = state.Get(file.Path);
             var unchanged = previous is not null && previous.Size == file.Size && previous.ModifiedTicks == modifiedTicks;
-            if (unchanged && previous!.Status == FileStatus.Done)
+            // A file whose manifest is gone is described again, or it would never be uploaded or catalogued.
+            if (unchanged && previous!.Status == FileStatus.Done
+                && previous.Sha256 is { } doneSha256 && File.Exists(ManifestPath(manifestFolder, doneSha256)))
             {
                 skipped++;
-                continue;
+                // The model may have been downloaded after this file was processed: the embedding comes from
+                // the thumbnails in the work folder, so the drive is not read again.
+                if (embedder is not null)
+                {
+                    var outcome = AddEmbedding(file.Path, doneSha256, () => ManifestEmbeddings.TryAddToFile(ManifestPath(manifestFolder, doneSha256), output, embedder));
+                    embedded += outcome?.Status == EmbeddingStatus.Added ? 1 : 0;
+                }
+
+                return;
             }
 
             // Still no FFmpeg: re-reading a large unchanged video would change nothing.
             if (unchanged && previous!.Status == FileStatus.Pending && video is null)
             {
                 pending++;
-                continue;
+                return;
             }
 
             try
@@ -88,7 +193,17 @@ public static class ProcessCommand
 
                 var described = Describe(manifestFolder, sha256, kind, file, source);
                 var (manifest, status, derivativeProblem) = AddDerivatives(output, file, described, video, cancellationToken);
-                Write(ManifestPath(manifestFolder, sha256), manifest);
+                var embeddingAdded = false;
+                if (embedder is not null && status == FileStatus.Done)
+                {
+                    var withDerivatives = manifest;
+                    var outcome = AddEmbedding(file.Path, sha256, () => ManifestEmbeddings.TryAdd(withDerivatives, output, embedder));
+                    embeddingAdded = outcome?.Status == EmbeddingStatus.Added;
+                    manifest = outcome?.Manifest ?? manifest;
+                }
+
+                ManifestJson.WriteFile(ManifestPath(manifestFolder, sha256), manifest);
+                embedded += embeddingAdded ? 1 : 0;
                 state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, status));
 
                 switch (status)
@@ -111,15 +226,62 @@ public static class ProcessCommand
                 problems.Add(new ScanProblem(file.Path, ex.Message));
                 state.Save(new FileState(file.Path, file.Size, modifiedTicks, previous?.Sha256, FileStatus.Failed));
             }
-
-            filesDone?.Report(processed + problems.Count);
         }
 
-        var warning = pending > 0
-            ? $"FFmpeg was not found {(options.FfmpegFolder is null ? "on the PATH" : $"in {options.FfmpegFolder}")}. "
-              + $"{pending:N0} videos are described but have no poster or 720p version yet; run process again once FFmpeg is installed."
-            : null;
-        return new ProcessResult(root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning);
+        var warnings = new List<string>();
+        if (pending > 0)
+        {
+            warnings.Add(
+                $"FFmpeg was not found {(options.FfmpegFolder is null ? "on the PATH" : $"in {options.FfmpegFolder}")}. "
+                + $"{pending:N0} videos are described but have no poster or 720p version yet; run process again once FFmpeg is installed.");
+        }
+
+        if (embedder is null && embedderWarning is not null)
+        {
+            warnings.Add(embedderWarning);
+        }
+
+        // One line each for all of them: a work folder whose files were deleted would otherwise list every file.
+        if (withoutDerivative.Count > 0)
+        {
+            warnings.Add(
+                $"{withoutDerivative.Count:N0} photos and videos have no preview or poster in the work folder, so they have no embedding. "
+                + "Keep the work folder until embeddings are computed.");
+        }
+
+        if (withoutManifest.Count > 0)
+        {
+            // Only when a manifest disappears during the run: the next run describes those files again.
+            warnings.Add($"{withoutManifest.Count:N0} manifests disappeared from {manifestFolder} during the run; the next run describes them again.");
+        }
+
+        var warning = warnings.Count == 0 ? null : string.Join(Environment.NewLine, warnings);
+        return new ProcessResult(
+            root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems);
+    }
+
+    /// <summary>
+    /// Removes temporary manifest files left by a run that was killed while writing. An hour is far longer than
+    /// any write, so a run going on in parallel keeps its files.
+    /// </summary>
+    private static void DeleteAbandonedManifests(string manifestFolder)
+    {
+        foreach (var file in Directory.EnumerateFiles(manifestFolder, "*.tmp"))
+        {
+            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) <= TimeSpan.FromHours(1))
+            {
+                continue;
+            }
+
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Still open elsewhere; a later run tries again.
+            }
+        }
     }
 
     private static Manifest Describe(string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source)
@@ -210,7 +372,7 @@ public static class ProcessCommand
         }
         else
         {
-            Write(path, manifest with { Sources = remaining });
+            ManifestJson.WriteFile(path, manifest with { Sources = remaining });
         }
     }
 
@@ -220,14 +382,6 @@ public static class ProcessCommand
     private static string ManifestPath(string manifestFolder, string sha256) => Path.Combine(manifestFolder, sha256 + ".json");
 
     private static string DerivativeFolder(string sha256) => $"derivatives/{sha256}";
-
-    // Written to a temporary file first so an interrupted run never leaves half a manifest.
-    private static void Write(string path, Manifest manifest)
-    {
-        var temporary = path + ".tmp";
-        File.WriteAllText(temporary, ManifestJson.Serialize(manifest));
-        File.Move(temporary, path, overwrite: true);
-    }
 
     private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
 }

@@ -17,10 +17,13 @@ public static class ThumbnailGenerator
     public const string ContentType = "image/webp";
     public const int Quality = 80;
 
+    /// <summary>The large preview, which is also what the CLIP embedding is computed from (S-015).</summary>
+    public const string PreviewName = "preview-1280";
+
     public static readonly IReadOnlyList<ThumbnailSize> PhotoSizes =
     [
         new("thumb-256", 256),
-        new("preview-1280", 1280),
+        new(PreviewName, 1280),
     ];
 
     /// <summary>

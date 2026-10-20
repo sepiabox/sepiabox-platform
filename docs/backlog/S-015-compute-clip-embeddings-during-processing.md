@@ -9,11 +9,11 @@
 
 ### Scope
 - `models/models.json` (name, URL, SHA-256, license) and `sepiabox-ingest models download` to `~/.sepiabox/models` (Windows: `%LOCALAPPDATA%\Sepiabox\models`); rejects files with a different SHA-256.
-- CLIP ViT-B/32 vision: `https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model.onnx` (fill in the SHA-256 when implementing).
+- CLIP ViT-B/32 vision: `Xenova/clip-vit-base-patch32` at revision `d15189d7028b43f1d3e65039190477f6af591c2a`, `onnx/vision_model.onnx`, SHA-256 pinned in `models/models.json` (D-044).
 - Preprocessing: resize the shorter side to 224 (bicubic), center crop 224×224, CLIP normalization (mean 0.48145466, 0.4578275, 0.40821073; std 0.26862954, 0.26130258, 0.27577711).
 - L2-normalized 512-d embedding; in the manifest `embeddings["clip-vit-b32"]` as base64 (float32 little-endian). Videos use the `poster`.
 - Import: table `asset_embeddings` (asset_id, model, embedding `vector(512)`), HNSW index with `vector_cosine_ops`.
-- ONNX Runtime on CPU; `--gpu` uses CUDA if available.
+- ONNX Runtime on CPU (D-042); a GPU build is a follow-up.
 
 ### Out of scope
 - Text encoder (S-016).

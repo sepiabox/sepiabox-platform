@@ -3,6 +3,7 @@ using Azure;
 using Azure.Storage.Blobs;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
+using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
 using Testcontainers.Azurite;
@@ -175,7 +176,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         using var otherDrive = new TempFolder();
         using var otherWork = new TempFolder();
         otherDrive.Write("Fotos/IMG_0001.jpg", TestPhotos.Porto("red"));
-        ProcessCommand.Run(new ProcessOptions(otherDrive.Path, otherWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None));
+        ProcessCommand.Run(new ProcessOptions(otherDrive.Path, otherWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
 
         var result = await UploadCommand.RunAsync(new UploadOptions(otherWork.Path, UploadDestination.Local), Service);
 
@@ -337,6 +338,40 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.IsAssignableFrom<OperationCanceledException>(failure);
     }
 
+    [Fact]
+    public async Task Sends_only_json_manifests_when_a_temporary_file_is_left_in_the_manifests_folder()
+    {
+        _drive.Write("2019/praia.jpg", TestPhotos.Porto("red"));
+        var id = Assert.Single(Process()).Id;
+        _work.Write($"manifests/{id}.json.0123.tmp", "{ half a manifest"u8.ToArray());
+
+        var result = await Upload();
+
+        Assert.Empty(result.Problems);
+        Assert.Equal([id + ".json"], await BlobNames(BlobLayout.ManifestsContainer));
+    }
+
+    [Fact]
+    public async Task A_manifest_that_gains_an_embedding_in_a_later_run_is_sent_again()
+    {
+        _drive.Write("2019/praia.jpg", TestPhotos.Porto("red"));
+        var id = Assert.Single(Process()).Id;
+        await Upload();
+
+        var rerun = ProcessCommand.Run(
+            new ProcessOptions(_drive.Path, _work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None),
+            new FakeEmbedder(),
+            embedderWarning: null);
+        Assert.Equal(1, rerun.Embedded);
+        var second = await Upload();
+
+        Assert.Empty(second.Problems);
+        Assert.Equal(1, second.Uploaded);
+        var blob = Service.GetBlobContainerClient(BlobLayout.ManifestsContainer).GetBlobClient(BlobLayout.ManifestBlobName(id));
+        var uploaded = ManifestJson.Deserialize((await blob.DownloadContentAsync()).Value.Content.ToString());
+        Assert.True(uploaded.Embeddings.ContainsKey(ClipImageEmbedder.ModelKey));
+    }
+
     /// <summary>Reads any manifest without checking it, so tests can reach the checks behind the schema.</summary>
     private sealed class AcceptsAnyManifest : IManifestValidator
     {
@@ -361,7 +396,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
     private List<Manifest> Process()
     {
         // No FFmpeg in these tests: photos get thumbnails, videos stay pending with no derivatives.
-        ProcessCommand.Run(new ProcessOptions(_drive.Path, _work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None));
+        ProcessCommand.Run(new ProcessOptions(_drive.Path, _work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
         return [.. Directory.GetFiles(Path.Combine(_work.Path, "manifests"), "*.json")
             .Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];
     }

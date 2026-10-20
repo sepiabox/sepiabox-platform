@@ -80,6 +80,43 @@ public static class ManifestJson
     public static Manifest Deserialize(string json) =>
         JsonSerializer.Deserialize<Manifest>(json, Options) ?? throw new JsonException("Manifest is empty.");
 
+    /// <summary>Writes a manifest file through a temporary file, so an interrupted run never leaves half a manifest.</summary>
+    public static void WriteFile(string path, Manifest manifest)
+    {
+        // Unique, so two writers never share a temporary file; flushed to disk before the rename, so a power
+        // cut cannot leave an empty manifest under the final name.
+        var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(file))
+            {
+                writer.Write(Serialize(manifest));
+                writer.Flush();
+                file.Flush(flushToDisk: true);
+            }
+
+            File.Move(temporary, path, overwrite: true);
+        }
+        catch
+        {
+            TryDelete(temporary);
+            throw;
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Left for the next process run, which removes old temporary files from the manifests folder.
+        }
+    }
+
     // capturedAt is wall-clock time with no offset, so it must never gain a "Z" or a local offset.
     private sealed class LocalDateTimeConverter : JsonConverter<DateTime>
     {

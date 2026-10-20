@@ -76,6 +76,6 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
 
     var manifests = services.GetRequiredService<BlobServiceClient>().GetBlobContainerClient(BlobLayout.ManifestsContainer);
     var result = await services.GetRequiredService<ManifestImporter>().ImportOnceAsync(manifests, cancellationToken);
-    Log.ImportFinished(logger, result.Imported, result.Unchanged, result.Problems.Count);
+    Log.ImportFinished(logger, result.Imported, result.Unchanged, result.Problems.Count, result.Warnings.Count);
     return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
 }

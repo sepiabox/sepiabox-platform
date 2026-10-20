@@ -11,6 +11,8 @@ Backlog meant to be executed by autonomous agents. Each story is a small vertica
 
 Statuses: `todo` · `doing` · `blocked` · `done`.
 
+**Order overrides** ([D-041](../decisions.md)): after S-009 come S-015, then S-018, ahead of S-010–S-014, so the drive is processed once with embeddings and faces.
+
 ## Execution order
 
 ### Sprint 1 — Foundation and first read of the drive
@@ -47,7 +49,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-012 | [Name places with GeoNames](S-012-name-places-with-geonames.md) | Cloud catalog | S-008 | High | M | `todo` |
 | S-013 | [Filter the library with search DSL v1](S-013-filter-the-library-with-search-dsl-v1.md) | Search | S-012 | High | M | `todo` |
 | S-014 | [Save personal places and filter by them](S-014-save-personal-places-and-filter-by-them.md) | Search | S-013 | Medium | S | `todo` |
-| S-015 | [Compute CLIP embeddings during processing](S-015-compute-clip-embeddings-during-processing.md) | Search | S-005, S-008 | High | M | `todo` |
+| S-015 | [Compute CLIP embeddings during processing](S-015-compute-clip-embeddings-during-processing.md) | Search | S-005, S-008 | High | M | `done` |
 | S-016 | [Search photos by description](S-016-search-photos-by-description.md) | Search | S-013, S-015 | High | M | `todo` |
 | S-017 | [Show more photos similar to this one](S-017-show-more-photos-similar-to-this-one.md) | Search | S-015, S-013 | Medium | S | `todo` |
 

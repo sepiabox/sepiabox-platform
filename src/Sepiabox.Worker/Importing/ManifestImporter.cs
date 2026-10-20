@@ -4,7 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
 using Npgsql;
+using Pgvector;
 using Sepiabox.Catalog;
+using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Storage;
@@ -13,7 +15,11 @@ namespace Sepiabox.Worker.Importing;
 
 public sealed record ImportProblem(string BlobName, string Reason);
 
-public sealed record ImportResult(int Imported, int Unchanged, IReadOnlyList<ImportProblem> Problems);
+/// <summary>
+/// What an import did. <see cref="Problems"/> are manifests that were not imported and make the exit code
+/// non-zero; <see cref="Warnings"/> are manifests imported without an embedding that could not be stored (D-043).
+/// </summary>
+public sealed record ImportResult(int Imported, int Unchanged, IReadOnlyList<ImportProblem> Problems, IReadOnlyList<ImportProblem> Warnings);
 
 /// <summary>
 /// Copies manifests from Blob Storage into the catalog (S-008). Each manifest blob is imported once per
@@ -30,12 +36,13 @@ public sealed class ManifestImporter(
         if (!await manifests.ExistsAsync(cancellationToken))
         {
             Log.NoManifestContainer(logger, manifests.Name);
-            return new ImportResult(0, 0, []);
+            return new ImportResult(0, 0, [], []);
         }
 
         var imported = await db.ManifestImports.AsNoTracking()
             .ToDictionaryAsync(i => i.BlobName, i => i.ETag, StringComparer.Ordinal, cancellationToken);
         var problems = new List<ImportProblem>();
+        var warnings = new List<ImportProblem>();
         int done = 0, unchanged = 0;
 
         await foreach (var blob in manifests.GetBlobsAsync(cancellationToken: cancellationToken))
@@ -51,6 +58,12 @@ public sealed class ManifestImporter(
             if (wasImported)
             {
                 done++;
+                // Imported without an unusable embedding: a warning, reported once, when it is imported (D-043).
+                if (problem is not null)
+                {
+                    Log.EmbeddingLeftOut(logger, blob.Name, problem);
+                    warnings.Add(new ImportProblem(blob.Name, problem));
+                }
             }
             else if (problem is not null)
             {
@@ -60,10 +73,13 @@ public sealed class ManifestImporter(
             }
         }
 
-        return new ImportResult(done, unchanged, problems);
+        return new ImportResult(done, unchanged, problems, warnings);
     }
 
-    /// <summary>Imports one manifest blob. Neither imported nor a problem means the blob was gone.</summary>
+    /// <summary>
+    /// Imports one manifest blob. Neither imported nor a problem means the blob was gone; imported with a problem
+    /// means an embedding was left out.
+    /// </summary>
     private async Task<(bool Imported, string? Problem)> ImportBlobAsync(
         BlobContainerClient manifests, string blobName, CancellationToken cancellationToken)
     {
@@ -101,6 +117,8 @@ public sealed class ManifestImporter(
             return (false, $"has kind {manifest.Kind}, which the catalog does not store");
         }
 
+        var (embeddings, embeddingProblem) = ReadEmbeddings(manifest);
+
         // Only errors known to be about this manifest's data are reported and the import goes on;
         // everything else (connection, missing table, a schema the model no longer matches,
         // cancellation…) stops the import, rather than failing every manifest left with the same error.
@@ -110,8 +128,8 @@ public sealed class ManifestImporter(
         // it only means an update or delete found its row gone, which is not this manifest's fault.
         try
         {
-            await SaveAsync(manifest, kind, blobName, etag, cancellationToken);
-            return (true, null);
+            await SaveAsync(manifest, kind, embeddings, blobName, etag, cancellationToken);
+            return (true, embeddingProblem);
         }
         // Only SaveChanges failures (which EF wraps in DbUpdateException) can be about the data; a read
         // that fails says something about the database. SaveAsync writes only through SaveChangesAsync
@@ -128,7 +146,9 @@ public sealed class ManifestImporter(
         }
     }
 
-    private async Task SaveAsync(Manifest manifest, string kind, string blobName, string etag, CancellationToken cancellationToken)
+    private async Task SaveAsync(
+        Manifest manifest, string kind, IReadOnlyDictionary<string, float[]> embeddings, string blobName, string etag,
+        CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
         var asset = await db.Assets
@@ -204,6 +224,20 @@ public sealed class ManifestImporter(
             }
         }
 
+        // Like sources, embeddings are only added or replaced per model (D-036): the blob is already a merge.
+        foreach (var (model, values) in embeddings)
+        {
+            var row = await db.AssetEmbeddings.FindAsync([asset.Id, model], cancellationToken);
+            if (row is null)
+            {
+                db.AssetEmbeddings.Add(new AssetEmbedding { AssetId = asset.Id, Model = model, Embedding = new Vector(values) });
+            }
+            else
+            {
+                row.Embedding = new Vector(values);
+            }
+        }
+
         var import = await db.ManifestImports.FindAsync([blobName], cancellationToken);
         if (import is null)
         {
@@ -217,6 +251,54 @@ public sealed class ManifestImporter(
 
         // One SaveChanges per manifest: the asset and its import record commit together or not at all.
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The embeddings the catalog stores, by model key, with the dimensions of their column. Keys of other
+    /// models are left in the manifest for a later story to import.
+    /// </summary>
+    private static readonly Dictionary<string, int> s_embeddingDimensions = new(StringComparer.Ordinal)
+    {
+        [ClipImageEmbedder.ModelKey] = ClipImageEmbedder.Dimensions,
+    };
+
+    /// <summary>
+    /// The embeddings to store. The schema has already checked their keys and base64 length; a vector whose values
+    /// are not finite or that has no length would break cosine search, so it is left out and reported, and the
+    /// asset is imported without it (D-043).
+    /// </summary>
+    private static (IReadOnlyDictionary<string, float[]> Embeddings, string? Problem) ReadEmbeddings(Manifest manifest)
+    {
+        var read = new Dictionary<string, float[]>(StringComparer.Ordinal);
+        var problems = new List<string>();
+        foreach (var (model, node) in manifest.Embeddings)
+        {
+            if (!s_embeddingDimensions.TryGetValue(model, out var dimensions))
+            {
+                continue;
+            }
+
+            float[] values;
+            try
+            {
+                values = EmbeddingCodec.Decode(node.GetValue<string>());
+            }
+            catch (Exception ex) when (ex is FormatException or InvalidOperationException)
+            {
+                problems.Add($"has an unreadable {model} embedding, which was left out: {ex.Message}");
+                continue;
+            }
+
+            if (values.Length != dimensions || values.Any(v => !float.IsFinite(v)) || values.All(v => v == 0))
+            {
+                problems.Add($"has a {model} embedding that is not {dimensions} finite values with a length, which was left out");
+                continue;
+            }
+
+            read[model] = values;
+        }
+
+        return (read, problems.Count == 0 ? null : string.Join("; ", problems));
     }
 
     // The schema only allows photo and video; anything else is reported before saving.

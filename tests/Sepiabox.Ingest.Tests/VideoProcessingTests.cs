@@ -75,7 +75,7 @@ public class VideoProcessingTests
         using var drive = new TempFolder();
         using var work = new TempFolder();
         MakeVideo(Path.Combine(drive.Path, "later.mp4"), 640, 360, seconds: 1);
-        var withoutFfmpeg = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None));
+        var withoutFfmpeg = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
 
         var withFfmpeg = Process(drive, work);
 
@@ -85,7 +85,7 @@ public class VideoProcessingTests
     }
 
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
-        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD"));
+        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", ModelFolder: TestModels.None));
 
     private static List<Manifest> ReadManifests(TempFolder work) =>
         [.. Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json").Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];
