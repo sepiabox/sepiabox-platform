@@ -87,7 +87,7 @@ Until the owner creates the secrets below, the web starts with no sign-in button
 
 ## Deploying from GitHub Actions
 
-`.github/workflows/deploy.yml` (S-034, D-064) deploys `main` after CI passes on a push to it, and on demand (Actions → Deploy → Run workflow). It waits for approval in the `production` environment, signs in with OIDC (no secret), recreates the azd environment `sepiabox` from the saved parameters, runs `scripts/deploy.sh` (so a failed migration stops it before the import jobs and the web), and then keeps the last 5 images of every repository in the container registry. It never runs for pull requests.
+`.github/workflows/deploy.yml` (S-034, D-064) deploys `main` after CI passes on a push to it, and on demand (Actions → Deploy → Run workflow). It waits for approval in the `production` environment, signs in with OIDC (no secret), recreates the azd environment `sepiabox` from the saved parameters, runs `scripts/deploy.sh` (so a failed migration stops it before the import jobs and the web), and then keeps the last 5 images of every repository in the container registry. It never runs for pull requests. A run whose commit is no longer the newest on `main` ends in its first job, without asking for approval and without deploying, because the newer commit's own run deploys it. If that newer commit's CI fails, nothing is deployed until `main` is green again: fix `main`, or run Deploy by hand once it is green.
 
 **The first deploy is from your computer** (`./scripts/deploy.sh`, see "Deploying to Azure"): azd generates the PostgreSQL parameters there, once. Then copy them into the `production` environment's secrets, straight from your `.azure` backup to GitHub, without pasting them anywhere (you need the GitHub CLI, `gh auth login`):
 

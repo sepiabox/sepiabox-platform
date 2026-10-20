@@ -26,7 +26,10 @@ public sealed partial class DeployWorkflowTests
             + "(github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && "
             + "github.event.workflow_run.event == 'push' && "
             + "github.event.workflow_run.head_repository.full_name == github.repository)",
-            Normalized(Text(Job()["if"])));
+            Normalized(Text(CheckJob()["if"])));
+        // The deploy job, and its approval, only follow a check that decided to deploy.
+        Assert.Equal("check", Text(Job()["needs"]));
+        Assert.Equal("needs.check.outputs.deploy == 'true'", Text(Job()["if"]));
     }
 
     [Fact]
@@ -36,26 +39,29 @@ public sealed partial class DeployWorkflowTests
         // branch rule (operations.md) refuses it too.
         Assert.Contains(
             "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
-            Normalized(Text(Job()["if"])),
+            Normalized(Text(CheckJob()["if"])),
             StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Only_the_newest_commit_on_main_is_deployed()
+    public void Only_the_newest_commit_on_main_is_deployed_and_a_stale_run_never_asks_for_approval()
     {
-        var names = Steps().Select(Name).ToList();
-        var newest = Steps().Single(step => Name(step) == "Skip a commit that is no longer the newest on main");
-        var run = Run("Skip a commit that is no longer the newest on main");
+        var check = CheckJob();
 
-        Assert.Equal("newest", Text(newest["id"]));
-        Assert.Equal("${{ github.event.workflow_run.head_sha || github.sha }}", Text(Map(newest, "env")["DEPLOY_SHA"]));
-        Assert.Contains("git fetch --no-tags --depth=1 origin main", run, StringComparison.Ordinal);
-        Assert.Contains("latest=$(git rev-parse FETCH_HEAD)", run, StringComparison.Ordinal);
-        Assert.Contains("if [[ \"$latest\" == \"$DEPLOY_SHA\" ]]", run, StringComparison.Ordinal);
-        Assert.Contains("echo \"deploy=false\" >> \"$GITHUB_OUTPUT\"", run, StringComparison.Ordinal);
-        // Every step after the check runs only for the newest commit, and only while the job succeeds.
+        // The check job needs no approval and no Azure rights: a stale or refused run ends there.
+        Assert.False(check.Children.ContainsKey(new YamlScalarNode("environment")));
+        Assert.Equal(
+            new Dictionary<string, string> { ["contents"] = "read" },
+            Map(check, "permissions").Children.ToDictionary(p => Text(p.Key), p => Text(p.Value)));
+        Assert.Equal("${{ steps.newest.outputs.deploy }}", Text(Map(check, "outputs")["deploy"]));
+        AssertNewestCommitCheck(Assert.Single(StepsOf(check)));
+
+        // Checked again in the deploy job, after the approval, which can come much later; every later step
+        // depends on it.
+        var newest = Steps().Single(step => Name(step) == NewestStep);
+        AssertNewestCommitCheck(newest);
         var index = Steps().IndexOf(newest);
-        Assert.True(index < names.IndexOf("Deploy"));
+        Assert.True(index < Steps().Select(Name).ToList().IndexOf("Deploy"));
         Assert.All(Steps().Skip(index + 1), step => Assert.Equal("steps.newest.outputs.deploy == 'true'", Text(step["if"])));
     }
 
@@ -178,9 +184,28 @@ public sealed partial class DeployWorkflowTests
     [GeneratedRegex(@"az acr run --registry ""\$registry"" \\\s+--cmd ""acr purge --filter '\$\{repository\}:\.\*' --ago 0d --keep 5 --untagged"" /dev/null")]
     private static partial Regex PurgeCommand();
 
+    private const string NewestStep = "Skip a commit that is no longer the newest on main";
+
     private YamlMappingNode Job() => Map(Map(_workflow, "jobs"), "deploy");
 
-    private List<YamlMappingNode> Steps() => [.. ((YamlSequenceNode)Job()["steps"]).Children.Cast<YamlMappingNode>()];
+    private YamlMappingNode CheckJob() => Map(Map(_workflow, "jobs"), "check");
+
+    private List<YamlMappingNode> Steps() => StepsOf(Job());
+
+    private static List<YamlMappingNode> StepsOf(YamlMappingNode job) =>
+        [.. ((YamlSequenceNode)job["steps"]).Children.Cast<YamlMappingNode>()];
+
+    private static void AssertNewestCommitCheck(YamlMappingNode step)
+    {
+        var run = Text(step["run"]);
+
+        Assert.Equal(NewestStep, Name(step));
+        Assert.Equal("newest", Text(step["id"]));
+        Assert.Equal("${{ github.event.workflow_run.head_sha || github.sha }}", Text(Map(step, "env")["DEPLOY_SHA"]));
+        Assert.Contains("latest=$(git ls-remote \"$REPOSITORY_URL\" refs/heads/main | cut -f1)", run, StringComparison.Ordinal);
+        Assert.Contains("if [[ \"$latest\" == \"$DEPLOY_SHA\" ]]", run, StringComparison.Ordinal);
+        Assert.Contains("echo \"deploy=false\" >> \"$GITHUB_OUTPUT\"", run, StringComparison.Ordinal);
+    }
 
     private string Run(string name) => Text(Steps().Single(step => Name(step) == name)["run"]).Trim();
 

@@ -6,11 +6,12 @@ namespace Sepiabox.AppHost.Tests;
 public sealed partial class RepositorySecretsTests
 {
     private static readonly string[] s_textExtensions =
-        [".cs", ".csproj", ".json", ".yml", ".yaml", ".sh", ".ps1", ".bicep", ".md", ".razor", ".props", ".slnx", ".config", ".env", ".txt", ".xml"];
+        [".cs", ".csproj", ".json", ".yml", ".yaml", ".sh", ".ps1", ".bicep", ".md", ".razor", ".props", ".targets", ".slnx", ".config", ".env", ".txt", ".xml"];
 
-    // Where a "key: value" or "key = value" line is configuration, not code (in C#, `password: password` is an
-    // argument name).
-    private static readonly string[] s_configurationExtensions = [".json", ".yml", ".yaml", ".env", ".config", ".bicep"];
+    // Where a "key: value", "key = value" or <Key>value</Key> line is configuration or a script setting it, not
+    // code (in C#, `password: password` is an argument name).
+    private static readonly string[] s_configurationExtensions =
+        [".json", ".yml", ".yaml", ".env", ".config", ".bicep", ".sh", ".ps1", ".csproj", ".props", ".targets"];
 
     // Directories that hold build output or local state, never committed.
     private static readonly string[] s_skipped = ["bin", "obj", ".git", ".azure", ".claude", "TestResults", "node_modules"];
@@ -49,6 +50,16 @@ public sealed partial class RepositorySecretsTests
         { "client_secret: " + new string('Q', 12), ".yml" },
         { "PASSWORD=" + new string('Q', 12), ".env" },
         { "  password: '" + new string('Q', 12) + "'", ".yaml" },
+        // Prefixed names, which a word boundary before the name would miss.
+        { "          PG_PASSWORD: " + new string('Q', 12), ".yml" },
+        { "DB_PASSWORD=" + new string('Q', 12), ".sh" },
+        { "  adminPassword: '" + new string('Q', 12) + "'", ".yaml" },
+        { "  \"AdministratorPassword\": \"" + new string('Q', 12) + "\"", ".json" },
+        { "  Anthropic__ApiKey: " + new string('Q', 12), ".yml" },
+        { "export ANTHROPIC_API_KEY=" + new string('Q', 12), ".sh" },
+        { "$env:CLIENT_SECRET = '" + new string('Q', 12) + "'", ".ps1" },
+        { "    <Password>" + new string('Q', 12) + "</Password>", ".csproj" },
+        { "    <AzureApiKey>" + new string('Q', 12) + "</AzureApiKey>", ".props" },
     };
 
     [Theory]
@@ -65,6 +76,10 @@ public sealed partial class RepositorySecretsTests
     [InlineData("param pg_password_value string", ".bicep")]
     [InlineData("await CatalogAppRole.EnsureAsync(connection, name, password: secret, token);", ".cs")]
     [InlineData("var password = ScramVerifier.Create(value);", ".cs")]
+    [InlineData("password=$(jq -er .password config.json)", ".sh")]
+    [InlineData("local password=\"$1\"", ".sh")]
+    [InlineData("    <Password>$(DeployPassword)</Password>", ".csproj")]
+    [InlineData("  azd env config set infra.parameters.pg_password \"$PG_PASSWORD\"", ".yml")]
     public void Scan_leaves_references_placeholders_and_code_alone(string line, string extension)
     {
         Assert.False(IsSecret(line, extension), $"Flagged: {line}");
@@ -123,10 +138,12 @@ public sealed partial class RepositorySecretsTests
         RegexOptions.IgnoreCase)]
     private static partial Regex Token();
 
-    // In configuration: a client secret, API key or password, quoted or not, with a literal value (not a
-    // placeholder in <>, nor a ${...} or {{...}} reference).
+    // In configuration and scripts: a client secret, API key or password, also inside a longer name
+    // (PG_PASSWORD, adminPassword, Anthropic__ApiKey), quoted or not, or as an XML element, with a literal value
+    // (not a placeholder in <>, nor a $..., ${...}, $(...) or {{...}} reference).
     [GeneratedRegex(
-        @"[""']?\b(client_?secret|api_?key|password)[""']?\s*[:=]\s*[""']?(?![<$\{])[^""'\s<]{8,}",
+        @"(?<![A-Za-z0-9])\w*(client_?secret|api_?key|password)\w*[""']?\s*[:=]\s*[""']?(?![<$\{])[^""'\s<]{8,}"
+        + @"|<\w*(clientsecret|apikey|password)>(?![<$\{])[^<]{8,}</",
         RegexOptions.IgnoreCase)]
     private static partial Regex ConfiguredSecret();
 }

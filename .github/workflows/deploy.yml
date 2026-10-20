@@ -25,7 +25,9 @@ env:
   RESOURCE_GROUP: rg-sepiabox
 
 jobs:
-  deploy:
+  # Decides whether to deploy before anything asks for approval: a run that would not deploy (another
+  # branch, a failed or pull request CI run, a commit that is no longer the newest) ends here.
+  check:
     # A green CI run of a push to main in this repository (not of a pull request, nor of a fork), or a
     # manual run of main: a manual run of another branch would use that branch's copy of this file.
     if: >-
@@ -34,6 +36,31 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      deploy: ${{ steps.newest.outputs.deploy }}
+    steps:
+      # Two CI runs can finish out of order: only the newest commit on main is deployed, so an older one never
+      # replaces it. The newer commit's own run deploys it.
+      - name: Skip a commit that is no longer the newest on main
+        id: newest
+        env:
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          latest=$(git ls-remote "$REPOSITORY_URL" refs/heads/main | cut -f1)
+          if [[ "$latest" == "$DEPLOY_SHA" ]]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$DEPLOY_SHA is no longer the newest commit on main ($latest); not deploying it."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: check
+    if: needs.check.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     # A deploy takes minutes; anything near an hour is stuck (the migrate wait alone ends after 15 minutes).
     timeout-minutes: 60
@@ -46,15 +73,14 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
 
-      # Two CI runs can finish out of order: only the newest commit on main is deployed, so an older one never
-      # replaces it. The newer commit's own run deploys it.
+      # Checked again after the approval, which can come long after the check job ran.
       - name: Skip a commit that is no longer the newest on main
         id: newest
         env:
           DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}.git
         run: |
-          git fetch --no-tags --depth=1 origin main
-          latest=$(git rev-parse FETCH_HEAD)
+          latest=$(git ls-remote "$REPOSITORY_URL" refs/heads/main | cut -f1)
           if [[ "$latest" == "$DEPLOY_SHA" ]]; then
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           else
