@@ -50,8 +50,13 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
 
         Assert.Matches(@"^\s*for id in uploaders: \{", uploaders.Body);
         Assert.Equal("'User'", uploaders.Property("principalType"));
+        // Trimmed, lower-cased, without empty entries or repeats.
         Assert.Contains(
-            "var uploaders = filter(map(split(uploaderPrincipalIds, ','), id => trim(id)), id => !empty(id))",
+            "var uploaderIds = filter(map(split(uploaderPrincipalIds, ','), id => toLower(trim(id))), id => !empty(id))",
+            published.Modules["access.bicep"],
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "var uploaders = filter(uploaderIds, (id, i) => indexOf(uploaderIds, id) == i)",
             published.Modules["access.bicep"],
             StringComparison.Ordinal);
         Assert.Equal("{uploaderPrincipalIds.value}", published.ModuleParameters["access.bicep"]["uploaderPrincipalIds"]!.GetValue<string>());

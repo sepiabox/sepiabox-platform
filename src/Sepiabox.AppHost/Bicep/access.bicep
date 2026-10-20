@@ -13,10 +13,12 @@ param vaultName string
 @description('The web\'s managed identity.')
 param webPrincipalId string
 
-@description('Comma-separated Entra object ids of the people who run `sepiabox-ingest upload --destination azure`.')
+@description('Comma-separated Entra object ids of the people who run `sepiabox-ingest upload --destination azure`. User object ids only (`az ad signed-in-user show --query id -o tsv`), not groups or service principals.')
 param uploaderPrincipalIds string = ''
 
-var uploaders = filter(map(split(uploaderPrincipalIds, ','), id => trim(id)), id => !empty(id))
+// Trimmed, lower-cased (object ids are GUIDs) and without repeats, so one id listed twice is one assignment.
+var uploaderIds = filter(map(split(uploaderPrincipalIds, ','), id => toLower(trim(id))), id => !empty(id))
+var uploaders = filter(uploaderIds, (id, i) => indexOf(uploaderIds, id) == i)
 
 resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' existing = {
   name: storageName
@@ -80,7 +82,7 @@ resource uploaderWriters 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
     properties: {
       principalId: id
       // Storage Blob Data Contributor
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
       principalType: 'User'
     }
   }
