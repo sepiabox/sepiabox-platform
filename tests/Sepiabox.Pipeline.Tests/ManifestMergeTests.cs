@@ -7,6 +7,7 @@ namespace Sepiabox.Pipeline.Tests;
 public sealed class ManifestMergeTests
 {
     private const string Id = "0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9";
+    private static readonly DateTime Taken = new(2019, 7, 14, 16, 30, 5);
 
     [Fact]
     public void Keeps_every_source_and_takes_the_newer_time_for_the_same_file()
@@ -141,6 +142,84 @@ public sealed class ManifestMergeTests
 
         Assert.Equal(4032, merged.Width);
         Assert.Equal(2, merged.Derivatives.Count);
+    }
+
+    [Fact]
+    public void Keeps_the_metadata_date_when_the_incoming_date_comes_from_a_path()
+    {
+        var existing = Photo(Source("HD da Ana", "a.jpg")) with { CapturedAt = Taken, CapturedAtSource = CaptureDateSource.Metadata };
+        var incoming = Photo(Source("HD do Jonathas", "2005-07-14/a.jpg")) with { CapturedAt = new DateTime(2005, 7, 14), CapturedAtSource = CaptureDateSource.Folder };
+
+        var merged = ManifestMerge.Merge(existing, incoming);
+
+        Assert.Equal((Taken, CaptureDateSource.Metadata), (merged.CapturedAt, merged.CapturedAtSource));
+    }
+
+    [Fact]
+    public void Takes_the_metadata_date_when_the_stored_date_comes_from_a_path()
+    {
+        var existing = Photo(Source("HD da Ana", "2005-07-14/a.jpg")) with { CapturedAt = new DateTime(2005, 7, 14), CapturedAtSource = CaptureDateSource.Folder };
+        var incoming = Photo(Source("HD do Jonathas", "a.jpg")) with { CapturedAt = Taken, CapturedAtSource = CaptureDateSource.Metadata };
+
+        var merged = ManifestMerge.Merge(existing, incoming);
+
+        Assert.Equal((Taken, CaptureDateSource.Metadata), (merged.CapturedAt, merged.CapturedAtSource));
+    }
+
+    [Fact]
+    public void Treats_a_date_without_a_source_as_metadata_when_the_manifest_predates_the_field()
+    {
+        var old = Photo(Source("HD da Ana", "a.jpg")) with { CapturedAt = Taken, CapturedAtSource = null };
+        var incoming = Photo(Source("HD do Jonathas", "IMG_20120304_101112.jpg")) with
+        {
+            CapturedAt = new DateTime(2012, 3, 4, 10, 11, 12),
+            CapturedAtSource = CaptureDateSource.FileName,
+        };
+
+        var merged = ManifestMerge.Merge(old, incoming);
+
+        Assert.Equal((Taken, (CaptureDateSource?)null), (merged.CapturedAt, merged.CapturedAtSource));
+    }
+
+    [Fact]
+    public void Takes_the_incoming_date_when_both_come_from_paths()
+    {
+        var existing = Video(Source("HD da Ana", "2008-12-24/clip.mod")) with { CapturedAt = new DateTime(2008, 12, 24), CapturedAtSource = CaptureDateSource.Folder };
+        var incoming = Video(Source("HD do Jonathas", "2008-12-25/MNU_101010.mod")) with
+        {
+            CapturedAt = new DateTime(2008, 12, 25, 10, 10, 10),
+            CapturedAtSource = CaptureDateSource.FileName,
+        };
+
+        var merged = ManifestMerge.Merge(existing, incoming);
+
+        Assert.Equal((new DateTime(2008, 12, 25, 10, 10, 10), CaptureDateSource.FileName), (merged.CapturedAt, merged.CapturedAtSource));
+    }
+
+    [Fact]
+    public void Keeps_a_path_date_when_the_incoming_manifest_has_no_date()
+    {
+        var existing = Video(Source("HD da Ana", "2008-12-24/clip.mod")) with { CapturedAt = new DateTime(2008, 12, 24), CapturedAtSource = CaptureDateSource.Folder };
+        var incoming = Video(Source("HD do Jonathas", "backup/clip.mod"));
+
+        var merged = ManifestMerge.Merge(existing, incoming);
+
+        Assert.Equal((new DateTime(2008, 12, 24), CaptureDateSource.Folder), (merged.CapturedAt, merged.CapturedAtSource));
+    }
+
+    [Fact]
+    public void Takes_the_date_of_the_complete_description_when_both_come_from_metadata()
+    {
+        var pending = Video(Source("HD da Ana", "v.mp4")) with { CapturedAt = Taken, CapturedAtSource = CaptureDateSource.Metadata };
+        var done = Video(Source("HD do Jonathas", "v.mp4")) with
+        {
+            CapturedAt = Taken.AddHours(1),
+            CapturedAtSource = CaptureDateSource.Metadata,
+            Derivatives = [Derivative("poster", 1280)],
+        };
+
+        Assert.Equal(Taken.AddHours(1), ManifestMerge.Merge(done, pending).CapturedAt);
+        Assert.Equal(Taken.AddHours(1), ManifestMerge.Merge(pending, done).CapturedAt);
     }
 
     [Fact]

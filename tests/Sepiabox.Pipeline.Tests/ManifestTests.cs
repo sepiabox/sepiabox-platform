@@ -39,6 +39,27 @@ public class ManifestTests
     }
 
     [Fact]
+    public void Omits_the_capture_date_source_when_it_is_not_known()
+    {
+        var json = JsonNode.Parse(ManifestJson.Serialize(Sample with { CapturedAt = null }))!.AsObject();
+
+        Assert.False(json.ContainsKey("capturedAtSource"));
+        Assert.True(json.ContainsKey("capturedAt"));
+    }
+
+    [Theory]
+    [InlineData(CaptureDateSource.Metadata, "metadata")]
+    [InlineData(CaptureDateSource.FileName, "fileName")]
+    [InlineData(CaptureDateSource.Folder, "folder")]
+    public void Writes_the_capture_date_source_when_it_is_known(CaptureDateSource source, string expected)
+    {
+        var json = ManifestJson.Serialize(Sample with { CapturedAtSource = source });
+
+        Assert.Equal(expected, (string?)JsonNode.Parse(json)!["capturedAtSource"]);
+        Assert.Equal(source, ManifestJson.Deserialize(json).CapturedAtSource);
+    }
+
+    [Fact]
     public void Reads_back_what_it_writes()
     {
         var copy = ManifestJson.Deserialize(ManifestJson.Serialize(Sample));

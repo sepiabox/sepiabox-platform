@@ -28,6 +28,13 @@ public sealed record Manifest
     /// <summary>Local time on the camera's clock; cameras rarely record the time zone.</summary>
     public DateTime? CapturedAt { get; init; }
 
+    /// <summary>
+    /// Where <see cref="CapturedAt"/> came from (D-046); omitted when there is no date. Manifests written before
+    /// S-043 never have it, and their dates all came from metadata.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CaptureDateSource? CapturedAtSource { get; init; }
+
     public GeoPoint? Location { get; init; }
 
     public CameraInfo? Camera { get; init; }
