@@ -9,8 +9,8 @@ Family drives have many blurry photos and near-identical sequences. Help review 
 
 ### Scope
 - In `process`: sharpness (variance of the Laplacian over the grayscale image at 512 px) and a 64-bit dHash; manifest `quality: { "sharpness": 123.4, "dhash": "<hex>" }`; the import stores them.
-- Page `/organizar`: bursts (photos ≤ 2 s apart with dHash Hamming distance ≤ 10) and blurry photos (sharpness below a configurable threshold).
-- "Esconder" (Hide) action (flag `hidden`); hidden assets are excluded from search by default. DSL `quality: { "blurry": true }`, `includeHidden`.
+- Page `/organize`: bursts (photos ≤ 2 s apart with dHash Hamming distance ≤ 10) and blurry photos (sharpness below a configurable threshold).
+- "Hide" action (flag `hidden`); hidden assets are excluded from search by default. DSL `quality: { "blurry": true }`, `includeHidden`.
 
 ### Out of scope
 - Deleting originals.

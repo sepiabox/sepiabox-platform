@@ -1,6 +1,6 @@
 ## S-035 — Serve the app at app.sepiabox.com
 **Epic:** Cloud and costs
-**Depends on:** S-032
+**Depends on:** S-032, S-058
 **Priority:** Low
 **Size:** S
 
@@ -19,6 +19,8 @@ The Google login shows the domain; `app.sepiabox.com` inspires more trust than t
 - [ ] Given `customDomain` set, then the generated Bicep has the domain and the managed certificate.
 - [ ] Given `customDomain` empty, then the Bicep has no custom domain.
 - [ ] Given a request in production, then the response has the `Strict-Transport-Security` header.
+- [ ] Given `customDomain` set, then `AllowedHosts` includes it next to the Container Apps default host.
+- [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), when I sign in with Google and with Microsoft on `https://app.sepiabox.com` (after adding its `/signin-google` and `/signin-microsoft` redirect URIs to the OAuth clients), then sign-in works, and an account not on `Access:Emails` lands on the no-access page.
 
 ### Technical notes
 - Human step: DNS at GoDaddy.

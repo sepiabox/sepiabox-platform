@@ -16,7 +16,7 @@ All search goes through a single JSON DSL (D-020), used by the filter UI and, la
     "dateFrom": "2019-01-01", "dateTo": "2019-12-31",
     "years": [2019], "months": [12],
     "onThisDay": { "yearsAgo": 5 },
-    "places": { "cities": ["Lisboa"], "countries": ["PT"] },
+    "places": { "cities": ["Lisbon"], "countries": ["PT"] },
     "sources": ["HD da Ana"],
     "undatedOnly": false
   },
@@ -25,14 +25,14 @@ All search goes through a single JSON DSL (D-020), used by the filter UI and, la
 }
 ```
 - `SearchService.Execute(SearchQuery)` (EF Core), `POST /api/search` (authenticated).
-- Filter bar on `/` (year, month, kind, city, source) and a "Neste dia" ("On this day") shortcut; filters in the URL (`?q=<json base64url>`).
+- Filter bar on `/` (year, month, kind, city, source) and an "On this day" shortcut ("Neste dia" in pt-BR); filters in the URL (`?q=<json base64url>`).
 - Invalid DSL → 400 with a message.
 
 ### Out of scope
 - People, personal places, visual, occasions (later stories extend the DSL).
 
 ### Acceptance criteria
-- [ ] Given assets from Lisbon and Porto across several months, when I filter `cities=[Lisboa], months=[12]`, then only the Lisbon ones from December come back.
+- [ ] Given assets from Lisbon and Porto across several months, when I filter `cities=[Lisbon], months=[12]`, then only the Lisbon ones from December come back.
 - [ ] Given a clock fixed at 2026-10-19 and `onThisDay.yearsAgo=5`, then only assets from 2021-10-19 come back.
 - [ ] Given several filters, then they are combined with AND.
 - [ ] Given a DSL with an unknown field, then the API returns 400.
@@ -40,7 +40,8 @@ All search goes through a single JSON DSL (D-020), used by the filter UI and, la
 
 ### Technical notes
 - `Sepiabox.Catalog/Search/SearchQuery.cs`, `SearchService.cs`; `TimeProvider` for the clock.
-- Decisions: D-020.
+- Portability (D-051): `SearchService` builds its filters with plain EF Core (no provider-specific SQL); later filters that need PostGIS (S-014) or pgvector (S-016) plug in provider-specific classes behind it.
+- Decisions: D-020, D-051.
 
 ### Expected tests
 - Unit: DSL validation, URL round trip. Integration (PostgreSQL): each filter and combinations.

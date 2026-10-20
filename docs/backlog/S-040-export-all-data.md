@@ -1,6 +1,6 @@
 ## S-040 — Export all data
 **Epic:** Privacy
-**Depends on:** S-020, S-010
+**Depends on:** S-020, S-010, S-051
 **Priority:** Medium
 **Size:** S
 
@@ -8,8 +8,8 @@
 "Your photos are yours": at any time, the family can take everything with them, in open formats.
 
 ### Scope
-- `/definicoes/exportar`: requests an export; the worker generates `exports/<date>.zip` with `catalog.json` (assets, sources, people with names, occasions, personal places), `originals.txt` (one line per original with a 24 h SAS) and `README.txt`.
-- Face data (embeddings) only with the "incluir dados de rosto" ("include face data") option.
+- `/settings/export`: requests an export; the worker generates `exports/<date>.zip` with `catalog.json` (assets, sources, people with names, occasions, personal places), `originals.txt` (one line per original with a 24 h SAS) and `README.txt`.
+- Face data (embeddings) only with the "Include face data" option.
 - 1 h SAS download link.
 
 ### Out of scope
@@ -21,7 +21,7 @@
 - [ ] Given `originals.txt`, then each SAS expires in ≤ 24 h.
 
 ### Technical notes
-- `System.IO.Compression.ZipArchive` streaming to the blob.
+- `System.IO.Compression.ZipArchive` streaming to the blob through `IBlobStore`'s staged upload, and the links from its signed read URL (D-051, S-050), not the Blob SDK directly.
 
 ### Expected tests
 - Integration (Azurite + PostgreSQL): zip contents and expirations.

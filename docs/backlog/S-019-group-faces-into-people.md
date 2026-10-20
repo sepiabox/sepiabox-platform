@@ -10,7 +10,7 @@ Similar faces become an unnamed person; the family only gives names (curation).
 ### Scope
 - Tables `people` (id, name nullable, user_email nullable, face_count, centroid `vector(128)`) and `faces` (id, asset_id, box, score, embedding `vector(128)`, person_id, assignment `auto|manual|excluded`).
 - On import: cosine with the nearest centroid ≥ 0.40 → assign; otherwise a new person. Recompute centroid and count.
-- Page `/pessoas`: people by number of faces, face crop from the thumbnail (CSS with the relative box), "Sem nome" ("Unnamed") when applicable.
+- Page `/people`: people by number of faces, face crop from the thumbnail (CSS with the relative box), "Unnamed" ("Sem nome" in pt-BR) when applicable.
 
 ### Out of scope
 - Renaming and merging (S-020).
@@ -19,7 +19,7 @@ Similar faces become an unnamed person; the family only gives names (curation).
 - [ ] Given two faces with nearly identical embeddings, then they end up in the same person.
 - [ ] Given two distant faces, then they end up in different people.
 - [ ] Given the same manifest imported twice, then faces are not duplicated.
-- [ ] Given the `/pessoas` page, then people appear in descending order of faces.
+- [ ] Given the `/people` page, then people appear in descending order of faces.
 
 ### Technical notes
 - `Sepiabox.Catalog/People/FaceAssigner.cs`. Threshold in configuration.

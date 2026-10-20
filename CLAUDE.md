@@ -50,7 +50,7 @@ New projects follow the names in `docs/architecture.md` and are added to `Sepiab
 
 ## Code conventions
 
-- Docs, code, identifiers and comments in English. Text the user sees in the app is in Portuguese.
+- Docs, code, identifiers and comments in English. The app UI is English by default and localizable: every string the user sees comes from resource files through `IStringLocalizer`, with English and Brazilian Portuguese (`pt-BR`, never European Portuguese wording); routes are English (D-050).
 - The product name is written `Sepiabox` in prose and namespaces (`Sepiabox.*`), `sepiabox` in lowercase identifiers such as executables, containers and URLs. Never `SepiaBox`, `Sepia Box` or `sepia-box`.
 - Style is defined in `.editorconfig` and enforced in the build: file-scoped namespaces, braces always, `var` only when the type is evident.
 - Comments explain why, not what. No commented-out code.
@@ -72,7 +72,7 @@ New projects follow the names in `docs/architecture.md` and are added to `Sepiab
 
 The full cycle (story selection, the Atlas + Spock review, priorities, iteration limit, CI, merge, blocked stories and the Agent Log) is in [docs/process.md](docs/process.md). In short:
 
-1. Take the first `todo` story in [docs/backlog/README.md](docs/backlog/README.md) whose dependencies are all `done`.
+1. Take the first `todo` story in [docs/backlog/README.md](docs/backlog/README.md) whose dependencies are all `done`; finish the current sprint before starting the next, with no order overrides (D-054).
 2. Work on a branch `story/S-XXX-short-slug`, one story per PR.
 3. In that PR, set the story's status in the index (`doing` while open, `done` when the PR completes it, `blocked` with the reason when a human step from `docs/operations.md` is missing).
 4. When something is not specified, choose the simplest conventional option and record it in `docs/decisions.md` (next D-number: date, decision, alternatives, reason).

@@ -5,7 +5,7 @@
 **Size:** M
 
 ### Context
-"Fotos de Lisboa" ("Photos of Lisbon") needs place names. GeoNames is used offline instead of a pay-per-query service (D-009).
+"Photos of Lisbon" ("Fotos de Lisboa") needs place names. GeoNames is used offline instead of a pay-per-query service (D-009).
 
 ### Scope
 - Table `geonames` (geoname_id, name, ascii_name, country_code, admin1_name, population, location geography) with a GiST index.
@@ -17,6 +17,7 @@
 
 ### Out of scope
 - Personal places (S-014).
+- Loading GeoNames in Azure (S-059).
 
 ### Acceptance criteria
 - [ ] Given a test file with 5 cities, when I load it twice, then the table has 5 rows.
@@ -26,8 +27,10 @@
 
 ### Technical notes
 - Query: `ORDER BY location <-> @point LIMIT 1` with `ST_DWithin(location, @point, 50000)`.
+- Place names are stored as GeoNames writes them (`name`, often the English name for large cities, "Lisbon"); they are data, not translated UI text (D-050). Alternate names are out of scope: the question translator (S-025) maps "Lisboa" to the stored name.
 - Small TSV fixture at `tests/.../TestData/geonames-sample.txt`.
-- Decisions: D-009.
+- Portability (D-051): the nearest-city query is PostGIS-specific and lives in a provider-specific class (`PostgisPlaceResolver`) behind a `IPlaceResolver` service; loading and the rest of the catalog code stay plain EF Core.
+- Decisions: D-009, D-050, D-051.
 
 ### Expected tests
 - Integration (PostgreSQL): load, resolution, radius, refresh.
