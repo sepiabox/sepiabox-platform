@@ -13,6 +13,12 @@ public static class ManifestFaces
     /// <summary>Box and score digits kept in the manifest: a ten-thousandth of a 1280 px preview is a tenth of a pixel.</summary>
     public const int Decimals = 4;
 
+    /// <summary>
+    /// The face pipeline written to <c>facesVersion</c> (D-047). Bump it with any change to the face models or to how
+    /// faces are found, aligned or embedded, so the new faces replace the old ones when manifests merge.
+    /// </summary>
+    public const int CurrentVersion = 1;
+
     public static EmbeddingOutcome TryAdd(Manifest manifest, string workFolder, IFaceDetector detector)
     {
         if (manifest.FacesProcessed)
@@ -37,7 +43,8 @@ public static class ManifestFaces
         {
             // A vector that is not finite or has no length cannot be compared, so that face is left out (as D-043).
             var faces = detector.Detect(path).Where(HasDirection).Select(ToManifest).ToList();
-            return new EmbeddingOutcome(EmbeddingStatus.Added, manifest with { FacesProcessed = true, Faces = faces });
+            return new EmbeddingOutcome(
+                EmbeddingStatus.Added, manifest with { FacesProcessed = true, Faces = faces, FacesVersion = CurrentVersion });
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
         {
@@ -57,15 +64,17 @@ public static class ManifestFaces
         var left = Round(face.X);
         var top = Round(face.Y);
         // Clamped after rounding, so the box never reaches past the right or bottom edge.
-        return new ManifestFace(
-            [left, top, Math.Min(Round(face.Width), Math.Round(1 - left, Decimals)), Math.Min(Round(face.Height), Math.Round(1 - top, Decimals))],
-            Round(face.Score),
-            EmbeddingCodec.Encode(embedding));
+        var width = Math.Min(Round(face.Width), Round(1 - left));
+        var height = Math.Min(Round(face.Height), Round(1 - top));
+        return new ManifestFace([left, top, width, height], Round(face.Score), EmbeddingCodec.Encode(embedding));
     }
 
+    // Only the direction is judged here: a vector of the wrong length is a model fault, which ToManifest turns into a
+    // failure of the whole file instead of silently dropping every face.
     private static bool HasDirection(DetectedFace face) =>
         face.Embedding.Length != FaceDetector.Dimensions || EmbeddingCodec.TryNormalize(face.Embedding.ToArray());
 
+    // The one rounding of box and score values, so every stored value rounds the same way.
     private static double Round(double value) => double.IsFinite(value)
         ? Math.Round(Math.Clamp(value, 0, 1), Decimals, MidpointRounding.AwayFromZero)
         : throw new EmbeddingException($"A face has a box or score that is not finite ({value}).");

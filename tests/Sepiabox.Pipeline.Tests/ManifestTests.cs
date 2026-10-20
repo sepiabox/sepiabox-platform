@@ -46,6 +46,7 @@ public class ManifestTests
         var json = JsonNode.Parse(ManifestJson.Serialize(Sample with { FacesProcessed = true, Faces = [face] }))!.AsObject();
 
         Assert.True((bool)json["facesProcessed"]!);
+        Assert.False(json.ContainsKey("facesVersion"));
         var written = json["faces"]![0]!.AsObject();
         Assert.Equal(["box", "score", "embedding"], written.Select(p => p.Key));
         Assert.Equal([0.25, 0.1, 0.2, 0.3], written["box"]!.AsArray().Select(v => (double)v!));

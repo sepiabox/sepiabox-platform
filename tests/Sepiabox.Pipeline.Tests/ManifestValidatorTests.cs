@@ -220,6 +220,38 @@ public sealed class ManifestValidatorTests
     }
 
     [Fact]
+    public void Accepts_a_faces_version_next_to_processed_faces_and_reads_a_missing_one_as_1()
+    {
+        var json = ValidJson(node =>
+        {
+            node["facesProcessed"] = true;
+            node["facesVersion"] = 2;
+        });
+
+        Assert.True(s_validator.TryValidate(json, out var versioned, out var error), error);
+        Assert.Equal(2, versioned.EffectiveFacesVersion);
+        Assert.True(s_validator.TryValidate(ValidJson(node => node["facesProcessed"] = true), out var unversioned, out error), error);
+        Assert.Null(unversioned.FacesVersion);
+        Assert.Equal(1, unversioned.EffectiveFacesVersion);
+    }
+
+    [Theory]
+    [InlineData(false, "1")]
+    [InlineData(true, "0")]
+    [InlineData(true, "1.5")]
+    [InlineData(true, "\"1\"")]
+    public void Rejects_a_faces_version_that_is_not_a_positive_integer_next_to_processed_faces(bool processed, string version)
+    {
+        var json = ValidJson(node =>
+        {
+            node["facesProcessed"] = processed;
+            node["facesVersion"] = JsonNode.Parse(version);
+        });
+
+        Assert.False(s_validator.TryValidate(json, out _, out _));
+    }
+
+    [Fact]
     public void Rejects_faces_when_faces_were_not_processed()
     {
         var json = ValidJson(node => node["faces"] = new JsonArray(Face()));

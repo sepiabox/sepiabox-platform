@@ -73,6 +73,18 @@ public sealed record Manifest
     public bool FacesProcessed { get; init; }
 
     public IReadOnlyList<ManifestFace> Faces { get; init; } = [];
+
+    /// <summary>
+    /// Which face pipeline found <see cref="Faces"/> (D-047): bumped whenever the face models or their preprocessing
+    /// change, so newer faces replace older ones in a merge. Written only next to <c>facesProcessed: true</c>; faces
+    /// written before the field existed read as version 1.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? FacesVersion { get; init; }
+
+    /// <summary><see cref="FacesVersion"/> with a missing value read as 1, the first face pipeline.</summary>
+    [JsonIgnore]
+    public int EffectiveFacesVersion => FacesVersion ?? 1;
 }
 
 /// <summary>One place where the asset's bytes were found.</summary>

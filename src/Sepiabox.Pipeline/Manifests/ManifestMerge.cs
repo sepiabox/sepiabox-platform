@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Sepiabox.Pipeline.Media;
 
@@ -34,6 +33,7 @@ public static class ManifestMerge
             Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),
             FacesProcessed = faces.FacesProcessed,
             Faces = faces.Faces,
+            FacesVersion = faces.FacesVersion,
         };
     }
 
@@ -41,7 +41,9 @@ public static class ManifestMerge
     /// The side whose faces the merge keeps (S-018, D-047). Faces are opt-in: a work folder processed without
     /// --faces knows nothing about them, so it never replaces faces another one found. When both sides looked, the
     /// choice depends only on the faces, never on which side is incoming, so uploads of the same asset from two
-    /// computers converge on one blob instead of flipping it: more faces wins, then the larger serialized list.
+    /// computers converge on one blob instead of flipping it: the newer face pipeline wins, then more faces, then
+    /// the larger list in <see cref="ManifestFace.Compare"/> order. That is a maximum over a total order, so merges
+    /// in any order and grouping give the same faces.
     /// </summary>
     private static Manifest FacesOf(Manifest existing, Manifest incoming)
     {
@@ -50,14 +52,21 @@ public static class ManifestMerge
             return existing.FacesProcessed ? existing : incoming;
         }
 
-        if (existing.Faces.Count != incoming.Faces.Count)
+        if (!existing.FacesProcessed)
         {
-            return existing.Faces.Count > incoming.Faces.Count ? existing : incoming;
+            return incoming;
         }
 
-        var order = string.CompareOrdinal(
-            JsonSerializer.Serialize(existing.Faces, ManifestJson.Options),
-            JsonSerializer.Serialize(incoming.Faces, ManifestJson.Options));
+        var order = existing.EffectiveFacesVersion.CompareTo(incoming.EffectiveFacesVersion);
+        order = order != 0 ? order : existing.Faces.Count.CompareTo(incoming.Faces.Count);
+        if (order == 0 && !existing.Faces.SequenceEqual(incoming.Faces))
+        {
+            for (var i = 0; order == 0 && i < existing.Faces.Count; i++)
+            {
+                order = ManifestFace.Compare(existing.Faces[i], incoming.Faces[i]);
+            }
+        }
+
         return order > 0 ? existing : incoming;
     }
 

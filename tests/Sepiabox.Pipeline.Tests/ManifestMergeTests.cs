@@ -295,6 +295,61 @@ public sealed class ManifestMergeTests
     }
 
     [Fact]
+    public void A_newer_face_pipeline_replaces_older_faces_in_either_order_even_with_fewer_faces()
+    {
+        var older = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9), Face(0.85, axis: 1)] };
+        var newer = Photo(Source("HD do Jonathas", "c.jpg")) with { FacesProcessed = true, FacesVersion = 2, Faces = [Face(0.95, axis: 2)] };
+
+        foreach (var merged in new[] { ManifestMerge.Merge(older, newer), ManifestMerge.Merge(newer, older) })
+        {
+            Assert.Equal(2, merged.FacesVersion);
+            Assert.Equal(0.95, Assert.Single(merged.Faces).Score);
+        }
+    }
+
+    [Fact]
+    public void Faces_written_before_the_version_field_count_as_version_1()
+    {
+        var unversioned = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9), Face(0.85, axis: 1)] };
+        var first = Photo(Source("HD do Jonathas", "c.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = [Face(0.95)] };
+
+        Assert.Equal(1, unversioned.EffectiveFacesVersion);
+        Assert.Equal(2, ManifestMerge.Merge(first, unversioned).Faces.Count);
+        Assert.Equal(2, ManifestMerge.Merge(unversioned, first).Faces.Count);
+    }
+
+    public static TheoryData<string> ThreeWays => ["tie between two computers", "a newer pipeline among them"];
+
+    [Theory]
+    [MemberData(nameof(ThreeWays))]
+    public void Merges_faces_to_the_same_result_whatever_the_order_and_grouping(string which)
+    {
+        Manifest[] manifests = which == "tie between two computers"
+            ?
+            [
+                Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.91)] },
+                Photo(Source("HD do Jonathas", "b.jpg")) with { FacesProcessed = true, Faces = [Face(0.93, axis: 1)] },
+                Photo(Source("Pen", "c.jpg")),
+            ]
+            :
+            [
+                Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.91), Face(0.8, axis: 4)] },
+                Photo(Source("HD do Jonathas", "b.jpg")) with { FacesProcessed = true, Faces = [Face(0.93, axis: 1)] },
+                Photo(Source("HD antigo", "c.jpg")) with { FacesProcessed = true, FacesVersion = 2, Faces = [Face(0.7, axis: 5)] },
+            ];
+
+        var results = (
+            from a in manifests
+            from b in manifests
+            from c in manifests
+            where !ReferenceEquals(a, b) && !ReferenceEquals(b, c) && !ReferenceEquals(a, c)
+            from merged in new[] { ManifestMerge.Merge(ManifestMerge.Merge(a, b), c), ManifestMerge.Merge(a, ManifestMerge.Merge(b, c)) }
+            select FacesOf(merged)).Distinct().ToList();
+
+        Assert.Single(results);
+    }
+
+    [Fact]
     public void Merging_a_manifest_with_itself_changes_nothing()
     {
         var manifest = ManifestMerge.Canonical(
@@ -314,6 +369,20 @@ public sealed class ManifestMergeTests
         Assert.Equal(first, second);
         Assert.Equal(first[0].GetHashCode(), second[0].GetHashCode());
         Assert.NotEqual(first[0], first[0] with { Box = [0.1, 0.2, 0.3, 0.5] });
+    }
+
+    [Fact]
+    public void A_face_keeps_its_own_copy_of_the_box()
+    {
+        var box = new List<double> { 0.1, 0.2, 0.3, 0.4 };
+        var face = new ManifestFace(box, 0.9, "AAAA");
+        var changed = face with { Box = box };
+
+        box[0] = 0.9;
+
+        Assert.Equal([0.1, 0.2, 0.3, 0.4], face.Box);
+        Assert.Equal([0.1, 0.2, 0.3, 0.4], changed.Box);
+        Assert.Throws<ArgumentNullException>(() => new ManifestFace(null!, 0.9, "AAAA"));
     }
 
     [Fact]
@@ -344,6 +413,9 @@ public sealed class ManifestMergeTests
     }
 
     private static ManifestFace Face(double score, int axis = 0) => TestManifests.Face(score, axis);
+
+    private static string FacesOf(Manifest manifest) =>
+        $"{manifest.FacesProcessed} {manifest.FacesVersion} {System.Text.Json.JsonSerializer.Serialize(manifest.Faces, ManifestJson.Options)}";
 
     private static (DateTime?, CaptureDateSource?) DateOf(Manifest manifest) => (manifest.CapturedAt, manifest.CapturedAtSource);
 

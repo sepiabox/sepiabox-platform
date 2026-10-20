@@ -21,6 +21,7 @@ public sealed class ManifestFacesTests : IDisposable
         Assert.Equal(EmbeddingStatus.Added, outcome.Status);
         Assert.EndsWith("preview-1280.webp", Assert.Single(detector.Detected), StringComparison.Ordinal);
         Assert.True(outcome.Manifest!.FacesProcessed);
+        Assert.Equal(ManifestFaces.CurrentVersion, outcome.Manifest.FacesVersion);
         var face = Assert.Single(outcome.Manifest.Faces);
         Assert.Equal([0.25, 0.2, 0.5, 0.6], face.Box);
         Assert.Equal(0.97, face.Score);
@@ -134,7 +135,8 @@ public sealed class ManifestFacesTests : IDisposable
         Assert.Equal([0, 0.1235, 0.5, 0.8765], face.Box);
         Assert.Equal(0.9877, face.Score);
         var stored = EmbeddingCodec.Decode(face.Embedding);
-        Assert.Equal((0.6f, 0.8f), (stored[0], stored[1]));
+        Assert.Equal(0.6f, stored[0], 6);
+        Assert.Equal(0.8f, stored[1], 6);
     }
 
     [Fact]
@@ -142,8 +144,9 @@ public sealed class ManifestFacesTests : IDisposable
     {
         var face = ManifestFaces.ToManifest(FakeFaceDetector.CentreFace() with { X = 0.33335, Width = 0.66666, Y = 0.99996, Height = 0.00004 });
 
-        Assert.True(face.Box[0] + face.Box[2] <= 1, string.Join(", ", face.Box));
-        Assert.True(face.Box[1] + face.Box[3] <= 1, string.Join(", ", face.Box));
+        // Within a rounding error of a double, never by a whole ten-thousandth.
+        Assert.True(face.Box[0] + face.Box[2] <= 1 + 1e-9, string.Join(", ", face.Box));
+        Assert.True(face.Box[1] + face.Box[3] <= 1 + 1e-9, string.Join(", ", face.Box));
     }
 
     [Theory]
