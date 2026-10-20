@@ -112,6 +112,7 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
     [InlineData("migrate", "migrate-identity")]
     [InlineData("import", "import-identity")]
     [InlineData("import-all", "import-identity")]
+    [InlineData("geonames", "migrate-identity")]
     public void Migrate_and_import_jobs_run_as_separate_identities_when_published(string job, string identity)
     {
         // Only migrate's identity reads the database vault; only the import identity reads storage and the

@@ -49,6 +49,12 @@ public static class AzureInfrastructure
     /// <summary>The AppHost resource behind <see cref="ImportAllJobName"/>.</summary>
     public const string ImportAllResourceName = "import-all";
 
+    /// <summary>The manual job that downloads GeoNames, loads it and names places (S-059).</summary>
+    public const string GeoNamesJobName = "sepiabox-geonames";
+
+    /// <summary>The AppHost resource behind <see cref="GeoNamesJobName"/>.</summary>
+    public const string GeoNamesResourceName = "geonames";
+
     /// <summary>The Service Bus namespace; the shutdown runbook disables its queue (S-030).</summary>
     public const string ServiceBusName = "sepiabox-sb";
 
@@ -133,6 +139,10 @@ public static class AzureInfrastructure
 
     // The migrations of a catalog this size take seconds; ten minutes is plenty and bounds a stuck run.
     private const int MigrateTimeoutSeconds = 600;
+
+    // Downloading about 10 MB, loading about 200,000 cities and naming the assets without a place take
+    // minutes; half an hour bounds a stuck run.
+    private const int GeoNamesTimeoutSeconds = 1800;
 
     // PostgreSQL 17 needs an API version newer than the 2024-08-01 the provisioning library defaults to.
     private const string PostgresApiVersion = "2025-08-01";
@@ -386,6 +396,32 @@ public static class AzureInfrastructure
         // Decoding embeddings and writing a few thousand rows; billed only while it runs.
         var container = job.Template.Containers.Single().Value
             ?? throw new InvalidOperationException("The import job has no container.");
+        container.Resources = new AppContainerResources { Cpu = 1.0, Memory = "2Gi" };
+    }
+
+    /// <summary>
+    /// <c>geonames update</c> (S-059, D-067): started by hand once after the first deploy and to refresh the
+    /// cities, never on a schedule. Its download is a few MB and lands in the replica's temporary storage.
+    /// </summary>
+    public static void ConfigureGeoNamesJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        job.Name = GeoNamesJobName;
+        job.Location = Region;
+
+        var configuration = job.Configuration;
+        configuration.TriggerType = ContainerAppJobTriggerType.Manual;
+        configuration.ManualTriggerConfig = new JobConfigurationManualTriggerConfig
+        {
+            Parallelism = 1,
+            ReplicaCompletionCount = 1,
+        };
+        configuration.ReplicaTimeout = GeoNamesTimeoutSeconds;
+        // A refused or failed load keeps the previous cities; repeating it unattended would only fail again.
+        configuration.ReplicaRetryLimit = 0;
+        // The cities are read whole before the load, so they can be counted (GeoNamesLoadGuard).
+        var container = job.Template.Containers.Single().Value
+            ?? throw new InvalidOperationException("The GeoNames job has no container.");
         container.Resources = new AppContainerResources { Cpu = 1.0, Memory = "2Gi" };
     }
 

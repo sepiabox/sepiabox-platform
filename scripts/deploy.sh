@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploys Sepiabox to Azure (S-032) in the only safe order: the infrastructure, the migrate job's new
 # image, one run of `sepiabox-worker migrate` against the cloud database, and only when it succeeded the
-# import jobs (S-033), which expect the new schema and never migrate (D-063), and the web's new revision.
+# import jobs (S-033), which expect the new schema and never migrate (D-063), the GeoNames job (S-059), which
+# writes the new schema too, and the web's new revision.
 # A failed or stuck migration stops here and the running jobs and web are left as they were.
 #
 # Needs azd, the Azure CLI with the containerapp extension, the .NET SDK and Docker, signed in to both
@@ -143,6 +144,9 @@ migrated=true
 azd deploy import --no-prompt
 azd deploy import-all --no-prompt
 imports_deployed=true
+# Manual (S-059): started by hand only, but never with an image older than the schema. After the import
+# jobs, so that if this deploy fails the queue still receives again with the new import image.
+azd deploy geonames --no-prompt
 # Never exit 0 with the queue paused.
 resume_queue || exit 1
 

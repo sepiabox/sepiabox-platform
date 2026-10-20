@@ -46,6 +46,9 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Information, Message = "Loaded {Cities} GeoNames cities.")]
     public static partial void GeoNamesLoaded(ILogger logger, int cities);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Downloaded {File}: SHA-256 {Sha256}, {Bytes} bytes, last modified {LastModified}, from {Uri}.")]
+    public static partial void GeoNamesFileDownloaded(ILogger logger, string file, string sha256, long bytes, string lastModified, Uri uri);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Named the place of {Assets} assets.")]
     public static partial void PlacesRefreshed(ILogger logger, int assets);
 

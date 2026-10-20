@@ -52,7 +52,7 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
         builder.Services.AddScoped<ManifestImporter>();
     }
 
-    if (command.Action is WorkerAction.ImportOnce or WorkerAction.ImportFromQueue or WorkerAction.PlacesRefresh)
+    if (command.Action is WorkerAction.ImportOnce or WorkerAction.ImportFromQueue or WorkerAction.PlacesRefresh or WorkerAction.GeoNamesUpdate)
     {
         // The PostGIS implementation (D-051), on the same context as the importer.
         builder.Services.AddScoped<IPlaceResolver, PostgisPlaceResolver>();
@@ -98,6 +98,26 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         var loaded = await new GeoNamesLoader(services.GetRequiredService<CatalogDbContext>())
             .LoadAsync(GeoNamesFiles.ReadCities(source.Cities), admin1, countries, cancellationToken);
         Log.GeoNamesLoaded(logger, loaded);
+        return ExitCodes.Success;
+    }
+
+    if (command is { Action: WorkerAction.GeoNamesDownload, Folder: { } folder })
+    {
+        using var http = GeoNamesDownloader.CreateClient();
+        await new GeoNamesDownloader(http, logger).DownloadAsync(folder, cancellationToken);
+        return ExitCodes.Success;
+    }
+
+    if (command.Action == WorkerAction.GeoNamesUpdate)
+    {
+        using var http = GeoNamesDownloader.CreateClient();
+        await new GeoNamesUpdate(
+                services.GetRequiredService<CatalogDbContext>(),
+                new GeoNamesDownloader(http, logger),
+                services.GetRequiredService<IPlaceResolver>(),
+                GeoNamesLoadGuard.Default,
+                logger)
+            .RunAsync(cancellationToken);
         return ExitCodes.Success;
     }
 

@@ -76,7 +76,7 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
     public void Owner_secrets_reach_only_the_web_and_only_from_key_vault_when_published()
     {
         var webEnvironment = Environment("web");
-        var jobKeys = new[] { "migrate", "import", "import-all" }.SelectMany(job => Environment(job).Keys).ToList();
+        var jobKeys = new[] { "migrate", "import", "import-all", "geonames" }.SelectMany(job => Environment(job).Keys).ToList();
 
         // Key Vault is the web's configuration source: Auth--Google--ClientId is Auth:Google:ClientId (D-051).
         Assert.Equal("{vault.connectionString}", webEnvironment["ConnectionStrings__vault"]);

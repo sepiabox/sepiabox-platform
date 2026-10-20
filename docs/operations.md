@@ -43,7 +43,7 @@ Checks only a person can do. A story whose automated criteria pass is `done` and
 | After "Custom domain" is done: `curl -sI https://app.sepiabox.com/health` answers 200 with `strict-transport-security: max-age=31536000`; sign in with Google and with Microsoft on `https://app.sepiabox.com` (after adding its `/signin-google` and `/signin-microsoft` redirect URIs to the OAuth clients): sign-in works; an account not on `Access:Emails` lands on the no-access page | S-035 |
 | After the secrets in "Deploying from GitHub Actions" are set: run Actions → Deploy → Run workflow on `main`, approve it in the `production` environment, and check that it succeeds, that its "Deploy" step shows "Migrations applied." before the web is deployed, and that "Purge old images" ran one `acr purge` per repository. Then merge a small change to `main`: the workflow starts by itself once CI is green, and waits for approval | S-034 |
 | After a deploy and `sepiabox-import-all` (see "Automatic import"): `upload` one small folder to Azure; within about 30 seconds a new `sepiabox-import` execution starts (see "Check after the first deploy that the job starts"), and within a few minutes, without running anything else, `az containerapp job execution list --name sepiabox-import --resource-group rg-sepiabox --query "[0].properties.status" -o tsv` shows `Succeeded`, its assets appear in the timeline at the Container Apps default host, and the dead-letter count (see "Automatic import") is `0` | S-033 |
-| After the GeoNames job (`az containerapp job start --name sepiabox-geonames --resource-group rg-sepiabox`): a photo taken in Lisbon shows "Lisbon" on its detail page in Azure | S-059 |
+| After the first run of the GeoNames job (see "Place names (GeoNames)"): its execution `Succeeded`, its log shows a SHA-256, size and date for `cities500.zip`, `admin1CodesASCII.txt` and `countryInfo.txt` and "Loaded N GeoNames cities" with N above 150,000; then a photo taken in Lisbon, uploaded and imported, shows "Lisbon" on its detail page in Azure | S-059 |
 | The first description search after a cold start answers within 30 s, later ones within 2 s | S-056 |
 | MVP acceptance on the real data: after uploading the drive and the import finishing, ask in the web a few counting questions (photos per year, videos per year, items with no date) and compare each answer with `sepiabox-ingest report` on every work folder that was uploaded, in upload order; no test data is ever uploaded to Azure | S-054 |
 | The video playback check in the table above | S-011 |
@@ -64,7 +64,8 @@ It refuses to start unless the selected azd environment is `sepiabox` in `france
 2. `azd deploy migrate`: builds the worker image and updates the `sepiabox-migrate` Container Apps job (manual trigger, 10 minutes, no retries).
 3. Starts one execution of `sepiabox-migrate` (`sepiabox-worker migrate` against the cloud database) and waits for it, up to 15 minutes.
 4. Only if it succeeded, `azd deploy import` and `azd deploy import-all`: the import jobs (S-033), which expect the new schema and never migrate (D-063).
-5. Then `azd deploy web`: builds the web image and creates the `sepiabox-web` revision (0–1 replicas, HTTPS ingress, `AllowedHosts` = its default host).
+5. Then `azd deploy geonames`: the manual GeoNames job (S-059), which writes the new schema too and is only ever started by hand. If this step fails the queue receives again (the import jobs already run the new image), but the web is not deployed; run the script again.
+6. Then `azd deploy web`: builds the web image and creates the `sepiabox-web` revision (0–1 replicas, HTTPS ingress, `AllowedHosts` = its default host).
 
 If the migration fails, is stopped or times out, the script stops before step 4 and the running web is left as it was; the job's logs are in the `sepiabox-logs` workspace (table `ContainerAppConsoleLogs_CL`, container `migrate`). Fix the cause and run the script again: migrations already applied are skipped. `azd up` and a bare `azd deploy` are refused by the `predeploy` hook in `azure.yaml`, since they would start the web before the migrations.
 
@@ -72,15 +73,15 @@ If the migration fails, is stopped or times out, the script stops before step 4 
 
 **The deploy hook is a guard, not a lock.** It only stops an accidental `azd up` or `azd deploy`; anyone who sets `SEPIABOX_DEPLOY_SCRIPT=1` by hand bypasses it. On Windows the hook runs in PowerShell 7 (`pwsh`), which must be installed; the script itself needs Bash.
 
-**If azd cannot deploy one resource at a time.** The script relies on `azd deploy migrate`, `azd deploy import`, `azd deploy import-all` and `azd deploy web` each deploying a single AppHost resource, and on azd deploying Container Apps jobs; neither could be tried before the first real deploy. If either is refused or a job is not created, deploy by hand in the same order:
+**If azd cannot deploy one resource at a time.** The script relies on `azd deploy migrate`, `azd deploy import`, `azd deploy import-all`, `azd deploy geonames` and `azd deploy web` each deploying a single AppHost resource, and on azd deploying Container Apps jobs; neither could be tried before the first real deploy. If either is refused or a job is not created, deploy by hand in the same order:
 
 1. `export SEPIABOX_DEPLOY_SCRIPT=1 && azd provision --no-prompt`, then pause the queue as the script does: `az servicebus queue update --resource-group rg-sepiabox --namespace-name sepiabox-sb --name manifests --status ReceiveDisabled`.
 2. Generate the modules: `dotnet run --project src/Sepiabox.AppHost -- --publisher manifest --output-path .azure/publish`.
-3. For each of `migrate` (project `src/Sepiabox.Worker`), then `import` and `import-all` (the same project), then `web` (project `src/Sepiabox.Web`), in that order:
+3. For each of `migrate` (project `src/Sepiabox.Worker`), then `import`, `import-all` and `geonames` (the same project), then `web` (project `src/Sepiabox.Web`), in that order:
    1. Build and push its image: `az acr login --name <registry name>` (from `azd env get-values`, `AZURE_CONTAINER_REGISTRY_ENDPOINT` without `.azurecr.io`), then `dotnet publish <project> -c Release -t:PublishContainer -p:ContainerRegistry=<registry endpoint> -p:ContainerRepository=sepiabox/<resource> -p:ContainerImageTag=$(git rev-parse --short HEAD)`.
    2. Create or update it: `az deployment group create --resource-group rg-sepiabox --template-file .azure/publish/<resource>-containerapp.module.bicep --parameters <resource with - as _>_containerimage=<registry endpoint>/sepiabox/<resource>:<tag> ...`, giving every other parameter of the module its value from `azd env get-values`: the `AZURE_CONTAINER_APPS_ENVIRONMENT_*` and `AZURE_CONTAINER_REGISTRY_*` values give the `aca_outputs_*` parameters, and the vault, storage, access and identity outputs give the rest.
    3. After `migrate` only: run the job and wait for it as the script does (`az containerapp job start --name sepiabox-migrate --resource-group rg-sepiabox`, then `az containerapp job execution show ... --query properties.status` until `Succeeded`); stop here if it fails.
-   4. After `import-all`: make the queue receive again (`... --status Active`).
+   4. After `geonames`: make the queue receive again (`... --status Active`).
 
 After the first deploy, record here which of the two behaviours azd showed (single-resource deploys and the job worked, or the manual steps were needed), so the script can be fixed if needed.
 
@@ -197,7 +198,21 @@ KEDA may also start short executions that find nothing to receive, or fail, whil
 
 ## Place names (GeoNames)
 
-Photos get a place ("Matosinhos, Porto, Portugal") from the GeoNames cities loaded in the catalog: the nearest city within 50 km of the photo's location, when it is imported (S-012, D-066). Until the cities are loaded, assets are imported without a place. In Azure, S-059 adds the job that downloads and loads them. To load them locally (the catalog of `dotnet run --project src/Sepiabox.AppHost`, or any catalog in `ConnectionStrings__catalog`, with an administrator connection):
+Photos get a place ("Matosinhos, Porto, Portugal") from the GeoNames cities loaded in the catalog: the nearest city within 50 km of the photo's location, when it is imported (S-012, D-066). Until the cities are loaded, assets are imported without a place.
+
+**In Azure** the manual job `sepiabox-geonames` loads them (S-059, D-067). It runs `sepiabox-worker geonames update`: downloads the three files over HTTPS from `download.geonames.org` (nothing else is accepted, and redirects are not followed) into the replica's temporary storage, logs each file's SHA-256, size and date, refuses the load when `cities500` has fewer than 150,000 cities or more than 10% fewer than the table holds now, replaces the cities in one transaction (any failure keeps the previous ones), then names the assets that have a location and no place. It connects as the PostgreSQL administrator (it writes `geonames`, which the application role may only read) with the migrate job's identity, and needs outbound HTTPS, which the Container Apps environment has (no VNet). A run takes a few minutes at 1 vCPU and 2 GiB, billed only while it runs (D-008).
+
+- **Once after the first deploy** (and after any deploy that recreated the database), start it and wait for `Succeeded`:
+
+  ```bash
+  az containerapp job start --name sepiabox-geonames --resource-group rg-sepiabox
+  az containerapp job execution list --name sepiabox-geonames --resource-group rg-sepiabox --query "[0].{status:properties.status,start:properties.startTime}" -o table
+  ```
+
+- **Again to refresh**, only when places are missing (a city founded or renamed, a large upload of old photos from places GeoNames lacked); GeoNames changes slowly, so there is no schedule. A refresh does not rename places already set (D-066). To name every asset again after it, start one more execution with the container's arguments overridden to `places refresh --all` (`az containerapp job start` takes the job's image and new arguments for one execution; this was not tried before the first real deploy, so check `az containerapp job start --help` for the exact form).
+- **Check the logged hashes** of each run in the `sepiabox-logs` workspace (table `ContainerAppConsoleLogs_CL`, container `geonames`, lines starting "Downloaded"): the size and date should be plausible (cities500.zip about 10 MB, dated within the last days), and you can compare the hash with a copy downloaded on your own computer the same day (`sha256sum cities500.zip`). A refused load ("fewer than the 150000 expected at least", "fewer than the N loaded now") or a download error ends the execution as `Failed` and keeps the cities already loaded: check https://download.geonames.org/export/dump/ and start it again later.
+
+**Locally**, load them yourself (the catalog of `dotnet run --project src/Sepiabox.AppHost`, or any catalog in `ConnectionStrings__catalog`, with an administrator connection):
 
 1. Download `cities500.zip`, `admin1CodesASCII.txt` and `countryInfo.txt` from https://download.geonames.org/export/dump/ into a folder outside the repository. GeoNames is CC BY 4.0: never commit these files.
 2. Run `dotnet run --project src/Sepiabox.Worker -- geonames load <folder>/cities500.zip --admin1 <folder>/admin1CodesASCII.txt --countries <folder>/countryInfo.txt`. It replaces the cities in one transaction (about 200,000 rows, a minute or two), so running it again with newer files is safe, and a failed load keeps the previous cities.
