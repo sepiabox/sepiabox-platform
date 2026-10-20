@@ -34,6 +34,8 @@ public static class ThumbnailGenerator
         string sourcePath, string workFolder, string relativeFolder, IReadOnlyList<ThumbnailSize> sizes)
     {
         using var stream = MediaFile.OpenRead(sourcePath);
+        // No format hint and only the first image: a Canon CR2 is then read as a TIFF, giving the camera's
+        // full-size JPEG in IFD0 instead of a slow demosaic of the sensor data (D-045).
         using var original = new MagickImage(stream);
         original.AutoOrient();
         original.Strip();
