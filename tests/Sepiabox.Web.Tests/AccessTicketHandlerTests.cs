@@ -17,11 +17,13 @@ public sealed class AccessTicketHandlerTests
 
         await AccessTicketHandler.OnTicketReceivedAsync(context);
 
-        // Handled means the remote handler stops here: it never signs in, so no cookie is written.
+        // Handled means the remote handler stops here: it never signs in.
         Assert.True(context.Result?.Handled);
         Assert.Equal(StatusCodes.Status302Found, context.Response.StatusCode);
         Assert.Equal("/sem-acesso", context.Response.Headers.Location.ToString());
-        Assert.False(context.Response.Headers.ContainsKey("Set-Cookie"));
+        // The only session cookie written is the one that deletes an earlier session.
+        var cookie = Assert.Single(context.Response.Headers.SetCookie, c => c!.StartsWith(AuthSetup.CookieName + "=", StringComparison.Ordinal));
+        Assert.Contains("expires=Thu, 01 Jan 1970", cookie, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -35,38 +37,69 @@ public sealed class AccessTicketHandlerTests
         Assert.Equal("/sem-acesso", context.Response.Headers.Location.ToString());
     }
 
-    [Theory]
-    [InlineData("ana@example.com")]
-    [InlineData("ANA@Example.COM")]
-    public async Task Lets_the_sign_in_continue_when_the_email_is_on_the_list(string email)
+    [Fact]
+    public async Task Refuses_a_google_email_on_the_list_that_google_says_is_not_verified()
     {
-        var context = TicketFor(email, microsoft: true);
+        var context = TicketFor(TestUsers.Allowed, emailVerified: "false");
+
+        await AccessTicketHandler.OnTicketReceivedAsync(context);
+
+        Assert.True(context.Result?.Handled);
+        Assert.Equal("/sem-acesso", context.Response.Headers.Location.ToString());
+    }
+
+    [Theory]
+    [InlineData("ana@example.com", null, false)]
+    [InlineData("ANA@Example.COM", "true", false)]
+    [InlineData("ana@example.com", null, true)]
+    public async Task Lets_a_sign_in_on_the_list_continue_and_keeps_it_across_browser_restarts(string email, string? emailVerified, bool microsoft)
+    {
+        var context = TicketFor(email, emailVerified, microsoft);
 
         await AccessTicketHandler.OnTicketReceivedAsync(context);
 
         Assert.Null(context.Result);
         Assert.False(context.Response.Headers.ContainsKey("Location"));
+        Assert.True(context.Properties!.IsPersistent);
     }
 
-    private static TicketReceivedContext TicketFor(string? email, bool microsoft = false)
+    [Fact]
+    public async Task Sends_a_failed_sign_in_back_to_entrar_with_a_message()
     {
-        var http = new DefaultHttpContext
-        {
-            RequestServices = new ServiceCollection()
-                .AddLogging()
-                .AddSingleton(new AccessList([TestUsers.Allowed]))
-                .BuildServiceProvider(),
-        };
-        Claim[] claims = email is null ? [] : [new Claim(ClaimTypes.Email, email)];
-        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "oauth"));
+        var http = Http();
+        http.Request.PathBase = "/app";
+        var scheme = new AuthenticationScheme(GoogleDefaults.AuthenticationScheme, null, typeof(GoogleHandler));
+        var context = new RemoteFailureContext(http, scheme, new GoogleOptions(), new AuthenticationFailureException("Access was denied by the resource owner or by the remote server."));
 
-        if (microsoft)
+        await AccessTicketHandler.OnRemoteFailureAsync(context);
+
+        Assert.True(context.Result?.Handled);
+        Assert.Equal("/app/entrar?erro=1", http.Response.Headers.Location.ToString());
+    }
+
+    private static DefaultHttpContext Http()
+    {
+        var services = new ServiceCollection()
+            .AddLogging()
+            .AddSingleton(new AccessList([TestUsers.Allowed]));
+        services.AddAuthentication().AddCookie(options => options.Cookie.Name = AuthSetup.CookieName);
+        return new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
+    }
+
+    private static TicketReceivedContext TicketFor(string? email, string? emailVerified = null, bool microsoft = false)
+    {
+        var http = Http();
+        List<Claim> claims = email is null ? [] : [new Claim(ClaimTypes.Email, email)];
+        if (emailVerified is not null)
         {
-            var scheme = new AuthenticationScheme(MicrosoftAccountDefaults.AuthenticationScheme, null, typeof(MicrosoftAccountHandler));
-            return new TicketReceivedContext(http, scheme, new MicrosoftAccountOptions(), new AuthenticationTicket(principal, scheme.Name));
+            claims.Add(new Claim(AccessTicketHandler.EmailVerifiedClaim, emailVerified));
         }
 
-        var google = new AuthenticationScheme(GoogleDefaults.AuthenticationScheme, null, typeof(GoogleHandler));
-        return new TicketReceivedContext(http, google, new GoogleOptions(), new AuthenticationTicket(principal, google.Name));
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "oauth"));
+        var scheme = microsoft
+            ? new AuthenticationScheme(MicrosoftAccountDefaults.AuthenticationScheme, null, typeof(MicrosoftAccountHandler))
+            : new AuthenticationScheme(GoogleDefaults.AuthenticationScheme, null, typeof(GoogleHandler));
+        RemoteAuthenticationOptions options = microsoft ? new MicrosoftAccountOptions() : new GoogleOptions();
+        return new TicketReceivedContext(http, scheme, options, new AuthenticationTicket(principal, new AuthenticationProperties(), scheme.Name));
     }
 }

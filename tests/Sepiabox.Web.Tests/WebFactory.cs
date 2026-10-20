@@ -1,7 +1,10 @@
+using System.Net;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -28,8 +31,8 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>The app with an in-memory library instead of PostgreSQL.</summary>
     public WebFactory(FakeLibrary library)
     {
-        // Never opened: every query goes to the fake.
-        _catalogConnectionString = "Host=localhost;Database=unused";
+        // Every query goes to the fake; only /health tries it, and a closed port fails at once.
+        _catalogConnectionString = "Host=127.0.0.1;Port=1;Database=unused;Timeout=2";
         _library = library;
     }
 
@@ -40,6 +43,12 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
 
     /// <summary>Extra configuration, such as OAuth clients (fake ones: no test ever reaches Google or Microsoft).</summary>
     public Dictionary<string, string> Settings { get; init; } = [];
+
+    /// <summary>
+    /// A folder for the data protection keys, so two factories can read each other's cookies like two
+    /// revisions of the app sharing a key ring.
+    /// </summary>
+    public DirectoryInfo? KeyRing { get; init; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -55,12 +64,18 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
 
         builder.ConfigureTestServices(services =>
         {
+            services.AddSingleton<IStartupFilter, LocalBrowser>();
             services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, TestSignIn>(TestSignIn.SchemeName, null);
             // Only authentication changes: challenges and 403s still go through the app's cookie handler.
             services.PostConfigure<AuthenticationOptions>(options => options.DefaultAuthenticateScheme = TestSignIn.SchemeName);
             if (_library is not null)
             {
                 services.AddSingleton<ILibraryQueries>(_library);
+            }
+
+            if (KeyRing is not null)
+            {
+                services.AddDataProtection().PersistKeysToFileSystem(KeyRing).SetApplicationName("sepiabox-web");
             }
         });
     }
@@ -73,9 +88,34 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
         return client;
     }
 
-    /// <summary>A client with no sign-in that reports redirects instead of following them.</summary>
+    /// <summary>A client with no sign-in that keeps cookies and reports redirects instead of following them.</summary>
     public HttpClient CreateAnonymousClient() =>
         CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+    /// <summary>A client that sends exactly this cookie, as a browser holding an old one would.</summary>
+    public HttpClient CreateClientWithCookie(string cookie)
+    {
+        var client = CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = false });
+        client.DefaultRequestHeaders.Add("Cookie", cookie);
+        return client;
+    }
+}
+
+/// <summary>
+/// TestServer requests have no connection, so they get the address a browser on this computer would have;
+/// a test that sets another address keeps it.
+/// </summary>
+internal sealed class LocalBrowser : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+        app.Use((http, nextMiddleware) =>
+        {
+            http.Connection.RemoteIpAddress ??= IPAddress.Loopback;
+            return nextMiddleware(http);
+        });
+        next(app);
+    };
 }
 
 internal static class TestUsers

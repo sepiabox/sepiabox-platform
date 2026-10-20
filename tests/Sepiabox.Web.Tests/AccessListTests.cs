@@ -68,6 +68,19 @@ public sealed class AccessListTests
         Assert.True(access.Allows("bruno@example.com"));
     }
 
+    [Fact]
+    public void Follows_the_configuration_when_it_reloads()
+    {
+        var configuration = (IConfigurationRoot)Configuration(new() { [AccessList.ConfigurationKey] = "ana@example.com" });
+        var access = AccessList.From(configuration);
+
+        configuration[AccessList.ConfigurationKey] = "bruno@example.com";
+        configuration.Reload();
+
+        Assert.False(access.Allows("ana@example.com"));
+        Assert.True(access.Allows("bruno@example.com"));
+    }
+
     private static IConfiguration Configuration(Dictionary<string, string?> values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 }

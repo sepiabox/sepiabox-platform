@@ -1,30 +1,21 @@
 using System.Net;
-using System.Text.RegularExpressions;
 using System.Web;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication.MicrosoftAccount;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Sepiabox.Web.Auth;
+using static Sepiabox.Web.Tests.SignInWeb;
 
 namespace Sepiabox.Web.Tests;
 
-/// <summary>
-/// The access list on the real app, with an in-memory library: no database, storage or OAuth client is
-/// reached. The library holds a photo, so a request that got past sign-in would be redirected to storage.
-/// </summary>
-public sealed partial class SignInTests
+/// <summary>Who reaches pages, media and the API, and how the provider buttons leave for Google or Microsoft.</summary>
+public sealed class SignInTests
 {
-    private static readonly string Photo = Ids.Of(1);
-
-    private static readonly Dictionary<string, string> BothClients = new()
-    {
-        ["Auth:Google:ClientId"] = "google-client.apps.example.com",
-        ["Auth:Google:ClientSecret"] = "not-a-secret",
-        ["Auth:Microsoft:ClientId"] = "00000000-0000-0000-0000-000000000000",
-        ["Auth:Microsoft:ClientSecret"] = "not-a-secret",
-    };
-
     [Fact]
     public async Task Redirects_an_anonymous_request_for_the_timeline_to_entrar()
     {
-        await using var web = Web();
+        await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
         using var response = await http.GetAsync(Url("/"));
@@ -41,7 +32,7 @@ public sealed partial class SignInTests
     public async Task Shows_the_timeline_to_a_user_on_the_list_whatever_the_casing(string email)
     {
         // The list itself is written with other casings and separators, as someone would type it into Key Vault.
-        await using var web = Web(accessEmails: "Ana@EXAMPLE.com; BRUNO@example.com");
+        await using var web = Create(accessEmails: "Ana@EXAMPLE.com; BRUNO@example.com");
         using var http = web.CreateSignedInClient(email);
 
         using var response = await http.GetAsync(Url("/"));
@@ -55,7 +46,7 @@ public sealed partial class SignInTests
     [InlineData("original")]
     public async Task Answers_403_to_media_for_a_signed_in_user_not_on_the_list(string media)
     {
-        await using var web = Web();
+        await using var web = Create();
         using var http = web.CreateSignedInClient(TestUsers.Stranger, followRedirects: false);
 
         using var response = await http.GetAsync(Url($"/fotos/{Photo}/{media}"));
@@ -68,7 +59,7 @@ public sealed partial class SignInTests
     [Fact]
     public async Task Answers_403_to_the_api_for_a_signed_in_user_not_on_the_list()
     {
-        await using var web = Web();
+        await using var web = Create();
         using var http = web.CreateSignedInClient(TestUsers.Stranger, followRedirects: false);
 
         using var response = await http.GetAsync(Url("/api/anything"));
@@ -79,7 +70,7 @@ public sealed partial class SignInTests
     [Fact]
     public async Task Sends_a_signed_in_user_not_on_the_list_from_a_page_to_sem_acesso()
     {
-        await using var web = Web();
+        await using var web = Create();
         using var http = web.CreateSignedInClient(TestUsers.Stranger, followRedirects: false);
 
         using var response = await http.GetAsync(Url("/"));
@@ -94,7 +85,7 @@ public sealed partial class SignInTests
     [InlineData("original")]
     public async Task Challenges_an_anonymous_request_for_media_and_never_redirects_it_to_storage(string media)
     {
-        await using var web = Web();
+        await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
         using var response = await http.GetAsync(Url($"/fotos/{Photo}/{media}"));
@@ -111,7 +102,7 @@ public sealed partial class SignInTests
     public async Task Redirects_the_same_media_to_storage_once_signed_in()
     {
         // The control for the test above: the setup would leak a storage link if sign-in let it through.
-        await using var web = Web();
+        await using var web = Create();
         using var http = web.CreateSignedInClient(followRedirects: false);
 
         using var response = await http.GetAsync(Url($"/fotos/{Photo}/thumb-256"));
@@ -121,15 +112,18 @@ public sealed partial class SignInTests
     }
 
     [Fact]
-    public async Task Answers_401_to_an_anonymous_api_request_instead_of_a_sign_in_page()
+    public async Task Answers_401_with_a_challenge_header_to_an_anonymous_api_request()
     {
-        await using var web = Web();
+        await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
         using var response = await http.GetAsync(Url("/api/anything"));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Null(response.Headers.Location);
+        var challenge = Assert.Single(response.Headers.WwwAuthenticate);
+        Assert.Equal("Cookie", challenge.Scheme);
+        Assert.Contains("sign-in=\"/entrar\"", challenge.Parameter, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -139,7 +133,7 @@ public sealed partial class SignInTests
     [InlineData("/app.css")]
     public async Task Serves_the_sign_in_pages_probes_and_styles_anonymously(string path)
     {
-        await using var web = Web();
+        await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
         using var response = await http.GetAsync(Url(path));
@@ -148,21 +142,33 @@ public sealed partial class SignInTests
     }
 
     [Fact]
-    public async Task Does_not_send_an_anonymous_health_probe_to_sign_in()
+    public async Task Answers_an_anonymous_health_probe_instead_of_sending_it_to_sign_in()
     {
-        await using var web = Web();
+        await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
-        // The database behind the fake library does not exist, so the check itself may fail; it must still answer.
+        // The fake library's database is a closed port, so the probe reports it rather than redirecting.
         using var response = await http.GetAsync(Url("/health"));
 
-        Assert.Contains(response.StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.ServiceUnavailable });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Sends_a_user_who_already_has_access_from_entrar_to_where_they_were_going()
+    {
+        await using var web = Create();
+        using var http = web.CreateSignedInClient(followRedirects: false);
+
+        using var response = await http.GetAsync(Url("/entrar?ReturnUrl=%2Ffotos%2Fabc"));
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/fotos/abc", response.Headers.Location!.AbsolutePath);
     }
 
     [Fact]
     public async Task Shows_a_button_for_each_configured_provider_on_entrar()
     {
-        await using var web = Web(settings: BothClients);
+        await using var web = Create(settings: BothClients);
         using var http = web.CreateAnonymousClient();
 
         var html = await http.GetStringAsync(Url("/entrar?ReturnUrl=%2Ffotos%2Fabc"));
@@ -171,14 +177,15 @@ public sealed partial class SignInTests
         Assert.Contains("Entrar com Microsoft", html, StringComparison.Ordinal);
         Assert.Contains("href=\"entrar/google?returnUrl=%2Ffotos%2Fabc\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("dev-login", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Não foi possível entrar", html, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData("google", "accounts.google.com", "/o/oauth2/v2/auth")]
-    [InlineData("microsoft", "login.microsoftonline.com", "/consumers/oauth2/v2.0/authorize")]
-    public async Task Sends_a_provider_button_to_that_provider_asking_which_account(string provider, string host, string path)
+    [InlineData("google", "accounts.google.com", "/o/oauth2/v2/auth", "/signin-google")]
+    [InlineData("Microsoft", "login.microsoftonline.com", "/consumers/oauth2/v2.0/authorize", "/signin-microsoft")]
+    public async Task Sends_a_provider_button_to_that_provider_asking_which_account(string provider, string host, string path, string callback)
     {
-        await using var web = Web(settings: BothClients);
+        await using var web = Create(settings: BothClients);
         using var http = web.CreateAnonymousClient();
 
         using var response = await http.GetAsync(Url($"/entrar/{provider}?returnUrl=%2Ffotos%2Fabc"));
@@ -189,7 +196,60 @@ public sealed partial class SignInTests
         Assert.Equal(path, location.AbsolutePath);
         var query = HttpUtility.ParseQueryString(location.Query);
         Assert.Equal("select_account", query["prompt"]);
-        Assert.EndsWith($"/signin-{provider}", query["redirect_uri"], StringComparison.Ordinal);
+        Assert.Equal("http://localhost" + callback, query["redirect_uri"]);
+    }
+
+    [Fact]
+    public async Task Asks_google_to_return_over_https_when_the_ingress_forwarded_https()
+    {
+        await using var web = Create(environment: "Production", settings: BothClients);
+        using var http = web.CreateAnonymousClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, Url("/entrar/google"));
+        request.Headers.Add("X-Forwarded-Proto", "https");
+        request.Headers.Add("X-Forwarded-Host", "app.example.com");
+        request.Headers.Add("X-Forwarded-For", "203.0.113.7");
+
+        using var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var query = HttpUtility.ParseQueryString(response.Headers.Location!.Query);
+        Assert.Equal("https://app.example.com/signin-google", query["redirect_uri"]);
+    }
+
+    [Fact]
+    public async Task Attaches_the_access_list_and_failure_events_to_both_providers()
+    {
+        await using var web = Create(settings: BothClients);
+
+        var google = web.Services.GetRequiredService<IOptionsMonitor<GoogleOptions>>().Get(GoogleDefaults.AuthenticationScheme);
+        var microsoft = web.Services.GetRequiredService<IOptionsMonitor<MicrosoftAccountOptions>>().Get(MicrosoftAccountDefaults.AuthenticationScheme);
+
+        Func<Microsoft.AspNetCore.Authentication.TicketReceivedContext, Task> ticket = AccessTicketHandler.OnTicketReceivedAsync;
+        Func<Microsoft.AspNetCore.Authentication.RemoteFailureContext, Task> failure = AccessTicketHandler.OnRemoteFailureAsync;
+        Assert.Equal(ticket, google.Events.OnTicketReceived);
+        Assert.Equal(ticket, microsoft.Events.OnTicketReceived);
+        Assert.Equal(failure, google.Events.OnRemoteFailure);
+        Assert.Equal(failure, microsoft.Events.OnRemoteFailure);
+        Assert.Equal($"{AuthSetup.MicrosoftConsumers}/authorize", microsoft.AuthorizationEndpoint);
+        Assert.Equal($"{AuthSetup.MicrosoftConsumers}/token", microsoft.TokenEndpoint);
+        Assert.Contains(google.ClaimActions, action => action.ClaimType == AccessTicketHandler.EmailVerifiedClaim);
+    }
+
+    [Theory]
+    [InlineData("google")]
+    [InlineData("microsoft")]
+    public async Task Sends_a_cancelled_sign_in_back_to_entrar_with_a_message(string provider)
+    {
+        await using var web = Create(settings: BothClients);
+        using var http = web.CreateAnonymousClient();
+
+        using var callback = await http.GetAsync(Url($"/signin-{provider}?error=access_denied&state=anything"));
+
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        Assert.Equal("/entrar?erro=1", callback.Headers.Location!.OriginalString);
+        Assert.Null(SessionCookie(callback));
+        var page = await http.GetStringAsync(Url("/entrar?erro=1"));
+        Assert.Contains("Não foi possível entrar", page, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -197,7 +257,7 @@ public sealed partial class SignInTests
     [InlineData("apple")]
     public async Task Answers_404_for_a_provider_that_is_not_configured(string provider)
     {
-        await using var web = Web();
+        await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
         using var response = await http.GetAsync(Url($"/entrar/{provider}"));
@@ -205,110 +265,14 @@ public sealed partial class SignInTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Theory]
-    [InlineData("Production", null)]
-    [InlineData("Production", TestUsers.Allowed)]
-    [InlineData("Staging", null)]
-    public async Task Answers_404_for_dev_login_outside_development(string environment, string? signedInAs)
-    {
-        await using var web = Web(environment: environment);
-        using var http = signedInAs is null ? web.CreateAnonymousClient() : web.CreateSignedInClient(signedInAs, followRedirects: false);
-
-        using var response = await http.GetAsync(Url($"/dev-login?email={TestUsers.Allowed}"));
-
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.False(SetsSessionCookie(response));
-    }
-
-    [Fact]
-    public async Task Answers_404_for_dev_login_in_development_once_an_oauth_client_is_configured()
-    {
-        await using var web = Web(settings: BothClients);
-        using var http = web.CreateAnonymousClient();
-
-        using var response = await http.GetAsync(Url($"/dev-login?email={TestUsers.Allowed}"));
-
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Signs_in_with_dev_login_in_development_and_signs_out_with_the_button()
-    {
-        await using var web = Web();
-        using var http = web.CreateAnonymousClient();
-
-        using var login = await http.GetAsync(Url("/dev-login?email=ANA%40example.com&returnUrl=%2F%3Fpagina%3D1"));
-        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
-        Assert.Equal("/?pagina=1", login.Headers.Location!.OriginalString);
-        Assert.True(SetsSessionCookie(login));
-
-        using var timeline = await http.GetAsync(Url("/"));
-        Assert.Equal(HttpStatusCode.OK, timeline.StatusCode);
-        var token = AntiforgeryToken().Match(await timeline.Content.ReadAsStringAsync()).Groups["token"].Value;
-
-        using var signOut = await http.PostAsync(Url("/sair"), new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["__RequestVerificationToken"] = token,
-        }));
-        Assert.Equal(HttpStatusCode.Redirect, signOut.StatusCode);
-        Assert.Equal("/entrar", signOut.Headers.Location!.OriginalString);
-
-        using var after = await http.GetAsync(Url("/"));
-        Assert.Equal(HttpStatusCode.Redirect, after.StatusCode);
-        Assert.Equal("/entrar", after.Headers.Location!.AbsolutePath);
-    }
-
-    [Fact]
-    public async Task Refuses_to_sign_out_without_the_antiforgery_token()
-    {
-        await using var web = Web();
-        using var http = web.CreateAnonymousClient();
-        using var login = await http.GetAsync(Url($"/dev-login?email={TestUsers.Allowed}"));
-
-        using var signOut = await http.PostAsync(Url("/sair"), new FormUrlEncodedContent([]));
-
-        Assert.Equal(HttpStatusCode.BadRequest, signOut.StatusCode);
-        using var timeline = await http.GetAsync(Url("/"));
-        Assert.Equal(HttpStatusCode.OK, timeline.StatusCode);
-    }
-
-    [Fact]
-    public async Task Sends_dev_login_for_an_email_not_on_the_list_to_sem_acesso_without_a_session()
-    {
-        await using var web = Web();
-        using var http = web.CreateAnonymousClient();
-
-        using var login = await http.GetAsync(Url($"/dev-login?email={TestUsers.Stranger}"));
-
-        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
-        Assert.Equal("/sem-acesso", login.Headers.Location!.OriginalString);
-        Assert.False(SetsSessionCookie(login));
-    }
-
     [Fact]
     public async Task Lets_no_one_in_when_the_access_list_is_empty()
     {
-        await using var web = Web(accessEmails: "");
+        await using var web = Create(accessEmails: "");
         using var http = web.CreateSignedInClient(followRedirects: false);
 
         using var response = await http.GetAsync(Url($"/fotos/{Photo}/thumb-256"));
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
-
-    private static WebFactory Web(string environment = "Development", string accessEmails = TestUsers.Allowed, Dictionary<string, string>? settings = null)
-    {
-        var library = new FakeLibrary();
-        library.Assets[Photo] = Details.Photo(Photo);
-        return new WebFactory(library) { Environment = environment, AccessEmails = accessEmails, Settings = settings ?? [] };
-    }
-
-    private static Uri Url(string path) => new(path, UriKind.Relative);
-
-    private static bool SetsSessionCookie(HttpResponseMessage response) =>
-        response.Headers.TryGetValues("Set-Cookie", out var cookies)
-        && cookies.Any(cookie => cookie.StartsWith(AuthSetup.CookieName + "=", StringComparison.Ordinal));
-
-    [GeneratedRegex("name=\"__RequestVerificationToken\" value=\"(?<token>[^\"]+)\"")]
-    private static partial Regex AntiforgeryToken();
 }
