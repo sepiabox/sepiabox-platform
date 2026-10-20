@@ -73,13 +73,48 @@ public class ScannerTests
     }
 
     [Fact]
+    public void Counts_a_file_in_the_year_of_its_folder_when_its_metadata_cannot_be_read()
+    {
+        using var folder = new TempFolder();
+        folder.Write("2005-07-14/damaged.jpg", RandomBytes(500, seed: 11));
+        // Reading this one throws, yet its path still dates it: on Windows it is locked by another handle; elsewhere
+        // it is a link whose target is gone, since files cannot be locked against reading there.
+        var unreadable = Path.Combine(folder.Path, "2006-01-02", "gone.jpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(unreadable)!);
+        using var lockHandle = OperatingSystem.IsWindows()
+            ? new FileStream(unreadable, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None)
+            : null;
+        if (!OperatingSystem.IsWindows())
+        {
+            File.CreateSymbolicLink(unreadable, Path.Combine(folder.Path, "missing.jpg"));
+        }
+
+        var result = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false));
+
+        Assert.Equal(1, result.MediaByYear["2005"]);
+        Assert.Equal(1, result.MediaByYear["2006"]);
+        Assert.Equal(unreadable, Assert.Single(result.Problems).Path);
+    }
+
+    [Fact]
+    public void Dates_a_scanned_print_from_a_folder_before_1990_when_scanning()
+    {
+        using var folder = new TempFolder();
+        folder.Write("1978-08-15/scan.jpg", TestPhotos.Plain());
+
+        var result = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false));
+
+        Assert.Equal(1, result.MediaByYear["1978"]);
+    }
+
+    [Fact]
     public void Leaves_a_path_date_after_now_out_of_the_years_when_scanning()
     {
         using var folder = new TempFolder();
         folder.Write("2027-01-01/clip.mpg", RandomBytes(1_000, seed: 10));
 
-        var before = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false), new FixedClock(new DateTime(2026, 10, 20)));
-        var after = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false), new FixedClock(new DateTime(2027, 2, 1)));
+        var before = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false), null, new FixedClock(new DateTime(2026, 10, 20)));
+        var after = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false), null, new FixedClock(new DateTime(2027, 2, 1)));
 
         Assert.Equal(1, before.MediaByYear[ScanResult.UnknownYear]);
         Assert.Equal(1, after.MediaByYear["2027"]);

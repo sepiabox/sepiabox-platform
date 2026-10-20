@@ -11,11 +11,11 @@ namespace Sepiabox.Ingest.Scanning;
 public static class Scanner
 {
     public static ScanResult Scan(ScanOptions options, IProgress<int>? filesSeen = null, CancellationToken cancellationToken = default) =>
-        Scan(options, TimeProvider.System, filesSeen, cancellationToken);
+        Scan(options, filesSeen, TimeProvider.System, cancellationToken);
 
     /// <summary>The same with <paramref name="clock"/> as "now" for the plausibility of capture dates (D-046).</summary>
     internal static ScanResult Scan(
-        ScanOptions options, TimeProvider clock, IProgress<int>? filesSeen = null, CancellationToken cancellationToken = default)
+        ScanOptions options, IProgress<int>? filesSeen, TimeProvider clock, CancellationToken cancellationToken = default)
     {
         var root = FileTree.ResolveRoot(options.Root);
 
@@ -74,16 +74,18 @@ public static class Scanner
     // The same rule as process (D-046), so "by year" matches the dates process will record.
     private static string ReadYear(string path, TimeProvider clock, List<ScanProblem> problems)
     {
+        DateTime? fromMetadata = null;
         try
         {
-            var taken = CaptureDate.Resolve(CaptureDateReader.TryRead(path), path, clock)?.Value;
-            return taken?.Year.ToString(CultureInfo.InvariantCulture) ?? ScanResult.UnknownYear;
+            fromMetadata = CaptureDateReader.TryRead(path);
         }
         catch (Exception ex)
         {
-            // A damaged file must not stop a scan of the whole drive; it is listed instead.
+            // A damaged file must not stop a scan of the whole drive; it is listed, and its path may still date it.
             problems.Add(new ScanProblem(path, ex.Message));
-            return ScanResult.UnknownYear;
         }
+
+        var taken = CaptureDate.Resolve(fromMetadata, path, clock)?.Value;
+        return taken?.Year.ToString(CultureInfo.InvariantCulture) ?? ScanResult.UnknownYear;
     }
 }
