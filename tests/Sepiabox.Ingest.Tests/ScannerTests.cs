@@ -143,7 +143,9 @@ public class ScannerTests
             .Select(file => ManifestJson.Deserialize(File.ReadAllText(file)).CapturedAt?.Year.ToString(CultureInfo.InvariantCulture) ?? ScanResult.UnknownYear)
             .GroupBy(year => year)
             .ToDictionary(group => group.Key, group => group.Count());
-        Assert.Equal(processed.OrderBy(pair => pair.Key, StringComparer.Ordinal), scan.MediaByYear);
+        // Every file is a distinct asset, so one manifest each and the counts compare one to one.
+        Assert.Equal(scan.Totals[MediaKind.Photo].Files + scan.Totals[MediaKind.Video].Files, processed.Values.Sum());
+        Assert.Equal(processed, new Dictionary<string, int>(scan.MediaByYear));
     }
 
     [Fact]
