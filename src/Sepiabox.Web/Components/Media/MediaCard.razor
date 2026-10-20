@@ -1,0 +1,44 @@
+@* One asset on the timeline grid: its thumbnail and, for a video, a play icon and its length. *@
+
+<a href="@Href" class="thumb" aria-label="@Description">
+    @if (Item.HasThumbnail)
+    {
+        <img src="fotos/@Item.Id/@DerivativeNames.Thumbnail" alt="" loading="lazy" width="256" height="256" />
+    }
+    else
+    {
+        <span class="placeholder">@AssetKinds.Label(Item.Kind) sem miniatura</span>
+    }
+    @if (AssetKinds.IsVideo(Item.Kind))
+    {
+        @* Over the poster only: on the grey placeholder it would cover the text. *@
+        @if (Item.HasThumbnail)
+        {
+            <span class="play" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" focusable="false"><path d="M8 5v14l11-7z" /></svg>
+            </span>
+        }
+        @* A video of unknown length still says it is a video. *@
+        <span class="badge">@(Duration ?? AssetKinds.Label(Item.Kind))</span>
+    }
+</a>
+
+@code {
+    [Parameter, EditorRequired]
+    public TimelineItem Item { get; set; } = default!;
+
+    /// <summary>The detail page, relative to the app's base.</summary>
+    [Parameter, EditorRequired]
+    public string Href { get; set; } = string.Empty;
+
+    private string? Duration => AssetKinds.IsVideo(Item.Kind) ? VideoDurations.Format(Item.DurationSeconds) : null;
+
+    // The link's accessible name, since the image itself has no text.
+    private string Description =>
+        string.Join(", ", new[]
+        {
+            AssetKinds.Label(Item.Kind),
+            Duration is { } duration ? $"duração {duration}" : null,
+            Item.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle,
+        }.Where(part => part is not null));
+}

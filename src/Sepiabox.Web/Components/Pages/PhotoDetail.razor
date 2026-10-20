@@ -11,7 +11,11 @@
 
     <div class="detail">
         <figure class="preview">
-            @if (_asset.PreviewName is { } preview)
+            @if (AssetKinds.IsVideo(_asset.Kind))
+            {
+                <VideoPlayer AssetId="@_asset.Id" Label="@VideoLabel" PosterName="@_asset.PreviewName" HasProxy="_asset.HasProxy" />
+            }
+            else if (_asset.PreviewName is { } preview)
             {
                 <img src="fotos/@_asset.Id/@preview" alt="@AssetKinds.Label(_asset.Kind)" />
             }
@@ -33,6 +37,11 @@
                 {
                     <dt>Dimensões</dt>
                     <dd class="mono">@width × @height</dd>
+                }
+                @if (AssetKinds.IsVideo(_asset.Kind) && VideoDurations.Format(_asset.DurationSeconds) is { } duration)
+                {
+                    <dt>Duração</dt>
+                    <dd class="mono">@duration</dd>
                 }
                 <dt>Tipo</dt>
                 <dd>@AssetKinds.Label(_asset.Kind)</dd>
@@ -74,6 +83,8 @@
     }
 
     private string Title => _asset?.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle;
+
+    private string VideoLabel => _asset?.CapturedAt is { } at ? $"Vídeo de {PortugueseDates.DateAndTime(at)}" : "Vídeo sem data";
 
     private string BackLink => LibraryQueries.ParsePage(Pagina) is > 1 and var page ? $"./?pagina={page}" : "./";
 

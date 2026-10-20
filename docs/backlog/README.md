@@ -37,7 +37,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-031 | [Restrict resource types and cap logging](S-031-restrict-resource-types-and-cap-logging.md) | Cloud and costs | S-029 | High | S | `done` |
 | S-042 | [Publish the showcase site at sepiabox.com](S-042-publish-the-showcase-site-at-sepiabox-com.md) | Site | — | Low | S | `done` |
 
-### Sprint 2 — See the photos in the browser
+### Sprint 2 — See the photos in the browser (done)
 
 **Demonstrable increment:** After `upload`, sign in locally with Google or Microsoft and browse the drive's photos and videos by date, with CLIP embeddings and (opt-in) faces computed in the same pass; e-mails not on the list are refused.
 
@@ -49,7 +49,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-015 | [Compute CLIP embeddings during processing](S-015-compute-clip-embeddings-during-processing.md) | Search | S-005, S-008 | High | M | `done` |
 | S-018 | [Detect faces during processing](S-018-detect-faces-during-processing.md) | People | S-005, S-015 | High | M | `done` |
 | S-010 | [Sign in with Google or Microsoft and allow only the access list](S-010-sign-in-with-google-or-microsoft-and.md) | Web app | S-009 | High | M | `done` |
-| S-011 | [Watch videos on the detail page](S-011-watch-videos-on-the-detail-page.md) | Web app | S-006, S-010 | Medium | S | `todo` |
+| S-011 | [Watch videos on the detail page](S-011-watch-videos-on-the-detail-page.md) | Web app | S-006, S-010 | Medium | S | `done` |
 
 ### Sprint 3 — English UI and the app in Azure
 
@@ -255,5 +255,5 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order.
 - **Epics:** 14
 - **Sprints:** 19
 - **Stories:** 52
-- **MVP** ([D-053](../decisions.md)): Sprints 1–7 (28 stories), with the external drive as the only source; Sprints 8–19 (24 stories) come after it. What is left of the MVP: S-011 → S-044 → S-025 → S-026, plus S-032–S-035, S-012, S-013 and S-016.
+- **MVP** ([D-053](../decisions.md)): Sprints 1–7 (28 stories), with the external drive as the only source; Sprints 8–19 (24 stories) come after it. What is left of the MVP: S-044 → S-025 → S-026, plus S-032–S-035, S-012, S-013 and S-016.
 - **Critical path (12 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-011 → S-044 → S-025 → S-026 → S-021 (equally long: the same chain ending in S-024 or S-028, and S-001 → … → S-010 → S-032 → S-033 → S-050 → S-036 → S-038)

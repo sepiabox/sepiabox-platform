@@ -47,6 +47,8 @@ public sealed class SignInTests
 
     [Theory]
     [InlineData("thumb-256")]
+    [InlineData("poster")]
+    [InlineData("proxy-720p")]
     [InlineData("original")]
     public async Task Answers_403_to_media_for_a_signed_in_user_not_on_the_list(string media)
     {
@@ -86,6 +88,8 @@ public sealed class SignInTests
     [Theory]
     [InlineData("thumb-256")]
     [InlineData("preview-1280")]
+    [InlineData("poster")]
+    [InlineData("proxy-720p")]
     [InlineData("original")]
     public async Task Challenges_an_anonymous_request_for_media_and_never_redirects_it_to_storage(string media)
     {
@@ -135,7 +139,8 @@ public sealed class SignInTests
     [InlineData("/sem-acesso")]
     [InlineData("/alive")]
     [InlineData("/app.css")]
-    public async Task Serves_the_sign_in_pages_probes_and_styles_anonymously(string path)
+    [InlineData("/video.js")]
+    public async Task Serves_the_sign_in_pages_probes_and_static_assets_anonymously(string path)
     {
         await using var web = Create();
         using var http = web.CreateAnonymousClient();

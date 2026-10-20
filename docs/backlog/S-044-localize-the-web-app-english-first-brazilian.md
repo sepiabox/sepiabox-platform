@@ -10,11 +10,11 @@ The owner decided that the app UI is English by default and localizable, with Br
 ### Scope
 - Request localization in `Sepiabox.Web`: supported cultures `en` (default) and `pt-BR`; the culture cookie wins, then `Accept-Language`, where any `pt` variant (`pt`, `pt-PT`, `pt-BR`) maps to `pt-BR` and anything else to `en` (D-050).
 - A language switch in the layout (English / Português (Brasil)) that sets the culture cookie and returns to the same page; works on the sign-in and no-access pages too.
-- Every existing user-facing string moves to `.resx` resources with English and `pt-BR` values, read through `IStringLocalizer`: timeline (headings, month groups, "no date" group, empty state), photo detail (labels, download link), sign-in page (buttons per provider, the failed sign-in message, the Development e-mail form), no-access page, sign-out button, not-found and error pages, the reconnect modal, page titles, `alt`/`title`/`aria-label` text, the video player (S-011: "still processing" message and any messages of `video.js`, passed to the script through `data-` attributes, never written in the script).
+- Every existing user-facing string moves to `.resx` resources with English and `pt-BR` values, read through `IStringLocalizer`: timeline (headings, month groups, "no date" group, empty state), photo detail (labels, download link), sign-in page (buttons per provider, the failed sign-in message, the Development e-mail form), no-access page, sign-out button, not-found and error pages, the reconnect modal, page titles, `alt`/`title`/`aria-label` text, the video player and media cards from S-011, now on main (`VideoPlayer.razor`: "Vídeo ainda em processamento", the player's `aria-label`, and the playback error message that `video.js` already reads from the `data-message` attribute, today in pt-PT wording "Descarregue o original"; `MediaCard.razor`: the play label and duration text). Messages stay out of `video.js` itself (D-049).
 - Date formatting per culture: month-and-year headings and the detail page's date and time come from the current culture ("July 2019" / "julho de 2019"; "July 14, 2019, 10:32" / "14 de julho de 2019, 10:32"); `PortugueseDates` is removed.
 - `<html lang>` follows the culture (`en` or `pt-BR`).
-- Routes renamed to English (D-050): `/entrar` → `/sign-in` (and `/sign-in/{provider}`), `/sem-acesso` → `/no-access`, `/sair` → `/sign-out`, `/fotos/{id}` → `/photos/{id}`, `/fotos/{id}/{derivative}` and `/fotos/{id}/original` → `/photos/{id}/...`; query parameter `erro` → `error`. The old routes are not redirected (the app was never published). `AuthSetup`'s path constants, the anonymous-route list, the return-URL loop check and the links in pages change with them.
-- Update `docs/operations.md` (sign-in section and the S-032 smoke-test step: `/no-access`, `/sign-in`) and the route names written in D-039 and D-048 (one line in `docs/decisions.md` saying they were renamed by S-044, D-050).
+- Routes renamed to English (D-050): `/entrar` → `/sign-in` (and `/sign-in/{provider}`), `/sem-acesso` → `/no-access`, `/sair` → `/sign-out`, `/fotos/{id}` → `/photos/{id}`, `/fotos/{id}/{derivative}` (including `proxy-720p` and `poster`, D-049) and `/fotos/{id}/original` → `/photos/{id}/...`; query parameter `erro` → `error`. The old routes are not redirected (the app was never published). `AuthSetup`'s path constants, the anonymous-route list, the return-URL loop check and the links in pages change with them.
+- Update `docs/operations.md` (sign-in section, the S-032 smoke-test step and S-011's playback check: `/no-access`, `/sign-in`, `/photos/...`) and the route names written in D-039, D-048 and D-049 (one line in `docs/decisions.md` saying they were renamed by S-044, D-050).
 
 ### Out of scope
 - Other languages (adding one is a new `.resx` file and a supported culture).
@@ -40,7 +40,7 @@ The owner decided that the app UI is English by default and localizable, with Br
 - In interactive server components the circuit keeps the culture of the request that started it; the switch reloads the page (forced navigation), so no circuit-level culture change is needed.
 - One `.resx` per component folder or a shared `Resources/SharedResource.resx`, whichever keeps keys simplest; English text as the neutral resource, `pt-BR` as the satellite.
 - Keep the existing tests' intent; they assert English text by default and add `pt-BR` cases where a page has text.
-- Decisions: D-039, D-048, D-050.
+- Decisions: D-039, D-048, D-049, D-050.
 
 ### Expected tests
 - Unit: culture selection (cookie, `pt*` mapping, fallback), resource completeness and the pt-PT word check, date formatting per culture.

@@ -51,12 +51,13 @@ public sealed class MediaRedirectTests(CatalogFixture catalog)
     [InlineData("/fotos/{0}/thumb-256")]
     [InlineData("/fotos/{0}/original")]
     [InlineData("/fotos/{1}/poster")]
+    [InlineData("/fotos/{1}/proxy-720p")]
     public async Task Anything_that_does_not_exist_is_a_404(string path)
     {
         await using var web = await WebWithPhotoAsync(Ids.Of(3));
         using var http = web.CreateSignedInClient(followRedirects: false);
 
-        // {0} is an id that is not in the catalog; {1} is a photo, which has no poster.
+        // {0} is an id that is not in the catalog; {1} is a photo, which has no poster or 720p version.
         var url = string.Format(CultureInfo.InvariantCulture, path, Ids.Of(4), Ids.Of(3));
         using var response = await http.GetAsync(new Uri(url, UriKind.Relative));
 

@@ -56,6 +56,8 @@
     font-display: swap;
     src: url("fonts/ibm-plex-mono/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
 }
+/* The brand's colours by their names (docs/architecture.md): sepia is the brand, cyanotype the actions,
+   developer (the darkest brown, as in photographic developer) the text, silver paper the background, mat the lines. */
 :root {
     --sepia: #9a5a2c;
     --cyanotype: #1f4c74;
@@ -199,6 +201,27 @@ main {
     border-radius: 2px;
 }
 
+.play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin: -20px 0 0 -20px;
+    /* The same brown, for browsers without color-mix. */
+    background: rgb(35 26 20 / 0.7);
+    background: color-mix(in srgb, var(--developer) 70%, transparent);
+    color: var(--white);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.play svg {
+    fill: currentColor;
+}
+
 .pages {
     display: flex;
     justify-content: space-between;
@@ -227,10 +250,32 @@ main {
     min-height: 240px;
 }
 
-.preview img {
+.preview img,
+.preview video {
     display: block;
     width: 100%;
     height: auto;
+}
+
+.preview video {
+    max-height: 80vh;
+    background: var(--developer);
+}
+
+.player-error {
+    margin: 0;
+    padding: 12px 16px;
+    font-weight: 600;
+}
+
+.player-error:empty {
+    display: none;
+}
+
+.processing {
+    margin: 0;
+    padding: 16px;
+    font-weight: 600;
 }
 
 .facts h1 {

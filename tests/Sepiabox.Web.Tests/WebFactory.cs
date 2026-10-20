@@ -52,6 +52,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// </summary>
     public DirectoryInfo? KeyRing { get; init; }
 
+    /// <summary>The app's clock, so a test can assert link expiry times exactly.</summary>
+    public TimeProvider? Time { get; init; }
+
     /// <summary>Answers the Google handler's server-to-server calls (token and user info) instead of Google.</summary>
     public HttpMessageHandler? GoogleBackchannel { get; init; }
 
@@ -88,6 +91,11 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
 
                     options.Registrations.Add(new HealthCheckRegistration("fake", new AlwaysHealthy(), null, null));
                 });
+            }
+
+            if (Time is not null)
+            {
+                services.AddSingleton(Time);
             }
 
             if (GoogleBackchannel is not null)

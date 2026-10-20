@@ -10,6 +10,14 @@ internal sealed class FixedTime(DateTimeOffset now) : TimeProvider
     public override DateTimeOffset GetUtcNow() => now;
 }
 
+/// <summary>A clock a test moves forward by hand.</summary>
+internal sealed class MovableTime(DateTimeOffset start) : TimeProvider
+{
+    public DateTimeOffset Now { get; set; } = start;
+
+    public override DateTimeOffset GetUtcNow() => Now;
+}
+
 /// <summary>
 /// An in-memory library. Items are split into pages of <see cref="PageSize"/>; the last requested page
 /// is recorded so tests can see how a page number from the URL was clamped.
@@ -33,7 +41,7 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
         Task.FromResult(Assets.GetValueOrDefault(id));
 
     public Task<string?> GetDerivativeBlobPathAsync(string id, string name, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Assets.ContainsKey(id) ? $"{id}/{name}.webp" : null);
+        Task.FromResult(Assets.ContainsKey(id) ? $"{id}/{name}{(name == DerivativeNames.Proxy ? ".mp4" : ".webp")}" : null);
 
     public Task<OriginalFile?> GetOriginalAsync(string id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Assets.ContainsKey(id) ? new OriginalFile("IMG_0001.jpg", "image/jpeg") : null);
@@ -50,6 +58,9 @@ internal sealed class FailingLinks(Exception? failure = null) : ISasUrlFactory
     public Task<Uri> ForDerivativeAsync(string blobPath, CancellationToken cancellationToken = default) =>
         Task.FromException<Uri>(_failure);
 
+    public Task<Uri> ForVideoAsync(string blobPath, CancellationToken cancellationToken = default) =>
+        Task.FromException<Uri>(_failure);
+
     public Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default) =>
         Task.FromException<Uri>(_failure);
 }
@@ -64,7 +75,12 @@ internal static class Details
 {
     public static AssetDetail Photo(string id, DateTime? capturedAt = null, string? previewName = DerivativeNames.Preview) =>
         new(id, AssetKinds.Photo, capturedAt, "Apple", "iPhone 15", 4000, 3000, previewName,
-            [new AssetSourceDetail("local", "HD Ana", "2019/praia.jpg")]);
+            [new AssetSourceDetail("local", "HD Ana", "2019/praia.jpg")], DurationSeconds: null, HasProxy: false);
+
+    /// <summary>A 3-second video; by default it has its poster and its 720p version.</summary>
+    public static AssetDetail Video(string id, bool hasProxy = true, string? posterName = DerivativeNames.Poster) =>
+        new(id, AssetKinds.Video, new DateTime(2020, 8, 9, 18, 5, 0), "JVC", "GZ-MG330", 1024, 576, posterName,
+            [new AssetSourceDetail("local", "HD Ana", "2020/MOV001.MOD")], DurationSeconds: 3, HasProxy: hasProxy);
 }
 
 /// <summary>Keeps what was logged, so a test can check a warning.</summary>
