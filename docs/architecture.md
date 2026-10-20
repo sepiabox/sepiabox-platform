@@ -54,9 +54,9 @@ Originals are **never re-read** in the cloud during local ingest (reading the Co
 
 - **Blob Storage**: `originals` (Cold), `derivatives` (Hot), `manifests`, `incoming`, `exports`. Public access disabled; the browser only reads through short-lived SAS URLs issued after sign-in.
 - **PostgreSQL Flexible (B1ms)** with **pgvector** (512-d CLIP and 128-d face embeddings, HNSW indexes) and **PostGIS** (location, distance, places). Main tables: `assets`, `asset_sources`, `derivatives`, `asset_embeddings`, `faces`, `people`, `events`, `saved_places`, `geonames`.
-- **Place names**: GeoNames `cities500` loaded into PostgreSQL (offline, no Azure Maps). Personal places ("Casa", "Casa da praia") are points with a radius saved by the user.
+- **Place names**: GeoNames `cities500` loaded into PostgreSQL (offline, no Azure Maps). Personal places ("Beach house", and one place flagged as home, S-014) are points with a radius saved by the user.
 
-## ML models (ONNX Runtime, CPU by default, optional CUDA)
+## ML models (ONNX Runtime, CPU only, D-042)
 
 - **CLIP ViT-B/32** (MIT): image embedding (search by description, "more like this", occasion types by zero-shot).
 - **YuNet** (face detection, MIT) + **SFace** (face embedding, Apache-2.0), from the OpenCV Zoo. Faces are **opt-in**.
@@ -98,6 +98,6 @@ Colors: Sepia `#9A5A2C` (brand), Cyanotype `#1F4C74` (actions), Developer `#231A
 
 ## Phases
 
-- **MVP** (Sprints 1–7, D-053, D-054): take the data from the external drive (the only source) to the cloud, ask questions about the imported photos and videos and get correct answers: local processing with embeddings and opt-in faces, upload and automatic import, timeline, restricted sign-in, English and Brazilian Portuguese UI, place names and filters, search by description, natural-language questions and counting answers, deployed to Azure with cost safeguards.
-- **Phase 2** (after the MVP, Sprints 8–19): people, personal places and "more like this", occasions and types, organization (blurry photos, bursts, storage), the portability refactor of existing code (D-051), Google Drive and OneDrive, full export, region search, and the official exports of Google Photos (Takeout), Apple Photos / iCloud, Instagram and Facebook processed locally by `sepiabox-ingest process --export` (D-053); later, a local UI for pre-processing.
+- **MVP** (Sprints 1–8, D-053, D-054): take the data from the external drive (the only source) to the cloud, ask questions about the imported photos and videos and get correct answers: local processing with embeddings and opt-in faces, upload and automatic import, timeline, restricted sign-in, English and Brazilian Portuguese UI, place names (with phone video locations) and filters, search by description (the CLIP text model shipped with the web, D-055), natural-language questions and counting answers checked against a golden set, deployed to Azure with cost safeguards, and an end-to-end acceptance from a generated folder to the answers.
+- **Phase 2** (after the MVP, Sprints 9–20): people, personal places and "more like this", occasions and types, organization (blurry photos, bursts, storage), the portability refactor of existing code (D-051), Google Drive and OneDrive, full export, region search, and the official exports of Google Photos (Takeout), Apple Photos / iCloud, Instagram and Facebook processed locally by `sepiabox-ingest process --export` (D-053); later, a local UI for pre-processing.
 - **Phase 3 (outside this backlog)**: relationship graph between people, captions from a vision model, mobile apps, dedicated object/clothing detection, OCR and transcription.

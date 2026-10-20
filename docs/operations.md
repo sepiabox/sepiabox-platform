@@ -18,8 +18,30 @@ Steps that need a person, because they depend on accounts, consents or external 
 | GitHub Pages enabled on `sepiabox-site` with source "GitHub Actions", then "Enforce HTTPS" once the certificate is issued; DNS: A records for `@` and a CNAME for `www` (values in the sepiabox-site README) | S-042 | GitHub → sepiabox-site → Settings → Pages; GoDaddy |
 | List of allowed e-mails (`Access:Emails`) in Key Vault | S-010, S-032 | Key Vault |
 | Sign-in secrets in Key Vault: `Auth--Google--ClientId`, `Auth--Google--ClientSecret`, `Auth--Microsoft--ClientId`, `Auth--Microsoft--ClientSecret`, `Access--Emails` | S-032 | Key Vault |
-| After the first deploy: sign in with Google and with Microsoft on `https://app.sepiabox.com`, restart the web revision, reload (still signed in); then try an account not on the list (lands on `/sem-acesso`) | S-032 | Browser; Azure portal → Container Apps → Revisions |
+| Storage Blob Data Contributor on the storage account for each person who runs `sepiabox-ingest upload --destination azure` (Owner on the resource group grants no data access): give their Entra object ids to S-032's `uploaderPrincipalIds` parameter (`az ad signed-in-user show --query id -o tsv`) | S-032, upload | azd environment; Azure portal |
+| After the first deploy: add `https://<Container Apps default host>/signin-google` and `/signin-microsoft` to the Google and Microsoft OAuth clients | S-032 | Google Cloud Console; Azure portal → Entra ID |
 | Video playback check, against Azurite (`dotnet run --project src/Sepiabox.AppHost`) or Azure after a deploy: in Chrome and in Safari on an iPhone, open the 720p version of one `.MOD` and one `.MTS` clip; play, seek forward and back, pause for 15 minutes and resume (it must carry on, D-049). Then force a failure while a video plays (stop Azurite, or delete that `proxy-720p.mp4` blob): the browser's network panel shows one more request to `fotos/<id>/proxy-720p?retry=…`, after which "Não foi possível reproduzir o vídeo. Descarregue o original." appears under the player. Last, a failure that repeats at the same point: replace one `proxy-720p.mp4` with a copy cut to half its size and play past the cut; there is at most one `?retry=` request, then the message, and no further requests. Also, in both browsers, pause a video for longer than its link lasts (over 4 hours, or shorten `VideoLifetime` locally) and resume: it must carry on after one `?retry=` request; and note the error code the browser reports for the expired link (run `document.querySelector("video").error?.code` in the console right after resuming; 2 is a network error, 4 an unusable source). This is the only test of `wwwroot/video.js` | S-011, S-032 | Browser |
+
+## Owner acceptance (manual checks)
+
+Checks only a person can do. A story whose automated criteria pass is `done` and lists its manual checks here (D-054); the owner runs them and reports a failure as an issue.
+
+| Check | Story |
+|---|---|
+| After the first deploy: sign in with Google and with Microsoft on `https://<Container Apps default host>`, restart the web revision, reload (still signed in); then try an account not on the list (lands on the no-access page) | S-032 |
+| The same on `https://app.sepiabox.com` once the custom domain is set | S-035 |
+| `upload` one folder to Azure: its assets appear in the cloud timeline without running anything else; the dead-letter count stays 0 | S-033 |
+| After the GeoNames job: a photo taken in Lisbon shows "Lisbon" on its detail page in Azure | S-012 |
+| The first description search after a cold start answers within 30 s, later ones within 2 s | S-056 |
+| The MVP acceptance script against Azure: every golden count matches | S-054 |
+| The video playback check in the table above | S-011 |
+
+## Uploading the drive to Azure
+
+1. Once: be listed in `uploaderPrincipalIds` (see the prerequisites) and run `az login` on the computer with the work folder; `upload` signs in with `DefaultAzureCredential`, so the Azure CLI login is enough.
+2. Run `sepiabox-ingest upload <work folder> --destination azure --account <storage account name>` (the name is in the azd outputs).
+3. It resumes where it stopped: run the same command again after an interruption. Originals go to the Cold tier and each is read once (D-030); manifests go last, so the cloud imports only complete assets (S-033).
+4. A file reported as changed since `process` is not uploaded: run `process` again for it.
 
 ## Ingesting a drive
 
@@ -38,7 +60,7 @@ Steps that need a person, because they depend on accounts, consents or external 
 
 ## Importing exports (after the MVP)
 
-Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from their official exports (D-053, Sprints 17–19), which only the account owner can request:
+Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from their official exports (D-053, Sprints 18–20), which only the account owner can request:
 
 | Source | How to get it |
 |---|---|
@@ -71,7 +93,8 @@ Without any OAuth client, in Development, `/entrar` shows an e-mail field instea
 ## OAuth redirect URLs
 
 - Local: `https://localhost:7180/signin-google`, `/signin-microsoft` (the `https` port in `src/Sepiabox.Web/Properties/launchSettings.json`)
-- Production: `https://app.sepiabox.com/signin-google`, `/signin-microsoft`
+- Azure, before the custom domain: `https://<Container Apps default host>/signin-google`, `/signin-microsoft` (S-032)
+- Production: `https://app.sepiabox.com/signin-google`, `/signin-microsoft` (S-035)
 
 ## Emergency shutdown
 

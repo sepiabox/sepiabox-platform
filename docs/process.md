@@ -13,9 +13,11 @@ How agents deliver the backlog without waiting for a person. Read `CLAUDE.md`, `
 ## Step 0 — Pick the story
 
 1. Update `main`.
-2. Take the next `todo` story in `docs/backlog/README.md` whose dependencies are all `done`, in backlog order; a sprint is finished before the next one starts and there are no order overrides (D-054).
+2. Take the next `todo` story **of the current sprint** in `docs/backlog/README.md` whose dependencies are all `done`, in backlog order. The current sprint is the first one with a story not yet `done` or `blocked`; the next sprint starts only when it is finished, and there are no order overrides (D-054). Sprints after the MVP do not start while any MVP story is `blocked`: report it in the Agent Log and stop (D-054).
 3. Set it to `doing` and create the branch.
 4. If nothing is eligible but some stories are `blocked`, go to "End of the cycle".
+
+**Manual checks.** A story whose only open acceptance criteria are manual owner checks (a real deploy, a browser or phone check) is `done` once its automated criteria pass; list the manual checks under "Owner acceptance" in `docs/operations.md`. A live run that the story itself requires (the golden questions of S-025/S-026) is not a manual check: without its credential the story is `blocked` (D-054).
 
 ## Step 1 — Develop or fix
 
@@ -93,7 +95,7 @@ Back to Step 0, until no eligible `todo` story is left.
 
 ## Blocked story
 
-When something really needs a person (a credential, a paid account, an irreversible business decision, the iteration limit): set the story to `blocked`, write the exact reason and what is needed in the Agent Log, leave the branch or PR as a draft, and **carry on with the next story**.
+When something really needs a person (a credential, a paid account, an irreversible business decision, the iteration limit): set the story to `blocked`, write the exact reason and what is needed in the Agent Log, leave the branch or PR as a draft, and **carry on with the next story of the same sprint**. A sprint whose remaining stories are all `blocked` is finished; the next sprint may start, except that no post-MVP sprint starts while an MVP story is `blocked` (D-054).
 
 ## Communication
 
