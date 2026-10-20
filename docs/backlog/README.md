@@ -11,9 +11,9 @@ Backlog meant to be executed by autonomous agents. Each story is a small vertica
 
 Statuses: `todo` · `doing` · `blocked` · `done`.
 
-**Sprints** ([D-054](../decisions.md)): a sprint is finished completely before the next one starts, and stories are taken in the order below, within the current sprint; there are no order overrides. A story whose only open items are manual owner checks is `done` once its automated criteria pass; the manual checks go to [`operations.md`](../operations.md) as owner acceptance. Each sprint fits in about 4 hours of agent work including the Atlas + Spock reviews (2 stories M + M, or up to 3 when some are S). Sprints 1–2 were re-cut from the work already done.
+**Sprints** ([D-054](../decisions.md)): a sprint is finished completely before the next one starts, and stories are taken in the order below, within the current sprint; there are no order overrides. A `todo` story whose dependency is `blocked` becomes `blocked` ("depends on S-XXX"). A story whose only open items are manual owner checks is `done` once its automated criteria pass; the manual checks go to [`operations.md`](../operations.md) as owner acceptance. Each sprint fits in about 4 hours of agent work including the Atlas + Spock reviews (2 stories M + M, or up to 3 when some are S). Sprints 1–2 were re-cut from the work already done.
 
-**MVP** ([D-053](../decisions.md)): Sprints 1–8. Take the data from the external drive to the cloud, ask questions about the imported photos and videos, and get correct answers. The only source in the MVP is the external drive (local folders and drives). Sprints 9–20 come after the MVP and do not start while an MVP story is `blocked`.
+**MVP** ([D-053](../decisions.md)): Sprints 1–9. Take the data from the external drive to the cloud, ask questions about the imported photos and videos, and get correct answers. The only source in the MVP is the external drive (local folders and drives). Sprints 10–21 come after the MVP and do not start while an MVP story is `blocked`.
 
 **UI text** ([D-050](../decisions.md)): from S-044 on, every story writes the text the user sees as resources in English and Brazilian Portuguese, and uses English routes. Portuguese strings quoted in stories are the `pt-BR` translation.
 
@@ -63,24 +63,34 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 ### Sprint 4 — The app in Azure
 
-**Demonstrable increment:** The app runs in Azure at the Container Apps address, deployed by GitHub Actions after the migrations; `app.sepiabox.com` is ready to point at it.
+**Demonstrable increment:** The app runs in Azure at the Container Apps address after the migrations, with managed identities, Key Vault secrets and sign-in that survives restarts; the uploader can write to storage.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-032 | [Publish the app to Azure with azd](S-032-publish-the-app-to-azure-with-azd.md) | Cloud and costs | S-010, S-031 | High | M | `todo` |
-| S-034 | [Deploy from GitHub Actions with OIDC](S-034-deploy-from-github-actions-with-oidc.md) | Cloud and costs | S-032 | Medium | S | `todo` |
-| S-035 | [Serve the app at app.sepiabox.com](S-035-serve-the-app-at-app-sepiabox-com.md) | Cloud and costs | S-032 | Low | S | `todo` |
+| S-058 | [Give the Azure services their identities and secrets](S-058-give-the-azure-services-their-identities.md) | Cloud and costs | S-032 | High | M | `todo` |
 
-### Sprint 5 — Automatic import and place names
+### Sprint 5 — Deploys and automatic import
 
-**Demonstrable increment:** A manifest uploaded from the PC is imported without intervention, with a backfill job and a dead-letter check; photos show their place, also in Azure.
+**Demonstrable increment:** A manifest uploaded from the PC is imported without intervention, with a backfill job and a dead-letter check; pushes to `main` deploy through GitHub Actions; `app.sepiabox.com` is ready to point at the app.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-033 | [Import manifests automatically when they arrive](S-033-import-manifests-automatically-when-they-arrive.md) | Cloud and costs | S-032, S-008 | High | M | `todo` |
-| S-012 | [Name places with GeoNames](S-012-name-places-with-geonames.md) | Cloud catalog | S-008, S-032 | High | M | `todo` |
+| S-033 | [Import manifests automatically when they arrive](S-033-import-manifests-automatically-when-they-arrive.md) | Cloud and costs | S-032, S-008, S-058 | High | M | `todo` |
+| S-034 | [Deploy from GitHub Actions with OIDC](S-034-deploy-from-github-actions-with-oidc.md) | Cloud and costs | S-032 | Medium | S | `todo` |
+| S-035 | [Serve the app at app.sepiabox.com](S-035-serve-the-app-at-app-sepiabox-com.md) | Cloud and costs | S-032, S-058 | Low | S | `todo` |
 
-### Sprint 6 — Filters and description search
+### Sprint 6 — Place names and test-data cleanup
+
+**Demonstrable increment:** Photos show their place, locally and in Azure; everything that came only from one named source can be deleted.
+
+| Story | Title | Epic | Depends on | Priority | Size | Status |
+|---|---|---|---|---|---|---|
+| S-012 | [Name places with GeoNames](S-012-name-places-with-geonames.md) | Cloud catalog | S-008 | High | M | `todo` |
+| S-059 | [Load GeoNames in Azure](S-059-load-geonames-in-azure.md) | Cloud catalog | S-012, S-058 | High | S | `todo` |
+| S-057 | [Delete a source's assets from the library](S-057-delete-a-source-s-assets-from-the.md) | Cloud catalog | S-008, S-012 | High | S | `todo` |
+
+### Sprint 7 — Filters and description search
 
 **Demonstrable increment:** Filter by "Lisbon, December 2019", kind, source and "on this day"; search "beach at sunset".
 
@@ -89,7 +99,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-013 | [Filter the library with search DSL v1](S-013-filter-the-library-with-search-dsl-v1.md) | Search | S-012 | High | M | `todo` |
 | S-016 | [Search photos by description](S-016-search-photos-by-description.md) | Search | S-013, S-015 | High | M | `todo` |
 
-### Sprint 7 — Questions
+### Sprint 8 — Questions
 
 **Demonstrable increment:** Description search works in Azure; ask "videos from Lisbon in December 2019" (or in Portuguese) and get the right photos and videos, checked against a golden set.
 
@@ -98,20 +108,20 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-056 | [Ship the CLIP text model with the web in Azure](S-056-ship-the-clip-text-model-with-the.md) | Search | S-016, S-032 | High | S | `todo` |
 | S-025 | [Ask questions in English or Brazilian Portuguese with Claude Haiku](S-025-ask-questions-in-english-or-brazilian-portuguese.md) | Questions | S-016, S-044 | Medium | M | `todo` |
 
-### Sprint 8 — Counting answers and MVP acceptance (end of the MVP)
+### Sprint 9 — Counting answers and MVP acceptance (end of the MVP)
 
-**Demonstrable increment:** Ask "How many videos did we take in 2019?" and get the correct number; a generated folder goes from `process` to answers in Azure with every count matching. **End of the MVP.**
+**Demonstrable increment:** Ask "How many videos did we take in 2019?" and get the correct number; a generated folder goes from `process` to answers in Azure with every count matching, and is deleted afterwards. **End of the MVP.**
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-026 | [Answer counting questions](S-026-answer-counting-questions.md) | Questions | S-025 | Medium | M | `todo` |
-| S-054 | [Accept the MVP from drive to answers](S-054-accept-the-mvp-from-drive-to-answers.md) | Questions | S-026, S-033, S-012, S-053, S-056 | High | S | `todo` |
+| S-054 | [Accept the MVP from drive to answers](S-054-accept-the-mvp-from-drive-to-answers.md) | Questions | S-026, S-033, S-053, S-056, S-057, S-059 | High | M | `todo` |
 
 ### After the MVP
 
 The sprints below come after the MVP ([D-053](../decisions.md)), in this order, and do not start while an MVP story is `blocked` ([D-054](../decisions.md)).
 
-### Sprint 9 — People I
+### Sprint 10 — People I
 
 **Demonstrable increment:** Faces are grouped into people, which the family names, merges and corrects.
 
@@ -120,7 +130,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-019 | [Group faces into people](S-019-group-faces-into-people.md) | People | S-018, S-010 | High | M | `todo` |
 | S-020 | [Name, merge and correct people](S-020-name-merge-and-correct-people.md) | People | S-019 | High | M | `todo` |
 
-### Sprint 10 — People II
+### Sprint 11 — People II
 
 **Demonstrable increment:** Filter and ask "photos of me with Ana and Pedro"; turning recognition off deletes face data.
 
@@ -129,7 +139,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-021 | [Filter by people](S-021-filter-by-people.md) | People | S-020, S-013, S-026 | High | M | `todo` |
 | S-022 | [Turn off face recognition and delete face data](S-022-turn-off-face-recognition-and-delete-face.md) | People | S-019 | Medium | S | `todo` |
 
-### Sprint 11 — Personal places and similar photos
+### Sprint 12 — Personal places and similar photos
 
 **Demonstrable increment:** Save "Beach house" and "home", filter and ask by them; open "more like this".
 
@@ -138,7 +148,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-014 | [Save personal places and filter by them](S-014-save-personal-places-and-filter-by-them.md) | Search | S-013, S-025 | Medium | M | `todo` |
 | S-017 | [Show more photos similar to this one](S-017-show-more-photos-similar-to-this-one.md) | Search | S-015, S-013 | Medium | S | `todo` |
 
-### Sprint 12 — Occasions
+### Sprint 13 — Occasions
 
 **Demonstrable increment:** Photos are grouped into typed occasions; ask "How many weddings did we go to in 2026?".
 
@@ -147,7 +157,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-023 | [Group photos into occasions](S-023-group-photos-into-occasions.md) | Occasions | S-012 | Medium | M | `todo` |
 | S-024 | [Classify occasions by type](S-024-classify-occasions-by-type.md) | Occasions | S-023, S-016, S-026, S-014 | Medium | M | `todo` |
 
-### Sprint 13 — Organization
+### Sprint 14 — Organization
 
 **Demonstrable increment:** See blurry photos, bursts and the space each source takes.
 
@@ -156,7 +166,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-027 | [Find blurry photos and bursts](S-027-find-blurry-photos-and-bursts.md) | Organization | S-005, S-013 | Low | M | `todo` |
 | S-028 | [See the library's storage and sources](S-028-see-the-library-s-storage-and-sources.md) | Organization | S-026 | Low | S | `todo` |
 
-### Sprint 14 — Portability refactor
+### Sprint 15 — Portability refactor
 
 **Demonstrable increment:** Existing storage code goes through the project's own interfaces (D-051); behaviour unchanged.
 
@@ -165,7 +175,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-050 | [Put blob storage behind the project's own interface](S-050-put-blob-storage-behind-the-project-s.md) | Foundation | S-007, S-008, S-009, S-033 | High | M | `todo` |
 | S-051 | [Upload originals through the storage interface](S-051-upload-originals-through-the-storage-interface.md) | Foundation | S-050 | Medium | M | `todo` |
 
-### Sprint 15 — Cloud sources I
+### Sprint 16 — Cloud sources I
 
 **Demonstrable increment:** Files that arrive in the cloud are processed by the worker; a Google Drive account can be connected.
 
@@ -174,7 +184,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-036 | [Process files that arrive in the cloud without a manifest](S-036-process-files-that-arrive-in-the-cloud.md) | Cloud sources | S-033, S-006, S-015, S-050 | Medium | M | `todo` |
 | S-037 | [Connect a Google Drive account](S-037-connect-a-google-drive-account.md) | Cloud sources | S-010 | Medium | M | `todo` |
 
-### Sprint 16 — Cloud sources II
+### Sprint 17 — Cloud sources II
 
 **Demonstrable increment:** Photos from Google Drive and OneDrive show up in the timeline.
 
@@ -183,16 +193,17 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036 | Medium | M | `todo` |
 | S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010 | Medium | M | `todo` |
 
-### Sprint 17 — Export and region search
+### Sprint 18 — Export, region search and video locations refresh
 
-**Demonstrable increment:** Full export as a zip; find photos similar to a selected region.
+**Demonstrable increment:** Full export as a zip; find photos similar to a selected region; work folders processed before S-053 get their video locations.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010, S-051 | Medium | S | `todo` |
 | S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `todo` |
+| S-060 | [Refresh video locations in processed work folders](S-060-refresh-video-locations-in-processed-work-folders.md) | Local ingest | S-053 | Low | S | `todo` |
 
-### Sprint 18 — Import exports I
+### Sprint 19 — Import exports I
 
 **Demonstrable increment:** `sepiabox-ingest process --export <kind>` reads an export's dates, places, captions and albums; the app shows captions and albums and filters by album ([D-053](../decisions.md)).
 
@@ -201,7 +212,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-045 | [Read metadata from photo exports during process](S-045-read-metadata-from-photo-exports-during-process.md) | Import exports | S-004, S-043 | Medium | M | `todo` |
 | S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` |
 
-### Sprint 19 — Import exports II
+### Sprint 20 — Import exports II
 
 **Demonstrable increment:** A Google Takeout and an Apple Photos / iCloud export show up in the timeline with their metadata.
 
@@ -210,7 +221,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045 | Medium | M | `todo` |
 | S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045 | Medium | M | `todo` |
 
-### Sprint 20 — Import exports III
+### Sprint 21 — Import exports III
 
 **Demonstrable increment:** Instagram and Facebook downloads show up in the timeline with their captions and albums.
 
@@ -224,15 +235,15 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Epic | Stories |
 |---|---|
 | Foundation | S-001, S-003, S-050, S-051 |
-| Local ingest | S-002, S-004, S-005, S-006, S-007, S-043, S-053 |
-| Cloud catalog | S-008, S-012 |
+| Local ingest | S-002, S-004, S-005, S-006, S-007, S-043, S-053, S-060 |
+| Cloud catalog | S-008, S-012, S-057, S-059 |
 | Web app | S-009, S-010, S-011, S-044, S-055 |
 | Search | S-013, S-014, S-015, S-016, S-017, S-041, S-056 |
 | People | S-018, S-019, S-020, S-021, S-022 |
 | Occasions | S-023, S-024 |
 | Questions | S-025, S-026, S-054 |
 | Organization | S-027, S-028 |
-| Cloud and costs | S-029, S-030, S-031, S-032, S-033, S-034, S-035 |
+| Cloud and costs | S-029, S-030, S-031, S-032, S-033, S-034, S-035, S-058 |
 | Cloud sources | S-036, S-037, S-038, S-039 |
 | Privacy | S-040 |
 | Site | S-042 |
@@ -240,9 +251,9 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 ## Validation
 
-- **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-056 were added with D-050, D-051, D-053 and the review of D-054; the sprints were re-cut by D-054); there are no cycles and no forward dependencies (checked by script when this index is generated).
-- **Size:** 18 stories S, 38 M, none L.
-- **Sprints:** 20 sprints. Sprints 3–20 hold 2 or 3 stories each (M + M, or up to 3 when some are S, D-054); Sprints 1 (11 stories) and 2 (7) gather the work done before D-054.
+- **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-060 were added with D-050, D-051, D-053 and the reviews of D-054; the sprints were re-cut by D-054); there are no cycles and no forward dependencies (checked by script when this index is generated).
+- **Size:** 20 stories S, 40 M, none L.
+- **Sprints:** 21 sprints. Sprints 3–21 hold 2 or 3 stories each (M + M, or up to 3 when some are S, D-054); Sprints 1 (11 stories) and 2 (7) gather the work done before D-054.
 - **Decisions covered:** D-001 to D-024 in [`decisions.md`](../decisions.md) are applied: each is cited in the technical notes of at least one story, except D-021, which this backlog itself applies.
 - Story status is kept up to date by each story's PR (see [How to use](#how-to-use)).
 
@@ -250,7 +261,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 | Topic | Reason |
 |---|---|
-| Dropbox | Not used by the family today; the source model (S-037 to S-039) allows adding it later. Google Photos, Apple Photos / iCloud, Instagram and Facebook are now covered by Sprints 18–20 through their exports (D-053). |
+| Dropbox | Not used by the family today; the source model (S-037 to S-039) allows adding it later. Google Photos, Apple Photos / iCloud, Instagram and Facebook are now covered by Sprints 19–21 through their exports (D-053). |
 | A local UI for pre-processing (a future epic) | A nicer desktop interface for `scan`, `process --export` and `upload` (progress, problems, choosing folders). For now the `sepiabox-ingest` console is enough. |
 | Mobile apps and Sign in with Apple | Phase 3; Apple sign-in only makes sense with the iOS app (D-006). |
 | Dedicated object and clothing detection ("red dress") | In v1 covered by CLIP visual search (S-016, S-041); a dedicated detector is phase 3. |
@@ -258,14 +269,14 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Relationship graph and vision-model captions ("Paulo's son") | Phase 3; needs relationships between people and a generative vision model. |
 | Per-user encryption (crypto-shredding) | Only needed for the multi-family product; two users in a shared library (D-018). |
 | Business plan, pricing and billing | Lives in the private `sepiabox-planning` repository; there is no sellable product in v1. |
-| `sepiabox-site` in English first | The public site is in Portuguese today; D-050 makes it English first with `pt-BR` later, and the footer's pt-PT "logótipo" becomes "logo". A small post-MVP follow-up in `sepiabox-site`. |
+| `sepiabox-site` in English first | The public site is in Portuguese today; D-050 makes it English first with `pt-BR` later, and the footer's pt-PT "logótipo" becomes "logo". A small post-MVP follow-up in `sepiabox-site`: [sepiabox/sepiabox-site#2](https://github.com/sepiabox/sepiabox-site/issues/2). |
 | Outlined wordmark and site waiting list | Needs a design tool / a backend; the S-042 site uses the symbol and the name as text, with no form. |
 | Human steps (subscription, OIDC, OAuth clients, DNS, Anthropic API key) | Cannot be automated; listed in [`operations.md`](../operations.md) and referenced by the stories that depend on them. |
 
 ## Summary
 
 - **Epics:** 14
-- **Sprints:** 20
-- **Stories:** 56
-- **MVP** ([D-053](../decisions.md)): Sprints 1–8 (32 stories), with the external drive as the only source; Sprints 9–20 (24 stories) come after it. What is left of the MVP (14 stories): S-044, S-055, S-053, S-032, S-034, S-035, S-033, S-012, S-013, S-016, S-056, S-025, S-026, S-054.
-- **Critical path (14 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-032 → S-012 → S-013 → S-016 → S-025 → S-026 → S-054, and others as long: the same chain ending in S-021, S-024 or S-028 instead of S-054.
+- **Sprints:** 21
+- **Stories:** 60
+- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (35 stories), with the external drive as the only source; Sprints 10–21 (25 stories) come after it. What is left of the MVP (17 stories): S-044, S-055, S-053, S-032, S-058, S-033, S-034, S-035, S-012, S-059, S-057, S-013, S-016, S-056, S-025, S-026, S-054; its longest chain is 11 stories (S-001 → … → S-008 → S-012 → S-013 → S-016 → S-025 → S-026 → S-054).
+- **Critical path (13 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-032 → S-058 → S-033 → S-050 → S-036 → S-038, and others as long: the same chain ending in S-036 → S-039, or in S-050 → S-051 → S-040.

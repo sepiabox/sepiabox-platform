@@ -15,7 +15,7 @@ How agents deliver the backlog without waiting for a person. Read `CLAUDE.md`, `
 1. Update `main`.
 2. Take the next `todo` story **of the current sprint** in `docs/backlog/README.md` whose dependencies are all `done`, in backlog order. The current sprint is the first one with a story not yet `done` or `blocked`; the next sprint starts only when it is finished, and there are no order overrides (D-054). Sprints after the MVP do not start while any MVP story is `blocked`: report it in the Agent Log and stop (D-054).
 3. Set it to `doing` and create the branch.
-4. If nothing is eligible but some stories are `blocked`, go to "End of the cycle".
+4. If nothing is eligible but some stories are `blocked`, go to "End of the cycle". A `todo` story whose dependency is `blocked` is set to `blocked` too, with the reason "depends on S-XXX" (D-054).
 
 **Manual checks.** A story whose only open acceptance criteria are manual owner checks (a real deploy, a browser or phone check) is `done` once its automated criteria pass; list the manual checks under "Owner acceptance" in `docs/operations.md`. A live run that the story itself requires (the golden questions of S-025/S-026) is not a manual check: without its credential the story is `blocked` (D-054).
 

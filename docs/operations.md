@@ -18,8 +18,9 @@ Steps that need a person, because they depend on accounts, consents or external 
 | GitHub Pages enabled on `sepiabox-site` with source "GitHub Actions", then "Enforce HTTPS" once the certificate is issued; DNS: A records for `@` and a CNAME for `www` (values in the sepiabox-site README) | S-042 | GitHub → sepiabox-site → Settings → Pages; GoDaddy |
 | List of allowed e-mails (`Access:Emails`) in Key Vault | S-010, S-032 | Key Vault |
 | Sign-in secrets in Key Vault: `Auth--Google--ClientId`, `Auth--Google--ClientSecret`, `Auth--Microsoft--ClientId`, `Auth--Microsoft--ClientSecret`, `Access--Emails` | S-032 | Key Vault |
-| Storage Blob Data Contributor on the storage account for each person who runs `sepiabox-ingest upload --destination azure` (Owner on the resource group grants no data access): give their Entra object ids to S-032's `uploaderPrincipalIds` parameter (`az ad signed-in-user show --query id -o tsv`) | S-032, upload | azd environment; Azure portal |
-| After the first deploy: add `https://<Container Apps default host>/signin-google` and `/signin-microsoft` to the Google and Microsoft OAuth clients | S-032 | Google Cloud Console; Azure portal → Entra ID |
+| Storage Blob Data Contributor on the storage account for each person who runs `sepiabox-ingest upload --destination azure` (Owner on the resource group grants no data access): give their Entra object ids to S-058's `uploaderPrincipalIds` parameter (`az ad signed-in-user show --query id -o tsv`) | S-058, upload | azd environment; Azure portal |
+| After the first deploy: add `https://<Container Apps default host>/signin-google` and `/signin-microsoft` to the Google and Microsoft OAuth clients | S-058 |
+| `Anthropic__ApiKey` as a secret of the agents' cloud environment (the environment the autonomous agents run in), never in the repository or CI, so the required live golden runs of S-025 and S-026 can call the API; the Anthropic organization's spend limit covers it. Tests in `Category=LiveApi` are excluded from CI. Without it, S-025 and S-026 are `blocked` (D-054) | S-025, S-026 | Claude Code environment settings; Anthropic Console | Google Cloud Console; Azure portal → Entra ID |
 | Video playback check, against Azurite (`dotnet run --project src/Sepiabox.AppHost`) or Azure after a deploy: in Chrome and in Safari on an iPhone, open the 720p version of one `.MOD` and one `.MTS` clip; play, seek forward and back, pause for 15 minutes and resume (it must carry on, D-049). Then force a failure while a video plays (stop Azurite, or delete that `proxy-720p.mp4` blob): the browser's network panel shows one more request to `fotos/<id>/proxy-720p?retry=…`, after which "Não foi possível reproduzir o vídeo. Descarregue o original." appears under the player. Last, a failure that repeats at the same point: replace one `proxy-720p.mp4` with a copy cut to half its size and play past the cut; there is at most one `?retry=` request, then the message, and no further requests. Also, in both browsers, pause a video for longer than its link lasts (over 4 hours, or shorten `VideoLifetime` locally) and resume: it must carry on after one `?retry=` request; and note the error code the browser reports for the expired link (run `document.querySelector("video").error?.code` in the console right after resuming; 2 is a network error, 4 an unusable source). This is the only test of `wwwroot/video.js` | S-011, S-032 | Browser |
 
 ## Owner acceptance (manual checks)
@@ -28,12 +29,13 @@ Checks only a person can do. A story whose automated criteria pass is `done` and
 
 | Check | Story |
 |---|---|
-| After the first deploy: sign in with Google and with Microsoft on `https://<Container Apps default host>`, restart the web revision, reload (still signed in); then try an account not on the list (lands on the no-access page) | S-032 |
+| After the first deploy: `GET https://<Container Apps default host>/health` answers 200 | S-032 |
+| Sign in with Google and with Microsoft on `https://<Container Apps default host>`, restart the web revision, reload (still signed in); then try an account not on the list (lands on the no-access page) | S-058 |
 | The same on `https://app.sepiabox.com` once the custom domain is set | S-035 |
 | `upload` one folder to Azure: its assets appear in the cloud timeline without running anything else; the dead-letter count stays 0 | S-033 |
-| After the GeoNames job: a photo taken in Lisbon shows "Lisbon" on its detail page in Azure | S-012 |
+| After the GeoNames job (`az containerapp job start --name sepiabox-geonames --resource-group rg-sepiabox`): a photo taken in Lisbon shows "Lisbon" on its detail page in Azure | S-059 |
 | The first description search after a cold start answers within 30 s, later ones within 2 s | S-056 |
-| The MVP acceptance script against Azure: every golden count matches | S-054 |
+| The MVP acceptance script against Azure: every golden count matches; at the pause before cleanup, one fixture Lisbon photo shows "Lisbon" in the web and one counting question asked in the web gives the same answer; after cleanup the counts are back where they started | S-054 |
 | The video playback check in the table above | S-011 |
 
 ## Uploading the drive to Azure
@@ -60,7 +62,7 @@ Checks only a person can do. A story whose automated criteria pass is `done` and
 
 ## Importing exports (after the MVP)
 
-Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from their official exports (D-053, Sprints 18–20), which only the account owner can request:
+Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from their official exports (D-053, Sprints 19–21), which only the account owner can request:
 
 | Source | How to get it |
 |---|---|
