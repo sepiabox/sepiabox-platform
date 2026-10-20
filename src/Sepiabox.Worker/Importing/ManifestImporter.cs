@@ -19,10 +19,7 @@ public sealed record ImportProblem(string BlobName, string Reason);
 /// What an import did. <see cref="Problems"/> are manifests that were not imported and make the exit code
 /// non-zero; <see cref="Warnings"/> are manifests imported without an embedding that could not be stored (D-043).
 /// </summary>
-public sealed record ImportResult(int Imported, int Unchanged, IReadOnlyList<ImportProblem> Problems, IReadOnlyList<ImportProblem>? Warnings = null)
-{
-    public IReadOnlyList<ImportProblem> Warnings { get; init; } = Warnings ?? [];
-}
+public sealed record ImportResult(int Imported, int Unchanged, IReadOnlyList<ImportProblem> Problems, IReadOnlyList<ImportProblem> Warnings);
 
 /// <summary>
 /// Copies manifests from Blob Storage into the catalog (S-008). Each manifest blob is imported once per
@@ -39,7 +36,7 @@ public sealed class ManifestImporter(
         if (!await manifests.ExistsAsync(cancellationToken))
         {
             Log.NoManifestContainer(logger, manifests.Name);
-            return new ImportResult(0, 0, []);
+            return new ImportResult(0, 0, [], []);
         }
 
         var imported = await db.ManifestImports.AsNoTracking()

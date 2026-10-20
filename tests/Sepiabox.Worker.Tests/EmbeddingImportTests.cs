@@ -28,6 +28,7 @@ public sealed class EmbeddingImportTests(CatalogFixture fixture)
         var result = await ImportAsync(db, container);
 
         Assert.Empty(result.Problems);
+        Assert.Empty(result.Warnings);
         var row = await db.AssetEmbeddings.SingleAsync();
         Assert.Equal((PhotoId, ClipImageEmbedder.ModelKey), (row.AssetId, row.Model));
         Assert.Equal(vector, row.Embedding.ToArray());

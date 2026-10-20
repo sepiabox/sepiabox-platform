@@ -1,6 +1,7 @@
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
+using Sepiabox.Pipeline.Models;
 
 namespace Sepiabox.Ingest.Tests;
 
@@ -26,7 +27,7 @@ public sealed class ProcessEmbeddingTests : IDisposable
 
         Assert.Equal((1, 0), (result.Processed, result.Embedded));
         Assert.Empty(result.Problems);
-        Assert.Contains("zero vector", Assert.Single(result.EmbeddingProblems).Reason, StringComparison.Ordinal);
+        Assert.Contains("zero vector", Assert.Single(result.EmbeddingProblems).Detail, StringComparison.Ordinal);
 
         var retry = Run(new FakeEmbedder());
 
@@ -60,7 +61,7 @@ public sealed class ProcessEmbeddingTests : IDisposable
 
         Assert.Equal((2, 1), (result.Skipped, result.Embedded));
         Assert.Empty(result.Problems);
-        Assert.Contains("Could not read its manifest", Assert.Single(result.EmbeddingProblems).Reason, StringComparison.Ordinal);
+        Assert.Contains("Could not read its manifest", Assert.Single(result.EmbeddingProblems).Detail, StringComparison.Ordinal);
         Assert.True(ManifestJson.Deserialize(File.ReadAllText(manifests[1])).Embeddings.ContainsKey(ClipImageEmbedder.ModelKey));
     }
 
@@ -117,20 +118,63 @@ public sealed class ProcessEmbeddingTests : IDisposable
     }
 
     [Fact]
-    public void Gives_one_warning_for_all_files_when_their_manifests_are_missing()
+    public void Describes_a_file_again_when_its_manifest_is_missing()
     {
         _drive.Write("2019/a.jpg", TestPhotos.Porto());
         _drive.Write("2019/b.jpg", TestPhotos.Porto("tomato"));
         Run(embedder: null);
-        foreach (var manifest in Directory.GetFiles(Path.Combine(_work.Path, "manifests")))
-        {
-            File.Delete(manifest);
-        }
+        var manifests = Directory.GetFiles(Path.Combine(_work.Path, "manifests"), "*.json");
+        File.Delete(manifests[0]);
 
         var result = Run(new FakeEmbedder());
 
+        Assert.Equal((1, 1, 2), (result.Processed, result.Skipped, result.Embedded));
+        Assert.True(File.Exists(manifests[0]));
+        Assert.Null(result.Warning);
+    }
+
+    [Fact]
+    public void Ignores_an_unchanged_file_when_its_manifest_lists_no_preview()
+    {
+        _drive.Write("2019/a.jpg", TestPhotos.Porto());
+        Run(embedder: null);
+        var path = Assert.Single(Directory.GetFiles(Path.Combine(_work.Path, "manifests"), "*.json"));
+        ManifestJson.WriteFile(path, ManifestJson.Deserialize(File.ReadAllText(path)) with { Derivatives = [] });
+
+        var result = Run(new FakeEmbedder());
+
+        Assert.Equal((1, 0), (result.Skipped, result.Embedded));
         Assert.Empty(result.EmbeddingProblems);
-        Assert.Contains("2 files marked as processed have no manifest", result.Warning, StringComparison.Ordinal);
+        Assert.Null(result.Warning);
+    }
+
+    [Fact]
+    public void Deletes_temporary_manifest_files_when_they_are_over_an_hour_old()
+    {
+        var old = _work.Write("manifests/abc.json.0123.tmp", [1]);
+        File.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddHours(-2));
+        var recent = _work.Write("manifests/abc.json.4567.tmp", [2]);
+
+        Run(embedder: null);
+
+        Assert.False(File.Exists(old));
+        Assert.True(File.Exists(recent));
+    }
+
+    [Fact]
+    public void Fails_without_reading_the_models_when_the_folder_does_not_exist()
+    {
+        using var models = new TempFolder();
+        var model = ModelCatalog.Get(ModelCatalog.ClipVision);
+        var modelPath = models.Write(model.File, [1, 2, 3]);
+        var marker = models.Write(model.File + ".verified", "stale"u8.ToArray());
+
+        Assert.Throws<DirectoryNotFoundException>(() => ProcessCommand.Run(
+            new ProcessOptions(Path.Combine(_drive.Path, "missing"), _work.Path, "HD", FfmpegFolder: TestFfmpeg.None, ModelFolder: models.Path)));
+
+        // Checking the model would have hashed it and removed the stale marker.
+        Assert.True(File.Exists(marker));
+        Assert.True(File.Exists(modelPath));
     }
 
     [Fact]

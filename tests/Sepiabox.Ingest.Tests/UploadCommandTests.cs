@@ -339,6 +339,19 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task Sends_only_json_manifests_when_a_temporary_file_is_left_in_the_manifests_folder()
+    {
+        _drive.Write("2019/praia.jpg", TestPhotos.Porto("red"));
+        var id = Assert.Single(Process()).Id;
+        _work.Write($"manifests/{id}.json.0123.tmp", "{ half a manifest"u8.ToArray());
+
+        var result = await Upload();
+
+        Assert.Empty(result.Problems);
+        Assert.Equal([id + ".json"], await BlobNames(BlobLayout.ManifestsContainer));
+    }
+
+    [Fact]
     public async Task A_manifest_that_gains_an_embedding_in_a_later_run_is_sent_again()
     {
         _drive.Write("2019/praia.jpg", TestPhotos.Porto("red"));
