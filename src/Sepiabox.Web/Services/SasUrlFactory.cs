@@ -13,6 +13,12 @@ public interface ISasUrlFactory
     /// <summary>A thumbnail, preview or poster in the <c>derivatives</c> container.</summary>
     Task<Uri> ForDerivativeAsync(string blobPath, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// A video's 720p version in the <c>derivatives</c> container, with a link that outlasts playback: the
+    /// browser keeps fetching ranges of it for as long as the video plays or sits paused.
+    /// </summary>
+    Task<Uri> ForVideoAsync(string blobPath, CancellationToken cancellationToken = default);
+
     /// <summary>The original in the <c>originals</c> container, downloaded under its source file name.</summary>
     Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default);
 }
@@ -33,25 +39,36 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
     public static readonly TimeSpan DerivativeWindow = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// How long a browser may cache a redirect to a derivative: a minute less than the shortest link's
-    /// life, so a cached redirect never points at a link that has just expired (clock skew, slow loads).
+    /// How long a browser may cache a redirect to a derivative or video: a minute less than the shortest
+    /// link's life, so a cached redirect never points at a link that has just expired (clock skew, slow loads).
     /// </summary>
-    public static readonly TimeSpan DerivativeCacheDuration = DerivativeLifetime - DerivativeWindow - TimeSpan.FromMinutes(1);
+    public static readonly TimeSpan RedirectCacheDuration = DerivativeLifetime - DerivativeWindow - TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Video links expire at the start of the 5-minute window they were signed in plus this, so 3 h 55 to
+    /// 4 h after signing: a long camcorder tape, or one paused for a while, still plays to the end (D-049).
+    /// </summary>
+    public static readonly TimeSpan VideoLifetime = TimeSpan.FromHours(4);
 
     public static readonly TimeSpan OriginalLifetime = TimeSpan.FromMinutes(5);
 
-    private static readonly TimeSpan s_delegationKeyLifetime = TimeSpan.FromHours(1);
     private static readonly TimeSpan s_clockSkew = TimeSpan.FromMinutes(5);
+
+    private static TimeSpan LongestLink =>
+        TimeSpan.FromTicks(Math.Max(DerivativeLifetime.Ticks, Math.Max(VideoLifetime.Ticks, OriginalLifetime.Ticks)));
+
+    // A user delegation SAS stops working when its key expires, so a key is reused only while it outlives the
+    // longest link by the clock skew; the margin lets one key serve about two hours of signing.
+    private static TimeSpan DelegationKeyLifetime => LongestLink + TimeSpan.FromHours(2);
 
     private readonly SemaphoreSlim _keyLock = new(1, 1);
     private volatile UserDelegationKey? _delegationKey;
 
-    public Task<Uri> ForDerivativeAsync(string blobPath, CancellationToken cancellationToken = default)
-    {
-        var now = time.GetUtcNow();
-        var windowStart = new DateTimeOffset(now.UtcTicks - (now.UtcTicks % DerivativeWindow.Ticks), TimeSpan.Zero);
-        return CreateAsync(StorageContainers.Derivatives, blobPath, windowStart + DerivativeLifetime, configure: null, cancellationToken);
-    }
+    public Task<Uri> ForDerivativeAsync(string blobPath, CancellationToken cancellationToken = default) =>
+        CreateAsync(StorageContainers.Derivatives, blobPath, SigningWindowStart() + DerivativeLifetime, configure: null, cancellationToken);
+
+    public Task<Uri> ForVideoAsync(string blobPath, CancellationToken cancellationToken = default) =>
+        CreateAsync(StorageContainers.Derivatives, blobPath, SigningWindowStart() + VideoLifetime, configure: null, cancellationToken);
 
     public Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default) =>
         CreateAsync(StorageContainers.Originals, assetId, time.GetUtcNow() + OriginalLifetime, sas =>
@@ -62,6 +79,13 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
         }, cancellationToken);
 
     public void Dispose() => _keyLock.Dispose();
+
+    // Links signed in the same window are identical, so the browser cache can reuse them.
+    private DateTimeOffset SigningWindowStart()
+    {
+        var now = time.GetUtcNow();
+        return new DateTimeOffset(now.UtcTicks - (now.UtcTicks % DerivativeWindow.Ticks), TimeSpan.Zero);
+    }
 
     private async Task<Uri> CreateAsync(
         string container, string blobName, DateTimeOffset expiresOn, Action<BlobSasBuilder>? configure, CancellationToken cancellationToken)
@@ -99,7 +123,7 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
             if (_delegationKey is not { } key || !IsStillGood(key))
             {
                 var now = time.GetUtcNow();
-                key = await service.GetUserDelegationKeyAsync(now - s_clockSkew, now + s_delegationKeyLifetime, cancellationToken);
+                key = await service.GetUserDelegationKeyAsync(now - s_clockSkew, now + DelegationKeyLifetime, cancellationToken);
                 _delegationKey = key;
             }
 
@@ -111,7 +135,6 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
         }
     }
 
-    // A key must outlive every link signed with it.
     private bool IsStillGood(UserDelegationKey key) =>
-        key.SignedExpiresOn - time.GetUtcNow() >= DerivativeLifetime + s_clockSkew;
+        key.SignedExpiresOn - time.GetUtcNow() >= LongestLink + s_clockSkew;
 }

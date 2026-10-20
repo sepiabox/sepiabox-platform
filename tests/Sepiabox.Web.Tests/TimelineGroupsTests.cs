@@ -9,10 +9,10 @@ public sealed class TimelineGroupsTests
     {
         var groups = TimelineGroups.ByMonth(
         [
-            new(Ids.Of(1), AssetKinds.Photo, new DateTime(2019, 7, 14), false),
-            new(Ids.Of(2), AssetKinds.Photo, null, false),
-            new(Ids.Of(3), AssetKinds.Photo, new DateTime(2019, 7, 20), false),
-            new(Ids.Of(4), AssetKinds.Photo, new DateTime(2020, 1, 1), false),
+            new(Ids.Of(1), AssetKinds.Photo, new DateTime(2019, 7, 14), false, DurationSeconds: null),
+            new(Ids.Of(2), AssetKinds.Photo, null, false, DurationSeconds: null),
+            new(Ids.Of(3), AssetKinds.Photo, new DateTime(2019, 7, 20), false, DurationSeconds: null),
+            new(Ids.Of(4), AssetKinds.Photo, new DateTime(2020, 1, 1), false, DurationSeconds: null),
         ]);
 
         Assert.Equal(["janeiro de 2020", "julho de 2019", "Sem data"], groups.Select(g => g.Title));
@@ -22,7 +22,7 @@ public sealed class TimelineGroupsTests
     [Fact]
     public void No_sem_data_group_when_every_asset_has_a_date()
     {
-        var groups = TimelineGroups.ByMonth([new(Ids.Of(1), AssetKinds.Photo, new DateTime(2024, 3, 9), false)]);
+        var groups = TimelineGroups.ByMonth([new(Ids.Of(1), AssetKinds.Photo, new DateTime(2024, 3, 9), false, DurationSeconds: null)]);
 
         Assert.Equal(["março de 2024"], groups.Select(g => g.Title));
     }

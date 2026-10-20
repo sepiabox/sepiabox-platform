@@ -25,14 +25,37 @@ public sealed class PhotoDetailTests : BunitContext
     }
 
     [Fact]
-    public void A_video_shows_its_poster()
+    public void A_video_with_its_720p_version_is_played_with_its_poster()
     {
-        var video = Details.Photo(Ids.Of(2), new DateTime(2020, 1, 1), DerivativeNames.Poster) with { Kind = AssetKinds.Video };
+        var page = RenderDetail(Details.Video(Ids.Of(2)));
 
-        var page = RenderDetail(video);
-
-        Assert.Equal($"fotos/{Ids.Of(2)}/poster", page.Find("figure.preview img").GetAttribute("src"));
+        var video = page.Find("figure.preview video");
+        Assert.Equal($"fotos/{Ids.Of(2)}/proxy-720p", video.GetAttribute("src"));
+        Assert.Equal($"fotos/{Ids.Of(2)}/poster", video.GetAttribute("poster"));
+        Assert.Equal("Vídeo de 9 de agosto de 2020, 18:05", video.GetAttribute("aria-label"));
         Assert.Contains("Vídeo", page.Find("dl").TextContent, StringComparison.Ordinal);
+        Assert.Contains("0:03", page.Find("dl").TextContent, StringComparison.Ordinal);
+        Assert.Equal($"fotos/{Ids.Of(2)}/original", page.Find("a.button").GetAttribute("href"));
+        Assert.DoesNotContain("sig=", page.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_video_without_its_720p_version_says_it_is_still_processing()
+    {
+        var page = RenderDetail(Details.Video(Ids.Of(6), hasProxy: false));
+
+        Assert.Empty(page.FindAll("video"));
+        Assert.Equal($"fotos/{Ids.Of(6)}/poster", page.Find("figure.preview img").GetAttribute("src"));
+        Assert.Equal("Vídeo ainda em processamento", page.Find("figure.preview .processing").TextContent);
+    }
+
+    [Fact]
+    public void A_photo_has_no_player_or_length()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(7)) with { DurationSeconds = 3, HasProxy = true });
+
+        Assert.Empty(page.FindAll("video"));
+        Assert.DoesNotContain("Duração", page.Markup, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -32,7 +32,8 @@ The AppHost describes the infrastructure; `azd` provisions it in France Central 
 - Human prerequisites in `docs/operations.md`.
 - The web signs blob links with a user delegation key (D-039): its managed identity needs *Storage Blob Data Reader* on the storage account. That role includes the user delegation key action, so *Storage Blob Delegator* is not added.
 - Sign-in (S-010, D-048): the web already reads `X-Forwarded-For` and `X-Forwarded-Proto` outside Development (never `X-Forwarded-Host`: the ingress keeps the browser's Host); set `AllowedHosts` to `app.sepiabox.com` and the Container Apps default host so no other Host reaches the app. S-032 also adds the data protection key ring (a blob in the storage account, a key in Key Vault; the web identity needs *Key Vault Crypto User* on that key and write access to that blob) and wires the sign-in secrets.
-- Decisions: D-002, D-003, D-004, D-022, D-034, D-048.
+- Videos (S-011, D-049): if a Content Security Policy is added, it must allow the blob endpoint in `media-src` as well as `img-src`, since the browser follows the web's redirect to storage for videos as for images.
+- Decisions: D-002, D-003, D-004, D-022, D-034, D-048, D-049.
 
 ### Expected tests
 - A test that generates the infrastructure and checks the properties in the Bicep. Manual smoke test after deploy.

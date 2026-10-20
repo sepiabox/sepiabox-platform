@@ -29,22 +29,7 @@ else
             <ul class="grid">
                 @foreach (var item in group.Items)
                 {
-                    <li>
-                        <a href="@DetailLink(item)" class="thumb" aria-label="@Describe(item)">
-                            @if (item.HasThumbnail)
-                            {
-                                <img src="fotos/@item.Id/@DerivativeNames.Thumbnail" alt="" loading="lazy" width="256" height="256" />
-                            }
-                            else
-                            {
-                                <span class="placeholder">@AssetKinds.Label(item.Kind) sem miniatura</span>
-                            }
-                            @if (AssetKinds.IsVideo(item.Kind))
-                            {
-                                <span class="badge">@AssetKinds.Label(item.Kind)</span>
-                            }
-                        </a>
-                    </li>
+                    <li><MediaCard Item="item" Href="@DetailLink(item)" /></li>
                 }
             </ul>
         </section>
@@ -94,7 +79,4 @@ else
 
     private string DetailLink(TimelineItem item) =>
         _page is { Page: > 1 } page ? $"fotos/{item.Id}?pagina={page.Page}" : $"fotos/{item.Id}";
-
-    private static string Describe(TimelineItem item) =>
-        $"{AssetKinds.Label(item.Kind)}, {(item.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle)}";
 }

@@ -16,9 +16,9 @@ Videos have a poster and a 720p version (S-006); the web has to show and play th
 - Transcoding on the web.
 
 ### Acceptance criteria
-- [ ] Given a video asset with a proxy, when I open the detail page, then there is a `<video>` with a SAS `src` for the proxy and a `poster`.
-- [ ] Given a 3 s video, when the grid renders, then the card shows "0:03".
-- [ ] Given a video without a proxy, when I open the detail page, then I see "Vídeo ainda em processamento".
+- [x] Given a video asset with a proxy, when I open the detail page, then there is a `<video>` with a SAS `src` for the proxy and a `poster`.
+- [x] Given a 3 s video, when the grid renders, then the card shows "0:03".
+- [x] Given a video without a proxy, when I open the detail page, then I see "Vídeo ainda em processamento".
 
 ### Technical notes
 - Components `VideoPlayer.razor`, `MediaCard.razor`.
