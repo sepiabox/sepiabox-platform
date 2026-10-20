@@ -48,9 +48,13 @@ public sealed class DeployScriptTests : IDisposable
             echo "az $*" >> "$CALLS"
             case "$*" in
               "group exists"*)
+                if [ "$STUB_PG_STATE" = "AZ_ERROR" ]; then
+                  echo "ERROR: Please run 'az login' to setup account." >&2
+                  exit 1
+                fi
                 if [ "$STUB_PG_STATE" = "NO_GROUP" ]; then echo "false"; else echo "true"; fi ;;
               "postgres flexible-server list"*)
-                if [ "$STUB_PG_STATE" = "AZ_ERROR" ]; then
+                if [ "$STUB_PG_STATE" = "LIST_ERROR" ]; then
                   echo "ERROR: Please run 'az login' to setup account." >&2
                   exit 1
                 fi
@@ -184,11 +188,14 @@ public sealed class DeployScriptTests : IDisposable
         Assert.DoesNotContain("azd provision --no-prompt", Calls());
     }
 
-    [UnixFact]
-    public async Task Deploy_stops_when_the_postgres_check_fails()
+    [UnixTheory]
+    [InlineData("AZ_ERROR")]
+    [InlineData("LIST_ERROR")]
+    public async Task Deploy_stops_when_the_postgres_check_fails(string failure)
     {
-        // A failed login or network error must not skip the check and deploy past a stopped server.
-        var result = await RunDeployAsync("Succeeded", postgresState: "AZ_ERROR");
+        // A failed login or network error, whether on the group or the server query, must not skip the
+        // check and deploy past a stopped server.
+        var result = await RunDeployAsync("Succeeded", postgresState: failure);
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("az login", result.Error, StringComparison.Ordinal);

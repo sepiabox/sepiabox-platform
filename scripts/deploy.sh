@@ -38,7 +38,13 @@ fi
 # After the €45 shutdown (S-030) the server is stopped and provisioning would fail half-way. Before the
 # first deploy neither the group nor the server exists; any other failure of these queries (no login, no
 # network) stops the script rather than skipping the check.
-if [[ "$(az group exists --name "$resource_group")" == "true" ]]; then
+# Assigned first: set -e does not apply to a command substitution inside an if condition.
+group_exists=$(az group exists --name "$resource_group")
+if [[ "$group_exists" != "true" && "$group_exists" != "false" ]]; then
+  echo "Could not tell whether $resource_group exists (az group exists printed '$group_exists')." >&2
+  exit 1
+fi
+if [[ "$group_exists" == "true" ]]; then
   postgres_state=$(az postgres flexible-server list --resource-group "$resource_group" \
     --query "[?name=='$postgres_server'].state | [0]" --output tsv)
   if [[ -n "$postgres_state" && "$postgres_state" != "Ready" ]]; then
