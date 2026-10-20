@@ -82,6 +82,7 @@ public class VideoProcessorTests
     [InlineData("""{}""")]
     [InlineData("""{ "tags": { "location": "+00.0000+000.0000/" } }""")]
     [InlineData("""{ "tags": { "location": "somewhere" } }""")]
+    [InlineData("""{ "tags": { "location": "+\u0663\u0668.7223-009.1393/" } }""")]
     [InlineData("""{ "tags": { "location": 38 } }""")]
     [InlineData("""{ "tags": [] }""")]
     public void Has_no_location_when_the_format_tags_hold_none(string format)

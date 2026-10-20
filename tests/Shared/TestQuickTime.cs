@@ -13,8 +13,9 @@ internal static class TestQuickTime
     /// A two-second movie with <paramref name="userData"/> in the <c>moov/udta/©xyz</c> atom (Android, older
     /// iPhones) and <paramref name="appleKey"/> under the <c>com.apple.quicktime.location.ISO6709</c> key of
     /// <c>moov/meta</c> (iPhones), each only when given.
+    /// <paramref name="keySize"/> overrides the size the <c>keys</c> atom declares for its entry, to make it malformed.
     /// </summary>
-    public static byte[] Movie(string? userData = null, string? appleKey = null)
+    public static byte[] Movie(string? userData = null, string? appleKey = null, uint? keySize = null)
     {
         // Version, flags, creation and modification time, then the time scale and duration that make two seconds.
         var header = new byte[100];
@@ -35,7 +36,7 @@ internal static class TestQuickTime
             movie.Add(Atom(
                 "meta",
                 Atom("hdlr", new byte[8], Encoding.ASCII.GetBytes("mdta"), new byte[13]),
-                Atom("keys", new byte[4], UInt32(1), UInt32((uint)(8 + key.Length)), Encoding.ASCII.GetBytes("mdta"), key),
+                Atom("keys", new byte[4], UInt32(1), UInt32(keySize ?? (uint)(8 + key.Length)), Encoding.ASCII.GetBytes("mdta"), key),
                 // Each ilst entry is named by its one-based index into keys; data type 1 is UTF-8 text.
                 Atom("ilst", Atom(UInt32(1), Atom("data", UInt32(1), new byte[4], Encoding.ASCII.GetBytes(appleKey))))));
         }

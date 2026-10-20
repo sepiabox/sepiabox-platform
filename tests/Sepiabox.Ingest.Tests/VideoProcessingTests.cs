@@ -99,18 +99,21 @@ public class VideoProcessingTests
 
     [Theory]
     // FFmpeg writes an MP4's location as a 3GPP loci box, which only ffprobe reads.
-    [InlineData("android.mp4", "location")]
+    [InlineData("android.mp4", "location", false)]
     // And a MOV's in the user-data ©xyz atom, which MetadataExtractor reads.
-    [InlineData("older-iphone.mov", "location")]
+    [InlineData("older-iphone.mov", "location", true)]
     // The Apple key goes into udta/meta here, which only ffprobe reads; iPhones put it in moov/meta (MetadataReaderTests).
-    [InlineData("IMG_0001.MOV", "com.apple.quicktime.location.ISO6709")]
-    public void Records_the_location_a_phone_video_carries(string name, string tag)
+    [InlineData("IMG_0001.MOV", "com.apple.quicktime.location.ISO6709", false)]
+    public void Records_the_location_a_phone_video_carries(string name, string tag, bool metadataExtractorReadsIt)
     {
         using var drive = new TempFolder();
         using var work = new TempFolder();
         // Without use_metadata_tags FFmpeg drops tags it has no atom for, such as the Apple key.
         string[] keys = tag == "location" ? [] : ["-movflags", "use_metadata_tags"];
-        MakeVideo(Path.Combine(drive.Path, name), 640, 360, seconds: 1, [.. keys, "-metadata", $"{tag}=+38.7223-009.1393+010.000/"]);
+        var path = Path.Combine(drive.Path, name);
+        MakeVideo(path, 640, 360, seconds: 1, [.. keys, "-metadata", $"{tag}=+38.7223-009.1393+010.000/"]);
+        // Which reader finds it, so each case keeps covering the path it is named for.
+        Assert.Equal(metadataExtractorReadsIt, MetadataReader.Read(path).Location is not null);
 
         var result = Process(drive, work);
 

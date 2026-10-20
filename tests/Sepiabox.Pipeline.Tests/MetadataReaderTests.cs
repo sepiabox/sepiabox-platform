@@ -83,6 +83,16 @@ public class MetadataReaderTests
     }
 
     [Fact]
+    public void Returns_empty_metadata_when_a_video_has_a_malformed_keys_atom()
+    {
+        using var folder = new TempFolder();
+        // A keys entry that declares 3 bytes, less than its own 8-byte header.
+        var path = folder.Write("broken.mov", TestQuickTime.Movie(appleKey: "+38.7223-009.1393+010.000/", keySize: 3));
+
+        Assert.Equal(MediaMetadata.Empty, MetadataReader.Read(path));
+    }
+
+    [Fact]
     public void Has_no_location_when_a_video_records_none()
     {
         using var folder = new TempFolder();

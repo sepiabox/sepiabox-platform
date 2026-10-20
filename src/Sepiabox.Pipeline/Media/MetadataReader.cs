@@ -42,14 +42,17 @@ public static class MetadataReader
     public static MediaMetadata Read(string path)
     {
         IReadOnlyList<MetadataExtractor.Directory> directories;
-        try
+        // Opened outside the try, so a path that cannot be opened is reported, never read as a file without metadata.
+        using (var stream = MediaFile.OpenRead(path))
         {
-            using var stream = MediaFile.OpenRead(path);
-            directories = ImageMetadataReader.ReadMetadata(stream);
-        }
-        catch (ImageProcessingException)
-        {
-            return MediaMetadata.Empty;
+            try
+            {
+                directories = ImageMetadataReader.ReadMetadata(stream);
+            }
+            catch (Exception ex) when (IsMalformed(ex))
+            {
+                return MediaMetadata.Empty;
+            }
         }
 
         var (width, height) = ReadDimensions(directories);
@@ -61,6 +64,12 @@ public static class MetadataReader
             height,
             ReadDuration(directories));
     }
+
+    // MetadataExtractor reports most damage as ImageProcessingException, but a malformed atom or segment can also
+    // overflow a size, index outside a buffer or end early (a truncated file). Those are the file's content, so it is
+    // processed without metadata; IOException and UnauthorizedAccessException are failures to read and still throw.
+    private static bool IsMalformed(Exception ex) =>
+        ex is ImageProcessingException or OverflowException or ArgumentException or IndexOutOfRangeException or EndOfStreamException;
 
     private static GeoPoint? ReadLocation(IReadOnlyList<MetadataExtractor.Directory> directories)
     {

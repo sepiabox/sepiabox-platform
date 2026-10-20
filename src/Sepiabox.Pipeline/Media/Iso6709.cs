@@ -22,24 +22,32 @@ public static partial class Iso6709
             return null;
         }
 
-        var match = DecimalDegrees().Match(value.Trim());
-        if (!match.Success)
+        // Some writers end the atom's text with a C string terminator.
+        var match = DecimalDegrees().Match(value.TrimEnd('\0').Trim());
+        if (!match.Success
+            || !TryParseDegrees(match.Groups["latitude"].Value, out var latitude)
+            || !TryParseDegrees(match.Groups["longitude"].Value, out var longitude)
+            || Math.Abs(latitude) > 90
+            || Math.Abs(longitude) > 180
+            || (latitude == 0 && longitude == 0))
         {
             return null;
         }
 
-        var latitude = double.Parse(match.Groups["latitude"].Value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
-        var longitude = double.Parse(match.Groups["longitude"].Value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
-        if (Math.Abs(latitude) > 90 || Math.Abs(longitude) > 180 || (latitude == 0 && longitude == 0))
-        {
-            return null;
-        }
+        return new GeoPoint(latitude, longitude);
+    }
 
-        return new GeoPoint(Math.Round(latitude, 6), Math.Round(longitude, 6));
+    // Rounded before the checks, so a value that rounds to the no-fix position is rejected as one; adding 0 turns -0 into 0.
+    private static bool TryParseDegrees(string text, out double degrees)
+    {
+        var parsed = double.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out degrees);
+        degrees = Math.Round(degrees, 6) + 0.0;
+        return parsed;
     }
 
     // ISO 6709 fixes the integer digits: 2 for latitude and 3 for longitude in decimal degrees, more in the
-    // degrees-and-minutes forms, which this does not read. The altitude, when present, is not used.
-    [GeneratedRegex(@"^(?<latitude>[+-]\d{2}(?:\.\d+)?)(?<longitude>[+-]\d{3}(?:\.\d+)?)(?:[+-]\d+(?:\.\d+)?)?/?$", RegexOptions.CultureInvariant)]
+    // degrees-and-minutes forms, which this does not read. The altitude, when present, is not used. [0-9], not \d,
+    // which also matches other scripts' digits that double.Parse refuses.
+    [GeneratedRegex(@"^(?<latitude>[+-][0-9]{2}(?:\.[0-9]+)?)(?<longitude>[+-][0-9]{3}(?:\.[0-9]+)?)(?:[+-][0-9]+(?:\.[0-9]+)?)?/?$", RegexOptions.CultureInvariant)]
     private static partial Regex DecimalDegrees();
 }
