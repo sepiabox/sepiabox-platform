@@ -10,6 +10,6 @@ internal static class ShutdownRunbook
     public const string ResourceGroup = "rg-sepiabox";
     public const string WebApp = "sepiabox-web";
     public const string PostgresServer = "sepiabox-pg";
-    public const string ServiceBusNamespace = "sepiabox-sb";
+    public const string ServiceBusNamespace = "sepiabox-bus";
     public const string Queue = "manifests";
 }

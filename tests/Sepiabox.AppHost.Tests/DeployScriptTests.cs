@@ -183,7 +183,7 @@ public sealed class DeployScriptTests : IDisposable
         // The old import image must not receive against the new schema.
         Assert.Equal([PauseQueue], Calls().Where(call => call.StartsWith("az servicebus", StringComparison.Ordinal)));
         Assert.Contains(
-            "The import jobs were not updated, so the queue manifests is still paused. Run this script again, or resume it once the import jobs run the new image: az servicebus queue update --resource-group rg-sepiabox --namespace-name sepiabox-sb --name manifests --status Active",
+            "The import jobs were not updated, so the queue manifests is still paused. Run this script again, or resume it once the import jobs run the new image: az servicebus queue update --resource-group rg-sepiabox --namespace-name sepiabox-bus --name manifests --status Active",
             result.Error,
             StringComparison.Ordinal);
         Assert.DoesNotContain(DeployWeb, Calls());
@@ -228,7 +228,7 @@ public sealed class DeployScriptTests : IDisposable
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains(
-            "Could not make the queue receive again; run: az servicebus queue update --resource-group rg-sepiabox --namespace-name sepiabox-sb --name manifests --status Active",
+            "Could not make the queue receive again; run: az servicebus queue update --resource-group rg-sepiabox --namespace-name sepiabox-bus --name manifests --status Active",
             result.Error,
             StringComparison.Ordinal);
     }
