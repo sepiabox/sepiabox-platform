@@ -262,14 +262,14 @@ main {
     background: var(--developer);
 }
 
-.player-error:empty {
-    display: none;
-}
-
 .player-error {
     margin: 0;
     padding: 12px 16px;
     font-weight: 600;
+}
+
+.player-error:empty {
+    display: none;
 }
 
 .processing {

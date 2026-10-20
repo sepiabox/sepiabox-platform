@@ -1,6 +1,8 @@
 @* A video on the detail page. The sources are the web's own media addresses, which redirect to a freshly
    signed storage link (D-039, D-049), so the page never holds a link that could expire while it is open.
-   wwwroot/video.js retries a failed video once with a fresh link and then reveals the error message.
+   wwwroot/video.js retries a network or source failure with a fresh link (not a decoding error or an
+   abort), allows another retry only after 30 seconds of played time, at most 3 per player, and otherwise
+   reveals the error message (D-049).
    It changes the video's src in the browser, so this component must stay static server rendering: an
    interactive render, or enhanced navigation's DOM merge when the same page is loaded again, would put
    the original src back, and the retry with it. *@
