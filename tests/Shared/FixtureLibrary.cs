@@ -125,14 +125,14 @@ internal static class FixtureLibrary
                 1 => Located(Porto, i / 4),
                 _ => (null, null),
             };
-            var path = Path.Combine("Fotos", string.Create(CultureInfo.InvariantCulture, $"IMG_{i:0000}.jpg"));
+            var path = Nfc(Path.Combine("Fotos", string.Create(CultureInfo.InvariantCulture, $"IMG_{i:0000}.jpg")));
             Write(root, path, Photo(Unique(), taken, point));
             files.Add(new FixtureFile(Slash(path), MediaKind.Photo, FixtureDate.Metadata, taken.Year, point, city));
         }
 
         // An exact copy of the first photo, as when a folder was copied to two places: one asset.
         var copied = files[0];
-        var copy = Path.Combine("Copia de Fotos", Path.GetFileName(copied.RelativePath));
+        var copy = Nfc(Path.Combine("Cópia de Fotos", Path.GetFileName(copied.RelativePath)));
         Write(root, copy, File.ReadAllBytes(Path.Combine(root, copied.RelativePath)));
         files.Add(copied with { RelativePath = Slash(copy), DuplicateOf = copied.RelativePath });
 
@@ -147,7 +147,7 @@ internal static class FixtureLibrary
                 1 => Located(Porto, 0),
                 _ => (null, null),
             };
-            var path = Path.Combine("Videos", string.Create(CultureInfo.InvariantCulture, $"VID_{i:000}.mov"));
+            var path = Nfc(Path.Combine("Vídeos", string.Create(CultureInfo.InvariantCulture, $"VID_{i:000}.mov")));
             Video(ffmpeg, root, path, Unique(), created, point);
             files.Add(new FixtureFile(Slash(path), MediaKind.Video, FixtureDate.Metadata, created.Year, point, city));
         }
@@ -156,13 +156,13 @@ internal static class FixtureLibrary
         var folderDay = RandomDay(random, 1995, 2016).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         foreach (var (folder, name, kind) in new[]
         {
-            (FarPastFolder, "digitalizacao-a.jpg", MediaKind.Photo),
-            (FarPastFolder, "digitalizacao-b.jpg", MediaKind.Photo),
+            (FarPastFolder, "digitalização-a.jpg", MediaKind.Photo),
+            (FarPastFolder, "digitalização-b.jpg", MediaKind.Photo),
             (folderDay, "foto.jpg", MediaKind.Photo),
             (folderDay, "filme.mov", MediaKind.Video),
         })
         {
-            var path = Path.Combine("Arquivo", folder, name);
+            var path = Nfc(Path.Combine("Arquivo", folder, name));
             WriteMedia(ffmpeg, root, path, kind, Unique());
             files.Add(new FixtureFile(Slash(path), kind, FixtureDate.Folder, int.Parse(folder[..4], CultureInfo.InvariantCulture), null, null));
         }
@@ -172,16 +172,16 @@ internal static class FixtureLibrary
         {
             ("sem-data.jpg", MediaKind.Photo),
             ("outra-sem-data.jpg", MediaKind.Photo),
-            ("clipe.mov", MediaKind.Video),
+            ("clipe-sem-título.mov", MediaKind.Video),
         })
         {
-            var path = Path.Combine("Diversos", name);
+            var path = Nfc(Path.Combine("Diversos", name));
             WriteMedia(ffmpeg, root, path, kind, Unique());
             files.Add(new FixtureFile(Slash(path), kind, FixtureDate.None, null, null, null));
         }
 
         // Not media: skipped by scan and process, never an asset.
-        var text = Path.Combine("Diversos", "leia-me.txt");
+        var text = Nfc(Path.Combine("Diversos", "leia-me.txt"));
         Write(root, text, System.Text.Encoding.UTF8.GetBytes("Fotos da familia.\n"));
         files.Add(new FixtureFile(Slash(text), MediaKind.Other, FixtureDate.None, null, null, null));
 
@@ -261,7 +261,8 @@ internal static class FixtureLibrary
         [
             "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
             "-f", "lavfi", "-i", "testsrc=duration=1:size=160x90:rate=10",
-            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            // One thread, so the encoder's output does not depend on the machine's core count.
+            "-threads", "1", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
             "-fflags", "+bitexact", "-flags:v", "+bitexact",
             "-metadata", "title=" + unique,
         ];
@@ -299,4 +300,8 @@ internal static class FixtureLibrary
     }
 
     private static string Slash(string path) => path.Replace('\\', '/');
+
+    // Folder and file names with accents, as the family's drive has, always in composed form (NFC), so the paths
+    // the tests assert are exactly the bytes written; a decomposed name is another file on Linux.
+    private static string Nfc(string path) => path.Normalize(System.Text.NormalizationForm.FormC);
 }

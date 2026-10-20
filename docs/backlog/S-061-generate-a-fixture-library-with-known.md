@@ -5,7 +5,7 @@
 **Size:** S
 
 ### Context
-The MVP acceptance test (S-054) needs a folder of photos and videos whose counts per year, kind, place and source are known in advance, generated in the test rather than committed (CLAUDE.md: generate larger media in the test).
+The MVP acceptance test (S-054) needs a folder of photos and videos whose counts in unique assets per year × kind, undated, folder-dated and per city are known in advance, generated in the test rather than committed (CLAUDE.md: generate larger media in the test).
 
 ### Scope
 - `FixtureLibrary` in `tests/Shared`: writes a folder with photos (EXIF dates, some with GPS in Lisbon and Porto), phone-style videos with QuickTime creation dates and ISO 6709 locations (S-053, through FFmpeg), files dated only by a `YYYY-MM-DD` parent folder (D-046), **truly undated** files (no metadata date, no dated file name, no dated parent folder), files without GPS, an exact duplicate, and a non-media file; it returns the expected numbers in unique assets (per year × kind, folder-dated, truly undated, per city, duplicates) computed from what it wrote.
