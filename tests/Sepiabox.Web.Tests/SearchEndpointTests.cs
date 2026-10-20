@@ -135,7 +135,8 @@ public sealed class SearchEndpointTests
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Contains("filters.visual", problem.GetProperty("detail").GetString(), StringComparison.Ordinal);
+        Assert.Equal("filters.visual", problem.GetProperty("field").GetString());
+        Assert.StartsWith("Search by description is not available right now.", problem.GetProperty("detail").GetString(), StringComparison.Ordinal);
     }
 
     private static StringContent Json(string json) => new(json, Encoding.UTF8, "application/json");

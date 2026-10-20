@@ -93,6 +93,14 @@ public static class AzureInfrastructure
     /// </summary>
     public const string SearchTimeZone = "Europe/Lisbon";
 
+    /// <summary>Where the web's image carries the CLIP text model and tokenizer (S-056, D-071).</summary>
+    public const string WebModelFolder = "/models";
+
+    /// <summary>The web's size (D-055): room for the ~250 MB text model loaded next to the app, at the smallest CPU.</summary>
+    public const double WebCpu = 0.5;
+
+    public const string WebMemory = "1Gi";
+
     /// <summary>The azd parameter with the web's custom domain, empty for none (S-035).</summary>
     public const string CustomDomainParameter = "customDomain";
 
@@ -305,6 +313,9 @@ public static class AzureInfrastructure
         // Scales to zero when nobody uses it (D-008); one replica is enough for two people.
         app.Template.Scale.MinReplicas = 0;
         app.Template.Scale.MaxReplicas = 1;
+        var container = app.Template.Containers.Single().Value
+            ?? throw new InvalidOperationException("The web app has no container.");
+        container.Resources = new AppContainerResources { Cpu = WebCpu, Memory = WebMemory };
 
         // The ingress is the only way in, over HTTPS only: the web trusts its X-Forwarded-For and
         // X-Forwarded-Proto for that reason (D-048).

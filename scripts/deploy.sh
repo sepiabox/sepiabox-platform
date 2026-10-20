@@ -150,4 +150,8 @@ azd deploy geonames --no-prompt
 # Never exit 0 with the queue paused.
 resume_queue || exit 1
 
+# The web's base image with the CLIP text model (S-056): built only when models.json or the ASP.NET Core image
+# changed, then the web's publish builds on it (src/Sepiabox.Web/Sepiabox.Web.csproj, ContainerBaseImage).
+SEPIABOX_WEB_BASE_IMAGE=$(scripts/web-models.sh)
+export SEPIABOX_WEB_BASE_IMAGE
 azd deploy web --no-prompt

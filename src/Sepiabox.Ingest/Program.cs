@@ -35,6 +35,8 @@ const string Usage = """
     Options for models download:
       --models <folder>     Where to put the models. Default: %LOCALAPPDATA%\Sepiabox\models on
                             Windows, ~/.sepiabox/models elsewhere (or SEPIABOX_MODELS).
+      --only <names>        Only these models, separated by commas (the web's image needs only
+                            clip-vit-b32-text,clip-bpe-vocab).
 
     Options for upload:
       --destination local   Azurite, or the connection string in SEPIABOX_BLOB_CONNECTION.
@@ -171,7 +173,7 @@ static async Task<int> RunModels(string[] args, CancellationToken cancellationTo
     using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
     var downloader = new ModelDownloader(http);
     var failed = false;
-    foreach (var model in ModelCatalog.All)
+    foreach (var model in ModelCatalog.All.Where(m => options.Only is null || options.Only.Contains(m.Name)))
     {
         try
         {

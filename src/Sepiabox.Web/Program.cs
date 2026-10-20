@@ -26,7 +26,15 @@ builder.Services.AddSingleton<ISasUrlFactory, SasUrlFactory>();
 builder.Services.AddSingleton(SearchSetup.Options(builder.Configuration));
 builder.Services.AddSingleton<FilterOptionsCache>();
 builder.Services.AddSingleton<IQueryEmbedder>(services => new ClipQueryEmbedder(
-    SearchSetup.ModelFolder(services.GetRequiredService<IConfiguration>()), services.GetRequiredService<ILogger<ClipQueryEmbedder>>()));
+    SearchSetup.ModelFolder(services.GetRequiredService<IConfiguration>()),
+    services.GetRequiredService<ILogger<ClipQueryEmbedder>>(),
+    failuresAreErrors: builder.Environment.IsProduction()));
+// S-056: Degraded in /health while the model is unusable; loaded before requests where the image ships it.
+builder.Services.AddHealthChecks().AddCheck<TextModelHealthCheck>(TextModelHealthCheck.Name);
+if (SearchSetup.WarmUp(builder.Configuration, builder.Environment))
+{
+    builder.Services.AddHostedService<TextModelWarmUp>();
+}
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 
 builder.AddSepiaboxAuth();

@@ -17,11 +17,11 @@ Search by description (S-016) needs the CLIP text model (~250 MB, `onnx/text_mod
 - A quantized text model (it would no longer match the stored image embeddings exactly).
 
 ### Acceptance criteria
-- [ ] Given the published web image, when it is inspected (test on the publish output), then it contains the text model whose SHA-256 matches `models.json`.
-- [ ] Given the web in the `Production` environment with the model present, when a description search runs, then the model loads and results come back (test with the real model, Integration).
-- [ ] Given the web in `Production` with the model missing or corrupted, when it starts, then it logs one clear error, the model health check is Degraded, `/health` and `/alive` answer 200 (the web stays ready), pages load, and the description search API answers 503.
-- [ ] Given two image builds of different app commits with the same `models.json`, when their layers are compared, then the model layer has the same digest (a CI check on the built images).
-- [ ] Given the generated Bicep, then the web has the chosen memory and `minReplicas: 0`.
+- [ ] Given the published web image, when it is inspected (test on the publish output), then it contains the text model whose SHA-256 matches `models.json`. *(Partly: the models image is built from `infra/web-models/Dockerfile` and checked byte for byte with stand-in files, and the files come from `models download`, which verifies the pinned SHA-256; the image with the real model is first built by the owner's next deploy.)*
+- [x] Given the web in the `Production` environment with the model present, when a description search runs, then the model loads and results come back (test with the real model, Integration). *(Runs in CI's integration job, which downloads the model; skipped in the agents' sandbox.)*
+- [x] Given the web in `Production` with the model missing or corrupted, when it starts, then it logs one clear error, the model health check is Degraded, `/health` and `/alive` answer 200 (the web stays ready), pages load, and the description search API answers 503.
+- [ ] Given two image builds of different app commits with the same `models.json`, when their layers are compared, then the model layer has the same digest (a CI check on the built images). *(By construction: the base image is reused by its tag; tested on the script with stand-ins. The comparison on real images is an owner check after two deploys, `docs/operations.md`.)*
+- [x] Given the generated Bicep, then the web has the chosen memory and `minReplicas: 0`.
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), when the first description search runs after a cold start, then it answers within 30 s and later ones within 2 s.
 
 ### Technical notes

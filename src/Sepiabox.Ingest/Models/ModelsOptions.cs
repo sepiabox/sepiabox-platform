@@ -3,7 +3,8 @@ using System.Diagnostics.CodeAnalysis;
 namespace Sepiabox.Ingest.Models;
 
 /// <param name="Folder">Where models go; null for the default folder.</param>
-public sealed record ModelsOptions(string? Folder)
+/// <param name="Only">The names of the models to download; null for all of them.</param>
+public sealed record ModelsOptions(string? Folder, IReadOnlyList<string>? Only = null)
 {
     /// <summary>Reads the arguments after <c>models</c>; <c>download</c> is the only subcommand.</summary>
     public static bool TryParse(
@@ -25,10 +26,27 @@ public sealed record ModelsOptions(string? Folder)
         }
 
         string? folder = null;
+        List<string>? only = null;
         for (var i = 1; i < args.Count; i++)
         {
             switch (args[i])
             {
+                case "--only" when i + 1 >= args.Count:
+                    error = "--only needs model names separated by commas.";
+                    return false;
+
+                case "--only":
+                    only = [.. args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+                    var unknown = only.FirstOrDefault(name => Sepiabox.Search.Models.ModelCatalog.Find(name) is null);
+                    if (unknown is not null || only.Count == 0)
+                    {
+                        error = $"Unknown model '{unknown}' for --only; the models are "
+                            + string.Join(", ", Sepiabox.Search.Models.ModelCatalog.All.Select(m => m.Name)) + ".";
+                        return false;
+                    }
+
+                    break;
+
                 case "--models" when i + 1 >= args.Count:
                     error = "--models needs a value.";
                     return false;
@@ -43,7 +61,7 @@ public sealed record ModelsOptions(string? Folder)
             }
         }
 
-        options = new ModelsOptions(folder);
+        options = new ModelsOptions(folder, only);
         error = null;
         return true;
     }

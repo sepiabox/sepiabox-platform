@@ -39,6 +39,9 @@ public sealed class ProjectSettingsTests
         XDocument.Load(Path.Combine(Repository.Root, project))
             .Descendants("PropertyGroup")
             .Elements()
+            // Conditional definitions apply only in some builds (the web's models image in a deploy, S-056);
+            // AzureWebModelTests evaluates those with MSBuild itself.
+            .Where(e => e.Attribute("Condition") is null)
             // As MSBuild reads them, the last definition of a property wins.
             .GroupBy(e => e.Name.LocalName, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Last().Value, StringComparer.Ordinal);

@@ -159,6 +159,15 @@ jobs:
           azd env config set infra.parameters.customDomain "$domain"
           azd env config set infra.parameters.customDomainBinding "$binding"
 
+      # The CLIP text model for the web's base image (S-056, D-071): downloaded only when models.json changes and
+      # the registry lacks the image, and verified against its pinned SHA-256 whether it came from here or not.
+      - name: Restore the downloaded models
+        if: steps.newest.outputs.deploy == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.sepiabox/models
+          key: web-models-${{ hashFiles('models/models.json') }}
+
       # Provision, run the migrate job and wait for it, then the import jobs and the web (S-032, S-033). A
       # failed migration ends the script, and so this job, before anything else is deployed.
       - name: Deploy
