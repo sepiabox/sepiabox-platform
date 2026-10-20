@@ -197,6 +197,21 @@ public sealed class PlacesTests(CatalogFixture fixture) : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Every_position_of_the_fixture_library_resolves_to_its_city_with_the_sample()
+    {
+        // S-054 counts the fixture library's assets per city with this sample (S-061).
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        await LoadAsync(db, GeoNamesSample.Write(_folder));
+        var resolver = new PostgisPlaceResolver(db);
+
+        foreach (var (city, at) in FixtureLibrary.CityPoints)
+        {
+            var place = await resolver.ResolveAsync(Point(at.Latitude, at.Longitude), CancellationToken.None);
+            Assert.True(place?.City == city, $"{at} resolved to {place?.City ?? "no city"}, not {city}.");
+        }
+    }
+
     private static NetTopologySuite.Geometries.Point Point(double latitude, double longitude) =>
         new(longitude, latitude) { SRID = 4326 };
 
