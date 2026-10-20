@@ -19,6 +19,7 @@ Steps that need a person, because they depend on accounts, consents or external 
 | List of allowed e-mails (`Access:Emails`) in Key Vault | S-010, S-032 | Key Vault |
 | Sign-in secrets in Key Vault: `Auth--Google--ClientId`, `Auth--Google--ClientSecret`, `Auth--Microsoft--ClientId`, `Auth--Microsoft--ClientSecret`, `Access--Emails` | S-032 | Key Vault |
 | After the first deploy: sign in with Google and with Microsoft on `https://app.sepiabox.com`, restart the web revision, reload (still signed in); then try an account not on the list (lands on `/sem-acesso`) | S-032 | Browser; Azure portal → Container Apps → Revisions |
+| Video playback check, against Azurite (`dotnet run --project src/Sepiabox.AppHost`) or Azure after a deploy: in Chrome and in Safari on an iPhone, open the 720p version of one `.MOD` and one `.MTS` clip; play, seek forward and back, pause for 15 minutes and resume (it must carry on, D-049) | S-011, S-032 | Browser |
 
 ## Ingesting a drive
 
