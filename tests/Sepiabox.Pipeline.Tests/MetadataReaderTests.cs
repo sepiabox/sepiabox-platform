@@ -12,7 +12,7 @@ public class MetadataReaderTests
 
         var metadata = MetadataReader.Read(path);
 
-        Assert.Equal(new DateTime(2019, 7, 14, 16, 30, 5), metadata.CapturedAt);
+        Assert.Equal(new DateTime(2019, 7, 14, 16, 30, 5), metadata.RawCapturedAt);
         Assert.Equal(new GeoPoint(41.18, -8.69), metadata.Location);
         Assert.Equal(new CameraInfo("Apple", "iPhone 8"), metadata.Camera);
         Assert.Equal(64, metadata.Width);

@@ -25,15 +25,22 @@ public sealed record Manifest
 
     public required string ContentType { get; init; }
 
-    /// <summary>Local time on the camera's clock; cameras rarely record the time zone.</summary>
+    /// <summary>Wall-clock capture time (D-037); see <see cref="CapturedAtSource"/>.</summary>
     public DateTime? CapturedAt { get; init; }
 
     /// <summary>
-    /// Where <see cref="CapturedAt"/> came from (D-046); omitted when there is no date. Manifests written before
-    /// S-043 never have it, and their dates all came from metadata.
+    /// Where <see cref="CapturedAt"/> came from (D-046). Every writer sets it whenever it sets a date; it reads as
+    /// null whenever <see cref="CapturedAt"/> is null, so a source never sits next to a missing date. Manifests written
+    /// before S-043 never have it, and their dates all came from metadata (<see cref="GetCaptureDate"/>).
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public CaptureDateSource? CapturedAtSource { get; init; }
+    public CaptureDateSource? CapturedAtSource
+    {
+        get => CapturedAt is null ? null : _capturedAtSource;
+        init => _capturedAtSource = value;
+    }
+
+    private readonly CaptureDateSource? _capturedAtSource;
 
     public GeoPoint? Location { get; init; }
 
@@ -54,6 +61,14 @@ public sealed record Manifest
     public bool FacesProcessed { get; init; }
 
     public IReadOnlyList<JsonObject> Faces { get; init; } = [];
+
+    /// <summary>The capture date with its source; a date without a source comes from metadata (written before S-043).</summary>
+    public CaptureDate? GetCaptureDate() =>
+        CapturedAt is { } value ? new CaptureDate(value, CapturedAtSource ?? CaptureDateSource.Metadata) : null;
+
+    /// <summary>This manifest with <paramref name="captured"/> as its date and source, or with neither.</summary>
+    public Manifest WithCaptureDate(CaptureDate? captured) =>
+        this with { CapturedAt = captured?.Value, CapturedAtSource = captured?.Source };
 }
 
 /// <summary>One place where the asset's bytes were found.</summary>

@@ -41,10 +41,19 @@ public class ManifestTests
     [Fact]
     public void Omits_the_capture_date_source_when_it_is_not_known()
     {
-        var json = JsonNode.Parse(ManifestJson.Serialize(Sample with { CapturedAt = null }))!.AsObject();
+        var json = JsonNode.Parse(ManifestJson.Serialize(Sample with { CapturedAt = null, CapturedAtSource = null }))!.AsObject();
 
         Assert.False(json.ContainsKey("capturedAtSource"));
         Assert.True(json.ContainsKey("capturedAt"));
+    }
+
+    [Fact]
+    public void Drops_the_capture_date_source_when_there_is_no_capture_date()
+    {
+        var undated = Sample with { CapturedAtSource = CaptureDateSource.Folder, CapturedAt = null };
+
+        Assert.Null(undated.CapturedAtSource);
+        Assert.False(JsonNode.Parse(ManifestJson.Serialize(undated))!.AsObject().ContainsKey("capturedAtSource"));
     }
 
     [Theory]

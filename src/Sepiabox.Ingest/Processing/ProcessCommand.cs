@@ -295,24 +295,18 @@ public static class ProcessCommand
         var path = ManifestPath(manifestFolder, sha256);
         if (File.Exists(path))
         {
-            // Same bytes seen at another path: the description is unchanged and the list of sources grows. Only
-            // the date can change, when it came from a path: this path's date, which needs no metadata (the bytes'
-            // metadata is already in the manifest), is weighed as an upload would weigh it (D-046).
+            // A copy of the same bytes: the description is unchanged and the list of sources grows. The stored date
+            // stays unless this path gives a stronger one (D-046); the bytes' metadata is already in the manifest.
             var existing = ManifestJson.Deserialize(File.ReadAllText(path));
-            var fromPath = CaptureDate.Resolve(null, file.Path, clock);
-            var dated = ManifestMerge.MergeCaptureDate(
-                existing, existing with { CapturedAt = fromPath?.Value, CapturedAtSource = fromPath?.Source }, existing);
-            return existing with
-            {
-                CapturedAt = dated.CapturedAt,
-                CapturedAtSource = dated.CapturedAtSource,
-                Sources = WithSource(existing.Sources, source),
-            };
+            var stored = existing.GetCaptureDate();
+            var kept = CaptureDate.Stronger(stored, CaptureDate.Resolve(null, file.Path, clock));
+            var dated = kept == stored ? existing : existing.WithCaptureDate(kept);
+            return dated with { Sources = WithSource(existing.Sources, source) };
         }
 
         var metadata = MetadataReader.Read(file.Path);
         // The file's own date when plausible, otherwise one from its path (D-046).
-        var captured = CaptureDate.Resolve(metadata.CapturedAt, file.Path, clock);
+        var captured = CaptureDate.Resolve(metadata.RawCapturedAt, file.Path, clock);
         return new Manifest
         {
             Id = sha256,

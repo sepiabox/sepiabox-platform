@@ -118,6 +118,52 @@ public sealed class ProcessDateTests : IDisposable
         Assert.Equal((new DateTime(2008, 12, 24), CaptureDateSource.Folder), (manifest.CapturedAt, manifest.CapturedAtSource));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Takes_the_file_name_date_over_a_folder_date_whichever_copy_is_processed_first(bool camcorderNameFirst)
+    {
+        var clip = FakeVideo("two days");
+        string[] paths = ["2011-09-25/MNU_110425_a.MTS", "2011-09-26/clip.MTS"];
+        if (!camcorderNameFirst)
+        {
+            Array.Reverse(paths);
+        }
+
+        _drive.Write(paths[0], clip);
+        Process();
+        _drive.Write(paths[1], clip);
+        Process();
+
+        var manifest = ReadManifest();
+        Assert.Equal(2, manifest.Sources.Count);
+        Assert.Equal((new DateTime(2011, 9, 25, 11, 4, 25), CaptureDateSource.FileName), (manifest.CapturedAt, manifest.CapturedAtSource));
+    }
+
+    [Fact]
+    public void Dates_a_scanned_print_from_a_folder_before_1990()
+    {
+        _drive.Write("Digitalizadas/1978-08-15/scan.jpg", TestPhotos.Plain());
+
+        Process();
+
+        var manifest = ReadManifest();
+        Assert.Equal((new DateTime(1978, 8, 15), CaptureDateSource.Folder), (manifest.CapturedAt, manifest.CapturedAtSource));
+    }
+
+    [Fact]
+    public void Dates_a_damaged_photo_from_its_folder_when_its_metadata_cannot_be_read()
+    {
+        _drive.Write("2005-07-14/damaged.jpg", FakeVideo("not a jpeg either"));
+
+        var result = Process();
+
+        // No thumbnails, so it is a problem, but its manifest is kept with the folder's date.
+        Assert.Single(result.Problems);
+        var manifest = ReadManifest();
+        Assert.Equal((new DateTime(2005, 7, 14), CaptureDateSource.Folder), (manifest.CapturedAt, manifest.CapturedAtSource));
+    }
+
     [Fact]
     public void Keeps_the_exif_date_when_a_copy_of_the_same_photo_is_in_a_dated_folder()
     {
