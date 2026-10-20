@@ -36,12 +36,12 @@ Checks only a person can do. A story whose automated criteria pass is `done` and
 | `upload` one folder to Azure: its assets appear in the cloud timeline without running anything else; the dead-letter count stays 0 | S-033 |
 | After the GeoNames job (`az containerapp job start --name sepiabox-geonames --resource-group rg-sepiabox`): a photo taken in Lisbon shows "Lisbon" on its detail page in Azure | S-059 |
 | The first description search after a cold start answers within 30 s, later ones within 2 s | S-056 |
-| MVP acceptance on the real data: after uploading the drive and the import finishing, ask in the web a few counting questions (photos per year, videos per year, items with no date) and compare each answer with `sepiabox-ingest report <workdir>` on the work folder that was uploaded; no test data is ever uploaded to Azure | S-054 |
+| MVP acceptance on the real data: after uploading the drive and the import finishing, ask in the web a few counting questions (photos per year, videos per year, items with no date) and compare each answer with `sepiabox-ingest report` on every work folder that was uploaded, in upload order; no test data is ever uploaded to Azure | S-054 |
 | The video playback check in the table above | S-011 |
 
 ## MVP acceptance on the real data
 
-After uploading the drive to Azure (below) and the automatic import finishing, run `sepiabox-ingest report <workdir>` on the work folder you uploaded: it counts unique assets per year and kind, and the undated ones, from its manifests, the same unit as the catalog (an exact duplicate counts once; `scan` counts files instead). Then open the app and ask, in English and in Portuguese: photos per year for three years, videos per year for two years, and how many items have no date. Each answer must equal `report`'s number. A difference is reported as an issue with the question, both numbers and the year. Cities are not part of this check (`report` has no place names). No test data is ever uploaded to Azure for this (S-054, D-056).
+After uploading the drive to Azure (below) and the automatic import finishing, run `sepiabox-ingest report <workdir>...` on every work folder you have uploaded, in the order you uploaded them (an asset in several folders counts once and takes its date from the last one, as the cloud does): it counts unique assets per year and kind, and the undated ones, from its manifests, the same unit as the catalog (an exact duplicate counts once; `scan` counts files instead). Then open the app and ask, in English and in Portuguese: photos per year for three years, videos per year for two years, and how many items have no date. Each answer must equal `report`'s number. A difference is reported as an issue with the question, both numbers and the year. Cities are not part of this check (`report` has no place names). No test data is ever uploaded to Azure for this (S-054, D-056).
 
 ## Uploading the drive to Azure
 
