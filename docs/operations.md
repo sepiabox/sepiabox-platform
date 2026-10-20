@@ -21,7 +21,12 @@ Steps that need a person, because they depend on accounts, consents or external 
 ## Ingesting a drive
 
 - Run `sepiabox-ingest models download` once per computer before `process`, so embeddings are computed in the same pass.
-- Before the first full run, copy one of your own Canon `.CR2` files into an empty folder, run `process` on that folder, and open `derivatives/<id>/preview-1280.webp` in the work folder: it should look like the camera's JPEG (right colours, upright, not a 160x120 thumbnail blown up). The tests only use a synthetic CR2 (D-045).
+- Before the first full run, check one of your own Canon `.CR2` files. The tests only use a synthetic CR2 (D-045).
+  1. Copy the file into a new, empty temporary folder.
+  2. Run `process` on that folder with a separate, new `--out` folder.
+  3. Open `derivatives/<id>/preview-1280.webp` in that `--out` folder. It should look like the camera's JPEG: right colours, upright, not a 160x120 thumbnail blown up.
+  4. Delete both folders. Never `upload` from that `--out` folder: its manifest names the temporary copy as a source.
+- `process` lists each file it leaves out ("Left out <path>: <reason>") on standard error: a tracker-music module, or a file with no video stream or only cover art (D-045). Left-out files are never catalogued. If one is a real video, report it. To try it again once the cause is fixed, change its modification time (for example `touch`, or re-copy the file); unchanged left-out files are not read again.
 - Keep the `process` work folder (`manifests/` and `derivatives/`) until every file has its embedding, and its faces once S-018 is done: a later `process` run adds them from the previews in the work folder without the drive, but cannot once they are deleted. The summary has no "have no embedding" or "no preview or poster" warning when nothing is left to add.
 
 ## OAuth redirect URLs

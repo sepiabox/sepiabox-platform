@@ -24,6 +24,7 @@ Files from cloud sources (Drive, OneDrive) arrive without the PC processing. The
 
 ### Technical notes
 - Reuse the stages from S-004/S-005/S-006/S-015.
+- Apply the same "not a video" rules as `process` (D-045): `TrackerModule.IsTrackerModule` before probing, and `VideoProcessor.Probe`'s `NoVideoStreamException` (no video stream after a second, longer probe, or cover art only). Such a file gets no manifest; log it with the reason instead of failing the message.
 
 ### Expected tests
 - Integration (Azurite + PostgreSQL): full processing; image build in CI.
