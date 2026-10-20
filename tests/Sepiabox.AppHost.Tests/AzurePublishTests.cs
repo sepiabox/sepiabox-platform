@@ -46,12 +46,13 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
 
         Assert.True(published.Resource("pg-password")["inputs"]!["value"]!["secret"]!.GetValue<bool>());
         Assert.False(password["special"]!.GetValue<bool>());
-        Assert.Equal(32, password["minLength"]!.GetValue<int>());
+        Assert.Equal(64, password["minLength"]!.GetValue<int>());
         Assert.Equal(1, password["minLower"]!.GetValue<int>());
         Assert.Equal(1, password["minUpper"]!.GetValue<int>());
         Assert.Equal(1, password["minNumeric"]!.GetValue<int>());
         Assert.False(login["special"]!.GetValue<bool>());
         Assert.False(login["numeric"]!.GetValue<bool>());
+        Assert.False(login["upper"]!.GetValue<bool>());
     }
 
     [Fact]

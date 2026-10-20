@@ -46,11 +46,12 @@ public static class AzureInfrastructure
     public const int BlobSoftDeleteDays = 7;
 
     /// <summary>
-    /// The PostgreSQL administrator login azd generates once: letters only, which Azure accepts as a login.
+    /// The PostgreSQL administrator login azd generates once: lower case letters only, which Azure accepts as a login.
     /// </summary>
     public static GenerateParameterDefault PostgresLogin { get; } = new()
     {
         MinLength = 12,
+        Upper = false,
         Numeric = false,
         Special = false,
     };
@@ -62,7 +63,7 @@ public static class AzureInfrastructure
     /// </summary>
     public static GenerateParameterDefault PostgresPassword { get; } = new()
     {
-        MinLength = 32,
+        MinLength = 64,
         Special = false,
         MinLower = 1,
         MinUpper = 1,

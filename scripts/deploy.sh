@@ -35,12 +35,16 @@ if [[ -n "$azd_group" && "$azd_group" != "$resource_group" ]]; then
   exit 1
 fi
 
-# After the €45 shutdown (S-030) the server is stopped and provisioning would fail half-way.
-postgres_state=$(az postgres flexible-server show --name "$postgres_server" --resource-group "$resource_group" \
-  --query state --output tsv 2>/dev/null) || postgres_state=""
-if [[ "$postgres_state" == "Stopped" ]]; then
-  echo "$postgres_server is stopped (the budget shutdown?). Resume first: sepiabox-infra/scripts/resume.sh" >&2
-  exit 1
+# After the €45 shutdown (S-030) the server is stopped and provisioning would fail half-way. Before the
+# first deploy neither the group nor the server exists; any other failure of these queries (no login, no
+# network) stops the script rather than skipping the check.
+if [[ "$(az group exists --name "$resource_group")" == "true" ]]; then
+  postgres_state=$(az postgres flexible-server list --resource-group "$resource_group" \
+    --query "[?name=='$postgres_server'].state | [0]" --output tsv)
+  if [[ -n "$postgres_state" && "$postgres_state" != "Ready" ]]; then
+    echo "$postgres_server is $postgres_state (the budget shutdown?). Resume it and wait until it is Ready: sepiabox-infra/scripts/resume.sh" >&2
+    exit 1
+  fi
 fi
 
 # Lets azure.yaml's predeploy hook through.
@@ -50,6 +54,10 @@ azd provision --no-prompt
 azd deploy migrate --no-prompt
 
 execution=$(az containerapp job start --name "$migrate_job" --resource-group "$resource_group" --query name --output tsv)
+if [[ -z "$execution" ]]; then
+  echo "Starting $migrate_job returned no execution name; the web was not deployed." >&2
+  exit 1
+fi
 echo "Waiting for $migrate_job execution $execution..."
 deadline=$((SECONDS + migrate_timeout_seconds))
 status="Unknown"
@@ -68,9 +76,13 @@ while true; do
       ;;
   esac
   if ((SECONDS >= deadline)); then
-    az containerapp job stop --name "$migrate_job" --resource-group "$resource_group" \
-      --job-execution-name "$execution" >/dev/null 2>&1 || true
-    echo "$migrate_job execution $execution did not finish in ${migrate_timeout_seconds}s (last status: $status) and was stopped; the web was not deployed." >&2
+    echo "$migrate_job execution $execution did not finish in ${migrate_timeout_seconds}s (last status: $status); the web was not deployed." >&2
+    stop=(az containerapp job stop --name "$migrate_job" --resource-group "$resource_group" --job-execution-name "$execution")
+    if "${stop[@]}" >/dev/null 2>&1; then
+      echo "The execution was stopped." >&2
+    else
+      echo "Stopping the execution failed; stop it by hand: ${stop[*]}" >&2
+    fi
     echo "The migration may be partly applied: check its logs, then run this script again." >&2
     exit 1
   fi

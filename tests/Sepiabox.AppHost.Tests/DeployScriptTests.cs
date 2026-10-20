@@ -47,13 +47,17 @@ public sealed class DeployScriptTests : IDisposable
         WriteStub("az", """
             echo "az $*" >> "$CALLS"
             case "$*" in
-              "postgres flexible-server show"*)
-                if [ "$STUB_PG_STATE" = "MISSING" ]; then
-                  echo "ResourceNotFound" >&2
-                  exit 3
+              "group exists"*)
+                if [ "$STUB_PG_STATE" = "NO_GROUP" ]; then echo "false"; else echo "true"; fi ;;
+              "postgres flexible-server list"*)
+                if [ "$STUB_PG_STATE" = "AZ_ERROR" ]; then
+                  echo "ERROR: Please run 'az login' to setup account." >&2
+                  exit 1
                 fi
-                echo "$STUB_PG_STATE" ;;
-              "containerapp job start"*) echo "sepiabox-migrate-run1" ;;
+                if [ "$STUB_PG_STATE" != "MISSING" ]; then echo "$STUB_PG_STATE"; fi ;;
+              "containerapp job start"*) echo "$STUB_EXECUTION" ;;
+              "containerapp job stop"*)
+                if [ "$STUB_STOP" = "FAIL" ]; then exit 1; fi ;;
               "containerapp job execution show"*)
                 n=$(( $(cat "$CALLS.polls" 2>/dev/null || echo 0) + 1 ))
                 echo "$n" > "$CALLS.polls"
@@ -78,6 +82,7 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Equal(
             ["azd provision --no-prompt", "azd deploy migrate --no-prompt", JobStart, JobStatus, DeployWeb],
             Calls().Where(call => !call.StartsWith("azd env", StringComparison.Ordinal)
+                && !call.StartsWith("az group", StringComparison.Ordinal)
                 && !call.StartsWith("az postgres", StringComparison.Ordinal)));
         // What azure.yaml's predeploy hook checks, so that only this script deploys.
         Assert.Equal(["1", "1"], File.ReadAllLines(_calls + ".guard"));
@@ -114,17 +119,41 @@ public sealed class DeployScriptTests : IDisposable
     }
 
     [UnixTheory]
-    [InlineData("Running")]
-    [InlineData("FAIL")]
-    public async Task Deploy_stops_the_job_and_leaves_the_web_alone_when_the_migration_times_out(string statuses)
+    [InlineData("Running", "", "The execution was stopped.")]
+    [InlineData("FAIL", "", "The execution was stopped.")]
+    [InlineData("Running", "FAIL", "Stopping the execution failed; stop it by hand: " + JobStop)]
+    public async Task Deploy_stops_the_job_and_leaves_the_web_alone_when_the_migration_times_out(
+        string statuses, string stop, string message)
     {
-        var result = await RunDeployAsync(statuses, timeoutSeconds: 1);
+        var result = await RunDeployAsync(statuses, timeoutSeconds: 1, stop: stop);
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains(JobStop, Calls());
         Assert.DoesNotContain(DeployWeb, Calls());
         Assert.Contains("did not finish in 1s", result.Error, StringComparison.Ordinal);
+        Assert.Contains(message, result.Error, StringComparison.Ordinal);
         Assert.Contains("may be partly applied", result.Error, StringComparison.Ordinal);
+    }
+
+    [UnixFact]
+    public async Task Deploy_leaves_the_web_alone_when_the_job_start_returns_no_execution()
+    {
+        var result = await RunDeployAsync("Succeeded", execution: "");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("returned no execution name", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("az containerapp job execution", StringComparison.Ordinal));
+        Assert.DoesNotContain(DeployWeb, Calls());
+    }
+
+    [UnixFact]
+    public async Task Deploy_succeeds_on_the_first_provision_when_azd_has_no_resource_group_yet()
+    {
+        var result = await RunDeployAsync("Succeeded", resourceGroup: "", postgresState: "NO_GROUP");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("az postgres", StringComparison.Ordinal));
+        Assert.Equal(DeployWeb, Calls()[^1]);
     }
 
     [UnixTheory]
@@ -141,13 +170,28 @@ public sealed class DeployScriptTests : IDisposable
         Assert.All(Calls(), call => Assert.StartsWith("azd env get-value", call, StringComparison.Ordinal));
     }
 
-    [UnixFact]
-    public async Task Deploy_refuses_to_start_when_postgres_is_stopped()
+    [UnixTheory]
+    [InlineData("Stopped")]
+    [InlineData("Stopping")]
+    [InlineData("Starting")]
+    public async Task Deploy_refuses_to_start_when_postgres_is_not_ready(string state)
     {
-        var result = await RunDeployAsync("Succeeded", postgresState: "Stopped");
+        var result = await RunDeployAsync("Succeeded", postgresState: state);
 
         Assert.Equal(1, result.ExitCode);
-        Assert.Contains("sepiabox-pg is stopped", result.Error, StringComparison.Ordinal);
+        Assert.Contains($"sepiabox-pg is {state}", result.Error, StringComparison.Ordinal);
+        Assert.Contains("resume.sh", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("azd provision --no-prompt", Calls());
+    }
+
+    [UnixFact]
+    public async Task Deploy_stops_when_the_postgres_check_fails()
+    {
+        // A failed login or network error must not skip the check and deploy past a stopped server.
+        var result = await RunDeployAsync("Succeeded", postgresState: "AZ_ERROR");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("az login", result.Error, StringComparison.Ordinal);
         Assert.DoesNotContain("azd provision --no-prompt", Calls());
     }
 
@@ -180,7 +224,9 @@ public sealed class DeployScriptTests : IDisposable
         string location = "francecentral",
         string resourceGroup = "rg-sepiabox",
         string postgresState = "Ready",
-        int timeoutSeconds = 30) =>
+        int timeoutSeconds = 30,
+        string execution = "sepiabox-migrate-run1",
+        string stop = "") =>
         RunAsync("bash", [Path.Combine(Repository.Root, "scripts", "deploy.sh")], new()
         {
             ["PATH"] = _stubs + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
@@ -190,6 +236,8 @@ public sealed class DeployScriptTests : IDisposable
             ["STUB_LOCATION"] = location,
             ["STUB_RESOURCE_GROUP"] = resourceGroup,
             ["STUB_PG_STATE"] = postgresState,
+            ["STUB_EXECUTION"] = execution,
+            ["STUB_STOP"] = stop,
             ["SEPIABOX_MIGRATE_TIMEOUT_SECONDS"] = timeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["SEPIABOX_MIGRATE_POLL_SECONDS"] = "0.1",
         });
