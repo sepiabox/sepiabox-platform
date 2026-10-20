@@ -99,23 +99,24 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-013 | [Filter the library with search DSL v1](S-013-filter-the-library-with-search-dsl-v1.md) | Search | S-012 | High | M | `todo` |
 | S-016 | [Search photos by description](S-016-search-photos-by-description.md) | Search | S-013, S-015 | High | M | `todo` |
 
-### Sprint 8 — Questions
+### Sprint 8 — Questions and a count reference
 
-**Demonstrable increment:** Description search works in Azure; ask "videos from Lisbon in December 2019" (or in Portuguese) and get the right photos and videos, checked against a golden set.
+**Demonstrable increment:** Description search works in Azure; ask "videos from Lisbon in December 2019" (or in Portuguese) and get the right photos and videos, checked against a golden set; `sepiabox-ingest report` counts unique assets in a work folder, the reference for correct counts.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-056 | [Ship the CLIP text model with the web in Azure](S-056-ship-the-clip-text-model-with-the.md) | Search | S-016, S-032 | High | S | `todo` |
 | S-025 | [Ask questions in English or Brazilian Portuguese with Claude Haiku](S-025-ask-questions-in-english-or-brazilian-portuguese.md) | Questions | S-016, S-044 | Medium | M | `todo` |
+| S-062 | [Count unique assets in a work folder](S-062-count-unique-assets-in-a-work-folder.md) | Local ingest | S-004, S-043 | High | S | `todo` |
 
 ### Sprint 9 — Counting answers and MVP acceptance (end of the MVP)
 
-**Demonstrable increment:** Ask "How many videos did we take in 2019?" and get the correct number; an end-to-end test takes a generated folder from `scan` to answers and every count matches; the owner compares a few counts on the real data in Azure with `scan`. **End of the MVP.**
+**Demonstrable increment:** Ask "How many videos did we take in 2019?" and get the correct number; an end-to-end test takes a generated folder from `process` to answers and every count matches the unique-asset report; the owner compares a few counts on the real data in Azure with `sepiabox-ingest report`. **End of the MVP.**
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-026 | [Answer counting questions](S-026-answer-counting-questions.md) | Questions | S-025 | Medium | M | `todo` |
-| S-054 | [Accept the MVP from drive to answers](S-054-accept-the-mvp-from-drive-to-answers.md) | Questions | S-026, S-061, S-012 | High | M | `todo` |
+| S-054 | [Accept the MVP from drive to answers](S-054-accept-the-mvp-from-drive-to-answers.md) | Questions | S-026, S-061, S-062, S-012 | High | M | `todo` |
 
 ### After the MVP
 
@@ -236,7 +237,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Epic | Stories |
 |---|---|
 | Foundation | S-001, S-003, S-050, S-051 |
-| Local ingest | S-002, S-004, S-005, S-006, S-007, S-043, S-053, S-060 |
+| Local ingest | S-002, S-004, S-005, S-006, S-007, S-043, S-053, S-060, S-062 |
 | Cloud catalog | S-008, S-012, S-057, S-059 |
 | Web app | S-009, S-010, S-011, S-044, S-055 |
 | Search | S-013, S-014, S-015, S-016, S-017, S-041, S-056 |
@@ -252,8 +253,8 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 ## Validation
 
-- **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-061 were added with D-050, D-051, D-053 and the reviews of D-054; the sprints were re-cut by D-054); there are no cycles and no forward dependencies (checked by script when this index is generated).
-- **Size:** 20 stories S, 41 M, none L.
+- **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-062 were added with D-050, D-051, D-053 and the reviews of D-054; the sprints were re-cut by D-054); there are no cycles and no forward dependencies (checked by script when this index is generated).
+- **Size:** 21 stories S, 41 M, none L.
 - **Sprints:** 21 sprints. Sprints 3–21 hold 2 or 3 stories each (M + M, or up to 3 when some are S, D-054); Sprints 1 (11 stories) and 2 (7) gather the work done before D-054.
 - **Decisions covered:** D-001 to D-024 in [`decisions.md`](../decisions.md) are applied: each is cited in the technical notes of at least one story, except D-021, which this backlog itself applies.
 - Story status is kept up to date by each story's PR (see [How to use](#how-to-use)).
@@ -278,6 +279,6 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 - **Epics:** 14
 - **Sprints:** 21
-- **Stories:** 61
-- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (35 stories), with the external drive as the only source; Sprints 10–21 (26 stories) come after it. What is left of the MVP (17 stories): S-044, S-055, S-053, S-032, S-058, S-033, S-034, S-035, S-012, S-059, S-061, S-013, S-016, S-056, S-025, S-026, S-054; its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
+- **Stories:** 62
+- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (36 stories), with the external drive as the only source; Sprints 10–21 (26 stories) come after it. What is left of the MVP (18 stories): S-044, S-055, S-053, S-032, S-058, S-033, S-034, S-035, S-012, S-059, S-061, S-013, S-016, S-056, S-025, S-062, S-026, S-054; its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
 - **Critical path (13 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-032 → S-058 → S-033 → S-050 → S-036 → S-038, and others as long: the same chain ending in S-036 → S-039, or in S-050 → S-051 → S-040.

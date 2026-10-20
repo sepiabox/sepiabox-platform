@@ -34,7 +34,7 @@ Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsof
 | Project | Runs on | Responsibility |
 |---|---|---|
 | `Sepiabox.Pipeline` | library | Processing stages: classification, hashing, metadata, thumbnails, video, embeddings, faces. Does not know where a file comes from. |
-| `Sepiabox.Ingest` (`sepiabox-ingest`) | user's PC | `scan`, `process`, `upload`, `models download`. Processes the drive locally and uploads only what is new. |
+| `Sepiabox.Ingest` (`sepiabox-ingest`) | user's PC | `scan`, `process`, `upload`, `report` (unique assets in a work folder, S-062), `models download`. Processes the drive locally and uploads only what is new. |
 | `Sepiabox.Catalog` | library | EF Core + Npgsql: schema, migrations, queries. |
 | `Sepiabox.Storage` | library | The project's storage and queue interfaces (`IBlobStore`, `IBlobEventQueue`), `BlobLayout`, and their Azure implementations (D-051, from S-050). |
 | `Sepiabox.Worker` (`sepiabox-worker`) | Container Apps job | Imports manifests, processes files that arrive through the cloud, groups events, syncs cloud sources. |
