@@ -53,6 +53,19 @@ internal static class GeoNamesSample
         folder.Write("admin1CodesASCII.txt", Encoding.UTF8.GetBytes(Admin1)),
         folder.Write("countryInfo.txt", Encoding.UTF8.GetBytes(Countries)));
 
+    /// <summary>cities500.zip as GeoNames serves it: one <c>cities500.txt</c> inside.</summary>
+    public static byte[] Zip(int count = 5)
+    {
+        using var buffer = new MemoryStream();
+        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        using (var writer = new StreamWriter(zip.CreateEntry("cities500.txt").Open(), Encoding.UTF8))
+        {
+            writer.Write(CitiesText(count));
+        }
+
+        return buffer.ToArray();
+    }
+
     public static string WriteZip(TempFolder folder)
     {
         var path = Path.Combine(folder.Path, "cities500.zip");

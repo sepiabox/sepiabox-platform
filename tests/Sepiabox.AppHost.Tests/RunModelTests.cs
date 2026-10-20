@@ -18,5 +18,6 @@ public sealed class RunModelTests
         Assert.DoesNotContain("registry", names);
         Assert.DoesNotContain("aca", names);
         Assert.DoesNotContain("migrate", names);
+        Assert.DoesNotContain("geonames", names);
     }
 }

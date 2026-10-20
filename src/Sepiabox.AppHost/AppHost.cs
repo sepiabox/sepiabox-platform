@@ -115,6 +115,18 @@ else
         .WithRoleAssignments(databaseVault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureMigrateJob);
 
+    // Loads GeoNames and names places (S-059, D-067), started by hand. It writes the geonames table, which the
+    // application role may only read (D-066), so it connects as the administrator, with migrate's identity: the
+    // same single role on the database vault, and nothing else.
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.GeoNamesResourceName)
+        .WithArgs("geonames", "update")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(catalog)
+        .WithAzureUserAssignedIdentity(migrateIdentity)
+        // Migrate's role on the database vault, declared there.
+        .WithRoleAssignments(databaseVault, [])
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureGeoNamesJob);
+
     // Manifests imported when they arrive (S-033, D-063): Event Grid sends the manifests container's
     // BlobCreated events to a Basic Service Bus queue, and an event-driven job imports them. Neither import
     // job ever migrates; both connect as the application role.

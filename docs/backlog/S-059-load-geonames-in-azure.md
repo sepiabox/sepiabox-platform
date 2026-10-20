@@ -15,7 +15,7 @@ S-012 loads GeoNames and resolves places with worker commands. The cloud catalog
 - A schedule (GeoNames changes slowly; a manual run is enough).
 
 ### Acceptance criteria
-- [ ] Given the generated Bicep, then it has the `sepiabox-geonames` job with a manual trigger, the worker image, the catalog connection from Key Vault and no schedule.
+- [x] Given the generated Bicep, then it has the `sepiabox-geonames` job with a manual trigger, the worker image, the catalog connection from Key Vault and no schedule.
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), when the job has run and a photo taken in Lisbon is imported, then its detail page shows "Lisbon".
 
 ### Technical notes

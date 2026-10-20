@@ -8,6 +8,8 @@ public enum WorkerAction
     ImportOnce,
     ImportFromQueue,
     GeoNamesLoad,
+    GeoNamesDownload,
+    GeoNamesUpdate,
     PlacesRefresh,
 }
 
@@ -17,8 +19,9 @@ public sealed record GeoNamesSource(string Cities, string Admin1, string Countri
 /// <param name="Action">What to run.</param>
 /// <param name="MigrateFirst">Apply pending migrations before importing (D-013).</param>
 /// <param name="GeoNames">The files to load, for <see cref="WorkerAction.GeoNamesLoad"/> only.</param>
+/// <param name="Folder">Where <see cref="WorkerAction.GeoNamesDownload"/> writes the files.</param>
 /// <param name="AllPlaces">Name every asset's place again, for <see cref="WorkerAction.PlacesRefresh"/> only.</param>
-public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNamesSource? GeoNames = null, bool AllPlaces = false)
+public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNamesSource? GeoNames = null, bool AllPlaces = false, string? Folder = null)
 {
     public const string Usage = """
         Usage: sepiabox-worker <command>
@@ -33,6 +36,11 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
           geonames load <cities500.zip|txt> --admin1 <admin1CodesASCII.txt> --countries <countryInfo.txt>
                                      Replace the GeoNames cities with these dump files
                                      (https://download.geonames.org/export/dump/, CC BY 4.0).
+          geonames download <folder> Download those three files from GeoNames into an existing folder,
+                                     logging each file's SHA-256, size and date.
+          geonames update            Download the files into a temporary folder, load them unless they
+                                     have fewer than 150,000 cities or 10% fewer than loaded now, then
+                                     run places refresh. What the sepiabox-geonames job runs (S-059).
           places refresh [--all]     Name the place of assets that have a location but no place yet;
                                      --all names every asset with a location again (after a newer dump).
         """;
@@ -61,6 +69,12 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                 return true;
             case ["geonames", "load", var cities, .. var options] when !cities.StartsWith("--", StringComparison.Ordinal):
                 return TryParseGeoNamesLoad(cities, options, out command, out error);
+            case ["geonames", "download", var folder] when !folder.StartsWith("--", StringComparison.Ordinal):
+                command = new WorkerCommand(WorkerAction.GeoNamesDownload, false, Folder: folder);
+                return true;
+            case ["geonames", "update"]:
+                command = new WorkerCommand(WorkerAction.GeoNamesUpdate, false);
+                return true;
             case ["places", "refresh"]:
                 command = new WorkerCommand(WorkerAction.PlacesRefresh, false);
                 return true;

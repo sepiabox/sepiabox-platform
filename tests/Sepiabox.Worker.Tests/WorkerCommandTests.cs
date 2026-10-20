@@ -39,6 +39,15 @@ public sealed class WorkerCommandTests
     }
 
     [Fact]
+    public void Parses_geonames_download_and_update()
+    {
+        Assert.True(WorkerCommand.TryParse(["geonames", "download", "dump"], out var download, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.GeoNamesDownload, false, Folder: "dump"), download);
+        Assert.True(WorkerCommand.TryParse(["geonames", "update"], out var update, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.GeoNamesUpdate, false), update);
+    }
+
+    [Fact]
     public void Parses_places_refresh()
     {
         Assert.True(WorkerCommand.TryParse(["places", "refresh"], out var command, out _));
@@ -66,6 +75,10 @@ public sealed class WorkerCommandTests
         new[] { "geonames", "load", "cities500.zip", "--admin1", "a.txt", "--admin1", "b.txt", "--countries", "c.txt" },
         new[] { "geonames", "load", "cities500.zip", "--admin1", "a.txt", "--countries", "c.txt", "--migrate", "x" },
         new[] { "geonames", "load", "--admin1", "a.txt", "--countries", "c.txt" },
+        new[] { "geonames", "download" },
+        new[] { "geonames", "download", "--to", "dump" },
+        new[] { "geonames", "download", "a", "b" },
+        new[] { "geonames", "update", "--migrate" },
         new[] { "places" },
         new[] { "places", "refresh", "--force" },
         new[] { "places", "refresh", "--all", "--all" },

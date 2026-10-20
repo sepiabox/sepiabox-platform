@@ -18,6 +18,7 @@ public sealed class DeployScriptTests : IDisposable
     private const string DeployWeb = "azd deploy web --no-prompt";
     private const string DeployImport = "azd deploy import --no-prompt";
     private const string DeployImportAll = "azd deploy import-all --no-prompt";
+    private const string DeployGeoNames = "azd deploy geonames --no-prompt";
     private const string PauseQueue =
         $"az servicebus queue update --resource-group {ShutdownRunbook.ResourceGroup} --namespace-name {ShutdownRunbook.ServiceBusNamespace} --name {ShutdownRunbook.Queue} --status ReceiveDisabled --output none";
     private const string ResumeQueue =
@@ -105,6 +106,8 @@ public sealed class DeployScriptTests : IDisposable
                 JobStatus,
                 DeployImport,
                 DeployImportAll,
+                // The manual GeoNames job runs the new image too (S-059), before the queue receives again.
+                DeployGeoNames,
                 ResumeQueue,
                 DeployWeb,
             ],
@@ -112,7 +115,7 @@ public sealed class DeployScriptTests : IDisposable
                 && !call.StartsWith("az group", StringComparison.Ordinal)
                 && !call.StartsWith("az postgres", StringComparison.Ordinal)));
         // What azure.yaml's predeploy hook checks, so that only this script deploys.
-        Assert.Equal(["1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
+        Assert.Equal(["1", "1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
         Assert.Contains("Migrations applied.", result.Output, StringComparison.Ordinal);
     }
 
@@ -143,6 +146,7 @@ public sealed class DeployScriptTests : IDisposable
         Assert.DoesNotContain(DeployWeb, Calls());
         Assert.DoesNotContain(DeployImport, Calls());
         Assert.DoesNotContain(DeployImportAll, Calls());
+        Assert.DoesNotContain(DeployGeoNames, Calls());
         Assert.Contains(
             $"ended as {statuses.Split(' ')[^1]}; the web was not deployed.", result.Error, StringComparison.Ordinal);
         // The old import image still expects the old schema, which a failed migration leaves.
@@ -163,6 +167,7 @@ public sealed class DeployScriptTests : IDisposable
         Assert.DoesNotContain(DeployWeb, Calls());
         Assert.DoesNotContain(DeployImport, Calls());
         Assert.DoesNotContain(DeployImportAll, Calls());
+        Assert.DoesNotContain(DeployGeoNames, Calls());
         Assert.Contains("did not finish in 1s", result.Error, StringComparison.Ordinal);
         Assert.Contains(message, result.Error, StringComparison.Ordinal);
         Assert.Contains("may be partly applied", result.Error, StringComparison.Ordinal);
@@ -181,6 +186,18 @@ public sealed class DeployScriptTests : IDisposable
             "The import jobs were not updated, so the queue manifests is still paused. Run this script again, or resume it once the import jobs run the new image: az servicebus queue update --resource-group rg-sepiabox --namespace-name sepiabox-sb --name manifests --status Active",
             result.Error,
             StringComparison.Ordinal);
+        Assert.DoesNotContain(DeployWeb, Calls());
+    }
+
+    [UnixFact]
+    public async Task Deploy_resumes_the_queue_but_leaves_the_web_alone_when_the_geonames_job_is_not_updated()
+    {
+        var result = await RunDeployAsync("Succeeded", failingDeploy: "geonames");
+
+        Assert.NotEqual(0, result.ExitCode);
+        // The import jobs already run the new image, so they may receive.
+        Assert.Equal([PauseQueue, ResumeQueue], Calls().Where(call => call.StartsWith("az servicebus", StringComparison.Ordinal)));
+        Assert.Equal(ResumeQueue, Calls()[^1]);
         Assert.DoesNotContain(DeployWeb, Calls());
     }
 
@@ -237,6 +254,7 @@ public sealed class DeployScriptTests : IDisposable
         Assert.DoesNotContain(DeployWeb, Calls());
         Assert.DoesNotContain(DeployImport, Calls());
         Assert.DoesNotContain(DeployImportAll, Calls());
+        Assert.DoesNotContain(DeployGeoNames, Calls());
     }
 
     [UnixFact]

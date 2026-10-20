@@ -87,7 +87,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-012 | [Name places with GeoNames](S-012-name-places-with-geonames.md) | Cloud catalog | S-008 | High | M | `done` |
-| S-059 | [Load GeoNames in Azure](S-059-load-geonames-in-azure.md) | Cloud catalog | S-012, S-058 | High | S | `todo` |
+| S-059 | [Load GeoNames in Azure](S-059-load-geonames-in-azure.md) | Cloud catalog | S-012, S-058 | High | S | `done` |
 | S-061 | [Generate a fixture library with known contents](S-061-generate-a-fixture-library-with-known.md) | Questions | S-004, S-053 | High | S | `todo` |
 
 ### Sprint 7 — Filters and description search
