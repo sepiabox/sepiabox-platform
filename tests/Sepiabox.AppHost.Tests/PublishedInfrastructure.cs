@@ -29,8 +29,12 @@ public sealed class PublishedInfrastructure : IAsyncLifetime
 
         Manifest = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(OutputPath, "aspire-manifest.json"), cts.Token))!
             .AsObject();
+        // Bicep is written with the platform's line endings; the block parsing below expects "\n".
         Modules = Directory.GetFiles(OutputPath, "*.bicep")
-            .ToDictionary(path => Path.GetFileName(path), File.ReadAllText, StringComparer.Ordinal);
+            .ToDictionary(
+                path => Path.GetFileName(path),
+                path => File.ReadAllText(path).ReplaceLineEndings("\n"),
+                StringComparer.Ordinal);
     }
 
     public Task DisposeAsync()
