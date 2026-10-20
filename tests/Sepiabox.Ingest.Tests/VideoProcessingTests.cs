@@ -219,8 +219,8 @@ public class VideoProcessingTests
         var marker = Path.Combine(tools.Path, "seek-misbehaved");
         // The real tools, except that ffmpeg misbehaves when asked for a frame anywhere but the start, and
         // leaves a marker to show it did.
-        FakeTool(tools, "ffprobe", $"exec '{s_tools.Ffprobe}' \"$@\"");
-        FakeTool(tools, "ffmpeg", $$"""
+        TestTools.FakeTool(tools, "ffprobe", $"exec '{s_tools.Ffprobe}' \"$@\"");
+        TestTools.FakeTool(tools, "ffmpeg", $$"""
             seek=""; previous=""
             for last; do
               if [ "$previous" = "-ss" ]; then seek="$last"; fi
@@ -257,8 +257,8 @@ public class VideoProcessingTests
         using var tools = new TempFolder();
         MakeVideo(Path.Combine(drive.Path, "clip.mp4"), 640, 360, seconds: 1);
         // Stand-ins that succeed without writing anything, as FFmpeg does when a seek decodes no frame.
-        FakeTool(tools, "ffprobe", """echo '{ "streams": [ { "width": 640, "height": 360 } ], "format": { "duration": "1.0" } }'""");
-        FakeTool(tools, "ffmpeg", "exit 0");
+        TestTools.FakeTool(tools, "ffprobe", """echo '{ "streams": [ { "width": 640, "height": 360 } ], "format": { "duration": "1.0" } }'""");
+        TestTools.FakeTool(tools, "ffmpeg", "exit 0");
 
         var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
 
@@ -272,8 +272,8 @@ public class VideoProcessingTests
     {
         using var drive = new TempFolder();
         using var work = new TempFolder();
-        // A camcorder file holding only sound: nothing to show, nothing to catalogue.
-        MakeSoundOnly(Path.Combine(drive.Path, "sound.mod"));
+        // A phone's sound recording saved as .mp4: nothing to show, nothing to catalogue.
+        MakeSoundOnly(Path.Combine(drive.Path, "memo.mp4"));
         MakeVideo(Path.Combine(drive.Path, "party.mp4"), 640, 360, seconds: 1);
 
         var first = Process(drive, work);
@@ -287,13 +287,28 @@ public class VideoProcessingTests
     }
 
     [Fact]
+    public void Reports_a_sound_only_mpeg_file_as_a_problem_because_it_looks_like_camcorder_video()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // MPEG with sound and no picture: more likely a camcorder clip that lost its video than a sound file.
+        Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "mp2", "-f", "mpeg", Path.Combine(drive.Path, "MOV001.MOD")]);
+
+        var result = Process(drive, work);
+
+        Assert.Contains("may be damaged", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Empty(result.LeftOut);
+        Assert.Single(ReadManifests(work));
+    }
+
+    [Fact]
     public void Removes_the_manifest_and_derivatives_once_ffmpeg_finds_no_video_in_any_copy()
     {
         using var drive = new TempFolder();
         using var work = new TempFolder();
-        MakeSoundOnly(Path.Combine(drive.Path, "sound.mod"));
+        MakeSoundOnly(Path.Combine(drive.Path, "memo.mp4"));
         Directory.CreateDirectory(Path.Combine(drive.Path, "copy"));
-        File.Copy(Path.Combine(drive.Path, "sound.mod"), Path.Combine(drive.Path, "copy", "sound.mod"));
+        File.Copy(Path.Combine(drive.Path, "memo.mp4"), Path.Combine(drive.Path, "copy", "memo.mp4"));
         var withoutFfmpeg = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
         var pending = Assert.Single(ReadManifests(work));
         Assert.Equal((2, 2), (withoutFfmpeg.VideosPending, pending.Sources.Count));
@@ -306,7 +321,7 @@ public class VideoProcessingTests
 
         Assert.Empty(withFfmpeg.Problems);
         Assert.Equal((0, 0, 2), (withFfmpeg.Processed, withFfmpeg.VideosPending, withFfmpeg.NotVideo));
-        Assert.All(withFfmpeg.LeftOut, file => Assert.Equal(NoVideoStreamException.NoStream, file.Reason));
+        Assert.All(withFfmpeg.LeftOut, file => Assert.Equal(new LeftOutFile(file.Path, NoVideoReason.NoStream, Earlier: false), file));
         Assert.Empty(ReadManifests(work));
         Assert.False(Directory.Exists(derivatives));
     }
@@ -319,13 +334,13 @@ public class VideoProcessingTests
         using var tools = new TempFolder();
         MakeVideo(Path.Combine(drive.Path, "late.mp4"), 640, 360, seconds: 1);
         // An ffprobe that, like FFmpeg on an MPEG file that declares its video late, sees no video at first.
-        FakeTool(tools, "ffprobe", $$"""
+        TestTools.FakeTool(tools, "ffprobe", $$"""
             for argument; do
               if [ "$argument" = "-probesize" ]; then exec '{{s_tools.Ffprobe}}' "$@"; fi
             done
             echo '{ "streams": [], "format": {} }'
             """);
-        FakeTool(tools, "ffmpeg", $"exec '{s_tools.Ffmpeg}' \"$@\"");
+        TestTools.FakeTool(tools, "ffmpeg", $"exec '{s_tools.Ffmpeg}' \"$@\"");
 
         var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
 
@@ -335,27 +350,27 @@ public class VideoProcessingTests
     }
 
     [Fact]
-    public void Keeps_the_manifest_for_the_other_copy_when_only_one_copy_is_left_out()
+    public void Keeps_sources_not_seen_in_this_run_when_another_copy_is_left_out()
     {
         using var drive = new TempFolder();
         using var work = new TempFolder();
         using var elsewhere = new TempFolder();
-        MakeSoundOnly(Path.Combine(drive.Path, "sound.mod"));
+        MakeSoundOnly(Path.Combine(drive.Path, "memo.mp4"));
         Directory.CreateDirectory(Path.Combine(drive.Path, "copy"));
-        File.Copy(Path.Combine(drive.Path, "sound.mod"), Path.Combine(drive.Path, "copy", "sound.mod"));
+        File.Copy(Path.Combine(drive.Path, "memo.mp4"), Path.Combine(drive.Path, "copy", "memo.mp4"));
         ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
         var id = Assert.Single(ReadManifests(work)).Id;
         var derivatives = Path.Combine(work.Path, "derivatives", id);
         Directory.CreateDirectory(derivatives);
         // The copy is away during the next run, so only the first path is found to hold no video.
-        File.Move(Path.Combine(drive.Path, "copy", "sound.mod"), Path.Combine(elsewhere.Path, "sound.mod"));
+        File.Move(Path.Combine(drive.Path, "copy", "memo.mp4"), Path.Combine(elsewhere.Path, "memo.mp4"));
 
         var withFfmpeg = Process(drive, work);
 
         Assert.Equal(1, withFfmpeg.NotVideo);
         var remaining = Assert.Single(ReadManifests(work));
         Assert.Equal(id, remaining.Id);
-        Assert.Equal("copy/sound.mod", Assert.Single(remaining.Sources).Path);
+        Assert.Equal("copy/memo.mp4", Assert.Single(remaining.Sources).Path);
         Assert.True(Directory.Exists(derivatives));
     }
 
@@ -373,22 +388,61 @@ public class VideoProcessingTests
 
         Assert.Empty(result.Problems);
         Assert.Equal((0, 0), (result.Processed, result.VideosPending));
-        Assert.Equal(TrackerModule.Reason, Assert.Single(result.LeftOut).Reason);
+        Assert.Equal(NoVideoReason.TrackerModule, Assert.Single(result.LeftOut).Reason);
         Assert.Empty(ReadManifests(work));
     }
 
-    [Fact]
-    public void Lists_a_file_left_out_by_an_earlier_run_again_without_reading_it()
+    [UnixFact]
+    public void Reads_a_left_out_file_again_only_when_asked_to_retry_left_out_files()
     {
         using var drive = new TempFolder();
         using var work = new TempFolder();
-        drive.Write("song.mod", TestTrackerModules.Module());
+        using var tools = new TempFolder();
+        var sound = Path.Combine(drive.Path, "memo.mp4");
+        MakeSoundOnly(sound);
         Process(drive, work);
+        // The real tools, except that every probe leaves a line behind, so a test can tell whether the file was read.
+        var probes = Path.Combine(tools.Path, "probes");
+        TestTools.FakeTool(tools, "ffprobe", $"echo x >> '{probes}'; exec '{s_tools.Ffprobe}' \"$@\"");
+        TestTools.FakeTool(tools, "ffmpeg", $"exec '{s_tools.Ffmpeg}' \"$@\"");
+        var options = new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None);
 
-        var second = Process(drive, work);
+        var unchanged = ProcessCommand.Run(options);
 
-        Assert.Equal((0, 0), (second.Processed, second.Skipped));
-        Assert.Equal(Path.Combine(drive.Path, "song.mod"), Assert.Single(second.LeftOut).Path);
+        Assert.False(File.Exists(probes), "An unchanged left-out file was read again.");
+        Assert.Equal(new LeftOutFile(sound, NoVideoReason.NoStream, Earlier: true), Assert.Single(unchanged.LeftOut));
+
+        var retried = ProcessCommand.Run(options with { RetryLeftOut = true });
+
+        Assert.True(File.Exists(probes), "--retry-left-out did not read the file again.");
+        Assert.Equal(new LeftOutFile(sound, NoVideoReason.NoStream, Earlier: false), Assert.Single(retried.LeftOut));
+        Assert.Empty(retried.Problems);
+    }
+
+    [UnixFact]
+    public void Reports_an_mpeg_file_in_which_ffprobe_finds_no_video_as_a_problem_and_keeps_its_manifest()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        byte[] packHeader = [0x00, 0x00, 0x01, 0xBA, 0x44, 0x00, 0x04, 0x00, 0x04, 0x01, 0x01, 0x89, 0xC3, 0xF8];
+        drive.Write("MOV001.MOD", [.. packHeader, .. new byte[64 * 1024]]);
+        // An ffprobe that opens the file but lists no streams, as it might for a camcorder file damaged mid-way.
+        TestTools.FakeTool(tools, "ffprobe", """echo '{ "streams": [], "format": {} }'""");
+        TestTools.FakeTool(tools, "ffmpeg", "exit 1");
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Contains("may be damaged", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Empty(result.LeftOut);
+        Assert.Single(ReadManifests(work));
+    }
+
+    [Fact]
+    public void Finds_ffmpeg_and_ffprobe_in_the_folder_every_test_passes()
+    {
+        Assert.Equal(s_ffmpegFolder, Path.GetDirectoryName(s_tools.Ffprobe));
+        Assert.Equal(s_tools, FfmpegTools.Find(s_ffmpegFolder));
     }
 
     [Fact]
@@ -420,8 +474,9 @@ public class VideoProcessingTests
         ]);
     }
 
+    // Sound only, in MP4 rather than MPEG, so it can be left out (MPEG with no picture is reported as damaged).
     private static void MakeSoundOnly(string path) =>
-        Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "mp2", "-f", "mpeg", path]);
+        Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "aac", "-f", "mp4", path]);
 
     private static void AssertPosterColour(TempFolder work, Manifest manifest, bool red)
     {
@@ -442,17 +497,6 @@ public class VideoProcessingTests
         var topLeft = pixels.GetPixel(20, 20).ToColor()!;
         Assert.True(topRight.B > 200 && topRight.R < 60, $"Expected blue at the top right, got {topRight}.");
         Assert.True(topLeft.R > 200 && topLeft.B < 60, $"Expected red at the top left, got {topLeft}.");
-    }
-
-    private static void FakeTool(TempFolder folder, string name, string script)
-    {
-        var path = Path.Combine(folder.Path, name);
-        File.WriteAllText(path, "#!/bin/sh\n" + script + "\n");
-        // Only [UnixFact] and [UnixTheory] tests call this; the guard keeps the Windows build free of platform warnings.
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
     }
 
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>

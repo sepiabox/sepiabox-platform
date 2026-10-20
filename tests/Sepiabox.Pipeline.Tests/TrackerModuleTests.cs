@@ -48,7 +48,39 @@ public class TrackerModuleTests
         module[2] = 0x01;
         module[3] = 0xBA;
 
-        Assert.False(TrackerModule.IsMatch(new MemoryStream(module)));
+        using var stream = new MemoryStream(module);
+        Assert.False(TrackerModule.IsMatch(stream));
+    }
+
+    [Fact]
+    public void Does_not_recognise_a_module_when_the_file_starts_with_any_mpeg_start_code()
+    {
+        var module = TestTrackerModules.Module("M.K.");
+        module[0] = 0x00;
+        module[1] = 0x00;
+        module[2] = 0x01;
+        module[3] = 0xB3;
+
+        using var stream = new MemoryStream(module);
+        Assert.False(TrackerModule.IsMatch(stream));
+    }
+
+    [Fact]
+    public void Puts_the_stream_position_back_when_it_has_looked()
+    {
+        using var stream = new MemoryStream(TestTrackerModules.Module("M.K."));
+        stream.Position = 42;
+
+        Assert.True(TrackerModule.IsMatch(stream));
+        Assert.Equal(42, stream.Position);
+    }
+
+    [Fact]
+    public void Does_not_recognise_a_module_when_the_stream_cannot_seek()
+    {
+        using var stream = new ForwardOnlyStream(TestTrackerModules.Module("M.K."));
+
+        Assert.False(TrackerModule.IsMatch(stream));
     }
 
     [Fact]
@@ -58,7 +90,8 @@ public class TrackerModuleTests
         module[0] = 0x47;
         module[188] = 0x47;
 
-        Assert.False(TrackerModule.IsMatch(new MemoryStream(module)));
+        using var stream = new MemoryStream(module);
+        Assert.False(TrackerModule.IsMatch(stream));
     }
 
     [Fact]
@@ -67,7 +100,8 @@ public class TrackerModuleTests
         var module = TestTrackerModules.Module("M.K.");
         module[0] = (byte)'G';
 
-        Assert.True(TrackerModule.IsMatch(new MemoryStream(module)));
+        using var stream = new MemoryStream(module);
+        Assert.True(TrackerModule.IsMatch(stream));
     }
 
     [Theory]
@@ -77,7 +111,8 @@ public class TrackerModuleTests
     {
         var module = TestTrackerModules.Module("M.K.")[..length];
 
-        Assert.Equal(expected, TrackerModule.IsMatch(new MemoryStream(module)));
+        using var stream = new MemoryStream(module);
+        Assert.Equal(expected, TrackerModule.IsMatch(stream));
     }
 
     [Fact]

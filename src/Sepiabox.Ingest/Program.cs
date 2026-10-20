@@ -27,6 +27,8 @@ const string Usage = """
       --ffmpeg <folder>     Folder with ffmpeg and ffprobe. Default: look on the PATH.
       --hw nvenc            Encode the 720p versions on an NVIDIA GPU.
       --models <folder>     Folder with the downloaded models. Default: where models download puts them.
+      --retry-left-out      Read again the files earlier runs left out as holding no video.
+      --list-left-out       List every file earlier runs left out, not just how many.
 
     Options for models download:
       --models <folder>     Where to put the models. Default: %LOCALAPPDATA%\Sepiabox\models on
@@ -119,12 +121,9 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
         Console.Error.WriteLine($"Warning: {result.Warning}");
     }
 
-    // Not failures, but never catalogued: listed so each one can be checked (operations.md says how to retry).
-    foreach (var file in result.LeftOut)
-    {
-        Console.Error.WriteLine($"  Left out {file.Path}: {file.Reason}");
-    }
 
+    // Next to the problems, on the same output: not failures, but never catalogued, so each one can be checked.
+    LeftOutReport.Write(result.LeftOut, options.ListLeftOut, Console.Out);
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");

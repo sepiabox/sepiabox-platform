@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
+using Sepiabox.Pipeline.Media;
 
 namespace Sepiabox.Pipeline.Video;
 
@@ -40,21 +41,18 @@ public sealed class VideoProcessingException : Exception
 }
 
 /// <summary>
-/// The file holds no video, such as a tracker-music <c>.mod</c>, a sound-only recording or audio with cover art.
+/// The file holds no video, such as a sound-only recording or audio with cover art; <see cref="Reason"/> says which.
 /// Not a <see cref="VideoProcessingException"/>: it is not a failure, so no handler of those may swallow it.
 /// </summary>
 public sealed class NoVideoStreamException : Exception
 {
-    public const string NoStream = "No video stream, even with a longer probe.";
-    public const string CoverArtOnly = "Only cover art, no video stream.";
-
     public NoVideoStreamException()
-        : base(NoStream)
+        : this(NoVideoReason.NoStream)
     {
     }
 
     public NoVideoStreamException(string message)
-        : base(message)
+        : this(NoVideoReason.NoStream, message)
     {
     }
 
@@ -62,6 +60,14 @@ public sealed class NoVideoStreamException : Exception
         : base(message, innerException)
     {
     }
+
+    public NoVideoStreamException(NoVideoReason reason, string? message = null)
+        : base(message ?? (reason == NoVideoReason.CoverArtOnly ? "Only cover art, no video stream." : "No video stream."))
+    {
+        Reason = reason;
+    }
+
+    public NoVideoReason Reason { get; } = NoVideoReason.NoStream;
 }
 
 /// <summary>Where <c>ffmpeg</c> and <c>ffprobe</c> live. FFmpeg is not bundled; the user installs it.</summary>
@@ -105,18 +111,42 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
     ];
 
     /// <summary>
-    /// Throws <see cref="NoVideoStreamException"/> only when a second, longer probe also finds no video: a file
-    /// that is left out is never catalogued, and some MPEG files declare their video stream late.
+    /// The size, duration and video stream of <paramref name="path"/>. A file that is left out is never catalogued,
+    /// so <see cref="NoVideoStreamException"/> is thrown only on strong evidence:
+    /// <list type="bullet">
+    /// <item>When FFmpeg's default probe finds no video stream, or one without a picture size, a second probe reads
+    /// far more of the file: an MPEG file can start with a minute of sound before its first picture.</item>
+    /// <item>A file that looks like MPEG (<see cref="MpegSignature"/>) and still has no video is reported as
+    /// damaged (<see cref="VideoProcessingException"/>), not left out.</item>
+    /// </list>
+    /// Cover art is the file's whole content, so it is not probed again.
     /// </summary>
     public VideoProbe Probe(string path, CancellationToken cancellationToken = default)
     {
+        // A failing ffprobe throws from Run and is not probed again: the file cannot be read, however much of it.
+        var json = Run(tools.Ffprobe, FfmpegArguments.Probe(path), cancellationToken);
         try
         {
-            return FfmpegArguments.ParseProbe(Run(tools.Ffprobe, FfmpegArguments.Probe(path), cancellationToken));
+            return FfmpegArguments.ParseProbe(json);
         }
-        catch (NoVideoStreamException)
+        catch (Exception ex) when (ex is VideoProcessingException or NoVideoStreamException { Reason: NoVideoReason.NoStream })
         {
-            return FfmpegArguments.ParseProbe(Run(tools.Ffprobe, FfmpegArguments.Probe(path, thorough: true), cancellationToken));
+            // No video stream, no picture size, or output of an unexpected shape: read more of the file.
+        }
+
+        json = Run(tools.Ffprobe, FfmpegArguments.Probe(path, thorough: true), cancellationToken);
+        try
+        {
+            return FfmpegArguments.ParseProbe(json);
+        }
+        catch (NoVideoStreamException ex) when (ex.Reason == NoVideoReason.NoStream)
+        {
+            if (MpegSignature.IsMatch(path))
+            {
+                throw new VideoProcessingException("FFmpeg finds no video stream in this MPEG file, even with a longer probe; it may be damaged.");
+            }
+
+            throw new NoVideoStreamException(NoVideoReason.NoStream, "No video stream, even with a longer probe.");
         }
     }
 
@@ -319,15 +349,20 @@ public static class FfmpegArguments
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         // Cover art in a music file or a video container shows up as a one-picture video stream.
-        var footage = root.TryGetProperty("streams", out var streams)
-            ? streams.EnumerateArray().Select((stream, index) => (Stream: stream, Index: index)).Where(s => !IsAttachedPicture(s.Stream)).ToList()
+        var all = root.TryGetProperty("streams", out var streams)
+            ? streams.EnumerateArray().Select((stream, index) => (Stream: stream, Index: index)).ToList()
             : [];
-        if (footage.Count == 0)
+        if (all.Count == 0)
         {
-            throw new NoVideoStreamException(streams.ValueKind == JsonValueKind.Array && streams.GetArrayLength() > 0
-                ? NoVideoStreamException.CoverArtOnly
-                : NoVideoStreamException.NoStream);
+            throw new NoVideoStreamException(NoVideoReason.NoStream);
         }
+
+        if (all.All(s => IsAttachedPicture(s.Stream)))
+        {
+            throw new NoVideoStreamException(NoVideoReason.CoverArtOnly);
+        }
+
+        var footage = all.Where(s => !IsAttachedPicture(s.Stream)).ToList();
 
         var (stream, videoStream) = footage[0];
         if (!TryGetSize(stream, "width", out var width) || !TryGetSize(stream, "height", out var height))

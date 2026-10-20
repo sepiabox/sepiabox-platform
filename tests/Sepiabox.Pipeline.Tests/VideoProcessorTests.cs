@@ -1,3 +1,4 @@
+using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Pipeline.Tests;
@@ -133,7 +134,7 @@ public class VideoProcessorTests
     {
         const string Json = """{ "streams": [ { "width": 600, "height": 600, "disposition": { "attached_pic": 1 } } ], "format": { "duration": "180.0" } }""";
 
-        Assert.Equal(NoVideoStreamException.CoverArtOnly, Assert.Throws<NoVideoStreamException>(() => FfmpegArguments.ParseProbe(Json)).Message);
+        Assert.Equal(NoVideoReason.CoverArtOnly, Assert.Throws<NoVideoStreamException>(() => FfmpegArguments.ParseProbe(Json)).Reason);
     }
 
     [Fact]
@@ -161,7 +162,100 @@ public class VideoProcessorTests
     [Fact]
     public void Rejects_a_file_without_a_video_stream()
     {
-        Assert.Throws<NoVideoStreamException>(() => FfmpegArguments.ParseProbe("""{ "streams": [], "format": {} }"""));
+        Assert.Equal(NoVideoReason.NoStream, Assert.Throws<NoVideoStreamException>(() => FfmpegArguments.ParseProbe("""{ "streams": [], "format": {} }""")).Reason);
+    }
+
+    [UnixFact]
+    public void Probes_again_with_a_larger_window_when_the_first_probe_gives_no_picture_size()
+    {
+        using var temp = new TempFolder();
+        // As FFmpeg reports an MPEG file that starts with a minute of sound: the video stream, but no size yet.
+        var ffprobe = TestTools.FakeTool(temp, "ffprobe", """
+            for argument; do
+              if [ "$argument" = "-probesize" ]; then echo '{ "streams": [ { "width": 720, "height": 576 } ], "format": { "duration": "90.0" } }'; exit 0; fi
+            done
+            echo '{ "streams": [ { "width": 0, "height": 0 } ], "format": {} }'
+            """);
+        var clip = temp.Write("clip.mpg", [1, 2, 3, 4]);
+
+        var probe = new VideoProcessor(new FfmpegTools("ffmpeg", ffprobe)).Probe(clip);
+
+        Assert.Equal(new VideoProbe(720, 576, 90), probe);
+    }
+
+    [UnixTheory]
+    // A program stream pack header, another MPEG start code (a sequence header), transport stream sync bytes
+    // every 188 bytes, and AVCHD's time-stamped 192-byte packets.
+    [InlineData(new byte[] { 0x00, 0x00, 0x01, 0xBA }, 0)]
+    [InlineData(new byte[] { 0x00, 0x00, 0x01, 0xB3 }, 0)]
+    [InlineData(new byte[] { 0x47 }, 188)]
+    [InlineData(new byte[] { 0, 0, 0, 0, 0x47 }, 196)]
+    public void Reports_an_mpeg_file_without_video_as_damaged_rather_than_leaving_it_out(byte[] start, int secondSync)
+    {
+        using var temp = new TempFolder();
+        var ffprobe = TestTools.FakeTool(temp, "ffprobe", """echo '{ "streams": [], "format": {} }'""");
+        var bytes = new byte[4096];
+        start.CopyTo(bytes, 0);
+        if (secondSync > 0)
+        {
+            bytes[secondSync] = 0x47;
+        }
+
+        var clip = temp.Write("MOV001.MOD", bytes);
+
+        var error = Assert.Throws<VideoProcessingException>(() => new VideoProcessor(new FfmpegTools("ffmpeg", ffprobe)).Probe(clip));
+        Assert.Contains("may be damaged", error.Message, StringComparison.Ordinal);
+    }
+
+    [UnixFact]
+    public void Leaves_out_a_file_that_does_not_look_like_mpeg_when_no_probe_finds_video()
+    {
+        using var temp = new TempFolder();
+        var probes = Path.Combine(temp.Path, "probes");
+        var ffprobe = TestTools.FakeTool(temp, "ffprobe", $$"""
+            echo x >> '{{probes}}'
+            echo '{ "streams": [], "format": {} }'
+            """);
+        var clip = temp.Write("sound.mod", new byte[4096]);
+
+        var error = Assert.Throws<NoVideoStreamException>(() => new VideoProcessor(new FfmpegTools("ffmpeg", ffprobe)).Probe(clip));
+
+        Assert.Equal(NoVideoReason.NoStream, error.Reason);
+        Assert.Contains("even with a longer probe", error.Message, StringComparison.Ordinal);
+        Assert.Equal(2, File.ReadAllLines(probes).Length);
+    }
+
+    [UnixFact]
+    public void Does_not_probe_cover_art_again()
+    {
+        using var temp = new TempFolder();
+        var probes = Path.Combine(temp.Path, "probes");
+        var ffprobe = TestTools.FakeTool(temp, "ffprobe", $$"""
+            echo x >> '{{probes}}'
+            echo '{ "streams": [ { "width": 600, "height": 600, "disposition": { "attached_pic": 1 } } ], "format": {} }'
+            """);
+        var song = temp.Write("song.mp4", new byte[4096]);
+
+        var error = Assert.Throws<NoVideoStreamException>(() => new VideoProcessor(new FfmpegTools("ffmpeg", ffprobe)).Probe(song));
+
+        Assert.Equal(NoVideoReason.CoverArtOnly, error.Reason);
+        Assert.Single(File.ReadAllLines(probes));
+    }
+
+    [UnixFact]
+    public void Does_not_probe_again_when_ffprobe_fails()
+    {
+        using var temp = new TempFolder();
+        var probes = Path.Combine(temp.Path, "probes");
+        var ffprobe = TestTools.FakeTool(temp, "ffprobe", $$"""
+            echo x >> '{{probes}}'
+            echo 'Invalid data found when processing input' >&2
+            exit 1
+            """);
+        var broken = temp.Write("broken.mod", new byte[4096]);
+
+        Assert.Throws<VideoProcessingException>(() => new VideoProcessor(new FfmpegTools("ffmpeg", ffprobe)).Probe(broken));
+        Assert.Single(File.ReadAllLines(probes));
     }
 
     [Fact]
