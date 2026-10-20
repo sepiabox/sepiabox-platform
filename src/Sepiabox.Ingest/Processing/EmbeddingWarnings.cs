@@ -6,8 +6,8 @@ namespace Sepiabox.Ingest.Processing;
 public sealed record EmbeddingProblem(string Path, string Category, string Detail);
 
 /// <summary>
-/// Prints the files that have no embedding, or were not checked for faces, grouped by category: a model problem usually hits thousands of files,
-/// each with its own message, and a few examples say as much as the full list.
+/// Prints the files that have no embedding, or were not checked for faces, grouped by category: a model problem
+/// usually hits thousands of files, each with its own message, and a few examples say as much as the full list.
 /// </summary>
 public static class EmbeddingWarnings
 {

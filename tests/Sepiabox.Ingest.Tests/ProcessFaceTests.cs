@@ -167,8 +167,9 @@ public sealed class ProcessFaceTests : IDisposable
 
         var result = ProcessCommand.Run(Options(faces: true), new FakeEmbedder(), null, faces: new FakeFaceDetector());
 
-        Assert.Contains("so they have no embedding.", result.Warning, StringComparison.Ordinal);
-        Assert.DoesNotContain("faces", result.Warning, StringComparison.Ordinal);
+        var line = Assert.Single(result.Warning!.Split(Environment.NewLine), l => l.Contains("no preview or poster", StringComparison.Ordinal));
+        Assert.StartsWith("1 photos and videos have no preview or poster in the work folder, so they have no embedding.", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("faces", line, StringComparison.Ordinal);
     }
 
     [Fact]

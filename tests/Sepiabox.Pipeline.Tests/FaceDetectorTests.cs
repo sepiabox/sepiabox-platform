@@ -101,7 +101,14 @@ public sealed class FaceDetectorTests(ITestOutputHelper output) : IDisposable
         using var detector = CreateDetector();
         var reference = JsonNode.Parse(File.ReadAllText(Path.Combine("TestData", "face-portrait.reference.json")))!;
         var embedding = EmbeddingCodec.Decode((string)reference["embedding"]!);
-        var box = reference["box"]!.AsArray().Select(v => (double)v! / 400).ToArray();
+        uint width, height;
+        using (var image = new MagickImage(s_portrait))
+        {
+            (width, height) = (image.Width, image.Height);
+        }
+
+        var pixels = reference["box"]!.AsArray().Select(v => (double)v!).ToArray();
+        double[] box = [pixels[0] / width, pixels[1] / height, pixels[2] / width, pixels[3] / height];
 
         var face = Assert.Single(detector.Detect(s_portrait));
 
@@ -131,21 +138,25 @@ public sealed class FaceDetectorTests(ITestOutputHelper output) : IDisposable
     [FacesFact]
     public void Refuses_a_model_without_the_input_the_caller_feeds()
     {
+        // A copy of its own, so the verification marker it checks is not the shared models folder's.
         var yunet = ModelCatalog.Get(ModelCatalog.YuNet);
+        var copy = _folder.Write(yunet.File, File.ReadAllBytes(ModelFolder.PathOf(TestModels.Folder, yunet)));
 
         using var named = ModelSession.TryOpen(
-            TestModels.Folder, yunet, "YuNet", "so nothing", "Download it.", [new ModelInput("data")], [], out var nameWarning);
+            _folder.Path, yunet, "YuNet", "so nothing", "Download it.", [new ModelInput("data")], [], out var nameWarning);
         using var shaped = ModelSession.TryOpen(
-            TestModels.Folder, yunet, "YuNet", "so nothing", "Download it.", [new ModelInput("input", [1, 3, 320, 320])], [], out var shapeWarning);
+            _folder.Path, yunet, "YuNet", "so nothing", "Download it.", [new ModelInput("input", [1, 3, 320, 320])], [], out var shapeWarning);
         using var right = ModelSession.TryOpen(
-            TestModels.Folder, yunet, "YuNet", "so nothing", "Download it.", [new ModelInput("input", [1, 3, 640, 640])], YuNet.OutputNames, out var none);
+            _folder.Path, yunet, "YuNet", "so nothing", "Download it.", [new ModelInput("input", [1, 3, 640, 640])], YuNet.OutputNames, out var none);
 
         Assert.Null(named);
-        Assert.Contains("has no input data", nameWarning, StringComparison.Ordinal);
+        Assert.Contains("is not the model version this build of sepiabox-ingest expects: it has no input data", nameWarning, StringComparison.Ordinal);
         Assert.Null(shaped);
         Assert.Contains("has no input input [1×3×320×320] (it has input [1×3×640×640])", shapeWarning, StringComparison.Ordinal);
         Assert.NotNull(right);
         Assert.Null(none);
+        // The file matches its pin, so its verification is kept: it is the wrong version, not a damaged file.
+        Assert.True(File.Exists(ModelVerifier.MarkerPath(copy)));
     }
 
     private static FaceDetector CreateDetector() =>

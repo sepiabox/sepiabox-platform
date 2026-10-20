@@ -1,5 +1,6 @@
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
+using Sepiabox.Pipeline.Processing;
 
 namespace Sepiabox.Pipeline.Tests;
 

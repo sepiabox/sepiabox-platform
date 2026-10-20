@@ -8,7 +8,8 @@ namespace Sepiabox.Pipeline.Faces;
 
 /// <summary>
 /// A face in an image: its box relative to the image size (0–1), the detector's score, its SFace embedding and,
-/// when the detector gives them, its five landmarks, relative to the image size too.
+/// when the detector gives them, its five landmarks, relative to the image size too. The box is clamped to the image;
+/// the landmarks are not, so a face cut by the edge can have one outside 0–1.
 /// </summary>
 public sealed record DetectedFace(
     double X, double Y, double Width, double Height, double Score, float[] Embedding, IReadOnlyList<FacePoint>? Landmarks = null);
@@ -71,9 +72,10 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
             return null;
         }
 
+        InferenceSession? recognizer = null;
         try
         {
-            var recognizer = ModelSession.TryOpen(
+            recognizer = ModelSession.TryOpen(
                 modelFolder, ModelCatalog.Get(ModelCatalog.SFace), "The SFace face recognition model", Consequence, Download,
                 s_recognizerInputs, [RecognizerOutput], out warning);
             if (recognizer is null)
@@ -86,6 +88,7 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
         }
         catch
         {
+            recognizer?.Dispose();
             detector.Dispose();
             throw;
         }

@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
+using Sepiabox.Pipeline.Processing;
 
 namespace Sepiabox.Pipeline.Tests;
 
@@ -105,7 +106,7 @@ public sealed class ManifestEmbeddingsTests : IDisposable
     {
         var path = _work.Write("manifests/corrupt.json", "{ not json"u8.ToArray());
 
-        var outcome = ManifestEmbeddings.TryAddToFile(path, _work.Path, new FakeEmbedder());
+        var outcome = WorkFolderManifest.TryAdd(path, _work.Path, new FakeEmbedder(), faces: null).Embedding!;
 
         Assert.Equal("Could not read its manifest (JsonException)", outcome.Category);
     }
@@ -196,7 +197,7 @@ public sealed class ManifestEmbeddingsTests : IDisposable
     {
         var path = WriteManifest(WithDerivativeFiles(TestManifests.Photo(Source())));
 
-        var outcome = ManifestEmbeddings.TryAddToFile(path, _work.Path, new FakeEmbedder());
+        var outcome = WorkFolderManifest.TryAdd(path, _work.Path, new FakeEmbedder(), faces: null).Embedding!;
 
         Assert.Equal(EmbeddingStatus.Added, outcome.Status);
         Assert.True(ManifestJson.Deserialize(File.ReadAllText(path)).Embeddings.ContainsKey(ClipImageEmbedder.ModelKey));
@@ -209,7 +210,7 @@ public sealed class ManifestEmbeddingsTests : IDisposable
         var before = File.ReadAllText(path);
         File.SetLastWriteTimeUtc(path, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
-        var outcome = ManifestEmbeddings.TryAddToFile(path, _work.Path, new FakeEmbedder());
+        var outcome = WorkFolderManifest.TryAdd(path, _work.Path, new FakeEmbedder(), faces: null).Embedding!;
 
         Assert.Equal(EmbeddingStatus.NoDerivative, outcome.Status);
         Assert.Equal(before, File.ReadAllText(path));
@@ -221,7 +222,7 @@ public sealed class ManifestEmbeddingsTests : IDisposable
     {
         var path = _work.Write("manifests/corrupt.json", "{ not json"u8.ToArray());
 
-        var outcome = ManifestEmbeddings.TryAddToFile(path, _work.Path, new FakeEmbedder());
+        var outcome = WorkFolderManifest.TryAdd(path, _work.Path, new FakeEmbedder(), faces: null).Embedding!;
 
         Assert.Equal(EmbeddingStatus.Failed, outcome.Status);
         Assert.Null(outcome.Manifest);
@@ -232,7 +233,7 @@ public sealed class ManifestEmbeddingsTests : IDisposable
     [Fact]
     public void Reports_a_missing_manifest_when_the_file_is_gone()
     {
-        var outcome = ManifestEmbeddings.TryAddToFile(Path.Combine(_work.Path, "manifests", "gone.json"), _work.Path, new FakeEmbedder());
+        var outcome = WorkFolderManifest.TryAdd(Path.Combine(_work.Path, "manifests", "gone.json"), _work.Path, new FakeEmbedder(), faces: null).Embedding!;
 
         Assert.Equal(EmbeddingStatus.ManifestMissing, outcome.Status);
     }
@@ -240,7 +241,7 @@ public sealed class ManifestEmbeddingsTests : IDisposable
     [Fact]
     public void Reports_a_missing_manifest_when_its_folder_is_gone()
     {
-        var outcome = ManifestEmbeddings.TryAddToFile(Path.Combine(_work.Path, "nowhere", "gone.json"), _work.Path, new FakeEmbedder());
+        var outcome = WorkFolderManifest.TryAdd(Path.Combine(_work.Path, "nowhere", "gone.json"), _work.Path, new FakeEmbedder(), faces: null).Embedding!;
 
         Assert.Equal(EmbeddingStatus.ManifestMissing, outcome.Status);
     }

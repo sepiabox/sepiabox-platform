@@ -1,7 +1,8 @@
+using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Faces;
 using Sepiabox.Pipeline.Manifests;
 
-namespace Sepiabox.Pipeline.Embeddings;
+namespace Sepiabox.Pipeline.Processing;
 
 /// <param name="Embedding">What happened to the embedding; null when there was no embedder, or when the failure to
 /// read or write the manifest is reported on the faces instead.</param>
@@ -11,13 +12,18 @@ public sealed record WorkFolderOutcome(EmbeddingOutcome? Embedding, EmbeddingOut
 
 /// <summary>
 /// Adds what an unchanged file's manifest is missing, its embedding and its faces, from the work folder: the manifest
-/// is read once, both are added in memory and it is written once, only when something was added. A failure to read or
-/// write the manifest is reported once, on the embedding when there is an embedder.
+/// is read once, both are added in memory and it is written once, only when something was added. A failure to read
+/// or write the manifest is reported once, on the embedding when there is an embedder.
 /// </summary>
 public static class WorkFolderManifest
 {
     public static WorkFolderOutcome TryAdd(string manifestPath, string workFolder, IImageEmbedder? embedder, IFaceDetector? faces)
     {
+        if (embedder is null && faces is null)
+        {
+            return new WorkFolderOutcome(null, null);
+        }
+
         Manifest manifest;
         try
         {
@@ -30,14 +36,15 @@ public static class WorkFolderManifest
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
         {
-            return Once(embedder is not null, Failed(null, "Could not read its manifest", ex));
+            var failure = Failed(null, "Could not read its manifest", ex);
+            return embedder is not null ? new WorkFolderOutcome(failure, null) : new WorkFolderOutcome(null, failure);
         }
 
         var embedding = embedder is null ? null : ManifestEmbeddings.TryAdd(manifest, workFolder, embedder);
         var current = embedding?.Manifest ?? manifest;
         var found = faces is null ? null : ManifestFaces.TryAdd(current, workFolder, faces);
         current = found?.Manifest ?? current;
-        if (embedding?.Status != EmbeddingStatus.Added && found?.Status != EmbeddingStatus.Added)
+        if (!IsAdded(embedding) && !IsAdded(found))
         {
             return new WorkFolderOutcome(embedding, found);
         }
@@ -49,16 +56,19 @@ public static class WorkFolderManifest
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
         {
-            // Nothing was stored, so neither counts as added; the next run tries both again.
-            var failed = Failed(manifest, "Could not write its manifest", ex);
-            return Once(embedding?.Status == EmbeddingStatus.Added, failed, embedding, found);
+            return WriteFailed(Failed(manifest, "Could not write its manifest", ex), embedding, found);
         }
     }
 
-    private static WorkFolderOutcome Once(bool onEmbedding, EmbeddingOutcome failure, EmbeddingOutcome? embedding = null, EmbeddingOutcome? faces = null) =>
-        onEmbedding
-            ? new WorkFolderOutcome(failure, faces?.Status == EmbeddingStatus.Added ? null : faces)
-            : new WorkFolderOutcome(embedding?.Status == EmbeddingStatus.Added ? null : embedding, failure);
+    private static bool IsAdded(EmbeddingOutcome? outcome) => outcome?.Status == EmbeddingStatus.Added;
+
+    // Nothing was stored, so neither counts as added and the next run tries both again. The failure is reported on
+    // the embedding when one was added, otherwise on the faces; the other side keeps what it was, unless it was
+    // "added", which did not happen.
+    private static WorkFolderOutcome WriteFailed(EmbeddingOutcome failure, EmbeddingOutcome? embedding, EmbeddingOutcome? faces) =>
+        IsAdded(embedding)
+            ? new WorkFolderOutcome(failure, IsAdded(faces) ? null : faces)
+            : new WorkFolderOutcome(embedding, failure);
 
     // The exception's type, unlike its message, never names the file, so it groups failures of the same kind.
     private static EmbeddingOutcome Failed(Manifest? manifest, string what, Exception ex) =>

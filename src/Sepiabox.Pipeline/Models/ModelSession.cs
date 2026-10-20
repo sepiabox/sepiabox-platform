@@ -7,7 +7,8 @@ public sealed record ModelInput(string Name, IReadOnlyList<int>? Shape = null);
 
 /// <summary>
 /// Opens a pinned model with ONNX Runtime (D-044): the file must exist, match its SHA-256 and have the outputs the
-/// caller reads and the inputs it feeds. Anything else is a warning, never an exception, so a run goes on without what the model computes.
+/// caller reads and the inputs it feeds. Anything else is a warning, never an exception, so a run goes on without
+/// what the model computes.
 /// </summary>
 public static class ModelSession
 {
@@ -62,8 +63,10 @@ public static class ModelSession
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException or BadImageFormatException)
         {
-            // ONNX Runtime's native library is missing or broken on this computer: the model itself may be fine.
-            warning = $"ONNX Runtime could not start ({ex.Message}), {consequence}. Reinstall sepiabox-ingest; the model files are kept.";
+            // ONNX Runtime's native library is missing or broken on this computer: the model itself may be fine. A type
+            // initializer hides the real cause in its inner exception.
+            var cause = ex is TypeInitializationException { InnerException: { } inner } ? inner.Message : ex.Message;
+            warning = $"ONNX Runtime could not start ({cause}), {consequence}. Reinstall sepiabox-ingest; the model files are kept.";
             return null;
         }
         catch (OnnxRuntimeException ex)
@@ -80,9 +83,11 @@ public static class ModelSession
         {
             var found = string.Join(", ", session.InputMetadata.Select(i => $"{i.Key} [{string.Join("×", i.Value.Dimensions)}]"));
             var expected = badInput.Shape is null ? badInput.Name : $"{badInput.Name} [{string.Join("×", badInput.Shape)}]";
+            // The file matches its pin, so it is not damaged: this build expects another version of the model. Its
+            // verification is kept, since hashing it again would change nothing.
             session.Dispose();
-            ModelVerifier.Forget(path);
-            warning = $"{path} has no input {expected} (it has {found}), {consequence}. {Forgotten} {remedy}";
+            warning = $"{path} is not the model version this build of sepiabox-ingest expects: it has no input {expected} "
+                + $"(it has {found}), {consequence}. Update sepiabox-ingest, then {char.ToLowerInvariant(remedy[0])}{remedy[1..]}";
             return null;
         }
 

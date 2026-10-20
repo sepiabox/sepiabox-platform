@@ -91,6 +91,7 @@ public sealed class EmbeddingCodecTests
         float[] values = [3f, 4f];
 
         Assert.True(EmbeddingCodec.TryNormalize(values));
-        Assert.Equal([0.6f, 0.8f], values);
+        Assert.Equal(0.6f, values[0], 6);
+        Assert.Equal(0.8f, values[1], 6);
     }
 }

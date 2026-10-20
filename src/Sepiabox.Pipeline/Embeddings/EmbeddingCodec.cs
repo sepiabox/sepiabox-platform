@@ -80,12 +80,17 @@ public static class EmbeddingCodec
             sum += (double)value * value;
         }
 
-        if (sum == 0 || !double.IsFinite(sum))
+        if (sum == 0)
         {
             return false;
         }
 
-        Normalize(values);
+        var norm = Math.Sqrt(sum);
+        for (var i = 0; i < values.Length; i++)
+        {
+            values[i] = (float)(values[i] / norm);
+        }
+
         return true;
     }
 

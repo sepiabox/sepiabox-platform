@@ -90,10 +90,6 @@ public static class ManifestEmbeddings
         }
     }
 
-    /// <summary>The same for a manifest file in the work folder, which is rewritten only when an embedding was added.</summary>
-    public static EmbeddingOutcome TryAddToFile(string manifestPath, string workFolder, IImageEmbedder embedder) =>
-        WorkFolderManifest.TryAdd(manifestPath, workFolder, embedder, faces: null).Embedding!;
-
     // The exception's type, unlike its message, never names the file, so it groups failures of the same kind.
     private static EmbeddingOutcome Failed(Manifest? manifest, string what, Exception ex) =>
         new(EmbeddingStatus.Failed, manifest, $"{what}: {ex.Message}", $"{what} ({ex.GetType().Name})");

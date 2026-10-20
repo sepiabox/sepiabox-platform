@@ -7,6 +7,7 @@ using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Models;
+using Sepiabox.Pipeline.Processing;
 using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Ingest.Processing;
@@ -135,10 +136,11 @@ public static class ProcessCommand
 
         // An embedding or faces never decide a file's status: whatever goes wrong is a warning for that file, and the
         // next run tries again from the work folder.
-        // Added is counted by the caller once the manifest is written.
         const string EmbeddingFailed = "Could not compute the embedding";
         const string FacesFailed = "Could not detect faces";
+        const string UpdateFailed = "Could not update its manifest";
 
+        // For a new file: Added is counted by the caller once the manifest is written.
         EmbeddingOutcome? AddEmbedding(string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
             Record(sourcePath, assetId, Try(sourcePath, embeddingProblems, EmbeddingFailed, add), embeddingProblems, withoutPreviewForEmbedding);
 
@@ -149,8 +151,9 @@ public static class ProcessCommand
         void AddToUnchanged(string sourcePath, string assetId)
         {
             var path = ManifestPath(manifestFolder, assetId);
+            // Neither step in particular failed when this throws, so the message names the manifest, not a step.
             var outcome = Try(
-                sourcePath, embedder is not null ? embeddingProblems : faceProblems, embedder is not null ? EmbeddingFailed : FacesFailed,
+                sourcePath, embedder is not null ? embeddingProblems : faceProblems, UpdateFailed,
                 () => WorkFolderManifest.TryAdd(path, output, embedder, faces));
             Record(sourcePath, assetId, outcome?.Embedding, embeddingProblems, withoutPreviewForEmbedding);
             embedded += outcome?.Embedding?.Status == EmbeddingStatus.Added ? 1 : 0;

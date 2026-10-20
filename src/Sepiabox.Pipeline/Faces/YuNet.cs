@@ -29,7 +29,13 @@ public static class YuNet
     /// <summary>The model's fixed input: 640×640 BGR, values 0–255, channel first.</summary>
     public const int InputSize = 640;
 
-    public static readonly IReadOnlyList<int> Strides = [8, 16, 32];
+    public static readonly IReadOnlyList<int> Strides = Array.AsReadOnly([8, 16, 32]);
+
+    /// <summary>
+    /// The outputs read for each stride, in <see cref="Strides"/> order; declared after it, which it is built from.
+    /// </summary>
+    public static readonly IReadOnlyList<string> OutputNames = Array.AsReadOnly(
+        Strides.SelectMany(stride => new[] { $"cls_{stride}", $"obj_{stride}", $"bbox_{stride}", $"kps_{stride}" }).ToArray());
 
     /// <summary>OpenCV's default: boxes that overlap more than this with a better one are the same face.</summary>
     public const double NmsThreshold = 0.3;
@@ -37,8 +43,6 @@ public static class YuNet
     /// <summary>The outputs of one stride: <c>cls_8</c>, <c>obj_8</c>, <c>bbox_8</c> (4 per cell) and <c>kps_8</c> (10 per cell).</summary>
     public sealed record StrideOutput(int Stride, float[] Class, float[] Objectness, float[] Box, float[] Landmarks);
 
-    public static readonly IReadOnlyList<string> OutputNames =
-        [.. Strides.SelectMany(stride => new[] { $"cls_{stride}", $"obj_{stride}", $"bbox_{stride}", $"kps_{stride}" })];
 
     /// <summary>Faces with a score of at least <paramref name="minimumScore"/>, best first, in input pixels.</summary>
     public static List<FaceCandidate> Decode(IReadOnlyList<StrideOutput> outputs, double minimumScore)
@@ -92,7 +96,9 @@ public static class YuNet
         return Suppress(candidates, NmsThreshold);
     }
 
-    /// <summary>Keeps the best of each group of boxes that overlap more than <paramref name="threshold"/> (intersection over union).</summary>
+    /// <summary>
+    /// Keeps the best of each group of boxes that overlap more than <paramref name="threshold"/> (intersection over union).
+    /// </summary>
     public static List<FaceCandidate> Suppress(IEnumerable<FaceCandidate> candidates, double threshold)
     {
         var kept = new List<FaceCandidate>();
