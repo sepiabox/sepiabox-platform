@@ -27,7 +27,8 @@ The AppHost describes the infrastructure; `azd` provisions it in France Central 
 - Customizations via Aspire's `ConfigureInfrastructure`.
 - Human prerequisites in `docs/operations.md`.
 - The web signs blob links with a user delegation key (D-039): its managed identity needs *Storage Blob Data Reader* on the storage account. That role includes the user delegation key action, so *Storage Blob Delegator* is not added.
-- Decisions: D-002, D-003, D-004, D-022, D-034.
+- Sign-in (S-010, D-048): set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` on the web so the OAuth redirect URI is HTTPS behind the ingress, and keep the data protection keys outside the container (for example in Blob Storage, protected with a Key Vault key) so a restart or a second replica does not sign everyone out.
+- Decisions: D-002, D-003, D-004, D-022, D-034, D-048.
 
 ### Expected tests
 - A test that generates the infrastructure and checks the properties in the Bicep. Manual smoke test after deploy.

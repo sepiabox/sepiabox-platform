@@ -33,9 +33,29 @@ Steps that need a person, because they depend on accounts, consents or external 
 - Manifests written by `process --faces` carry faces and `facesVersion` (S-018, D-047). Older `sepiabox-ingest` and `sepiabox-worker` builds reject `facesVersion`, so update every computer that runs `sepiabox-ingest` and deploy the worker before uploading manifests from a `--faces` run; otherwise `upload` from an old build fails to merge them (that asset is reported and retried, the stored blob is left alone) and the old worker's import reports them as problems.
 - Files processed before S-043 keep the date they had (none, for undated videos): `process` skips unchanged files. To date them from their folder or file name, run `process` again into a fresh work folder and upload from it.
 
+## Sign-in configuration
+
+The web reads these keys (D-048). Locally they go into the web's user secrets; in Azure into Key Vault, where `:` becomes `--` in the secret name (`Auth--Google--ClientId`, `Access--Emails`). Never put them in `appsettings*.json`.
+
+| Key | Value |
+|---|---|
+| `Auth:Google:ClientId`, `Auth:Google:ClientSecret` | The Google OAuth client (web application) |
+| `Auth:Microsoft:ClientId`, `Auth:Microsoft:ClientSecret` | The Microsoft app registration, for personal Microsoft accounts only, with a client secret |
+| `Access:Emails` | The allowed e-mails, separated by commas; casing does not matter. Empty or missing lets no one in |
+
+A provider without both of its keys is left out (its button is not shown); one key without the other stops the web from starting. Locally:
+
+```bash
+dotnet user-secrets set "Access:Emails" "<e-mail>,<e-mail>" --project src/Sepiabox.Web
+dotnet user-secrets set "Auth:Google:ClientId" "<client id>" --project src/Sepiabox.Web
+dotnet user-secrets set "Auth:Google:ClientSecret" "<client secret>" --project src/Sepiabox.Web
+```
+
+Without any OAuth client, in Development, `/entrar` shows an e-mail field instead (`/dev-login?email=`): it signs in any e-mail on `Access:Emails` without a password. It answers 404 in every other environment, and also in Development once a client is configured.
+
 ## OAuth redirect URLs
 
-- Local: `https://localhost:<port>/signin-google`, `/signin-microsoft`
+- Local: `https://localhost:7180/signin-google`, `/signin-microsoft` (the `https` port in `src/Sepiabox.Web/Properties/launchSettings.json`)
 - Production: `https://app.sepiabox.com/signin-google`, `/signin-microsoft`
 
 ## Emergency shutdown
