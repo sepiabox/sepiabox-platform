@@ -18,6 +18,15 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
         Assert.Equal("true", serviceBus.Property("disableLocalAuth"));
     }
 
+    [Theory]
+    [InlineData("-sb")]
+    [InlineData("-mgmt")]
+    public void Namespace_avoids_a_suffix_azure_reserves_when_published(string reserved)
+    {
+        // The first deploy failed with NamespaceUnavailable: Azure refuses Service Bus names ending in these.
+        Assert.False(AzureInfrastructure.ServiceBusName.EndsWith(reserved, StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Queue_dead_letters_a_message_after_five_deliveries_when_published()
     {
@@ -58,7 +67,7 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
         Assert.Contains("minExecutions: 0", trigger, StringComparison.Ordinal);
         Assert.Contains("maxExecutions: 1", trigger, StringComparison.Ordinal);
         Assert.Contains("type: 'azure-servicebus'", trigger, StringComparison.Ordinal);
-        Assert.Contains("namespace: 'sepiabox-sb'", trigger, StringComparison.Ordinal);
+        Assert.Contains("namespace: 'sepiabox-bus'", trigger, StringComparison.Ordinal);
         Assert.Contains("queueName: 'manifests'", trigger, StringComparison.Ordinal);
         // KEDA reads the queue as the import identity, with no connection string.
         Assert.Contains("identity: import_identity_id", trigger, StringComparison.Ordinal);
@@ -104,7 +113,7 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
     {
         var environment = published.Resource("import")["env"]!.AsObject();
 
-        Assert.Equal("sepiabox-sb.servicebus.windows.net", environment["ServiceBus__Namespace"]!.GetValue<string>());
+        Assert.Equal("sepiabox-bus.servicebus.windows.net", environment["ServiceBus__Namespace"]!.GetValue<string>());
         Assert.Equal("manifests", environment["ServiceBus__Queue"]!.GetValue<string>());
     }
 

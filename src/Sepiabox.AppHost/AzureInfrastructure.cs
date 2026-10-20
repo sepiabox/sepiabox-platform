@@ -56,7 +56,7 @@ public static class AzureInfrastructure
     public const string GeoNamesResourceName = "geonames";
 
     /// <summary>The Service Bus namespace; the shutdown runbook disables its queue (S-030).</summary>
-    public const string ServiceBusName = "sepiabox-sb";
+    public const string ServiceBusName = "sepiabox-bus";
 
     /// <summary>The namespace's host name, which the import job connects to.</summary>
     public const string ServiceBusHostName = ServiceBusName + ".servicebus.windows.net";
