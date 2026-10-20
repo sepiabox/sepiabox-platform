@@ -1,8 +1,8 @@
 ## S-014 — Save personal places and filter by them
 **Epic:** Search
-**Depends on:** S-013
+**Depends on:** S-013, S-025
 **Priority:** Medium
-**Size:** S
+**Size:** M
 
 ### Context
 "The beach house over the years" ("A casa da praia ao longo dos anos") and "photos more than 100 km from home" ("fotos a mais de 100 km de casa") depend on places only the family knows.
@@ -12,6 +12,7 @@
 - Page `/places`: create from a photo's location ("Save this place"; "Salvar este lugar" in pt-BR) or from lat/lon, edit the radius, delete.
 - DSL: `savedPlaces: ["Beach house"]`, `distanceFrom: { "place": "Beach house", "minKm": 100 }` or `distanceFrom: { "home": true, "minKm": 100 }`.
 - "Over the years" view for a place (grouped by year).
+- Questions (S-025): the translator's context gains the saved place names and the home place, with prompt examples ("photos at the beach house", "more than 100 km from home").
 
 ### Out of scope
 - Automatic detection of "home".

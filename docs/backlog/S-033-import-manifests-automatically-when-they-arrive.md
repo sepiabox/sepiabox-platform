@@ -1,6 +1,6 @@
 ## S-033 — Import manifests automatically when they arrive
 **Epic:** Cloud and costs
-**Depends on:** S-032, S-008, S-050
+**Depends on:** S-032, S-008
 **Priority:** High
 **Size:** M
 
@@ -23,7 +23,7 @@ Every manifest sent from the PC must be imported without intervention and withou
 
 ### Technical notes
 - `Azure.Messaging.ServiceBus`. Resources added via Aspire (`AddAzureServiceBus`) and `ConfigureInfrastructure` for Event Grid.
-- Portability (D-051): the worker's import loop depends on `IBlobEventQueue` (receive a `BlobCreated(container, name)`, complete, abandon) in `Sepiabox.Storage`; the Service Bus receiver and the Event Grid payload parsing are its Azure implementation, and the import reads manifests through `IBlobStore` (S-050). Unit tests use an in-memory queue.
+- Portability (D-051, new code only): the new queue loop depends on an `IBlobEventQueue` interface (receive a `BlobCreated(container, name)`, complete, abandon) declared in the worker; the Service Bus receiver and the Event Grid payload parsing are its Azure implementation, registered in `Program.cs`. Unit tests use an in-memory queue. The existing manifest reads stay as they are; S-050 (after the MVP) moves the interface to `Sepiabox.Storage`.
 - Decisions: D-008, D-051.
 
 ### Expected tests

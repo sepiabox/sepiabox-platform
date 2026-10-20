@@ -1,11 +1,11 @@
 ## S-050 — Put blob storage behind the project's own interface
 **Epic:** Foundation
-**Depends on:** S-007, S-008, S-009
+**Depends on:** S-007, S-008, S-009, S-033
 **Priority:** High
 **Size:** M
 
 ### Context
-Azure-specific services sit behind the project's own small interfaces, so any part can move (D-051). Today the Blob SDK is used directly in four places: Pipeline's `ManifestStore`, the worker's `ManifestImporter`, the web's `SasUrlFactory` and the ingest `upload`. This story moves the first three behind `IBlobStore` before S-032, S-033 and S-036 add more storage code; `upload` follows in S-051.
+Azure-specific services sit behind the project's own small interfaces, so any part can move (D-051). Today the Blob SDK is used directly in four places: Pipeline's `ManifestStore`, the worker's `ManifestImporter`, the web's `SasUrlFactory` and the ingest `upload`. This story, after the MVP, moves the first three behind `IBlobStore`, and moves S-033's `IBlobEventQueue` from the worker into `Sepiabox.Storage`; `upload` follows in S-051.
 
 ### Scope
 - New library `Sepiabox.Storage` (added to `Sepiabox.slnx`, with its test project `Sepiabox.Storage.Tests`): `IBlobStore` with what the code uses today: read a blob with its version tag (`null` when missing), list names by container and prefix, write (unconditionally, only if new, or only if the version still matches; a lost condition is a typed result, not an exception), delete, and a signed read URL for one blob (lifetime, optional download file name and content type).
@@ -17,7 +17,7 @@ Azure-specific services sit behind the project's own small interfaces, so any pa
 
 ### Out of scope
 - `sepiabox-ingest upload` (S-051).
-- Queues and events (`IBlobEventQueue` comes with S-033).
+- Changing the queue: `IBlobEventQueue` and its Azure implementation only move from the worker to `Sepiabox.Storage`.
 - Any behaviour change: the D-036 merge, the D-039 links and the import results stay exactly as they are.
 
 ### Acceptance criteria
