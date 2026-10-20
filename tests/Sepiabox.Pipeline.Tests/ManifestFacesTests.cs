@@ -68,6 +68,36 @@ public sealed class ManifestFacesTests : IDisposable
     }
 
     [Fact]
+    public void Looks_again_for_faces_found_by_an_older_face_pipeline_and_replaces_them()
+    {
+        // Version 0 stands for any version older than the current one; the schema never stores it.
+        var outdated = WithDerivativeFiles(Photo()) with
+        {
+            FacesProcessed = true,
+            FacesVersion = ManifestFaces.CurrentVersion - 1,
+            Faces = [TestManifests.Face(0.5, axis: 7), TestManifests.Face(0.4, axis: 8)],
+        };
+        var detector = new FakeFaceDetector();
+
+        var outcome = ManifestFaces.TryAdd(outdated, _work.Path, detector);
+
+        Assert.Equal(EmbeddingStatus.Added, outcome.Status);
+        Assert.Single(detector.Detected);
+        Assert.Equal(ManifestFaces.CurrentVersion, outcome.Manifest!.FacesVersion);
+        Assert.Equal(0.97, Assert.Single(outcome.Manifest.Faces).Score);
+    }
+
+    [Fact]
+    public void Leaves_faces_from_a_newer_face_pipeline_alone()
+    {
+        var newer = WithDerivativeFiles(Photo()) with { FacesProcessed = true, FacesVersion = ManifestFaces.CurrentVersion + 1 };
+        var detector = new FakeFaceDetector();
+
+        Assert.Equal(EmbeddingStatus.Present, ManifestFaces.TryAdd(newer, _work.Path, detector).Status);
+        Assert.Empty(detector.Detected);
+    }
+
+    [Fact]
     public void Reports_no_derivative_when_the_preview_is_not_in_the_work_folder()
     {
         var outcome = ManifestFaces.TryAdd(Photo(), _work.Path, new FakeFaceDetector());

@@ -318,35 +318,84 @@ public sealed class ManifestMergeTests
         Assert.Equal(2, ManifestMerge.Merge(unversioned, first).Faces.Count);
     }
 
-    public static TheoryData<string> ThreeWays => ["tie between two computers", "a newer pipeline among them"];
-
-    [Theory]
-    [MemberData(nameof(ThreeWays))]
-    public void Merges_faces_to_the_same_result_whatever_the_order_and_grouping(string which)
+    public static TheoryData<string, Manifest[]> Scenarios => new()
     {
-        Manifest[] manifests = which == "tie between two computers"
-            ?
+        {
+            "a tie between two computers, with an unversioned and a versioned copy of the winner",
             [
-                Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.91)] },
+                Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = [Face(0.91)] },
                 Photo(Source("HD do Jonathas", "b.jpg")) with { FacesProcessed = true, Faces = [Face(0.93, axis: 1)] },
-                Photo(Source("Pen", "c.jpg")),
+                Photo(Source("HD antigo", "c.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = [Face(0.93, axis: 1)] },
+                Photo(Source("Pen", "d.jpg")),
             ]
-            :
+        },
+        {
+            "a newer pipeline among them",
             [
                 Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.91), Face(0.8, axis: 4)] },
-                Photo(Source("HD do Jonathas", "b.jpg")) with { FacesProcessed = true, Faces = [Face(0.93, axis: 1)] },
+                Photo(Source("HD do Jonathas", "b.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = [Face(0.93, axis: 1)] },
                 Photo(Source("HD antigo", "c.jpg")) with { FacesProcessed = true, FacesVersion = 2, Faces = [Face(0.7, axis: 5)] },
-            ];
+                Photo(Source("Pen", "d.jpg")),
+            ]
+        },
+    };
 
+    [Theory]
+    [MemberData(nameof(Scenarios))]
+    public void Merges_faces_to_the_same_result_whatever_the_order_and_grouping(string scenario, Manifest[] manifests)
+    {
         var results = (
-            from a in manifests
-            from b in manifests
-            from c in manifests
-            where !ReferenceEquals(a, b) && !ReferenceEquals(b, c) && !ReferenceEquals(a, c)
-            from merged in new[] { ManifestMerge.Merge(ManifestMerge.Merge(a, b), c), ManifestMerge.Merge(a, ManifestMerge.Merge(b, c)) }
+            from order in Permutations(manifests)
+            from merged in new[]
+            {
+                ManifestMerge.Merge(ManifestMerge.Merge(ManifestMerge.Merge(order[0], order[1]), order[2]), order[3]),
+                ManifestMerge.Merge(order[0], ManifestMerge.Merge(order[1], ManifestMerge.Merge(order[2], order[3]))),
+                ManifestMerge.Merge(ManifestMerge.Merge(order[0], order[1]), ManifestMerge.Merge(order[2], order[3])),
+            }
             select FacesOf(merged)).Distinct().ToList();
 
-        Assert.Single(results);
+        Assert.True(results.Count == 1, $"{scenario}: {string.Join(" | ", results)}");
+    }
+
+    [Fact]
+    public void Merges_equal_faces_with_and_without_a_version_to_the_same_json_in_either_order()
+    {
+        var unversioned = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9)] };
+        var versioned = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = [Face(0.9)] };
+
+        var one = ManifestJson.Serialize(ManifestMerge.Merge(unversioned, versioned));
+        var other = ManifestJson.Serialize(ManifestMerge.Merge(versioned, unversioned));
+
+        Assert.Equal(one, other);
+        Assert.Equal(1, ManifestMerge.Merge(unversioned, versioned).FacesVersion);
+        Assert.Null(ManifestMerge.Merge(unversioned, unversioned).FacesVersion);
+    }
+
+    [Fact]
+    public void Writes_no_faces_version_when_neither_side_processed_faces()
+    {
+        var notProcessed = Photo(Source("HD da Ana", "a.jpg"));
+
+        Assert.Null(ManifestMerge.Merge(notProcessed, notProcessed with { Sources = [Source("Pen", "b.jpg")] }).FacesVersion);
+    }
+
+    [Fact]
+    public void Orders_faces_consistently_with_equality_on_edge_values()
+    {
+        var zero = new ManifestFace([0.0, 0.2, 0.3, 0.4], 0.0, "AAAA");
+        var negativeZero = new ManifestFace([-0.0, 0.2, 0.3, 0.4], -0.0, "AAAA");
+
+        Assert.Equal(zero, negativeZero);
+        Assert.Equal(zero.GetHashCode(), negativeZero.GetHashCode());
+        Assert.Equal(0, ManifestFace.Order.Compare(zero, negativeZero));
+        Assert.DoesNotContain("-0", System.Text.Json.JsonSerializer.Serialize(negativeZero, ManifestJson.Options), StringComparison.Ordinal);
+
+        var shorter = zero with { Box = [0.0, 0.2, 0.3] };
+        Assert.NotEqual(zero, shorter);
+        Assert.True(ManifestFace.Order.Compare(shorter, zero) < 0);
+        Assert.True(ManifestFace.Order.Compare(zero with { Embedding = "AAAB" }, zero) > 0);
+        Assert.True(ManifestFace.Order.Compare(null, zero) < 0);
+        Assert.Equal(0, ManifestFace.Order.Compare(null, null));
     }
 
     [Fact]
@@ -413,6 +462,11 @@ public sealed class ManifestMergeTests
     }
 
     private static ManifestFace Face(double score, int axis = 0) => TestManifests.Face(score, axis);
+
+    private static IEnumerable<Manifest[]> Permutations(Manifest[] items) =>
+        items.Length <= 1
+            ? [items]
+            : items.SelectMany((first, i) => Permutations([.. items[..i], .. items[(i + 1)..]]).Select(rest => (Manifest[])[first, .. rest]));
 
     private static string FacesOf(Manifest manifest) =>
         $"{manifest.FacesProcessed} {manifest.FacesVersion} {System.Text.Json.JsonSerializer.Serialize(manifest.Faces, ManifestJson.Options)}";

@@ -4,7 +4,7 @@ using Sepiabox.Pipeline.Manifests;
 namespace Sepiabox.Pipeline.Faces;
 
 /// <summary>
-/// Adds faces to a manifest that has none yet, from the same derivative as the CLIP embedding: the 1280 px preview
+/// Adds faces to a manifest that has none yet, or only from an older face pipeline, from the same derivative as the CLIP embedding: the 1280 px preview
 /// of a photo or the poster of a video (D-042, D-047). Like an embedding, faces are optional data: a failure is
 /// reported, never thrown (only cancellation is), and the next run with <c>--faces</c> tries again.
 /// </summary>
@@ -21,7 +21,9 @@ public static class ManifestFaces
 
     public static EmbeddingOutcome TryAdd(Manifest manifest, string workFolder, IFaceDetector detector)
     {
-        if (manifest.FacesProcessed)
+        // Faces from an older face pipeline are looked for again and replaced, so a work folder catches up with a model
+        // or preprocessing change without reading the drive; a newer version, from a newer build, is left alone.
+        if (manifest.FacesProcessed && manifest.EffectiveFacesVersion >= CurrentVersion)
         {
             return new EmbeddingOutcome(EmbeddingStatus.Present, manifest);
         }
