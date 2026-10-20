@@ -84,6 +84,29 @@ public class VideoProcessingTests
         Assert.Equal(3, Assert.Single(ReadManifests(work)).Derivatives.Count);
     }
 
+    [Fact]
+    public void Dates_an_undated_mpeg_clip_from_its_folder_and_file_name_when_processed()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // MPEG program stream, as camcorders write it: no creation time anywhere in the file.
+        var clip = Path.Combine(drive.Path, "2011-09-25", "MNU_110425_x.mpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(clip)!);
+        MakeVideo(clip, 720, 576, seconds: 1, "-c:v", "mpeg2video", "-c:a", "mp2");
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        Assert.Equal(1, result.Processed);
+        var file = Assert.Single(Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json"));
+        var json = File.ReadAllText(file);
+        Assert.True(new ManifestValidator().TryValidate(json, out var manifest, out var error), error);
+        Assert.Equal(new DateTime(2011, 9, 25, 11, 4, 25), manifest.CapturedAt);
+        Assert.Equal(CaptureDateSource.FileName, manifest.CapturedAtSource);
+        Assert.Equal(("video/mpeg", "2011-09-25/MNU_110425_x.mpg"), (manifest.ContentType, Assert.Single(manifest.Sources).Path));
+        Assert.Equal(["poster", "thumb-256", "proxy-720p"], manifest.Derivatives.Select(d => d.Name));
+    }
+
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
         ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", ModelFolder: TestModels.None));
 
@@ -96,7 +119,8 @@ public class VideoProcessingTests
         return (derivative.Width, derivative.Height);
     }
 
-    private static void MakeVideo(string path, int width, int height, int seconds)
+    // codecs: FFmpeg codec options; H.264 and AAC when none are given.
+    private static void MakeVideo(string path, int width, int height, int seconds, params string[] codecs)
     {
         var info = new ProcessStartInfo(s_tools.Ffmpeg) { RedirectStandardError = true, UseShellExecute = false };
         foreach (var argument in new[]
@@ -104,9 +128,9 @@ public class VideoProcessingTests
             "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
             "-f", "lavfi", "-i", $"testsrc=duration={seconds}:size={width}x{height}:rate=25",
             "-f", "lavfi", "-i", $"sine=frequency=440:duration={seconds}",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
-            path,
-        })
+        }
+            .Concat(codecs.Length > 0 ? codecs : ["-c:v", "libx264", "-c:a", "aac"])
+            .Concat(["-pix_fmt", "yuv420p", "-shortest", path]))
         {
             info.ArgumentList.Add(argument);
         }

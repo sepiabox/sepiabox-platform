@@ -10,6 +10,7 @@ public class MediaTypesTests
     [InlineData("DSC_0042.NEF", MediaKind.Photo)]
     [InlineData("clip.MOV", MediaKind.Video)]
     [InlineData("party.mp4", MediaKind.Video)]
+    [InlineData("MOV001.MOD", MediaKind.Video)]
     [InlineData("notes.txt", MediaKind.Other)]
     [InlineData("Thumbs.db", MediaKind.Other)]
     [InlineData("no-extension", MediaKind.Other)]

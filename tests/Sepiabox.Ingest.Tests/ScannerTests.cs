@@ -44,6 +44,48 @@ public class ScannerTests
     }
 
     [Fact]
+    public void Counts_an_undated_video_in_the_year_of_its_folder_when_the_folder_is_a_day()
+    {
+        using var folder = new TempFolder();
+        folder.Write("2009-05-01/clip.mpg", RandomBytes(1_000, seed: 7));
+        folder.Write("2011-09-25/MNU_110425_d8b2.MTS", RandomBytes(1_000, seed: 8));
+        folder.Write("2011-02-30/clip.mpg", RandomBytes(1_000, seed: 9));
+
+        var result = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false));
+
+        Assert.Equal(1, result.MediaByYear["2009"]);
+        Assert.Equal(1, result.MediaByYear["2011"]);
+        Assert.Equal(1, result.MediaByYear[ScanResult.UnknownYear]);
+    }
+
+    [Fact]
+    public void Counts_a_photo_in_the_year_of_its_metadata_when_its_folder_is_another_day()
+    {
+        using var folder = new TempFolder();
+        folder.Write("2005-07-14/praia.jpg", TestPhotos.Porto());
+        folder.Write("2005-07-14/reset.jpg", TestPhotos.Taken("1980:01:01 00:00:00"));
+
+        var result = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false));
+
+        Assert.Equal(1, result.MediaByYear["2019"]);
+        Assert.Equal(1, result.MediaByYear["2005"]);
+        Assert.False(result.MediaByYear.ContainsKey("1980"));
+    }
+
+    [Fact]
+    public void Leaves_a_path_date_after_now_out_of_the_years_when_scanning()
+    {
+        using var folder = new TempFolder();
+        folder.Write("2027-01-01/clip.mpg", RandomBytes(1_000, seed: 10));
+
+        var before = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false), new FixedClock(new DateTime(2026, 10, 20)));
+        var after = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false), new FixedClock(new DateTime(2027, 2, 1)));
+
+        Assert.Equal(1, before.MediaByYear[ScanResult.UnknownYear]);
+        Assert.Equal(1, after.MediaByYear["2027"]);
+    }
+
+    [Fact]
     public void Fails_clearly_when_the_folder_does_not_exist() =>
         Assert.Throws<DirectoryNotFoundException>(() =>
             Scanner.Scan(new ScanOptions(Path.Combine(Path.GetTempPath(), "sepiabox-missing-" + Guid.NewGuid()), null, true)));

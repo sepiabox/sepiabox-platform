@@ -50,19 +50,23 @@ public static class ProcessCommand
         // A wrong folder fails before the model is checked, which can take seconds the first time.
         var (root, output) = Resolve(options);
         using var embedder = ClipImageEmbedder.TryCreate(options.ModelFolder ?? ModelFolder.Default(), out var embedderWarning);
-        return Run(options, root, output, embedder, embedderWarning, filesDone, cancellationToken);
+        return Run(options, root, output, embedder, embedderWarning, TimeProvider.System, filesDone, cancellationToken);
     }
 
-    /// <summary>The same with a given embedder, or none; <paramref name="embedderWarning"/> says why there is none.</summary>
+    /// <summary>
+    /// The same with a given embedder, or none; <paramref name="embedderWarning"/> says why there is none.
+    /// <paramref name="clock"/> gives "now" for the plausibility of capture dates (D-046); the system clock when null.
+    /// </summary>
     internal static ProcessResult Run(
         ProcessOptions options,
         IImageEmbedder? embedder,
         string? embedderWarning,
         IProgress<int>? filesDone = null,
+        TimeProvider? clock = null,
         CancellationToken cancellationToken = default)
     {
         var (root, output) = Resolve(options);
-        return Run(options, root, output, embedder, embedderWarning, filesDone, cancellationToken);
+        return Run(options, root, output, embedder, embedderWarning, clock ?? TimeProvider.System, filesDone, cancellationToken);
     }
 
     /// <summary>The folder to read, which must exist, and the work folder, both as full paths.</summary>
@@ -75,6 +79,7 @@ public static class ProcessCommand
         string output,
         IImageEmbedder? embedder,
         string? embedderWarning,
+        TimeProvider clock,
         IProgress<int>? filesDone,
         CancellationToken cancellationToken)
     {
@@ -191,7 +196,7 @@ public static class ProcessCommand
                     RemoveSource(output, oldSha256, source);
                 }
 
-                var described = Describe(manifestFolder, sha256, kind, file, source);
+                var described = Describe(manifestFolder, sha256, kind, file, source, clock);
                 var (manifest, status, derivativeProblem) = AddDerivatives(output, file, described, video, cancellationToken);
                 var embeddingAdded = false;
                 if (embedder is not null && status == FileStatus.Done)
@@ -284,24 +289,38 @@ public static class ProcessCommand
         }
     }
 
-    private static Manifest Describe(string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source)
+    private static Manifest Describe(
+        string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source, TimeProvider clock)
     {
         var path = ManifestPath(manifestFolder, sha256);
         if (File.Exists(path))
         {
-            // Same bytes seen at another path: the description is unchanged, only the list of sources grows.
+            // Same bytes seen at another path: the description is unchanged and the list of sources grows. Only
+            // the date can change, when it came from a path: this path's date, which needs no metadata (the bytes'
+            // metadata is already in the manifest), is weighed as an upload would weigh it (D-046).
             var existing = ManifestJson.Deserialize(File.ReadAllText(path));
-            return existing with { Sources = WithSource(existing.Sources, source) };
+            var fromPath = CaptureDate.Resolve(null, file.Path, clock);
+            var dated = ManifestMerge.MergeCaptureDate(
+                existing, existing with { CapturedAt = fromPath?.Value, CapturedAtSource = fromPath?.Source }, existing);
+            return existing with
+            {
+                CapturedAt = dated.CapturedAt,
+                CapturedAtSource = dated.CapturedAtSource,
+                Sources = WithSource(existing.Sources, source),
+            };
         }
 
         var metadata = MetadataReader.Read(file.Path);
+        // The file's own date when plausible, otherwise one from its path (D-046).
+        var captured = CaptureDate.Resolve(metadata.CapturedAt, file.Path, clock);
         return new Manifest
         {
             Id = sha256,
             Kind = kind,
             SizeBytes = file.Size,
             ContentType = MediaTypes.ContentType(file.Path),
-            CapturedAt = metadata.CapturedAt,
+            CapturedAt = captured?.Value,
+            CapturedAtSource = captured?.Source,
             Location = metadata.Location,
             Camera = metadata.Camera,
             Width = metadata.Width,

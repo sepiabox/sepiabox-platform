@@ -10,7 +10,12 @@ namespace Sepiabox.Ingest.Scanning;
 /// </summary>
 public static class Scanner
 {
-    public static ScanResult Scan(ScanOptions options, IProgress<int>? filesSeen = null, CancellationToken cancellationToken = default)
+    public static ScanResult Scan(ScanOptions options, IProgress<int>? filesSeen = null, CancellationToken cancellationToken = default) =>
+        Scan(options, TimeProvider.System, filesSeen, cancellationToken);
+
+    /// <summary>The same with <paramref name="clock"/> as "now" for the plausibility of capture dates (D-046).</summary>
+    internal static ScanResult Scan(
+        ScanOptions options, TimeProvider clock, IProgress<int>? filesSeen = null, CancellationToken cancellationToken = default)
     {
         var root = FileTree.ResolveRoot(options.Root);
 
@@ -36,7 +41,7 @@ public static class Scanner
             if (kind is MediaKind.Photo or MediaKind.Video)
             {
                 media.Add(new FileSample(path, size));
-                var year = ReadYear(path, problems);
+                var year = ReadYear(path, clock, problems);
                 mediaByYear[year] = mediaByYear.GetValueOrDefault(year) + 1;
             }
 
@@ -66,11 +71,12 @@ public static class Scanner
         };
     }
 
-    private static string ReadYear(string path, List<ScanProblem> problems)
+    // The same rule as process (D-046), so "by year" matches the dates process will record.
+    private static string ReadYear(string path, TimeProvider clock, List<ScanProblem> problems)
     {
         try
         {
-            var taken = CaptureDateReader.TryRead(path);
+            var taken = CaptureDate.Resolve(CaptureDateReader.TryRead(path), path, clock)?.Value;
             return taken?.Year.ToString(CultureInfo.InvariantCulture) ?? ScanResult.UnknownYear;
         }
         catch (Exception ex)
