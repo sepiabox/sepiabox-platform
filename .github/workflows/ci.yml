@@ -21,6 +21,16 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet format Sepiabox.slnx --verify-no-changes
+      # Checks every workflow, and the scripts in their run steps with ShellCheck (S-034).
+      - name: actionlint
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh
 
   test:
     strategy:

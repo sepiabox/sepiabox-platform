@@ -8,11 +8,14 @@ Steps that need a person, because they depend on accounts, consents or external 
 |---|---|---|
 | Azure subscription billed in EUR, with Owner access to the `rg-sepiabox` resource group | S-029 onwards (deploy) | Azure portal |
 | Resource providers registered on the subscription, once, by someone with rights on the subscription (the deploy identity only has rights on `rg-sepiabox`, and a deploy that needs an unregistered provider fails, as the first sepiabox-infra deploy did on `Microsoft.Automation`): Azure portal → Subscriptions → your subscription → Settings → Resource providers → select each and Register; or `az provider register --namespace <name>` for each of `Microsoft.Automation`, `Microsoft.OperationalInsights`, `Microsoft.Insights`, `Microsoft.AlertsManagement`, `Microsoft.CostManagement`, `Microsoft.App`, `Microsoft.DBforPostgreSQL`, `Microsoft.Storage`, `Microsoft.KeyVault`, `Microsoft.ContainerRegistry`, `Microsoft.ManagedIdentity`, `Microsoft.ServiceBus`, `Microsoft.EventGrid`. Check with `az provider show --namespace <name> --query registrationState -o tsv` (`Registered`) | S-029 onwards (deploy), S-030, S-031, S-032, S-033 | Azure portal → Subscriptions |
-| Entra ID app registration with a federated credential (OIDC) for `sepiabox/sepiabox-platform` and `sepiabox/sepiabox-infra`, environment `production` | S-029, S-034 | Azure portal → Entra ID |
+| Entra ID app registration with a federated credential (OIDC) for `sepiabox/sepiabox-platform` and `sepiabox/sepiabox-infra`, environment `production`. GitHub sends the subject in its immutable-id format, with the organization's and the repository's numeric ids: issuer `https://token.actions.githubusercontent.com`, audience `api://AzureADTokenExchange`, subject `repo:sepiabox@344892533/sepiabox-platform@1425873797:environment:production` for this repository (the ids come from `gh api orgs/sepiabox --jq .id` and `gh api repos/sepiabox/sepiabox-platform --jq .id`; sepiabox-infra has its own repository id). Keeping a second credential with the name-only subject `repo:sepiabox/sepiabox-platform:environment:production` does no harm. Both formats exist already | S-029, S-034 | Azure portal → Entra ID → App registrations → Certificates & secrets → Federated credentials |
 | GitHub variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` and a `production` environment with manual approval | S-029, S-034 | GitHub → Settings |
 | GitHub variable `BUDGET_ALERT_EMAILS` in `sepiabox-infra`: comma-separated e-mails that receive the budget and cost-anomaly alerts | S-029 | GitHub → sepiabox-infra → Settings → Variables |
 | The deploy identity (the OIDC app registration) needs Owner, or User Access Administrator plus Resource Policy Contributor, on `rg-sepiabox`, to assign the shutdown runbook's role and the resource policy | S-030, S-031 | Azure portal → rg-sepiabox → Access control |
-| The deploy identity needs *AcrDelete* (or Contributor) on the container registry, for the image purge after each deploy (Owner on `rg-sepiabox` already includes it) | S-034 | Azure portal → Container Registry → Access control |
+| The deploy identity needs *Contributor* on the container registry (or Owner on `rg-sepiabox`, which includes it) for the image purge after each deploy: `az acr run` starts a registry task, which *AcrDelete* alone does not allow | S-034 | Azure portal → Container Registry → Access control |
+| The `production` environment deploys only `main`: GitHub → sepiabox-platform → Settings → Environments → production → Deployment branches and tags → Selected branches and tags → add `main`. The workflow also refuses a manual run of another branch, which would use that branch's copy of the workflow | S-034 | GitHub → Settings → Environments |
+| The deploy identity, and anyone who runs `scripts/deploy.sh`, needs rights at **subscription** scope to create deployments and to read and write the resource group: azd deploys the AppHost's infrastructure as a subscription-scoped deployment that declares `rg-sepiabox` itself, which Owner on the resource group alone does not allow. The narrowest choice is a custom role assigned on the subscription with the actions `Microsoft.Resources/deployments/*`, `Microsoft.Resources/subscriptions/read`, `Microsoft.Resources/subscriptions/locations/read`, `Microsoft.Resources/subscriptions/resourceGroups/read` and `Microsoft.Resources/subscriptions/resourceGroups/write`; if azd then reports `AuthorizationFailed` on another read, add that action too. Contributor on the subscription also works but grants far more. If the first deploy from GitHub fails with `AuthorizationFailed` on `Microsoft.Resources/deployments/write` at the subscription, this is the missing step | S-034 | Azure portal → Subscriptions → Access control |
+| GitHub secrets of the `production` environment `PG_USERNAME`, `PG_PASSWORD` and `PG_APP_PASSWORD`, and optionally the variable `UPLOADER_PRINCIPAL_IDS`, copied from the first deploy (see "Deploying from GitHub Actions") | S-034 | GitHub → sepiabox-platform → Settings → Environments → production |
 | Google OAuth client (Testing mode, the two e-mails as test users; Drive API enabled) | S-010, S-037 | Google Cloud Console |
 | Microsoft app registration for personal accounts (sign-in and Files.Read) | S-010, S-039 | Azure portal → Entra ID |
 | Anthropic API key for `claude-haiku-5-5` (an Anthropic Console organization with billing and a low monthly spend limit; billed separately, outside the €50/month Azure ceiling of D-008); locally in the web's user secrets as `Anthropic:ApiKey`, in Azure as the Key Vault secret `Anthropic--ApiKey` (D-052) | S-025, S-058 | Anthropic Console; Key Vault |
@@ -37,6 +40,7 @@ Checks only a person can do. A story whose automated criteria pass is `done` and
 | After `scripts/deploy.sh` (see "Deploying to Azure"): (1) `az containerapp job execution list --name sepiabox-migrate --resource-group rg-sepiabox --query "[0].{status:properties.status,end:properties.endTime}" -o table` shows `Succeeded`, and its end time is before the `createdTime` of the web's newest revision in `az containerapp revision list --name sepiabox-web --resource-group rg-sepiabox --query "[].{name:name,created:properties.createdTime}" -o table`. (2) With `host=$(az containerapp show --name sepiabox-web --resource-group rg-sepiabox --query properties.configuration.ingress.fqdn -o tsv)`, `curl -s -o /dev/null -w "%{http_code}\n" https://$host/health` prints `200` (the first call after scale to zero can take up to a minute). (3) `curl -s -o /dev/null -w "%{http_code}\n" http://$host/health` prints `301` or `308` (the ingress sends plain HTTP to HTTPS). (4) `curl -s -o /dev/null -w "%{http_code}\n" -H "Host: example.com" https://$host/health` does not print `200` (`AllowedHosts`; the ingress itself may answer 404) | S-032 |
 | After the first deploy has settled (the web may restart a few times while its Key Vault role propagates, see "Secrets in Azure"), the owner's secrets are in Key Vault and the default host's `/signin-google` and `/signin-microsoft` are on the OAuth clients: sign in with Google and with Microsoft on `https://<Container Apps default host>`; restart the web (`az containerapp revision restart --name sepiabox-web --resource-group rg-sepiabox --revision $(az containerapp show --name sepiabox-web --resource-group rg-sepiabox --query properties.latestRevisionName -o tsv)`) and reload: still signed in; deploy again (a new revision) and reload: still signed in; then try an account not on the list: it lands on the no-access page. Also check the key ring exists: the `dataprotection` container has a `keys.xml` blob (Azure portal → storage account → Containers) | S-058 |
 | The same on `https://app.sepiabox.com` once the custom domain is set | S-035 |
+| After the secrets in "Deploying from GitHub Actions" are set: run Actions → Deploy → Run workflow on `main`, approve it in the `production` environment, and check that it succeeds, that its "Deploy" step shows "Migrations applied." before the web is deployed, and that "Purge old images" ran one `acr purge` per repository. Then merge a small change to `main`: the workflow starts by itself once CI is green, and waits for approval | S-034 |
 | After a deploy and `sepiabox-import-all` (see "Automatic import"): `upload` one small folder to Azure; within about 30 seconds a new `sepiabox-import` execution starts (see "Check after the first deploy that the job starts"), and within a few minutes, without running anything else, `az containerapp job execution list --name sepiabox-import --resource-group rg-sepiabox --query "[0].properties.status" -o tsv` shows `Succeeded`, its assets appear in the timeline at the Container Apps default host, and the dead-letter count (see "Automatic import") is `0` | S-033 |
 | After the GeoNames job (`az containerapp job start --name sepiabox-geonames --resource-group rg-sepiabox`): a photo taken in Lisbon shows "Lisbon" on its detail page in Azure | S-059 |
 | The first description search after a cold start answers within 30 s, later ones within 2 s | S-056 |
@@ -80,6 +84,42 @@ If the migration fails, is stopped or times out, the script stops before step 4 
 After the first deploy, record here which of the two behaviours azd showed (single-resource deploys and the job worked, or the manual steps were needed), so the script can be fixed if needed.
 
 Until the owner creates the secrets below, the web starts with no sign-in buttons and lets no one in, but `/health` answers. On the first deploy the web may restart a few times while its new role assignments reach Key Vault (a few minutes); it then starts normally. The web's address is `https://sepiabox-web.<environment default domain>`: `az containerapp show --name sepiabox-web --resource-group rg-sepiabox --query properties.configuration.ingress.fqdn -o tsv`.
+
+## Deploying from GitHub Actions
+
+`.github/workflows/deploy.yml` (S-034, D-064) deploys `main` after CI passes on a push to it, and on demand (Actions → Deploy → Run workflow). It waits for approval in the `production` environment, signs in with OIDC (no secret), recreates the azd environment `sepiabox` from the saved parameters, runs `scripts/deploy.sh` (so a failed migration stops it before the import jobs and the web), and then keeps the last 5 images of every repository in the container registry. It never runs for pull requests. A run whose commit is no longer the newest on `main` ends in its first job, without asking for approval and without deploying, because the newer commit's own run deploys it. If that newer commit's CI fails, nothing is deployed until `main` is green again: fix `main`, or run Deploy by hand once it is green.
+
+**The first deploy is from your computer** (`./scripts/deploy.sh`, see "Deploying to Azure"): azd generates the PostgreSQL parameters there, once. Then copy them into the `production` environment's secrets, straight from your `.azure` backup to GitHub, without pasting them anywhere (you need the GitHub CLI, `gh auth login`):
+
+```bash
+cd sepiabox-platform   # the folder with .azure/sepiabox/config.json
+set -o pipefail
+for pair in PG_USERNAME:pg_username PG_PASSWORD:pg_password PG_APP_PASSWORD:pg_app_password; do
+  # -e makes jq fail on a missing key instead of printing "null"; the secret is set only when it succeeded.
+  if value=$(jq -er ".infra.parameters.${pair#*:}" .azure/sepiabox/config.json); then
+    printf '%s' "$value" | gh secret set "${pair%%:*}" --env production --repo sepiabox/sepiabox-platform
+  else
+    echo "Not set: ${pair%%:*} (check the key names in config.json)" >&2
+  fi
+done
+unset value
+gh variable set UPLOADER_PRINCIPAL_IDS --env production --repo sepiabox/sepiabox-platform \
+  --body "$(jq -r '.infra.parameters.uploaderPrincipalIds // ""' .azure/sepiabox/config.json)"
+```
+
+`gh secret set` reads the value from its input, so it never appears on the screen or in the shell history. Without the `.azure` folder, the login and password can be read from the database vault's secret `connectionstrings--catalog` instead (it needs *Key Vault Secrets User* on that vault for your account):
+
+```bash
+vault=$(az keyvault list --resource-group rg-sepiabox --query "[?starts_with(name, 'databasevault-')].name | [0]" -o tsv)
+az keyvault secret show --vault-name "$vault" --name connectionstrings--catalog --query value -o tsv \
+  | sed -n 's/.*Username=\([^;]*\).*/\1/p' | gh secret set PG_USERNAME --env production --repo sepiabox/sepiabox-platform
+az keyvault secret show --vault-name "$vault" --name connectionstrings--catalog --query value -o tsv \
+  | sed -n 's/.*Password=\([^;]*\).*/\1/p' | gh secret set PG_PASSWORD --env production --repo sepiabox/sepiabox-platform
+```
+
+`PG_APP_PASSWORD` (the web's application role) is not kept in Key Vault; if it is lost, set a new one of 64 letters and digits, which the next deploy's migrate job gives the role before the web restarts: `LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64 | gh secret set PG_APP_PASSWORD --env production --repo sepiabox/sepiabox-platform`. The workflow stops before azd if any of the three is missing, so azd never generates new ones on a runner (D-061).
+
+After a workflow deploy, check the run's "Purge old images" step: one `acr purge` per repository, each keeping 5 images.
 
 ## Secrets in Azure
 
