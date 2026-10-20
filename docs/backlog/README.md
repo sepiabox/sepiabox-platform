@@ -11,7 +11,7 @@ Backlog meant to be executed by autonomous agents. Each story is a small vertica
 
 Statuses: `todo` · `doing` · `blocked` · `done`.
 
-**Order overrides** ([D-041](../decisions.md)): after S-009 come S-015, then S-018, ahead of S-010–S-014, so the drive is processed once with embeddings and faces.
+**Order overrides** ([D-041](../decisions.md)): after S-009 come S-015, S-043, then S-018, ahead of S-010–S-014, so the drive is processed once with embeddings, faces and the dates of undated files.
 
 ## Execution order
 
@@ -27,6 +27,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-004 | [Describe each photo and video in a manifest](S-004-describe-each-photo-and-video-in-a.md) | Local ingest | S-002 | High | M | `done` |
 | S-005 | [Generate photo thumbnails](S-005-generate-photo-thumbnails.md) | Local ingest | S-004 | High | S | `done` |
 | S-006 | [Generate video posters and 720p versions](S-006-generate-video-posters-and-720p-versions.md) | Local ingest | S-004 | High | M | `done` |
+| S-043 | [Date files from folder and file names](S-043-date-files-from-folder-and-file-names.md) | Local ingest | S-004 | High | M | `doing` |
 
 ### Sprint 2 — See the photos in the browser
 
@@ -111,7 +112,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | Epic | Stories |
 |---|---|
 | Foundation | S-001, S-003 |
-| Local ingest | S-002, S-004, S-005, S-006, S-007 |
+| Local ingest | S-002, S-004, S-005, S-006, S-007, S-043 |
 | Cloud catalog | S-008, S-012 |
 | Web app | S-009, S-010, S-011 |
 | Search | S-013, S-014, S-015, S-016, S-017, S-041 |
@@ -126,8 +127,8 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 ## Validation
 
-- **Dependencies:** all point to lower-numbered stories in the same or an earlier sprint; there are no cycles and no forward dependencies (checked by script when this index is generated).
-- **Size:** 14 stories S, 28 M, none L.
+- **Dependencies:** all point to stories in the same or an earlier sprint (S-043 was added later and listed in Sprint 1); there are no cycles and no forward dependencies (checked by script when this index is generated).
+- **Size:** 14 stories S, 29 M, none L.
 - **Sprints:** 7 sprints, between 5 and 7 stories each.
 - **Decisions covered:** D-001 to D-024 in [`decisions.md`](../decisions.md) are applied: each is cited in the technical notes of at least one story, except D-021, which this backlog itself applies.
 - Story status is kept up to date by each story's PR (see [How to use](#how-to-use)).
@@ -151,5 +152,5 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 - **Epics:** 13
 - **Sprints:** 7
-- **Stories:** 42
+- **Stories:** 43
 - **Critical path (13 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-015 → S-018 → S-019 → S-020 → S-021 → S-025 → S-026 → S-028
