@@ -21,6 +21,7 @@ Steps that need a person, because they depend on accounts, consents or external 
 ## Ingesting a drive
 
 - Run `sepiabox-ingest models download` once per computer before `process`, so embeddings are computed in the same pass.
+- Before the first full run, copy one of your own Canon `.CR2` files into an empty folder, run `process` on that folder, and open `derivatives/<id>/preview-1280.webp` in the work folder: it should look like the camera's JPEG (right colours, upright, not a 160x120 thumbnail blown up). The tests only use a synthetic CR2 (D-045).
 - Keep the `process` work folder (`manifests/` and `derivatives/`) until every file has its embedding, and its faces once S-018 is done: a later `process` run adds them from the previews in the work folder without the drive, but cannot once they are deleted. The summary has no "have no embedding" or "no preview or poster" warning when nothing is left to add.
 
 ## OAuth redirect URLs
