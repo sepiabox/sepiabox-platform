@@ -16,7 +16,7 @@ The owner's archive (`scan` of `E:\Life`, 87,891 files) has 4,556 photos and vid
 - Precedence: a date read from the file's own metadata (EXIF, QuickTime) always wins; the path is only a fallback.
 - Implausible metadata dates (before 1990-01-01, or more than one day after the time of processing, e.g. a camera with a reset clock) are treated as missing, so the path fallback applies.
 - `process` writes the fallback date to `capturedAt` and a new optional manifest field `capturedAtSource`: `metadata`, `fileName` or `folder` (omitted when `capturedAt` is null). Update `docs/schemas/manifest.v1.json` (still v1: the field is optional).
-- Merging manifests (D-036): a date from `metadata` is never replaced by one from the path; between path dates, the incoming one wins.
+- Merging manifests (D-036): the stronger source wins (`metadata` > `fileName` > `folder` > no date); between two path dates of the same source, the earlier date, so the result does not depend on the order of uploads (amended in review, D-046).
 - `scan` uses the same rules for "by year", so its report matches what `process` will record.
 
 ### Out of scope
@@ -26,14 +26,14 @@ The owner's archive (`scan` of `E:\Life`, 87,891 files) has 4,556 photos and vid
 - Time zones: `capturedAt` stays wall-clock time (D-037).
 
 ### Acceptance criteria
-- [ ] Given `E:\Life\2011-09-25\MNU_110425_d8b2.MTS` with no metadata date, when it is processed, then `capturedAt` is `2011-09-25T11:04:25` and `capturedAtSource` is `fileName`.
-- [ ] Given `2008-12-24\clip.mod` with no metadata date, then `capturedAt` is `2008-12-24T00:00:00` and `capturedAtSource` is `folder`.
-- [ ] Given `VID_20120304_101112.mp4` with no metadata date, then `capturedAt` is `2012-03-04T10:11:12`.
-- [ ] Given a JPEG with an EXIF date in a `YYYY-MM-DD` folder for another day, then the EXIF date is kept and `capturedAtSource` is `metadata`.
-- [ ] Given a JPEG with EXIF date 1980-01-01 in folder `2005-07-14`, then `capturedAt` is `2005-07-14T00:00:00`.
-- [ ] Given folder `2011-02-30`, then no date comes from the path.
-- [ ] Given a scan of a folder `2009-05-01` with an undated `.mpg`, then "by year" counts it in 2009.
-- [ ] Given an old manifest without `capturedAtSource`, then it still validates and imports.
+- [x] Given `E:\Life\2011-09-25\MNU_110425_d8b2.MTS` with no metadata date, when it is processed, then `capturedAt` is `2011-09-25T11:04:25` and `capturedAtSource` is `fileName`.
+- [x] Given `2008-12-24\clip.mod` with no metadata date, then `capturedAt` is `2008-12-24T00:00:00` and `capturedAtSource` is `folder`.
+- [x] Given `VID_20120304_101112.mp4` with no metadata date, then `capturedAt` is `2012-03-04T10:11:12`.
+- [x] Given a JPEG with an EXIF date in a `YYYY-MM-DD` folder for another day, then the EXIF date is kept and `capturedAtSource` is `metadata`.
+- [x] Given a JPEG with EXIF date 1980-01-01 in folder `2005-07-14`, then `capturedAt` is `2005-07-14T00:00:00`.
+- [x] Given folder `2011-02-30`, then no date comes from the path.
+- [x] Given a scan of a folder `2009-05-01` with an undated `.mpg`, then "by year" counts it in 2009.
+- [x] Given an old manifest without `capturedAtSource`, then it still validates and imports.
 
 ### Technical notes
 - Use the parent folder only, not other ancestors: a dated folder higher up says less about the file.

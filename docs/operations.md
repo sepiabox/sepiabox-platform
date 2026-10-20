@@ -23,6 +23,9 @@ Steps that need a person, because they depend on accounts, consents or external 
 - Run `sepiabox-ingest models download` once per computer before `process`, so embeddings are computed in the same pass.
 - Keep the `process` work folder (`manifests/` and `derivatives/`) until every file has its embedding, and its faces once S-018 is done: a later `process` run adds them from the previews in the work folder without the drive, but cannot once they are deleted. The summary has no "have no embedding" or "no preview or poster" warning when nothing is left to add.
 
+- Manifests written by `process` from S-043 on may carry `capturedAtSource` (D-046). Older `sepiabox-ingest` and `sepiabox-worker` builds reject that field, so update every computer that runs `sepiabox-ingest` and deploy the worker before uploading such manifests; otherwise `upload` from an old build fails to merge them and the old worker's import reports them as problems.
+- Files processed before S-043 keep the date they had (none, for undated videos): `process` skips unchanged files. To date them from their folder or file name, run `process` again into a fresh work folder and upload from it.
+
 ## OAuth redirect URLs
 
 - Local: `https://localhost:<port>/signin-google`, `/signin-microsoft`

@@ -24,6 +24,7 @@ Files from cloud sources (Drive, OneDrive) arrive without the PC processing. The
 
 ### Technical notes
 - Reuse the stages from S-004/S-005/S-006/S-015.
+- Decide `capturedAt` with `CaptureDate.Resolve` (Sepiabox.Pipeline), never from `MediaMetadata.RawCapturedAt` alone, and set `capturedAtSource` whenever `capturedAt` is set (D-046). The path given to it is the file's path in the cloud source.
 
 ### Expected tests
 - Integration (Azurite + PostgreSQL): full processing; image build in CI.
