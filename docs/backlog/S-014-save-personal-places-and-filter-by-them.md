@@ -25,7 +25,7 @@
 - [ ] Given two places with the same name in different letter case, then the second is rejected.
 
 ### Technical notes
-- `ST_DWithin` on `geography`. Extends `search.v1.json`.
+- `ST_DWithin` on `geography`, in the PostGIS-specific class next to S-012's (D-051). Extends `search.v1.json`.
 
 ### Expected tests
 - Integration (PostgreSQL): radius, minimum distance, uniqueness. bUnit: form.

@@ -21,5 +21,7 @@ An expensive resource created by mistake, or too much telemetry, could blow the 
 ### Technical notes
 - Export the workspace id as an output for the AppHost (S-032).
 
+- Update (2026-10-20): Cognitive Services/Foundry was removed from the allowed types in `sepiabox-infra` (sepiabox/sepiabox-infra#5, merged), since Claude is called through the Anthropic API (D-052). No follow-up needed.
+
 ### Expected tests
 - CI: Bicep compilation and assertions on the compiled JSON.

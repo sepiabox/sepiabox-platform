@@ -1,6 +1,6 @@
 ## S-024 — Classify occasions by type
 **Epic:** Occasions
-**Depends on:** S-023, S-016, S-026
+**Depends on:** S-023, S-016, S-026, S-014
 **Priority:** Medium
 **Size:** M
 
@@ -10,7 +10,7 @@ Knowing that an occasion is a wedding uses the CLIP embeddings already stored (z
 ### Scope
 - `eventTypes.json`: English keys with their CLIP prompt: `wedding` ("a photo of a wedding"), `birthday` ("a photo of a birthday party"), `beach` ("a photo at the beach"), `christmas` ("a photo of a Christmas celebration"), `graduation` ("a photo of a graduation ceremony"), `snow` ("a photo in the snow"), `party` ("a photo of a party"). Labels shown to the user come from the resources (English and pt-BR: casamento, aniversário, praia, Natal, formatura, neve, festa, viagem; D-050). No religion or health categories.
 - Per photo: softmax (temperature 100) across the texts; event type = the label with the most photos at probability ≥ 0.35, if that is ≥ 30% of the photos; otherwise no type.
-- Extra `trip` rule: an occasion more than 100 km from the place marked as home (S-014, if there is one) lasting ≥ 1 day.
+- Extra `trip` rule: an occasion more than 100 km from the place marked as home (S-014) lasting ≥ 1 day; without a home place, no occasion is a trip.
 - DSL `eventTypes: ["wedding"]`; filter on the occasions page.
 - Counting (S-026): `aggregate.count: "events"` and `groupBy: "eventType"` ("How many weddings did we go to this year?"), with the answer sentence in both cultures.
 - Questions (S-025): the translator's context gains the occasion types and its prompt examples map them ("casamentos" → `wedding`).

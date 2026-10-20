@@ -19,6 +19,7 @@ Repeatable deploys, with no secrets in the repository and never running on third
 - [ ] Given the workflow, then `actionlint` passes.
 - [ ] Given the workflow, then it uses the `production` environment, minimal permissions and no PR trigger.
 - [ ] Given the repository, then there is no Azure secret in plain text.
+- [ ] Given the workflow, then it runs the `sepiabox-worker migrate` job (S-032) and waits for its success before the web is deployed; a failed migration stops the deploy (a test on the workflow or the `azure.yaml` hooks it calls).
 
 ### Technical notes
 - Configuring the environment and the federated credential is a human step (`docs/operations.md`).

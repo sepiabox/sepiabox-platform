@@ -24,9 +24,10 @@ The CLIP text encoder turns "snow" into a vector comparable with the photo embed
 
 ### Technical notes
 - Try `Microsoft.ML.Tokenizers` (BPE with end-of-word suffix); if it does not reproduce the reference ids, implement CLIP's BPE (~150 lines).
-- `Sepiabox.Pipeline/Clip/ClipTextEncoder.cs`, `ClipTokenizer.cs`. Singleton service with lazy loading in the web app.
+- Where it lives (D-055): `ClipTokenizer` and `ClipTextEncoder` go in a new small library `Sepiabox.Search` (ONNX Runtime only, no Magick.NET or FFmpeg), which the web references, keeping D-038; the model verification shared with the image encoder (`models.json`, SHA-256, `ModelSession`, D-044) moves there and `Sepiabox.Pipeline` references it. Singleton service with lazy loading in the web. Shipping the model to the Azure web is S-056; locally the web reads it from the folder `models download` fills.
+- Portability (D-051): the kNN query (`<=>` with the HNSW index) is pgvector-specific and lives in a provider-specific class (`PgvectorSimilarity`) behind the search service.
 - The text model must come from the same repository revision as the image model in `models/models.json` (`Xenova/clip-vit-base-patch32` at `d15189d7028b43f1d3e65039190477f6af591c2a`, D-044), so both encoders share one embedding space.
-- Decisions: D-016, D-017, D-020.
+- Decisions: D-016, D-017, D-020, D-038, D-051, D-055.
 
 ### Expected tests
 - Unit: tokenizer with reference ids. Integration: text inference and kNN query.

@@ -40,7 +40,8 @@ All search goes through a single JSON DSL (D-020), used by the filter UI and, la
 
 ### Technical notes
 - `Sepiabox.Catalog/Search/SearchQuery.cs`, `SearchService.cs`; `TimeProvider` for the clock.
-- Decisions: D-020.
+- Portability (D-051): `SearchService` builds its filters with plain EF Core (no provider-specific SQL); later filters that need PostGIS (S-014) or pgvector (S-016) plug in provider-specific classes behind it.
+- Decisions: D-020, D-051.
 
 ### Expected tests
 - Unit: DSL validation, URL round trip. Integration (PostgreSQL): each filter and combinations.
