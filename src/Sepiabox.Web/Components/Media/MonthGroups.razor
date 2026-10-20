@@ -1,0 +1,22 @@
+@* Assets under one heading per month, newest first as given; undated ones last under "No date". *@
+
+@foreach (var group in TimelineGroups.ByMonth(Items))
+{
+    <section class="month">
+        <h2>@(group.Month is { } month ? Text.MonthAndYear(month) : Text["NoDate"])</h2>
+        <ul class="grid">
+            @foreach (var item in group.Items)
+            {
+                <li><MediaCard Item="item" Href="@DetailLink(item)" /></li>
+            }
+        </ul>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TimelineItem> Items { get; set; } = [];
+
+    [Parameter, EditorRequired]
+    public Func<TimelineItem, string> DetailLink { get; set; } = item => $"photos/{item.Id}";
+}

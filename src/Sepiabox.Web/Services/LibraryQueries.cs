@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Sepiabox.Catalog;
+using Sepiabox.Catalog.Search;
 
 namespace Sepiabox.Web.Services;
 
@@ -30,6 +31,12 @@ public sealed record AssetDetail(
     bool HasProxy,
     string? Place = null);
 
+/// <summary>The assets a search found, up to its limit; <see cref="HasMore"/> says whether more matched.</summary>
+public sealed record SearchPage(IReadOnlyList<TimelineItem> Items, bool HasMore);
+
+/// <summary>What the filter bar offers: the years, cities and sources the catalog has, in display order.</summary>
+public sealed record FilterOptions(IReadOnlyList<int> Years, IReadOnlyList<string> Cities, IReadOnlyList<string> Sources);
+
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
 public sealed record OriginalFile(string FileName, string ContentType);
 
@@ -46,9 +53,18 @@ public interface ILibraryQueries
 
     /// <summary>Null when the catalog has no asset with that id.</summary>
     Task<OriginalFile?> GetOriginalAsync(string id, CancellationToken cancellationToken = default);
+
+    /// <summary>The assets a valid search DSL query matches (S-013), in its order and up to its limit.</summary>
+    Task<SearchPage> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default);
+
+    Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default);
 }
 
-public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts) : ILibraryQueries
+public sealed class LibraryQueries(
+    IDbContextFactory<CatalogDbContext> contexts,
+    TimeProvider? clock = null,
+    SearchOptions? searchOptions = null,
+    FilterOptionsCache? filterOptions = null) : ILibraryQueries
 {
     public const int PageSize = 200;
 
@@ -178,6 +194,39 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
         // The first source in the order the detail page lists them names the download.
         var path = OrderSources(asset.Sources).FirstOrDefault()?.Path;
         return new OriginalFile(DownloadName(path, asset.Id, asset.ContentType), asset.ContentType);
+    }
+
+    public async Task<SearchPage> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var rows = await new SearchService(db, clock ?? TimeProvider.System, searchOptions)
+            .Query(query)
+            .Select(a => new TimelineItem(
+                a.Id, a.Kind, a.CapturedAt, a.Derivatives.Any(d => d.Name == DerivativeNames.Thumbnail), a.DurationSeconds))
+            .Take(query.Limit + 1)
+            .ToListAsync(cancellationToken);
+        return new SearchPage([.. rows.Take(query.Limit)], rows.Count > query.Limit);
+    }
+
+    public async Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default)
+    {
+        // Loaded unsorted and shared; sorted per request, in the reader's culture.
+        var options = await (filterOptions?.GetAsync(() => LoadFilterOptionsAsync(CancellationToken.None))
+            ?? LoadFilterOptionsAsync(cancellationToken));
+        var byName = StringComparer.Create(System.Globalization.CultureInfo.CurrentCulture, ignoreCase: true);
+        return new FilterOptions(options.Years, [.. options.Cities.Order(byName)], [.. options.Sources.Order(byName)]);
+    }
+
+    private async Task<FilterOptions> LoadFilterOptionsAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var years = await db.Assets.Where(a => a.CapturedAt != null).Select(a => a.CapturedAt!.Value.Year)
+            .Distinct().OrderByDescending(y => y).ToListAsync(cancellationToken);
+        var cities = await db.Assets.Where(a => a.PlaceCity != null).Select(a => a.PlaceCity!)
+            .Distinct().ToListAsync(cancellationToken);
+        var sources = await db.AssetSources.Select(s => s.Name).Distinct().ToListAsync(cancellationToken);
+        return new FilterOptions(years, cities, sources);
     }
 
     private static IEnumerable<AssetSource> OrderSources(IEnumerable<AssetSource> sources) =>

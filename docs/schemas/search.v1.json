@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepiabox.com/schemas/search.v1.json",
+  "title": "Sepiabox search DSL v1",
+  "description": "What the filter bar, POST /api/search and the question translator send to the search (D-020, S-013, D-069). Every filter given must match (AND); the values of one list match when any does (OR). Unknown fields are rejected.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "enum": ["photo", "video"] }
+        },
+        "dateFrom": {
+          "description": "First day included, on the camera's wall clock.",
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "dateTo": {
+          "description": "Last day included; not before dateFrom.",
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "years": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "type": "integer", "minimum": 1800, "maximum": 9999 }
+        },
+        "months": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "type": "integer", "minimum": 1, "maximum": 12 }
+        },
+        "onThisDay": {
+          "description": "Today's day and month (in the configured time zone): yearsAgo years ago, or in every earlier year when yearsAgo is absent.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "yearsAgo": { "type": "integer", "minimum": 0, "maximum": 200 }
+          }
+        },
+        "places": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cities": {
+              "description": "GeoNames city names as the catalog stores them (\"Lisbon\"), matched ignoring case and accents.",
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
+            },
+            "countries": {
+              "description": "ISO 3166-1 alpha-2 codes.",
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": { "type": "string", "pattern": "^[A-Z]{2}$" }
+            }
+          }
+        },
+        "sources": {
+          "description": "Source names, such as the drive's name given to process, matched ignoring case.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
+        },
+        "undatedOnly": {
+          "description": "Only assets without a capture date; not together with dateFrom, dateTo, years, months or onThisDay.",
+          "type": "boolean"
+        }
+      }
+    },
+    "sort": {
+      "description": "Undated assets come last either way.",
+      "enum": ["capturedAtDesc", "capturedAtAsc"]
+    },
+    "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+  }
+}

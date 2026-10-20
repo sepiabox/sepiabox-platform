@@ -91,7 +91,15 @@
 
     private string VideoLabel => _asset?.CapturedAt is { } at ? Text["Detail_VideoFrom", Text.DateAndTime(at)] : Text["Detail_UndatedVideo"];
 
-    private string BackLink => LibraryQueries.ParsePage(PageQuery) is > 1 and var page ? $"./?page={page}" : "./";
+    /// <summary>The filters the visitor came from (S-013), so "back" returns to them.</summary>
+    [SupplyParameterFromQuery(Name = SearchLinks.QueryParameter)]
+    public string? SearchQueryParameter { get; set; }
+
+    // Only a query that decodes is linked back, so the link never carries anything else from the URL.
+    private string BackLink =>
+        Sepiabox.Catalog.Search.SearchQueryJson.TryDecode(SearchQueryParameter, out var query, out _) ? SearchLinks.Timeline(query)
+        : LibraryQueries.ParsePage(PageQuery) is > 1 and var page ? $"./?page={page}"
+        : "./";
 
     private string? Camera =>
         string.Join(' ', new[] { _asset?.CameraMake, _asset?.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s))) is { Length: > 0 } text

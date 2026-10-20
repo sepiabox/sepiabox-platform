@@ -22,6 +22,8 @@ builder.Services.AddDbContextFactory<CatalogDbContext>((services, options) =>
     CatalogDbContext.Configure(options, services.GetRequiredService<NpgsqlDataSource>()));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ISasUrlFactory, SasUrlFactory>();
+builder.Services.AddSingleton(SearchSetup.Options(builder.Configuration));
+builder.Services.AddSingleton<FilterOptionsCache>();
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 
 builder.AddSepiaboxAuth();
@@ -64,6 +66,7 @@ app.MapStaticAssets().AllowAnonymous();
 app.MapSepiaboxAuth();
 app.MapLanguageSwitch();
 app.MapMediaEndpoints();
+app.MapSearchEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
