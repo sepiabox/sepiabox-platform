@@ -52,26 +52,45 @@ public class CaptureDateTests
             CaptureDate.Resolve(null, "Digitalizadas/1978-08-15/scan.jpg", s_clock));
 
     [Theory]
-    [InlineData("1989-12-31T23:59:59", CaptureDateSource.Metadata, false)]
-    [InlineData("1990-01-01T00:00:00", CaptureDateSource.Metadata, true)]
-    [InlineData("1989-12-31T23:59:59", CaptureDateSource.FileName, false)]
-    [InlineData("1990-01-01T00:00:00", CaptureDateSource.FileName, true)]
-    [InlineData("1899-12-31T00:00:00", CaptureDateSource.Folder, false)]
-    [InlineData("1900-01-01T00:00:00", CaptureDateSource.Folder, true)]
-    [InlineData("2026-10-21T12:00:00", CaptureDateSource.Metadata, true)]
-    [InlineData("2026-10-21T12:00:01", CaptureDateSource.Metadata, false)]
-    [InlineData("2026-10-21T12:00:01", CaptureDateSource.Folder, false)]
-    public void Accepts_dates_up_to_one_day_after_now_from_1990_or_1900_for_folders_when_checking_plausibility(
-        string value, CaptureDateSource source, bool plausible) =>
-        Assert.Equal(plausible, CaptureDate.IsPlausible(DateTime.Parse(value, System.Globalization.CultureInfo.InvariantCulture), source, s_clock));
+    [InlineData("1989-12-31T23:59:59", false)]
+    [InlineData("1990-01-01T00:00:00", true)]
+    [InlineData("2026-10-21T12:00:00", true)]
+    [InlineData("2026-10-21T12:00:01", false)]
+    public void Keeps_a_metadata_date_from_1990_to_one_day_after_now_when_resolving(string value, bool kept)
+    {
+        var taken = DateTime.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.Equal(kept ? new CaptureDate(taken, CaptureDateSource.Metadata) : null, CaptureDate.Resolve(taken, "Fotos/photo.jpg", s_clock));
+    }
+
+    public static TheoryData<string, CaptureDate?> PathBounds => new()
+    {
+        // A date the device wrote in the file name: from 1990.
+        { "IMG_19891231_235959.jpg", null },
+        { "IMG_19900101_000000.jpg", new(new DateTime(1990, 1, 1), CaptureDateSource.FileName) },
+        { "IMG_20261021_120000.jpg", new(new DateTime(2026, 10, 21, 12, 0, 0), CaptureDateSource.FileName) },
+        { "IMG_20261021_120001.jpg", null },
+        // A day a person typed as the folder name, alone or with a camcorder's time: from 1900.
+        { "1899-12-31/photo.jpg", null },
+        { "1900-01-01/photo.jpg", new(new DateTime(1900, 1, 1), CaptureDateSource.Folder) },
+        { "1899-12-31/MNU_101010.mod", null },
+        { "1900-01-01/MNU_101010.mod", new(new DateTime(1900, 1, 1, 10, 10, 10), CaptureDateSource.FileName) },
+        { "2026-10-21/photo.jpg", new(new DateTime(2026, 10, 21), CaptureDateSource.Folder) },
+        { "2026-10-22/photo.jpg", null },
+    };
+
+    [Theory]
+    [MemberData(nameof(PathBounds))]
+    public void Keeps_a_path_date_only_within_its_plausibility_window_when_resolving(string path, CaptureDate? expected) =>
+        Assert.Equal(expected, CaptureDate.Resolve(null, path, s_clock));
 
     [Fact]
-    public void Measures_now_on_the_clock_given_when_checking_plausibility()
+    public void Measures_now_on_the_clock_given_when_resolving()
     {
         var later = new FixedClock(new DateTime(2030, 1, 1));
 
-        Assert.False(CaptureDate.IsPlausible(new DateTime(2029, 6, 1), CaptureDateSource.Metadata, s_clock));
-        Assert.True(CaptureDate.IsPlausible(new DateTime(2029, 6, 1), CaptureDateSource.Metadata, later));
+        Assert.Null(CaptureDate.Resolve(new DateTime(2029, 6, 1), "photo.jpg", s_clock));
+        Assert.Equal(new CaptureDate(new DateTime(2029, 6, 1), CaptureDateSource.Metadata), CaptureDate.Resolve(new DateTime(2029, 6, 1), "photo.jpg", later));
     }
 
     public static TheoryData<CaptureDate?, CaptureDate?, CaptureDate?> Strongest => new()

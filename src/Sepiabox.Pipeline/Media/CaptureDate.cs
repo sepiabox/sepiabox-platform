@@ -2,7 +2,7 @@ namespace Sepiabox.Pipeline.Media;
 
 /// <summary>
 /// Where <see cref="CaptureDate.Value"/> came from, written to the manifest as <c>capturedAtSource</c>. How they rank
-/// is decided in <see cref="CaptureDate.Stronger"/>, not by their order here.
+/// is decided in <see cref="CaptureDate.Rank"/>, not by their order here.
 /// </summary>
 public enum CaptureDateSource
 {
@@ -40,7 +40,7 @@ public sealed record CaptureDate(DateTime Value, CaptureDateSource Source)
     {
         ArgumentNullException.ThrowIfNull(clock);
 
-        if (fromMetadata is { } metadata && IsPlausible(metadata, CaptureDateSource.Metadata, clock))
+        if (fromMetadata is { } metadata && IsPlausible(metadata, EarliestPlausible, clock))
         {
             return new CaptureDate(metadata, CaptureDateSource.Metadata);
         }
@@ -52,18 +52,12 @@ public sealed record CaptureDate(DateTime Value, CaptureDateSource Source)
     }
 
     /// <summary>
-    /// Not before <see cref="EarliestPlausible"/> (<see cref="EarliestPlausibleFolder"/> for a folder date, and in
-    /// <see cref="Resolve"/> for any date whose day comes from a folder, such as a camcorder clip's) and not
-    /// more than a day after now. The extra day covers a camera set to a time zone ahead of the computer's.
+    /// Not before <paramref name="earliest"/> (<see cref="EarliestPlausibleFolder"/> when the day comes from a folder,
+    /// otherwise <see cref="EarliestPlausible"/>) and not more than a day after now. The extra day covers a camera set
+    /// to a time zone ahead of the computer's.
     /// </summary>
-    public static bool IsPlausible(DateTime value, CaptureDateSource source, TimeProvider clock)
-    {
-        return IsPlausible(value, source == CaptureDateSource.Folder ? EarliestPlausibleFolder : EarliestPlausible, clock);
-    }
-
     private static bool IsPlausible(DateTime value, DateTime earliest, TimeProvider clock)
     {
-        ArgumentNullException.ThrowIfNull(clock);
         return value >= earliest && value <= clock.GetLocalNow().DateTime.AddDays(1);
     }
 

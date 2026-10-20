@@ -8,13 +8,6 @@ namespace Sepiabox.Pipeline.Media;
 /// files after the capture time (<c>IMG_20120304_101112.jpg</c>) and camcorder archives are often kept in folders
 /// named after the capture day (<c>2011-09-25\MNU_110425_d8b2.MTS</c>). Pure: the file is never opened.
 /// </summary>
-/// <summary>A date read from a path.</summary>
-/// <param name="Date">The date and how it was read.</param>
-/// <param name="DayFromFolder">
-/// The day comes from a folder name a person typed, so it may be older than any device clock (D-046).
-/// </param>
-public sealed record PathDateCandidate(CaptureDate Date, bool DayFromFolder);
-
 public static partial class PathDate
 {
     private const string FolderFormat = "yyyy-MM-dd";
