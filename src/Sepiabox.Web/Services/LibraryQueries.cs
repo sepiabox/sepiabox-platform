@@ -54,7 +54,10 @@ public interface ILibraryQueries
     /// <summary>Null when the catalog has no asset with that id.</summary>
     Task<OriginalFile?> GetOriginalAsync(string id, CancellationToken cancellationToken = default);
 
-    /// <summary>The assets a valid search DSL query matches (S-013), in its order and up to its limit.</summary>
+    /// <summary>
+    /// The assets a valid search DSL query matches (S-013), in its order and up to its limit; with
+    /// <c>filters.visual</c>, most similar first, or <see cref="VisualSearchUnavailableException"/> without the text model.
+    /// </summary>
     Task<SearchPage> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default);
 
     Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default);
@@ -64,7 +67,8 @@ public sealed class LibraryQueries(
     IDbContextFactory<CatalogDbContext> contexts,
     TimeProvider? clock = null,
     SearchOptions? searchOptions = null,
-    FilterOptionsCache? filterOptions = null) : ILibraryQueries
+    FilterOptionsCache? filterOptions = null,
+    IQueryEmbedder? embedder = null) : ILibraryQueries
 {
     public const int PageSize = 200;
 
@@ -200,12 +204,15 @@ public sealed class LibraryQueries(
     {
         ArgumentNullException.ThrowIfNull(query);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        var rows = await new SearchService(db, clock ?? TimeProvider.System, searchOptions)
-            .Query(query)
-            .Select(a => new TimelineItem(
-                a.Id, a.Kind, a.CapturedAt, a.Derivatives.Any(d => d.Name == DerivativeNames.Thumbnail), a.DurationSeconds))
-            .Take(query.Limit + 1)
-            .ToListAsync(cancellationToken);
+        // A search by description comes back most similar first (S-016); any other by capture date.
+        var rows = await new SearchService(db, clock ?? TimeProvider.System, searchOptions, embedder).RunAsync(
+            query,
+            assets => assets.Select(a => new TimelineItem(
+                a.Id, a.Kind, a.CapturedAt, a.Derivatives.Any(d => d.Name == DerivativeNames.Thumbnail), a.DurationSeconds)),
+            scored => scored.Select(s => new TimelineItem(
+                s.Asset.Id, s.Asset.Kind, s.Asset.CapturedAt, s.Asset.Derivatives.Any(d => d.Name == DerivativeNames.Thumbnail),
+                s.Asset.DurationSeconds)),
+            cancellationToken: cancellationToken);
         return new SearchPage([.. rows.Take(query.Limit)], rows.Count > query.Limit);
     }
 

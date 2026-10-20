@@ -1,6 +1,6 @@
 using Microsoft.ML.OnnxRuntime;
 
-namespace Sepiabox.Pipeline.Models;
+namespace Sepiabox.Search.Models;
 
 /// <summary>An input the caller feeds, with its exact shape when the caller depends on one.</summary>
 public sealed record ModelInput(string Name, IReadOnlyList<int>? Shape = null);

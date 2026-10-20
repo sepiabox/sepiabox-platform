@@ -1,6 +1,6 @@
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using Sepiabox.Pipeline.Models;
+using Sepiabox.Search.Models;
 
 namespace Sepiabox.Pipeline.Embeddings;
 

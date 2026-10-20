@@ -337,6 +337,266 @@ public sealed class SearchServiceTests(CatalogFixture catalog)
         Assert.Equal(System.Net.HttpStatusCode.OK, apiLastDay.StatusCode);
     }
 
+    [Fact]
+    public async Task Puts_the_asset_closest_to_the_description_first()
+    {
+        await using var db = await CatalogWithEmbeddingsAsync();
+        // Close to asset 2 (axis 1) and a little towards asset 3's second axis.
+        var embedder = new FakeQueryEmbedder(embed: _ => FakeQueryEmbedder.Axis(1, 1, 2, 0.1f));
+
+        var result = await new SearchService(db, s_clock, embedder: embedder).ExecuteAsync(Visual("snow"));
+
+        // Similarities about 0.99 (asset 2), 0.95 (asset 5) and 0.86 (asset 3); asset 1 is orthogonal, below 0.2.
+        Assert.Equal([Ids.Of(2), Ids.Of(5), Ids.Of(3)], result.Hits.Select(h => h.Id));
+        Assert.Equal(["snow"], embedder.Texts);
+        Assert.InRange(result.Hits[0].Score!.Value, 0.99, 1.0);
+        Assert.True(result.Hits[0].Score > result.Hits[1].Score && result.Hits[1].Score > result.Hits[2].Score);
+    }
+
+    [Fact]
+    public async Task Combines_a_description_with_years_and_keeps_the_similarity_order()
+    {
+        await using var db = await CatalogWithEmbeddingsAsync();
+        var embedder = new FakeQueryEmbedder(embed: _ => FakeQueryEmbedder.Axis(1, 1, 2, 0.1f));
+        var query = Visual("snow") with { Filters = new SearchFilters { Visual = new VisualFilter { Text = "snow" }, Years = [2019] } };
+
+        var result = await new SearchService(db, s_clock, embedder: embedder).ExecuteAsync(query);
+
+        // Asset 5 is as similar but from 2018; asset 1 is from 2019 but unrelated.
+        Assert.Equal([Ids.Of(2), Ids.Of(3)], result.Hits.Select(h => h.Id));
+        Assert.All(result.Hits, h => Assert.Equal(2019, h.CapturedAt!.Value.Year));
+    }
+
+    [Fact]
+    public async Task Leaves_out_assets_below_the_threshold_or_without_an_embedding()
+    {
+        await using var db = await CatalogWithEmbeddingsAsync();
+        var embedder = new FakeQueryEmbedder(embed: _ => FakeQueryEmbedder.Axis(1));
+        var service = new SearchService(db, s_clock, embedder: embedder);
+
+        var loose = await service.ExecuteAsync(Visual("snow", minScore: 0));
+        var strict = await service.ExecuteAsync(Visual("snow", minScore: 0.9));
+
+        // Asset 1 is orthogonal (similarity 0, kept only at 0); asset 4 has no embedding at all.
+        Assert.Equal([Ids.Of(1), Ids.Of(2), Ids.Of(3), Ids.Of(5)], loose.Hits.Select(h => h.Id).Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(Ids.Of(4), loose.Hits.Select(h => h.Id));
+        Assert.Equal([Ids.Of(2), Ids.Of(5)], strict.Hits.Select(h => h.Id).Order(StringComparer.Ordinal));
+        // pgvector's cosine distance operator, which the HNSW index (vector_cosine_ops) serves.
+        Assert.Contains("<=>", PgvectorSimilarity.Rank(db, db.Assets, FakeQueryEmbedder.Axis(1), 0.2).ToQueryString(), StringComparison.Ordinal);
+        // Exact ranking orders by an expression the index cannot serve; the index-friendly order is the bare distance.
+        Assert.Contains("+ 0.0", PgvectorSimilarity.Rank(db, db.Assets, FakeQueryEmbedder.Axis(1), 0.2, exact: true).ToQueryString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("+ 0.0", PgvectorSimilarity.Rank(db, db.Assets, FakeQueryEmbedder.Axis(1), 0.2).ToQueryString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Refuses_a_search_by_description_without_a_text_model_but_runs_the_others()
+    {
+        await using var db = await CatalogWithEmbeddingsAsync();
+        var service = new SearchService(db, s_clock, embedder: new FakeQueryEmbedder(available: false));
+
+        await Assert.ThrowsAsync<VisualSearchUnavailableException>(() => service.ExecuteAsync(Visual("snow")));
+        await Assert.ThrowsAsync<VisualSearchUnavailableException>(() => new SearchService(db, s_clock).ExecuteAsync(Visual("snow")));
+        Assert.Equal(5, (await service.ExecuteAsync(new SearchQuery())).Hits.Count);
+    }
+
+    [Fact]
+    public async Task The_api_and_the_page_rank_a_real_catalog_by_description()
+    {
+        string connection;
+        await using (var db = await CatalogWithEmbeddingsAsync())
+        {
+            connection = catalog.ConnectionStringFor(db);
+        }
+
+        await using var web = new WebFactory(connection) { QueryEmbedder = new FakeQueryEmbedder(embed: _ => FakeQueryEmbedder.Axis(1, 1, 2, 0.1f)) };
+        using var http = web.CreateSignedInClient();
+
+        using var api = await http.PostAsync(
+            new Uri("/api/search", UriKind.Relative),
+            new StringContent("""{"filters": {"visual": {"text": "snow"}, "years": [2019]}}""", System.Text.Encoding.UTF8, "application/json"));
+        var html = await http.GetStringAsync(new Uri("/?filter=1&text=snow", UriKind.Relative));
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, api.StatusCode);
+        using var body = System.Text.Json.JsonDocument.Parse(await api.Content.ReadAsStringAsync());
+        Assert.Equal([Ids.Of(2), Ids.Of(3)], body.RootElement.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetString()));
+        Assert.True(html.IndexOf($"photos/{Ids.Of(2)}", StringComparison.Ordinal) < html.IndexOf($"photos/{Ids.Of(3)}", StringComparison.Ordinal));
+        Assert.Contains("Closest to the description", html, StringComparison.Ordinal);
+        Assert.Contains("name=\"text\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Finds_every_filtered_match_even_where_the_index_would_miss_them()
+    {
+        // 2,500 photos from 2020 close to the description (similarity about 0.8) and 5 from 2019 further away (about
+        // 0.4). Walking the HNSW index, even iteratively with no limits, reaches only one of the five: an HNSW graph
+        // does not link every outlier from the cluster (reproduced in plain SQL, D-070). So a filtered search ranks
+        // its candidates exactly, which finds all five even with the planner pushed towards indexes.
+        var (db, description, _) = await LargeLibraryAsync();
+        await using var _ = db;
+        var query = new SearchQuery { Filters = new SearchFilters { Visual = new VisualFilter { Text = "snow" }, Years = [2019] } };
+
+        var result = await new SearchService(db, s_clock, embedder: new FakeQueryEmbedder(embed: _ => description)).ExecuteAsync(query);
+
+        var plan = await ExplainAsync(db, query, description);
+        Assert.False(plan.Contains("ix_asset_embeddings_embedding", StringComparison.Ordinal), plan);
+        Assert.Equal([Ids.Of(1), Ids.Of(2), Ids.Of(3), Ids.Of(4), Ids.Of(5)], result.Hits.Select(h => h.Id).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task Finds_every_match_above_the_threshold_without_filters_in_exact_mode()
+    {
+        // What counting needs (S-025, S-026): exactly the photos above the threshold, as a brute-force check finds them.
+        var (db, description, vectors) = await LargeLibraryAsync();
+        await using var _ = db;
+        const double MinScore = 0.84;
+        // Scores computed here in double precision and in PostgreSQL in single precision can differ in the last digits,
+        // so a photo within 0.0001 of the threshold may land on either side.
+        var scores = vectors.ToDictionary(v => Ids.Of(v.Key), v => v.Value.Zip(description, (a, b) => (double)a * b).Sum());
+        var certain = scores.Where(s => s.Value >= MinScore + 1e-4).Select(s => s.Key).ToHashSet();
+        var possible = scores.Where(s => s.Value >= MinScore - 1e-4).Select(s => s.Key).ToHashSet();
+        var query = new SearchQuery
+        {
+            Filters = new SearchFilters { Visual = new VisualFilter { Text = "snow", MinScore = MinScore } },
+            Limit = SearchQuery.MaxLimit,
+        };
+        var service = new SearchService(db, s_clock, embedder: new FakeQueryEmbedder(embed: _ => description));
+
+        var exact = await service.ExecuteAsync(query, SimilarityMode.Exact);
+        var ranking = await service.ExecuteAsync(query);
+
+        var found = exact.Hits.Select(h => h.Id).ToHashSet();
+        Assert.InRange(certain.Count, 20, SearchQuery.MaxLimit - 1);
+        Assert.False(exact.HasMore);
+        Assert.Subset(found, certain);
+        Assert.Superset(found, possible);
+        Assert.Equal(exact.Hits.Select(h => h.Score).OrderDescending(), exact.Hits.Select(h => h.Score));
+        // The index walk is approximate: never more than the exact answer, every hit it gives is a real match.
+        Assert.NotEmpty(ranking.Hits);
+        Assert.Subset(found, ranking.Hits.Select(h => h.Id).ToHashSet());
+    }
+
+    // 2,505 photos with random 512-value embeddings: 2,500 from 2020 near the description, 5 from 2019 further away.
+    // Random directions, as real embeddings are: an HNSW graph of near-copies is degenerate.
+    private async Task<(CatalogDbContext Db, float[] Description, Dictionary<int, float[]> Vectors)> LargeLibraryAsync()
+    {
+        var random = new Random(16);
+        var description = Unit(Gaussian(random));
+        var vectors = new Dictionary<int, float[]>();
+        var db = await catalog.CreateMigratedDatabaseAsync();
+        for (var n = 1; n <= 2505; n++)
+        {
+            var near = n > 5;
+            vectors[n] = Unit(Mix(description, Gaussian(random), near ? 0.6 : 0.3));
+            db.Assets.Add(Asset(n, new DateTime(near ? 2020 : 2019, 6, 1)));
+            db.AssetEmbeddings.Add(Embedding(n, vectors[n]));
+        }
+
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        await db.Database.ExecuteSqlRawAsync("ANALYZE assets; ANALYZE asset_embeddings;");
+        // The planner then prefers indexes wherever it can, as it would on a large library.
+        await db.Database.OpenConnectionAsync();
+        await db.Database.ExecuteSqlRawAsync("SET enable_seqscan = off; SET enable_sort = off; SET enable_bitmapscan = off");
+        return (db, description, vectors);
+    }
+
+    private static float[] Gaussian(Random random) =>
+        [.. Enumerable.Range(0, 512).Select(_ => (float)(Math.Sqrt(-2 * Math.Log(1 - random.NextDouble())) * Math.Cos(2 * Math.PI * random.NextDouble())))];
+
+    private static float[] Mix(float[] towards, float[] noise, double weight)
+    {
+        var unitNoise = Unit(noise);
+        return [.. towards.Zip(unitNoise, (t, r) => (float)((weight * t) + ((1 - weight) * r)))];
+    }
+
+    private static float[] Unit(float[] vector)
+    {
+        var norm = Math.Sqrt(vector.Sum(v => (double)v * v));
+        return [.. vector.Select(v => (float)(v / norm))];
+    }
+
+    [Fact]
+    public async Task Sets_the_iterative_scan_only_inside_the_search_s_transaction()
+    {
+        await using var db = await CatalogWithEmbeddingsAsync();
+        await db.Database.OpenConnectionAsync();
+        var service = new SearchService(db, s_clock, embedder: new FakeQueryEmbedder(embed: _ => FakeQueryEmbedder.Axis(1)));
+
+        await service.ExecuteAsync(Visual("snow"));
+
+        // SET LOCAL ends with the transaction: the pooled connection is left as it was.
+        Assert.Equal("off", await db.Database.SqlQuery<string>($"SELECT current_setting('hnsw.iterative_scan') AS \"Value\"").SingleAsync());
+        Assert.Equal("40", await db.Database.SqlQuery<string>($"SELECT current_setting('hnsw.ef_search') AS \"Value\"").SingleAsync());
+    }
+
+    // The plan of the query RunAsync sends (printed by ToQueryString), with the same settings.
+    private static async Task<string> ExplainAsync(CatalogDbContext db, SearchQuery query, float[] description)
+    {
+        var filtered = new SearchService(db, s_clock).Filtered(query with { Filters = query.Filters with { Visual = null } });
+        var sql = PgvectorSimilarity.Rank(db, filtered, description, 0.2, exact: true).Take(201).ToQueryString();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await PgvectorSimilarity.PrepareIndexWalkAsync(db, CancellationToken.None);
+        var lines = sql.Split('\n');
+        var body = string.Join('\n', lines.SkipWhile(l => l.StartsWith("-- ", StringComparison.Ordinal)));
+        var command = (Npgsql.NpgsqlCommand)db.Database.GetDbConnection().CreateCommand();
+        await using (command)
+        {
+            command.Transaction = (Npgsql.NpgsqlTransaction)Microsoft.EntityFrameworkCore.Storage.DbContextTransactionExtensions.GetDbTransaction(transaction);
+            command.CommandText = "EXPLAIN " + body;
+            foreach (var line in lines.TakeWhile(l => l.StartsWith("-- @", StringComparison.Ordinal)))
+            {
+                var name = line[4..line.IndexOf('=', StringComparison.Ordinal)];
+                command.Parameters.AddWithValue(name, name.Contains("vector", StringComparison.OrdinalIgnoreCase) || line.Contains('[', StringComparison.Ordinal)
+                    ? new Pgvector.Vector(description)
+                    : ParameterValue(line));
+            }
+
+            var plan = new List<string>();
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                plan.Add(reader.GetString(0));
+            }
+
+            return string.Join('\n', plan);
+        }
+    }
+
+    private static object ParameterValue(string declaration)
+    {
+        var value = declaration[(declaration.IndexOf('=', StringComparison.Ordinal) + 1)..];
+        var type = value.LastIndexOf(" (DbType", StringComparison.Ordinal);
+        value = (type < 0 ? value : value[..type]).Trim().Trim('\'');
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        return value.StartsWith('{') ? new[] { int.Parse(value.Trim('{', '}', ' ', '\''), culture) }
+            : int.TryParse(value, System.Globalization.NumberStyles.Integer, culture, out var whole) ? whole
+            : double.TryParse(value, System.Globalization.NumberStyles.Float, culture, out var number) ? number
+            : value;
+    }
+
+    private static SearchQuery Visual(string text, double? minScore = null) =>
+        new() { Filters = new SearchFilters { Visual = new VisualFilter { Text = text, MinScore = minScore } } };
+
+    // Five photos: 1 (2019) on axis 0, 2 (2019) on axis 1, 3 (2019) mostly axis 1, 4 (2019) without an embedding,
+    // 5 (2018) on axis 1 with a little of axis 3.
+    private async Task<CatalogDbContext> CatalogWithEmbeddingsAsync()
+    {
+        var db = await CatalogWithAsync(
+            Asset(1, new DateTime(2019, 1, 1)), Asset(2, new DateTime(2019, 2, 1)), Asset(3, new DateTime(2019, 3, 1)),
+            Asset(4, new DateTime(2019, 4, 1)), Asset(5, new DateTime(2018, 5, 1)));
+        db.AssetEmbeddings.AddRange(
+            Embedding(1, FakeQueryEmbedder.Axis(0)),
+            Embedding(2, FakeQueryEmbedder.Axis(1)),
+            Embedding(3, FakeQueryEmbedder.Axis(1, 0.8f, 2, 0.6f)),
+            Embedding(5, FakeQueryEmbedder.Axis(1, 0.95f, 3, 0.31f)));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        return db;
+    }
+
+    private static AssetEmbedding Embedding(int n, float[] vector) =>
+        new() { AssetId = Ids.Of(n), Model = PgvectorSimilarity.ModelKey, Embedding = new Pgvector.Vector(vector) };
+
     private async Task<CatalogDbContext> CatalogWithAsync(params Asset[] assets)
     {
         var db = await catalog.CreateMigratedDatabaseAsync();

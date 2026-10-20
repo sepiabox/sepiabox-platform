@@ -260,6 +260,10 @@ Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from t
 
 Keep the extracted export on the PC and run `sepiabox-ingest process <folder> --export <kind>`; the export is only read. Exports hold personal data: never commit them or attach them to issues. When a story asks for a small real export to confirm the format, share it privately with the person running it.
 
+## Search by description
+
+The filter bar's "Describe (in English)" box (S-016) compares a description with the photos' CLIP embeddings. It appears only when the web finds the CLIP text model and tokenizer, both pinned in `models.json`: locally in the folder `sepiabox-ingest models download` fills (`SEPIABOX_MODELS`, or `~/.sepiabox/models`; `Search:ModelFolder` overrides it), in Azure once S-056 ships the model in the web's image. The model loads on the first description search. While the files are missing the box is hidden, and it appears once they arrive, without a restart. A file that is not the pinned one, or that ONNX Runtime cannot use, logs one warning and hides the box until the web restarts with the right file; a file that could not be opened is tried again after 5 minutes. Meanwhile `POST /api/search` answers 503 for `filters.visual`, and every other filter keeps working. A description search with other filters (a year, a city) ranks every candidate exactly; one without filters walks the HNSW index for its top results, which is approximate and needs pgvector 0.8 or later (check in Azure with `SELECT extversion FROM pg_extension WHERE extname = 'vector';`; on an older version it ranks exactly too, which is slower but complete). Descriptions are in English: CLIP reads Portuguese poorly, and the question translator (S-025) turns Portuguese questions into English descriptions (D-070).
+
 ## Sign-in configuration
 
 The web reads these keys (D-048). Locally they go into the web's user secrets; in Azure into Key Vault, where `:` becomes `--` in the secret name (`Auth--Google--ClientId`, `Access--Emails`). Never put them in `appsettings*.json`.

@@ -2,7 +2,7 @@ using ImageMagick;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Sepiabox.Pipeline.Embeddings;
-using Sepiabox.Pipeline.Models;
+using Sepiabox.Search.Models;
 
 namespace Sepiabox.Pipeline.Faces;
 

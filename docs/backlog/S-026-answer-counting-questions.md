@@ -10,7 +10,7 @@
 ### Scope
 - DSL: `aggregate: { "count": "assets", "groupBy": null | "year" | "month" | "kind" | "city" | "source", "top": 10 }`, designed so later stories add `count: "events"` and other `groupBy` values.
 - The executor returns `{ total, groups: [{ key, count }] }`.
-- Counts are exact only over exact filters: a count with a `visual` (description) filter is not shown as a number in the MVP; the card says the question needs a description search and shows the results instead. When the query has a time filter, the card also says "N items have no date" (undated items cannot match a date) with a link to them.
+- Counts are exact only over exact filters: a count with a `visual` (description) filter is not shown as a number in the MVP; the card says the question needs a description search and shows the results instead. (A later count with `visual` must use `SimilarityMode.Exact` and a calibrated threshold, D-070.) When the query has a time filter, the card also says "N items have no date" (undated items cannot match a date) with a link to them.
 - UI: answer card (big number + a sentence in the current culture, e.g. "312 videos in 2019" / "312 vídeos em 2019", with plural forms from the resources) or a ranking table, with a link to the items.
 - Counting examples in the translator prompt, in English and Portuguese.
 

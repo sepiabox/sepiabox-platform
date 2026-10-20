@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace Sepiabox.Pipeline.Models;
+namespace Sepiabox.Search.Models;
 
 /// <param name="Name">Stable name used in code, such as <c>clip-vit-b32-vision</c>.</param>
 /// <param name="File">File name in the models folder.</param>
@@ -21,6 +21,15 @@ public static partial class ModelCatalog
 {
     public const string ClipVision = "clip-vit-b32-vision";
 
+    /// <summary>
+    /// CLIP's text encoder (S-016), from the same repository revision as <see cref="ClipVision"/> so both share one
+    /// embedding space. Search by description is off while models.json does not pin it (D-070).
+    /// </summary>
+    public const string ClipText = "clip-vit-b32-text";
+
+    /// <summary>The BPE merges CLIP's tokenizer is built from (S-016).</summary>
+    public const string ClipBpe = "clip-bpe-vocab";
+
     /// <summary>YuNet face detection (S-018).</summary>
     public const string YuNet = "yunet-2023mar";
 
@@ -34,6 +43,9 @@ public static partial class ModelCatalog
     private static readonly Lazy<IReadOnlyList<ModelInfo>> s_models = new(LoadEmbedded);
 
     public static IReadOnlyList<ModelInfo> All => s_models.Value;
+
+    /// <summary>The pinned model, or null when models.json does not list it.</summary>
+    public static ModelInfo? Find(string name) => All.FirstOrDefault(m => m.Name == name);
 
     public static ModelInfo Get(string name) =>
         All.FirstOrDefault(m => m.Name == name) ?? throw new ArgumentException($"Unknown model '{name}'.", nameof(name));
@@ -94,7 +106,7 @@ public static partial class ModelCatalog
     private static IReadOnlyList<ModelInfo> LoadEmbedded()
     {
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("models.json")
-            ?? throw new InvalidOperationException("models.json is not embedded in Sepiabox.Pipeline.");
+            ?? throw new InvalidOperationException("models.json is not embedded in Sepiabox.Search.");
         using var reader = new StreamReader(stream);
         return Parse(reader.ReadToEnd());
     }

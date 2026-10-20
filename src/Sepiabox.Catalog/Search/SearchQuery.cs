@@ -54,6 +54,12 @@ public sealed record SearchFilters
     /// <summary>Source names, such as the drive's name given to <c>process</c>.</summary>
     public IReadOnlyList<string>? Sources { get; init; }
 
+    /// <summary>
+    /// A description in English matched against the photos' CLIP embeddings (S-016); results are then ordered by
+    /// similarity, most similar first, and <see cref="SearchQuery.Sort"/> is not used.
+    /// </summary>
+    public VisualFilter? Visual { get; init; }
+
     /// <summary>Only assets with no capture date; cannot be combined with a time filter.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UndatedOnly { get; init; }
@@ -70,12 +76,28 @@ public sealed record SearchFilters
         other is not null
         && Same(Kinds, other.Kinds) && DateFrom == other.DateFrom && DateTo == other.DateTo
         && Same(Years, other.Years) && Same(Months, other.Months) && OnThisDay == other.OnThisDay
-        && Equals(Places, other.Places) && Same(Sources, other.Sources) && UndatedOnly == other.UndatedOnly;
+        && Equals(Places, other.Places) && Same(Sources, other.Sources) && UndatedOnly == other.UndatedOnly
+        && Visual == other.Visual;
 
     public override int GetHashCode() => HashCode.Combine(DateFrom, DateTo, OnThisDay, Places, UndatedOnly);
 
     internal static bool Same<T>(IReadOnlyList<T>? a, IReadOnlyList<T>? b) =>
         a is null ? b is null : b is not null && a.SequenceEqual(b);
+}
+
+/// <summary>Search by description (S-016, D-070).</summary>
+public sealed record VisualFilter
+{
+    /// <summary>The cosine similarity an asset needs when <see cref="MinScore"/> is absent.</summary>
+    public const double DefaultMinScore = 0.2;
+
+    /// <summary>What the photo shows, in English (D-017): "snow", "beach at sunset".</summary>
+    public string Text { get; init; } = string.Empty;
+
+    /// <summary>The least cosine similarity, from 0 to 1, between the text and an asset's embedding.</summary>
+    public double? MinScore { get; init; }
+
+    public double EffectiveMinScore => MinScore ?? DefaultMinScore;
 }
 
 /// <summary>
@@ -110,6 +132,9 @@ public static class SearchQueryJson
     public const int MinYear = 1800;
     public const int MaxYear = 9999;
     public const int MaxYearsAgo = 200;
+
+    /// <summary>The longest description accepted; CLIP reads at most 77 tokens of it anyway.</summary>
+    public const int MaxTextLength = 300;
 
     /// <summary>The longest <c>?q=</c> accepted; far more than any filter bar or question produces.</summary>
     public const int MaxEncodedLength = 8192;
@@ -211,9 +236,29 @@ public static class SearchQueryJson
             ?? List("filters.places.cities", filters.Places?.Cities, Name)
             ?? List("filters.places.countries", filters.Places?.Countries, code => code.Length == 2 && code.All(char.IsAsciiLetterUpper) ? null : "must be a two-letter country code such as 'PT'")
             ?? List("filters.sources", filters.Sources, Name)
+            ?? Visual(filters.Visual)
             ?? (filters.UndatedOnly && filters.HasTimeFilter
                 ? "filters.undatedOnly cannot be combined with dateFrom, dateTo, years, months or onThisDay."
                 : null);
+    }
+
+    private static string? Visual(VisualFilter? visual)
+    {
+        if (visual is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(visual.Text) || visual.Text.Length > MaxTextLength || visual.Text.Any(char.IsControl))
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"filters.visual.text must be a description of 1 to {MaxTextLength} characters without control characters.");
+        }
+
+        return visual.MinScore is { } score && !(score >= 0 && score <= 1)
+            ? "filters.visual.minScore must be between 0 and 1."
+            : null;
     }
 
     // Control characters, NUL among them, are never part of a name, and PostgreSQL refuses NUL in text.

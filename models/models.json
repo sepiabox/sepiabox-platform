@@ -10,6 +10,24 @@
       "source": "Xenova/clip-vit-base-patch32 (ONNX export of openai/clip-vit-base-patch32)"
     },
     {
+      "name": "clip-vit-b32-text",
+      "file": "clip-vit-b32-text.onnx",
+      "url": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/onnx/text_model.onnx",
+      "revision": "d15189d7028b43f1d3e65039190477f6af591c2a",
+      "sha256": "3f6571f5bad13a97c469c1622e1cfc4d9aef78b79fdbfcff804ca357bfada8cc",
+      "license": "MIT",
+      "source": "Xenova/clip-vit-base-patch32 (ONNX export of openai/clip-vit-base-patch32), text encoder"
+    },
+    {
+      "name": "clip-bpe-vocab",
+      "file": "clip-bpe-simple-vocab-16e6.txt.gz",
+      "url": "https://raw.githubusercontent.com/openai/CLIP/dcba3cb2e2827b402d2701e7e1c7d9fed8a20ef1/clip/bpe_simple_vocab_16e6.txt.gz",
+      "revision": "dcba3cb2e2827b402d2701e7e1c7d9fed8a20ef1",
+      "sha256": "924691ac288e54409236115652ad4aa250f48203de50a9e4722a6ecd48d6804a",
+      "license": "MIT",
+      "source": "openai/CLIP, clip/bpe_simple_vocab_16e6.txt.gz (the BPE merges of CLIP's text tokenizer; not a model, pinned like one)"
+    },
+    {
       "name": "yunet-2023mar",
       "file": "face_detection_yunet_2023mar.onnx",
       "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",

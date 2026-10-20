@@ -1,4 +1,4 @@
-using Sepiabox.Pipeline.Models;
+using Sepiabox.Search.Models;
 
 namespace Sepiabox.Tests.Shared;
 

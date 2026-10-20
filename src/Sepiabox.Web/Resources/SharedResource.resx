@@ -276,4 +276,19 @@
     <value>Showing the first {0} results. Narrow the filters to see the rest.</value>
     <comment>{0} is the number shown.</comment>
   </data>
+  <data name="Filter_Describe" xml:space="preserve">
+    <value>Describe (in English)</value>
+    <comment>Search by description: CLIP understands English (D-017).</comment>
+  </data>
+  <data name="Filter_DescribePlaceholder" xml:space="preserve">
+    <value>e.g. beach at sunset</value>
+    <comment>Example description; keep it in English in every language.</comment>
+  </data>
+  <data name="Search_MostSimilar" xml:space="preserve">
+    <value>Closest to the description</value>
+    <comment>Heading of the results of a search by description, most similar first.</comment>
+  </data>
+  <data name="Search_DescribeUnavailable" xml:space="preserve">
+    <value>Search by description is not available right now. The other filters still work.</value>
+  </data>
 </root>

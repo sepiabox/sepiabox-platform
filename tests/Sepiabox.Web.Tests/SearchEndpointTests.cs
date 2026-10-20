@@ -124,5 +124,19 @@ public sealed class SearchEndpointTests
         Assert.Empty(library.Searches);
     }
 
+    [Fact]
+    public async Task Answers_503_with_a_message_when_search_by_description_is_unavailable()
+    {
+        var library = new FakeLibrary { SearchFailure = new Sepiabox.Catalog.Search.VisualSearchUnavailableException("No model.") };
+        await using var web = new WebFactory(library);
+        using var http = web.CreateSignedInClient();
+
+        using var response = await http.PostAsync(new Uri("/api/search", UriKind.Relative), Json("""{"filters": {"visual": {"text": "snow"}}}"""));
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains("filters.visual", problem.GetProperty("detail").GetString(), StringComparison.Ordinal);
+    }
+
     private static StringContent Json(string json) => new(json, Encoding.UTF8, "application/json");
 }

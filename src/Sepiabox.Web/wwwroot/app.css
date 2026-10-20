@@ -248,6 +248,15 @@ main {
     color: var(--developer);
 }
 
+.filters input[type="search"] {
+    min-height: 36px;
+    min-width: 16rem;
+    padding: 4px 8px;
+    font: inherit;
+    border: 1px solid var(--mat);
+    border-radius: 2px;
+}
+
 .filters button {
     background: var(--cyanotype);
     border-color: var(--cyanotype);

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -47,6 +48,8 @@ public abstract class LocalizedContext : BunitContext
     {
         _culture = Cultures.Use(Cultures.English);
         Services.AddSepiaboxLocalization();
+        // As a web without the CLIP text model; a test that needs one registers its own (the last one wins).
+        Services.AddSingleton<Sepiabox.Catalog.Search.IQueryEmbedder>(new FakeQueryEmbedder(available: false));
     }
 
     protected override void Dispose(bool disposing)

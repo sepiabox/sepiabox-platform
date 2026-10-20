@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace Sepiabox.Pipeline.Models;
+namespace Sepiabox.Search.Models;
 
 /// <summary>A downloaded model whose SHA-256 is not the pinned one, or a model with no SHA-256 pinned.</summary>
 public sealed class ModelIntegrityException(string message) : Exception(message);

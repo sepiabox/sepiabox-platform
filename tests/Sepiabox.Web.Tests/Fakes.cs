@@ -62,10 +62,13 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
 
     public SearchPage SearchResults { get; init; } = new([], false);
 
+    /// <summary>Thrown by every search, such as the text model being unavailable.</summary>
+    public Exception? SearchFailure { get; init; }
+
     public Task<SearchPage> SearchAsync(Sepiabox.Catalog.Search.SearchQuery query, CancellationToken cancellationToken = default)
     {
         Searches.Add(query);
-        return Task.FromResult(SearchResults);
+        return SearchFailure is null ? Task.FromResult(SearchResults) : Task.FromException<SearchPage>(SearchFailure);
     }
 
     public Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Options);
@@ -119,4 +122,40 @@ internal sealed class ListLogger<T> : ILogger<T>
 
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
         Entries.Add((logLevel, formatter(state, exception)));
+}
+
+/// <summary>
+/// A stand-in for the CLIP text encoder (S-016): unit tests never need the real model. Without a function it
+/// returns a fixed unit vector; unavailable, it behaves like a web without the text model.
+/// </summary>
+internal sealed class FakeQueryEmbedder(bool available = true, Func<string, float[]>? embed = null) : Sepiabox.Catalog.Search.IQueryEmbedder
+{
+    public List<string> Texts { get; } = [];
+
+    public bool IsAvailable => available;
+
+    public float[] Embed(string text)
+    {
+        if (!available)
+        {
+            throw new Sepiabox.Catalog.Search.VisualSearchUnavailableException("No text model in this test.");
+        }
+
+        Texts.Add(text);
+        return embed?.Invoke(text) ?? Axis(0);
+    }
+
+    /// <summary>A 512-value unit vector along <paramref name="axis"/>.</summary>
+    public static float[] Axis(int axis, float weight = 1, int other = -1, float otherWeight = 0)
+    {
+        var vector = new float[512];
+        vector[axis] = weight;
+        if (other >= 0)
+        {
+            vector[other] = otherWeight;
+        }
+
+        var norm = (float)Math.Sqrt(vector.Sum(v => v * v));
+        return [.. vector.Select(v => v / norm)];
+    }
 }

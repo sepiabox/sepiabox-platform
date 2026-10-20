@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Sepiabox.Catalog.Search;
 using Sepiabox.Web.Components.Pages;
 using Sepiabox.Web.Services;
 
@@ -135,6 +136,77 @@ public sealed class TimelineFilterTests : LocalizedContext
         var page = Render<Timeline>();
 
         Assert.Empty(page.FindAll("form.filters"));
+    }
+
+    [Fact]
+    public void Hides_the_description_box_and_keeps_the_other_filters_when_the_text_model_is_missing()
+    {
+        // LocalizedContext registers an unavailable embedder, as a web without the CLIP text model.
+        var library = Use(new FakeLibrary(LisbonInDecember) { SearchResults = new SearchPage([LisbonInDecember], false) });
+
+        var page = RenderAt(SearchLinks.Timeline(SearchLinks.FromFields(null, "12", null, "Lisbon", null)));
+
+        Assert.Empty(page.FindAll("input[name=text]"));
+        Assert.NotEmpty(page.FindAll("select[name=city]"));
+        Assert.Single(library.Searches);
+        Assert.Single(page.FindAll("ul.grid li"));
+    }
+
+    [Fact]
+    public void Shows_the_description_box_in_english_when_the_text_model_is_there()
+    {
+        Services.AddSingleton<IQueryEmbedder>(new FakeQueryEmbedder());
+        Use(new FakeLibrary(LisbonInDecember));
+
+        var page = Render<Timeline>();
+
+        var box = page.Find("input[name=text]");
+        Assert.Equal("Describe (in English)", page.Find("label.describe span").TextContent);
+        Assert.Equal("en", box.GetAttribute("lang"));
+        Assert.Equal("300", box.GetAttribute("maxlength"));
+    }
+
+    [Fact]
+    public void Says_describe_in_english_in_portuguese_in_pt_br()
+    {
+        using var culture = Cultures.Use(Cultures.BrazilianPortuguese);
+        Services.AddSingleton<IQueryEmbedder>(new FakeQueryEmbedder());
+        Use(new FakeLibrary(LisbonInDecember));
+
+        var page = Render<Timeline>();
+
+        Assert.Equal("Descrever (em inglês)", page.Find("label.describe span").TextContent);
+    }
+
+    [Fact]
+    public void Lists_description_results_most_similar_first_without_month_groups()
+    {
+        Services.AddSingleton<IQueryEmbedder>(new FakeQueryEmbedder());
+        TimelineItem[] ranked =
+        [
+            new(Ids.Of(51), AssetKinds.Photo, new DateTime(2015, 1, 1), true, null),
+            new(Ids.Of(52), AssetKinds.Photo, new DateTime(2021, 1, 1), true, null),
+            new(Ids.Of(53), AssetKinds.Photo, null, true, null),
+        ];
+        var library = Use(new FakeLibrary { SearchResults = new SearchPage(ranked, false) });
+
+        var page = RenderAt(SearchLinks.Timeline(SearchLinks.FromFields(null, null, null, null, null, "beach at sunset")));
+
+        Assert.Equal("beach at sunset", Assert.Single(library.Searches).Filters.Visual!.Text);
+        Assert.Equal(["Closest to the description"], page.FindAll("section.month h2").Select(h => h.TextContent));
+        Assert.Equal([Ids.Of(51), Ids.Of(52), Ids.Of(53)], page.FindAll("a.thumb").Select(a => a.GetAttribute("href")![7..71]));
+        Assert.Equal("beach at sunset", page.Find("input[name=text]").GetAttribute("value"));
+    }
+
+    [Fact]
+    public void Says_search_by_description_is_unavailable_instead_of_failing()
+    {
+        Use(new FakeLibrary(LisbonInDecember) { SearchFailure = new VisualSearchUnavailableException("No model.") });
+
+        var page = RenderAt(SearchLinks.Timeline(SearchLinks.FromFields(null, null, null, null, null, "snow")));
+
+        Assert.Contains("Search by description is not available right now.", page.Find("[role=alert]").TextContent, StringComparison.Ordinal);
+        Assert.NotEmpty(page.FindAll("form.filters"));
     }
 
     private FakeLibrary Use(FakeLibrary library)

@@ -1,4 +1,5 @@
 @using System.Globalization
+@using Sepiabox.Catalog.Search
 @* A plain GET form: the timeline turns its fields into ?q= (SearchLinks), so it needs no interactivity. *@
 
 <form class="filters" method="get" action="./" role="search" aria-label="@Text["Filter_Label"]">
@@ -57,6 +58,14 @@
         </select>
     </label>
 
+    @if (DescribeAvailable)
+    {
+        <label class="describe">
+            <span>@Text["Filter_Describe"]</span>
+            <input type="search" name="text" value="@Fields.Text" maxlength="@SearchQueryJson.MaxTextLength" placeholder="@Text["Filter_DescribePlaceholder"]" lang="en" />
+        </label>
+    }
+
     <button type="submit">@Text["Filter_Apply"]</button>
     <a class="shortcut" href="@SearchLinks.Timeline(SearchLinks.OnThisDay)" aria-current="@(OnThisDayActive ? "page" : null)">@Text["Filter_OnThisDay"]</a>
     @if (Filtered)
@@ -74,6 +83,10 @@
 
     [Parameter]
     public bool Filtered { get; set; }
+
+    /// <summary>Whether the CLIP text model is there: without it, the description box is not shown (S-016).</summary>
+    [Parameter]
+    public bool DescribeAvailable { get; set; }
 
     [Parameter]
     public bool OnThisDayActive { get; set; }

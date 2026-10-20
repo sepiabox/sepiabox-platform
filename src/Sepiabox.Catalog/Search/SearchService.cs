@@ -11,8 +11,22 @@ public sealed record SearchOptions
     public TimeZoneInfo? TimeZone { get; init; }
 }
 
-/// <summary>One asset a search found.</summary>
-public sealed record SearchHit(string Id, string Kind, DateTime? CapturedAt, double? DurationSeconds, string? PlaceCity, string? PlaceCountry);
+/// <summary>How a search by description ranks its candidates (D-070).</summary>
+public enum SimilarityMode
+{
+    /// <summary>
+    /// Top results fast: without other filters, through the HNSW index, which is approximate and can miss some matches
+    /// above the threshold; with other filters, exactly.
+    /// </summary>
+    Ranking,
+
+    /// <summary>Every candidate's exact distance: every match above the threshold. For counting (S-025, S-026).</summary>
+    Exact,
+}
+
+/// <summary>One asset a search found; <see cref="Score"/> is its cosine similarity to the description, for a visual search.</summary>
+public sealed record SearchHit(
+    string Id, string Kind, DateTime? CapturedAt, double? DurationSeconds, string? PlaceCity, string? PlaceCountry, double? Score = null);
 
 /// <summary>The assets found, up to the query's limit; <see cref="HasMore"/> says whether more matched.</summary>
 public sealed record SearchResult(IReadOnlyList<SearchHit> Hits, bool HasMore);
@@ -21,7 +35,8 @@ public sealed record SearchResult(IReadOnlyList<SearchHit> Hits, bool HasMore);
 /// Runs the search DSL (S-013) with plain EF Core (D-051): every value goes to the database as a parameter, never
 /// into SQL text. Filters are combined with AND; the values of one list with OR.
 /// </summary>
-public sealed class SearchService(CatalogDbContext db, TimeProvider clock, SearchOptions? options = null)
+public sealed class SearchService(
+    CatalogDbContext db, TimeProvider clock, SearchOptions? options = null, IQueryEmbedder? embedder = null)
 {
     /// <summary>
     /// The assets the query's filters match, in no particular order and without its limit: for a caller that orders
@@ -33,9 +48,18 @@ public sealed class SearchService(CatalogDbContext db, TimeProvider clock, Searc
         return Filter(db.Assets.AsNoTracking(), query.Filters);
     }
 
-    /// <summary>The assets the query matches, sorted by capture date (undated last, then by id), without its limit.</summary>
+    /// <summary>
+    /// The assets the query matches, sorted by capture date (undated last, then by id), without its limit. A query with
+    /// <see cref="SearchFilters.Visual"/> needs its vector: use <see cref="RunAsync{T}"/>.
+    /// </summary>
     public IQueryable<Asset> Query(SearchQuery query)
     {
+        ArgumentNullException.ThrowIfNull(query);
+        if (query.Filters.Visual is not null)
+        {
+            throw new InvalidOperationException("A search by description is run with RunAsync, which computes its vector.");
+        }
+
         var assets = Filtered(query);
         // Undated last in both directions; the id makes the order total, so pages never overlap.
         return query.Sort == SearchSort.CapturedAtAsc
@@ -43,14 +67,62 @@ public sealed class SearchService(CatalogDbContext db, TimeProvider clock, Searc
             : assets.OrderBy(a => a.CapturedAt == null).ThenByDescending(a => a.CapturedAt).ThenBy(a => a.Id);
     }
 
-    public async Task<SearchResult> ExecuteAsync(SearchQuery query, CancellationToken cancellationToken = default)
+    public async Task<SearchResult> ExecuteAsync(
+        SearchQuery query, SimilarityMode similarity = SimilarityMode.Ranking, CancellationToken cancellationToken = default)
+    {
+        var hits = await RunAsync(
+            query,
+            assets => assets.Select(a => new SearchHit(a.Id, a.Kind, a.CapturedAt, a.DurationSeconds, a.PlaceCity, a.PlaceCountry, null)),
+            scored => scored.Select(s => new SearchHit(
+                s.Asset.Id, s.Asset.Kind, s.Asset.CapturedAt, s.Asset.DurationSeconds, s.Asset.PlaceCity, s.Asset.PlaceCountry, 1 - s.Distance)),
+            similarity,
+            cancellationToken);
+        return new SearchResult([.. hits.Take(query.Limit)], hits.Count > query.Limit);
+    }
+
+    /// <summary>
+    /// Runs the query and returns up to its limit plus one row (so a caller can tell whether more matched), projected
+    /// by <paramref name="byDate"/> for a plain search or <paramref name="bySimilarity"/> for a search by description,
+    /// whose vector comes from the embedder (throws <see cref="VisualSearchUnavailableException"/> without one).
+    /// </summary>
+    public async Task<List<T>> RunAsync<T>(
+        SearchQuery query,
+        Func<IQueryable<Asset>, IQueryable<T>> byDate,
+        Func<IQueryable<ScoredAsset>, IQueryable<T>> bySimilarity,
+        SimilarityMode similarity = SimilarityMode.Ranking,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var hits = await Query(query)
-            .Select(a => new SearchHit(a.Id, a.Kind, a.CapturedAt, a.DurationSeconds, a.PlaceCity, a.PlaceCountry))
-            .Take(query.Limit + 1)
-            .ToListAsync(cancellationToken);
-        return new SearchResult([.. hits.Take(query.Limit)], hits.Count > query.Limit);
+        ArgumentNullException.ThrowIfNull(byDate);
+        ArgumentNullException.ThrowIfNull(bySimilarity);
+        if (query.Filters.Visual is not { } visual)
+        {
+            return await byDate(Query(query)).Take(query.Limit + 1).ToListAsync(cancellationToken);
+        }
+
+        if (embedder is not { IsAvailable: true })
+        {
+            throw new VisualSearchUnavailableException("Search by description is not available: the CLIP text model is not loaded.");
+        }
+
+        var vector = embedder.Embed(visual.Text);
+        // The index walk only for top results without other filters, on a pgvector that can walk it iteratively; with
+        // filters, for counting, or on an older pgvector, every candidate is ranked exactly (D-070).
+        var walkIndex = similarity == SimilarityMode.Ranking
+            && (query.Filters with { Visual = null }).IsEmpty
+            && await PgvectorSimilarity.CanWalkIndexAsync(db, cancellationToken);
+        var ranked = PgvectorSimilarity.Rank(db, Filtered(query), vector, visual.EffectiveMinScore, exact: !walkIndex);
+        if (!walkIndex)
+        {
+            return await bySimilarity(ranked).Take(query.Limit + 1).ToListAsync(cancellationToken);
+        }
+
+        // One transaction, so the index settings apply to this query only and leave the pooled connection as it was.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await PgvectorSimilarity.PrepareIndexWalkAsync(db, cancellationToken);
+        var rows = await bySimilarity(ranked).Take(query.Limit + 1).ToListAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return rows;
     }
 
     /// <summary>Today's date where the family is, for "on this day".</summary>

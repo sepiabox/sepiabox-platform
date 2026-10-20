@@ -249,4 +249,16 @@
   <data name="Search_FirstResults" xml:space="preserve">
     <value>Mostrando os primeiros {0} resultados. Refine os filtros para ver o restante.</value>
   </data>
+  <data name="Filter_Describe" xml:space="preserve">
+    <value>Descrever (em inglês)</value>
+  </data>
+  <data name="Filter_DescribePlaceholder" xml:space="preserve">
+    <value>ex.: beach at sunset</value>
+  </data>
+  <data name="Search_MostSimilar" xml:space="preserve">
+    <value>Mais parecidas com a descrição</value>
+  </data>
+  <data name="Search_DescribeUnavailable" xml:space="preserve">
+    <value>A busca por descrição não está disponível no momento. Os outros filtros continuam funcionando.</value>
+  </data>
 </root>
