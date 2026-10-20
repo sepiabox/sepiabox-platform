@@ -1,10 +1,11 @@
 using ImageMagick;
 using Sepiabox.Pipeline.Embeddings;
+using Xunit.Abstractions;
 
 namespace Sepiabox.Pipeline.Tests;
 
 [Trait("Category", "Integration")]
-public sealed class ClipImageEmbedderTests : IDisposable
+public sealed class ClipImageEmbedderTests(ITestOutputHelper output) : IDisposable
 {
     private readonly TempFolder _folder = new();
 
@@ -89,6 +90,7 @@ public sealed class ClipImageEmbedderTests : IDisposable
 
         var cosine = EmbeddingCodec.Cosine(embedder.Embed(Path.Combine("TestData", $"{name}.png")), reference);
 
+        output.WriteLine($"{name}: cosine with the reference {cosine:F6}");
         Assert.True(cosine > 0.999, $"cosine with the reference was {cosine}");
     }
 
