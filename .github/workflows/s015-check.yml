@@ -1,0 +1,34 @@
+# Temporary (S-015 review): runs CI's integration job on pushes to this branch, removed before the PR.
+name: S-015 integration check
+on:
+  push:
+    branches: [story/S-015-clip-embeddings]
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - id: models-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.sepiabox/models
+          key: models-${{ hashFiles('models/models.json') }}
+      - run: dotnet run --project src/Sepiabox.Ingest --configuration Release -- models download
+      - if: steps.models-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.sepiabox/models
+          key: models-${{ hashFiles('models/models.json') }}
+      - run: dotnet test tests/Sepiabox.Pipeline.Tests --configuration Release --filter "FullyQualifiedName~golden_image" --logger "console;verbosity=detailed"
+        env:
+          SEPIABOX_REQUIRE_MODELS: "1"
+      - run: dotnet test Sepiabox.slnx --configuration Release --filter "Category=Integration" --logger "console;verbosity=normal"
+        env:
+          SEPIABOX_REQUIRE_MODELS: "1"
+      - run: dotnet test Sepiabox.slnx --configuration Release --filter "Category!=Integration"
