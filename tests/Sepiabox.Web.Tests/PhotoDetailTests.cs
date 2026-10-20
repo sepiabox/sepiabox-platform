@@ -153,12 +153,30 @@ public sealed class PhotoDetailTests : LocalizedContext
         Assert.Equal("./?page=3", page.Find("p.back a").GetAttribute("href"));
     }
 
-    private IRenderedComponent<PhotoDetail> RenderDetail(AssetDetail asset, int? pageNumber = null)
+    [Fact]
+    public void The_back_link_returns_to_the_filters_the_visitor_came_from()
+    {
+        var filters = SearchLinks.Timeline(SearchLinks.FromFields("2019", "12", null, "Lisbon", null));
+
+        var page = RenderDetail(Details.Photo(Ids.Of(5), new DateTime(2019, 12, 1)), query: filters[2..]);
+
+        Assert.Equal(filters, page.Find("p.back a").GetAttribute("href"));
+    }
+
+    [Fact]
+    public void The_back_link_ignores_filters_that_do_not_decode()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(5), new DateTime(2019, 12, 1)), query: "?q=%3Cscript%3E");
+
+        Assert.Equal("./", page.Find("p.back a").GetAttribute("href"));
+    }
+
+    private IRenderedComponent<PhotoDetail> RenderDetail(AssetDetail asset, int? pageNumber = null, string? query = null)
     {
         var library = new FakeLibrary();
         library.Assets[asset.Id] = asset;
         Services.AddSingleton<ILibraryQueries>(library);
-        var query = pageNumber is { } number ? $"?page={number}" : string.Empty;
+        query ??= pageNumber is { } number ? $"?page={number}" : string.Empty;
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}{query}");
         return Render<PhotoDetail>(p => p.Add(d => d.Id, asset.Id));
     }

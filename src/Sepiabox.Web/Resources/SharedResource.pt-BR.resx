@@ -204,4 +204,49 @@
   <data name="Download_Unavailable" xml:space="preserve">
     <value>Não foi possível preparar o download. Tente novamente daqui a pouco.</value>
   </data>
+  <data name="Filter_Label" xml:space="preserve">
+    <value>Filtros</value>
+  </data>
+  <data name="Filter_Year" xml:space="preserve">
+    <value>Ano</value>
+  </data>
+  <data name="Filter_Month" xml:space="preserve">
+    <value>Mês</value>
+  </data>
+  <data name="Filter_Kind" xml:space="preserve">
+    <value>Tipo</value>
+  </data>
+  <data name="Filter_City" xml:space="preserve">
+    <value>Cidade</value>
+  </data>
+  <data name="Filter_Source" xml:space="preserve">
+    <value>Origem</value>
+  </data>
+  <data name="Filter_Any" xml:space="preserve">
+    <value>Qualquer</value>
+  </data>
+  <data name="Filter_Photos" xml:space="preserve">
+    <value>Fotos</value>
+  </data>
+  <data name="Filter_Videos" xml:space="preserve">
+    <value>Vídeos</value>
+  </data>
+  <data name="Filter_Apply" xml:space="preserve">
+    <value>Filtrar</value>
+  </data>
+  <data name="Filter_Clear" xml:space="preserve">
+    <value>Limpar filtros</value>
+  </data>
+  <data name="Filter_OnThisDay" xml:space="preserve">
+    <value>Neste dia</value>
+  </data>
+  <data name="Search_NoResults" xml:space="preserve">
+    <value>Nada corresponde a estes filtros.</value>
+  </data>
+  <data name="Search_Invalid" xml:space="preserve">
+    <value>Não foi possível ler estes filtros.</value>
+  </data>
+  <data name="Search_FirstResults" xml:space="preserve">
+    <value>Mostrando os primeiros {0} resultados. Refine os filtros para ver o restante.</value>
+  </data>
 </root>

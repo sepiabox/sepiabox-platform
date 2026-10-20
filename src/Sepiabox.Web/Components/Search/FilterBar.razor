@@ -1,0 +1,99 @@
+@using System.Globalization
+@* A plain GET form: the timeline turns its fields into ?q= (SearchLinks), so it needs no interactivity. *@
+
+<form class="filters" method="get" action="./" role="search" aria-label="@Text["Filter_Label"]">
+    <input type="hidden" name="filter" value="1" />
+
+    <label>
+        <span>@Text["Filter_Year"]</span>
+        <select name="year">
+            <option value="">@Text["Filter_Any"]</option>
+            @foreach (var year in Years)
+            {
+                <option value="@year.ToString(CultureInfo.InvariantCulture)" selected="@(Fields.Year == year)">@year.ToString(CultureInfo.InvariantCulture)</option>
+            }
+        </select>
+    </label>
+
+    <label>
+        <span>@Text["Filter_Month"]</span>
+        <select name="month">
+            <option value="">@Text["Filter_Any"]</option>
+            @for (var month = 1; month <= 12; month++)
+            {
+                <option value="@month.ToString(CultureInfo.InvariantCulture)" selected="@(Fields.Month == month)">@MonthName(month)</option>
+            }
+        </select>
+    </label>
+
+    <label>
+        <span>@Text["Filter_Kind"]</span>
+        <select name="kind">
+            <option value="">@Text["Filter_Any"]</option>
+            <option value="@AssetKinds.Photo" selected="@(Fields.Kind == AssetKinds.Photo)">@Text["Filter_Photos"]</option>
+            <option value="@AssetKinds.Video" selected="@(Fields.Kind == AssetKinds.Video)">@Text["Filter_Videos"]</option>
+        </select>
+    </label>
+
+    <label>
+        <span>@Text["Filter_City"]</span>
+        <select name="city">
+            <option value="">@Text["Filter_Any"]</option>
+            @foreach (var city in Cities)
+            {
+                <option value="@city" selected="@(string.Equals(Fields.City, city, StringComparison.OrdinalIgnoreCase))">@city</option>
+            }
+        </select>
+    </label>
+
+    <label>
+        <span>@Text["Filter_Source"]</span>
+        <select name="source">
+            <option value="">@Text["Filter_Any"]</option>
+            @foreach (var source in Sources)
+            {
+                <option value="@source" selected="@(string.Equals(Fields.Source, source, StringComparison.OrdinalIgnoreCase))">@source</option>
+            }
+        </select>
+    </label>
+
+    <button type="submit">@Text["Filter_Apply"]</button>
+    <a class="shortcut" href="@SearchLinks.Timeline(SearchLinks.OnThisDay)" aria-current="@(OnThisDayActive ? "page" : null)">@Text["Filter_OnThisDay"]</a>
+    @if (Filtered)
+    {
+        <a class="clear" href="./">@Text["Filter_Clear"]</a>
+    }
+</form>
+
+@code {
+    [Parameter, EditorRequired]
+    public FilterOptions Options { get; set; } = new([], [], []);
+
+    [Parameter]
+    public FilterFields Fields { get; set; } = new(null, null, null, null, null);
+
+    [Parameter]
+    public bool Filtered { get; set; }
+
+    [Parameter]
+    public bool OnThisDayActive { get; set; }
+
+    // A year, city or source the URL names but the catalog lacks stays selectable, so the bar shows what is applied.
+    private IEnumerable<int> Years => Fields.Year is { } year && !Options.Years.Contains(year)
+        ? Options.Years.Append(year).OrderDescending()
+        : Options.Years;
+
+    private IEnumerable<string> Cities => With(Options.Cities, Fields.City);
+
+    private IEnumerable<string> Sources => With(Options.Sources, Fields.Source);
+
+    private static IEnumerable<string> With(IReadOnlyList<string> values, string? value) =>
+        value is null || values.Contains(value, StringComparer.OrdinalIgnoreCase) ? values : values.Append(value);
+
+    // Month names come from the culture (D-050), capitalised as a list entry.
+    private static string MonthName(int month)
+    {
+        var name = CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(month);
+        return name.Length == 0 ? name : CultureInfo.CurrentCulture.TextInfo.ToUpper(name[0]) + name[1..];
+    }
+}

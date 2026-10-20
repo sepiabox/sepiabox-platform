@@ -53,6 +53,22 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
 
     public Task<OriginalFile?> GetOriginalAsync(string id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Assets.ContainsKey(id) ? new OriginalFile("IMG_0001.jpg", "image/jpeg") : null);
+
+    /// <summary>What the filter bar offers.</summary>
+    public FilterOptions Options { get; init; } = new([2021, 2019], ["Lisbon", "Porto"], ["HD da Ana"]);
+
+    /// <summary>The searches asked for, in order; each returns <see cref="SearchResults"/>.</summary>
+    public List<Sepiabox.Catalog.Search.SearchQuery> Searches { get; } = [];
+
+    public SearchPage SearchResults { get; init; } = new([], false);
+
+    public Task<SearchPage> SearchAsync(Sepiabox.Catalog.Search.SearchQuery query, CancellationToken cancellationToken = default)
+    {
+        Searches.Add(query);
+        return Task.FromResult(SearchResults);
+    }
+
+    public Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Options);
 }
 
 /// <summary>

@@ -32,11 +32,11 @@ All search goes through a single JSON DSL (D-020), used by the filter UI and, la
 - People, personal places, visual, occasions (later stories extend the DSL).
 
 ### Acceptance criteria
-- [ ] Given assets from Lisbon and Porto across several months, when I filter `cities=[Lisbon], months=[12]`, then only the Lisbon ones from December come back.
-- [ ] Given a clock fixed at 2026-10-19 and `onThisDay.yearsAgo=5`, then only assets from 2021-10-19 come back.
-- [ ] Given several filters, then they are combined with AND.
-- [ ] Given a DSL with an unknown field, then the API returns 400.
-- [ ] Given filters chosen in the UI, when I copy the URL and open it, then the same filters are applied.
+- [x] Given assets from Lisbon and Porto across several months, when I filter `cities=[Lisbon], months=[12]`, then only the Lisbon ones from December come back.
+- [x] Given a clock fixed at 2026-10-19 and `onThisDay.yearsAgo=5`, then only assets from 2021-10-19 come back.
+- [x] Given several filters, then they are combined with AND.
+- [x] Given a DSL with an unknown field, then the API returns 400.
+- [x] Given filters chosen in the UI, when I copy the URL and open it, then the same filters are applied.
 
 ### Technical notes
 - `Sepiabox.Catalog/Search/SearchQuery.cs`, `SearchService.cs`; `TimeProvider` for the clock.

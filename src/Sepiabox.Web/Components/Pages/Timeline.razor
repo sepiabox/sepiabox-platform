@@ -1,14 +1,43 @@
 @page "/"
 @using Microsoft.AspNetCore.WebUtilities
+@using Sepiabox.Catalog.Search
 @inject ILibraryQueries Library
 @inject NavigationManager Navigation
-@* Static server rendering (no @rendermode): the page is plain HTML with links, nothing interactive. *@
+@* Static server rendering (no @rendermode): the page is plain HTML with links and a GET form, nothing interactive. *@
 
 <PageTitle>Sepiabox</PageTitle>
 
 <h1 class="visually-hidden">@Text["Timeline_Heading"]</h1>
 
-@if (_page is null)
+@if (_options is { } options && (_filtered || _invalid || _page is { Items.Count: > 0 } || _page is { Page: > 1 }))
+{
+    <FilterBar Options="options" Fields="SearchLinks.ToFields(_query)" Filtered="@(_filtered || _invalid)" OnThisDayActive="@(_query == SearchLinks.OnThisDay)" />
+}
+
+@if (_invalid)
+{
+    <p class="empty" role="alert">@Text["Search_Invalid"] <a href="./">@Text["Filter_Clear"]</a></p>
+}
+else if (_filtered)
+{
+    @if (_results is null)
+    {
+        <p class="muted">@Text["Timeline_Loading"]</p>
+    }
+    else if (_results.Items.Count == 0)
+    {
+        <p class="empty">@Text["Search_NoResults"] <a href="./">@Text["Filter_Clear"]</a></p>
+    }
+    else
+    {
+        <MonthGroups Items="_results.Items" DetailLink="DetailLink" />
+        @if (_results.HasMore)
+        {
+            <p class="more muted">@Text["Search_FirstResults", _results.Items.Count]</p>
+        }
+    }
+}
+else if (_page is null)
 {
     <p class="muted">@Text["Timeline_Loading"]</p>
 }
@@ -22,18 +51,7 @@ else if (_page.Items.Count == 0)
 }
 else
 {
-    @foreach (var group in _groups)
-    {
-        <section class="month">
-            <h2>@(group.Month is { } month ? Text.MonthAndYear(month) : Text["NoDate"])</h2>
-            <ul class="grid">
-                @foreach (var item in group.Items)
-                {
-                    <li><MediaCard Item="item" Href="@DetailLink(item)" /></li>
-                }
-            </ul>
-        </section>
-    }
+    <MonthGroups Items="_page.Items" DetailLink="DetailLink" />
 
     <nav class="pages" aria-label="@Text["Timeline_Pages"]">
         @if (_page.Page > 1)
@@ -52,14 +70,68 @@ else
     [SupplyParameterFromQuery(Name = "page")]
     public string? PageQuery { get; set; }
 
+    /// <summary>The filters, as the search DSL in base64url (S-013).</summary>
+    [SupplyParameterFromQuery(Name = SearchLinks.QueryParameter)]
+    public string? SearchQueryParameter { get; set; }
+
+    // The filter bar's fields, present only when it was submitted; the page turns them into ?q= at once.
+    [SupplyParameterFromQuery(Name = "filter")]
+    public string? FilterSubmitted { get; set; }
+
+    [SupplyParameterFromQuery(Name = "year")]
+    public string? Year { get; set; }
+
+    [SupplyParameterFromQuery(Name = "month")]
+    public string? Month { get; set; }
+
+    [SupplyParameterFromQuery(Name = "kind")]
+    public string? Kind { get; set; }
+
+    [SupplyParameterFromQuery(Name = "city")]
+    public string? City { get; set; }
+
+    [SupplyParameterFromQuery(Name = "source")]
+    public string? Source { get; set; }
+
     private TimelinePage? _page;
-    private IReadOnlyList<TimelineGroup> _groups = [];
+    private SearchPage? _results;
+    private FilterOptions? _options;
+    private SearchQuery? _query;
+    private bool _filtered;
+    private bool _invalid;
 
     protected override async Task OnParametersSetAsync()
     {
-        var page = await Library.GetTimelinePageAsync(LibraryQueries.ParsePage(PageQuery));
-        _groups = TimelineGroups.ByMonth(page.Items);
-        _page = page;
+        if (FilterSubmitted is not null)
+        {
+            // One address per set of filters, so the URL can be copied and opened again.
+            Navigation.NavigateTo(SearchLinks.Timeline(SearchLinks.FromFields(Year, Month, Kind, City, Source)));
+            return;
+        }
+
+        (_page, _results, _query, _filtered, _invalid) = (null, null, null, false, false);
+        if (!string.IsNullOrEmpty(SearchQueryParameter))
+        {
+            if (SearchQueryJson.TryDecode(SearchQueryParameter, out var query, out _))
+            {
+                _query = query;
+                _filtered = !query.Filters.IsEmpty;
+            }
+            else
+            {
+                _invalid = true;
+            }
+        }
+
+        _options = await Library.GetFilterOptionsAsync();
+        if (_filtered)
+        {
+            _results = await Library.SearchAsync(_query!);
+        }
+        else if (!_invalid)
+        {
+            _page = await Library.GetTimelinePageAsync(LibraryQueries.ParsePage(PageQuery));
+        }
     }
 
     // Relative, keeping any other query parameters, so links work under whatever base path the app has.
@@ -77,6 +149,9 @@ else
         return QueryHelpers.AddQueryString("./", query);
     }
 
+    // The detail page's "back" returns to the same filters or the same page.
     private string DetailLink(TimelineItem item) =>
-        _page is { Page: > 1 } page ? $"photos/{item.Id}?page={page.Page}" : $"photos/{item.Id}";
+        _filtered ? $"photos/{item.Id}?{SearchLinks.QueryParameter}={SearchQueryParameter}"
+        : _page is { Page: > 1 } page ? $"photos/{item.Id}?page={page.Page}"
+        : $"photos/{item.Id}";
 }

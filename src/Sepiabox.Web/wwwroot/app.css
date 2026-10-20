@@ -222,6 +222,47 @@ main {
     fill: currentColor;
 }
 
+/* The filter bar (S-013): labelled selects in a row that wraps on narrow screens. */
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px 16px;
+    margin: 8px 0 16px;
+}
+
+.filters label {
+    display: grid;
+    gap: 4px;
+    font-size: 0.85rem;
+}
+
+.filters select,
+.filters button {
+    min-height: 36px;
+    padding: 4px 8px;
+    font: inherit;
+    border: 1px solid var(--mat);
+    border-radius: 2px;
+    background: var(--white);
+    color: var(--developer);
+}
+
+.filters button {
+    background: var(--cyanotype);
+    border-color: var(--cyanotype);
+    color: var(--white);
+    cursor: pointer;
+}
+
+.filters .shortcut[aria-current="page"] {
+    font-weight: 600;
+}
+
+.more {
+    margin-top: 32px;
+}
+
 .pages {
     display: flex;
     justify-content: space-between;
