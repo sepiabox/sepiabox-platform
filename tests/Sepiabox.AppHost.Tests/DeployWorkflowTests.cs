@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using YamlDotNet.RepresentationModel;
 
@@ -139,15 +140,49 @@ public sealed partial class DeployWorkflowTests
         // The custom domain (S-035) comes from variables, with no domain and a disabled binding when unset.
         Assert.Equal("${{ vars.CUSTOM_DOMAIN }}", Text(environment["CUSTOM_DOMAIN"]));
         Assert.Equal("${{ vars.CUSTOM_DOMAIN_BINDING }}", Text(environment["CUSTOM_DOMAIN_BINDING"]));
-        Assert.Contains("azd env config set infra.parameters.customDomain \"$CUSTOM_DOMAIN\"", run, StringComparison.Ordinal);
-        Assert.Contains(
-            "azd env config set infra.parameters.customDomainBinding \"${CUSTOM_DOMAIN_BINDING:-Disabled}\"", run, StringComparison.Ordinal);
+        Assert.Contains("azd env config set infra.parameters.customDomain \"$domain\"", run, StringComparison.Ordinal);
+        Assert.Contains("azd env config set infra.parameters.customDomainBinding \"$binding\"", run, StringComparison.Ordinal);
         // A missing secret, or jq's "null" saved as one, stops the run before azd could generate a value.
         Assert.Contains("if [[ -z \"${!name}\" || \"${!name}\" == \"null\" ]]; then", run, StringComparison.Ordinal);
         Assert.Contains("exit 1", run, StringComparison.Ordinal);
         Assert.True(
             run.IndexOf("exit 1", StringComparison.Ordinal) < run.IndexOf("azd env new", StringComparison.Ordinal),
             "The secrets are checked before the environment is created.");
+    }
+
+    [UnixTheory]
+    [InlineData("", "", "", "Disabled")]
+    [InlineData("app.sepiabox.com", "", "app.sepiabox.com", "Disabled")]
+    [InlineData("App.Sepiabox.com", "disabled", "app.sepiabox.com", "Disabled")]
+    [InlineData("app.sepiabox.com", "SniEnabled", "app.sepiabox.com", "SniEnabled")]
+    [InlineData("app.sepiabox.com", "snienabled", "app.sepiabox.com", "SniEnabled")]
+    public async Task Custom_domain_variables_reach_azd_in_their_canonical_form(
+        string domain, string binding, string expectedDomain, string expectedBinding)
+    {
+        var (exitCode, calls, _) = await RunEnvironmentStepAsync(domain, binding);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains($"env config set infra.parameters.customDomain {expectedDomain}".TrimEnd(), calls);
+        Assert.Contains($"env config set infra.parameters.customDomainBinding {expectedBinding}", calls);
+    }
+
+    [UnixTheory]
+    // A ";" or "*" in AllowedHosts would let any host in.
+    [InlineData("app.sepiabox.com;*", "", "CUSTOM_DOMAIN must be empty or a host name")]
+    [InlineData("*", "", "CUSTOM_DOMAIN must be empty or a host name")]
+    [InlineData("sepiabox", "", "CUSTOM_DOMAIN must be empty or a host name")]
+    [InlineData("https://app.sepiabox.com", "", "CUSTOM_DOMAIN must be empty or a host name")]
+    [InlineData("app.sepiabox.com ", "", "CUSTOM_DOMAIN must be empty or a host name")]
+    [InlineData("-app.sepiabox.com", "", "CUSTOM_DOMAIN must be empty or a host name")]
+    [InlineData("app.sepiabox.com", "Enabled", "CUSTOM_DOMAIN_BINDING must be Disabled or SniEnabled")]
+    [InlineData("app.sepiabox.com", "SNI", "CUSTOM_DOMAIN_BINDING must be Disabled or SniEnabled")]
+    public async Task Invalid_custom_domain_variables_stop_the_run_before_azd(string domain, string binding, string message)
+    {
+        var (exitCode, calls, output) = await RunEnvironmentStepAsync(domain, binding);
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(calls);
+        Assert.Contains(message, output, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -191,6 +226,47 @@ public sealed partial class DeployWorkflowTests
     private static partial Regex PurgeCommand();
 
     private const string NewestStep = "Skip a commit that is no longer the newest on main";
+
+    /// <summary>Runs the "Create the azd environment" step's script with a stand-in azd that records its calls.</summary>
+    private async Task<(int ExitCode, List<string> Calls, string Output)> RunEnvironmentStepAsync(string domain, string binding)
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "sepiabox-workflow-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var calls = Path.Combine(folder, "calls.txt");
+            var azd = Path.Combine(folder, "azd");
+            await File.WriteAllTextAsync(azd, "#!/bin/sh\necho \"$*\" >> \"$CALLS\"\n");
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(azd, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            var start = new ProcessStartInfo("bash") { RedirectStandardOutput = true, RedirectStandardError = true };
+            start.ArgumentList.Add("-e");
+            start.ArgumentList.Add("-c");
+            start.ArgumentList.Add(Run("Create the azd environment from the saved parameters"));
+            start.Environment["PATH"] = folder + Path.PathSeparator + System.Environment.GetEnvironmentVariable("PATH");
+            start.Environment["CALLS"] = calls;
+            start.Environment["PG_USERNAME"] = "example";
+            start.Environment["PG_PASSWORD"] = "example";
+            start.Environment["PG_APP_PASSWORD"] = "example";
+            start.Environment["AZURE_SUBSCRIPTION_ID"] = "00000000-0000-0000-0000-000000000000";
+            start.Environment["CUSTOM_DOMAIN"] = domain;
+            start.Environment["CUSTOM_DOMAIN_BINDING"] = binding;
+
+            using var process = Process.Start(start)!;
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var error = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            var recorded = File.Exists(calls) ? (await File.ReadAllLinesAsync(calls)).Select(c => c.TrimEnd()).ToList() : [];
+            return (process.ExitCode, recorded, output + error);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
 
     private YamlMappingNode Job() => Map(Map(_workflow, "jobs"), "deploy");
 

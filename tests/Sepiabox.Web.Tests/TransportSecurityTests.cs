@@ -24,19 +24,29 @@ public sealed class TransportSecurityTests
     }
 
     [Fact]
-    public async Task Development_and_local_hosts_get_no_strict_transport_security()
+    public async Task Development_gets_no_strict_transport_security_even_on_a_public_host()
     {
-        await using var development = Web("Development", "*");
-        await using var production = Web("Production", "*");
-        using var local = Client(development, "localhost");
-        using var localInProduction = Client(production, "localhost");
+        // A public host, so it is Development that leaves the header out, not the localhost exclusion; local runs
+        // keep plain http and /dev-login.
+        await using var web = Web("Development", "*");
+        using var client = Client(web, DefaultHost);
 
-        using var developmentResponse = await local.GetAsync(new Uri("/sign-in", UriKind.Relative));
-        using var productionResponse = await localInProduction.GetAsync(new Uri("/sign-in", UriKind.Relative));
+        using var response = await client.GetAsync(new Uri("/sign-in", UriKind.Relative));
 
-        // Development keeps /dev-login and plain http working; localhost is never pinned to HTTPS.
-        Assert.False(developmentResponse.Headers.Contains("Strict-Transport-Security"));
-        Assert.False(productionResponse.Headers.Contains("Strict-Transport-Security"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(response.Headers.Contains("Strict-Transport-Security"));
+    }
+
+    [Fact]
+    public async Task Localhost_gets_no_strict_transport_security_in_production()
+    {
+        await using var web = Web("Production", "*");
+        using var client = Client(web, "localhost");
+
+        using var response = await client.GetAsync(new Uri("/sign-in", UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(response.Headers.Contains("Strict-Transport-Security"));
     }
 
     [Theory]

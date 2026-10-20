@@ -135,14 +135,29 @@ jobs:
               exit 1
             fi
           done
+          # The domain goes into AllowedHosts, where a ";" or "*" would let any host in: a plain host name only.
+          domain="${CUSTOM_DOMAIN,,}"
+          domain_pattern='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+          if [[ -n "$domain" && ! "$domain" =~ $domain_pattern ]]; then
+            echo "::error::CUSTOM_DOMAIN must be empty or a host name such as app.sepiabox.com."
+            exit 1
+          fi
+          case "${CUSTOM_DOMAIN_BINDING,,}" in
+            "" | disabled) binding=Disabled ;;
+            snienabled) binding=SniEnabled ;;
+            *)
+              echo "::error::CUSTOM_DOMAIN_BINDING must be Disabled or SniEnabled."
+              exit 1
+              ;;
+          esac
           azd env new sepiabox --location francecentral --subscription "$AZURE_SUBSCRIPTION_ID" --no-prompt
           azd env config set infra.parameters.pg_username "$PG_USERNAME"
           azd env config set infra.parameters.pg_password "$PG_PASSWORD"
           azd env config set infra.parameters.pg_app_password "$PG_APP_PASSWORD"
           azd env config set infra.parameters.uploaderPrincipalIds "$UPLOADER_PRINCIPAL_IDS"
           # S-035: empty for no custom domain; the binding goes from Disabled to SniEnabled (docs/operations.md).
-          azd env config set infra.parameters.customDomain "$CUSTOM_DOMAIN"
-          azd env config set infra.parameters.customDomainBinding "${CUSTOM_DOMAIN_BINDING:-Disabled}"
+          azd env config set infra.parameters.customDomain "$domain"
+          azd env config set infra.parameters.customDomainBinding "$binding"
 
       # Provision, run the migrate job and wait for it, then the import jobs and the web (S-032, S-033). A
       # failed migration ends the script, and so this job, before anything else is deployed.
