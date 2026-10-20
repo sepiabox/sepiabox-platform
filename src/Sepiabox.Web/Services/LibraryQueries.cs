@@ -76,6 +76,7 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
         ["video/mpeg"] = ".mpg",
         ["video/mp2t"] = ".mts",
         ["video/dv"] = ".dv",
+        ["video/x-dv"] = ".dv",
     };
 
     /// <summary>

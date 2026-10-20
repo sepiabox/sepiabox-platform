@@ -60,7 +60,7 @@ public static partial class MediaTypes
     public static string ContentType(string path) =>
         ContentTypes.GetValueOrDefault(Path.GetExtension(path), "application/octet-stream");
 
-    [GeneratedRegex(@"^(VIDEO_TS|VTS_\d{2}_0)\.VOB$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^(VIDEO_TS|VTS_[0-9]{2}_0)\.VOB$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DvdMenu();
 
     public static MediaKind Classify(string path)
