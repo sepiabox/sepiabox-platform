@@ -98,6 +98,35 @@ public class VideoProcessingTests
     }
 
     [Fact]
+    public void Dates_an_undated_mpeg_clip_from_its_folder_and_file_name_when_processed()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // MPEG program stream, as camcorders write it: no creation time anywhere in the file.
+        var clip = Path.Combine(drive.Path, "2011-09-25", "MNU_110425_x.mpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(clip)!);
+        Run(s_tools.Ffmpeg,
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc=duration=1:size=720x576:rate=25",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+            "-c:v", "mpeg2video", "-pix_fmt", "yuv420p", "-c:a", "mp2", "-shortest", "-f", "mpeg",
+            clip,
+        ]);
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        Assert.Equal(1, result.Processed);
+        var file = Assert.Single(Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json"));
+        Assert.True(new ManifestValidator().TryValidate(File.ReadAllText(file), out var manifest, out var error), error);
+        Assert.Equal(new CaptureDate(new DateTime(2011, 9, 25, 11, 4, 25), CaptureDateSource.FileName), manifest.Captured);
+        Assert.Equal(("video/mpeg", "2011-09-25/MNU_110425_x.mpg"), (manifest.ContentType, Assert.Single(manifest.Sources).Path));
+        // As a set: this test is about the date, and the order of derivatives is covered by the tests above.
+        Assert.Equal(["poster", "proxy-720p", "thumb-256"], manifest.Derivatives.Select(d => d.Name).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Deinterlaces_and_shows_at_16_9_an_interlaced_anamorphic_camcorder_mod_file()
     {
         using var drive = new TempFolder();

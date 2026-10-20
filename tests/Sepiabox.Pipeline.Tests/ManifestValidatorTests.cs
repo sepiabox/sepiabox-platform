@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
+using Sepiabox.Pipeline.Media;
 
 namespace Sepiabox.Pipeline.Tests;
 
@@ -99,6 +100,53 @@ public sealed class ManifestValidatorTests
     {
         // Camera clocks have no time zone; process never writes one, so an offset means a foreign writer.
         var json = ValidJson(node => node["capturedAt"] = capturedAt);
+
+        Assert.False(s_validator.TryValidate(json, out _, out var error));
+        Assert.Contains("/capturedAt", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, CaptureDateSource.Metadata)]
+    [InlineData("metadata", CaptureDateSource.Metadata)]
+    [InlineData("fileName", CaptureDateSource.FileName)]
+    [InlineData("folder", CaptureDateSource.Folder)]
+    public void Accepts_a_capture_date_source_when_it_is_known_or_absent(string? value, CaptureDateSource expected)
+    {
+        // Absent: a manifest written before S-043, whose date came from metadata.
+        var json = ValidJson(node =>
+        {
+            node.Remove("capturedAtSource");
+            if (value is not null)
+            {
+                node["capturedAtSource"] = value;
+            }
+        });
+
+        Assert.True(s_validator.TryValidate(json, out var manifest, out var error), error);
+        Assert.Equal(expected, manifest.CapturedAtSource);
+        Assert.Equal(new DateTime(2019, 7, 14, 16, 30, 0), manifest.CapturedAt);
+    }
+
+    [Theory]
+    [InlineData("exif")]
+    [InlineData("FileName")]
+    [InlineData("")]
+    public void Rejects_a_capture_date_source_when_it_is_unknown(string value)
+    {
+        var json = ValidJson(node => node["capturedAtSource"] = value);
+
+        Assert.False(s_validator.TryValidate(json, out _, out var error));
+        Assert.Contains("/capturedAtSource", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rejects_a_capture_date_source_when_there_is_no_capture_date()
+    {
+        var json = ValidJson(node =>
+        {
+            node["capturedAt"] = null;
+            node["capturedAtSource"] = "folder";
+        });
 
         Assert.False(s_validator.TryValidate(json, out _, out var error));
         Assert.Contains("/capturedAt", error, StringComparison.Ordinal);

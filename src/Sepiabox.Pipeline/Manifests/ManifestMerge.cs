@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Sepiabox.Pipeline.Media;
 
 namespace Sepiabox.Pipeline.Manifests;
 
@@ -17,10 +18,14 @@ public static class ManifestMerge
 
         // A manifest without derivatives comes from a run that could not finish the file: a video
         // waiting for FFmpeg (D-029) or a photo that did not decode (D-028). Its description is weaker.
-        var description = incoming.Derivatives.Count == 0 && existing.Derivatives.Count > 0 ? existing : incoming;
+        var (description, other) = incoming.Derivatives.Count == 0 && existing.Derivatives.Count > 0
+            ? (existing, incoming)
+            : (incoming, existing);
 
         return description with
         {
+            // Ranked by source, so the date does not depend on which drive uploads first (D-046).
+            Captured = CaptureDate.Stronger(description.Captured, other.Captured),
             Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
             Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
             Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),

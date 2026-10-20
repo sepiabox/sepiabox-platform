@@ -9,6 +9,9 @@
     "schemaVersion", "id", "kind", "sizeBytes", "contentType", "capturedAt", "location", "camera",
     "width", "height", "durationSeconds", "sources", "derivatives", "embeddings", "facesProcessed", "faces"
   ],
+  "dependentSchemas": {
+    "capturedAtSource": { "properties": { "capturedAt": { "type": "string" } } }
+  },
   "properties": {
     "schemaVersion": { "const": 1 },
     "id": {
@@ -20,9 +23,13 @@
     "sizeBytes": { "type": "integer", "minimum": 0 },
     "contentType": { "type": "string", "minLength": 1 },
     "capturedAt": {
-      "description": "Wall-clock time on the camera, without time zone.",
+      "description": "Wall-clock time when the photo or video was taken, without time zone (D-037); capturedAtSource says how it is known.",
       "type": ["string", "null"],
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$"
+    },
+    "capturedAtSource": {
+      "description": "Where capturedAt came from (D-046): the file's own metadata, its file name, or its parent folder's name. Optional: omitted when capturedAt is null, and absent from manifests written before S-043, whose dates all came from metadata.",
+      "enum": ["metadata", "fileName", "folder"]
     },
     "location": {
       "type": ["object", "null"],

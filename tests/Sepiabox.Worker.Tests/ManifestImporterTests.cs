@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Manifests;
+using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Storage;
 using Sepiabox.Worker.Importing;
 using static Sepiabox.Tests.Shared.TestManifests;
@@ -55,6 +56,35 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
             [$"{PhotoId}/preview-1280.webp", $"{PhotoId}/thumb-256.webp"],
             asset.Derivatives.Select(d => d.BlobPath).Order(StringComparer.Ordinal));
         Assert.Equal(BlobLayout.ManifestBlobName(PhotoId), (await db.ManifestImports.SingleAsync()).BlobName);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(CaptureDateSource.Metadata)]
+    [InlineData(CaptureDateSource.Folder)]
+    public async Task Imports_the_capture_date_whether_or_not_the_manifest_says_where_it_came_from(CaptureDateSource? source)
+    {
+        // Manifests written before S-043 have no capturedAtSource; the catalog does not store it yet (D-046).
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var manifest = Photo(Source("HD da Ana", "2005-07-14/praia.jpg")) with
+        {
+            Captured = new(new DateTime(2005, 7, 14), source ?? CaptureDateSource.Metadata),
+        };
+        var json = JsonNode.Parse(ManifestJson.Serialize(manifest))!.AsObject();
+        if (source is null)
+        {
+            json.Remove("capturedAtSource");
+        }
+
+        await container.GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id))
+            .UploadAsync(BinaryData.FromString(json.ToJsonString()), overwrite: true);
+
+        var result = await ImportAsync(db, container);
+
+        Assert.Equal(1, result.Imported);
+        Assert.Empty(result.Problems);
+        Assert.Equal(new DateTime(2005, 7, 14), (await LoadAsync(db)).CapturedAt);
     }
 
     [Fact]
@@ -122,7 +152,7 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
         await PutAsync(container, Photo(Source("HD da Ana", "2019/praia.jpg", hour: 20)) with
         {
             Width = 3024,
-            CapturedAt = new DateTime(2019, 7, 15, 9, 0, 0),
+            Captured = new(new DateTime(2019, 7, 15, 9, 0, 0), CaptureDateSource.Metadata),
             Derivatives = [Derivative("thumb-256", 192, 256), Derivative("square-512", 512, 512)],
         });
         await ImportAsync(db, container);

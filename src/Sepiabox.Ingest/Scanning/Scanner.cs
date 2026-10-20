@@ -10,7 +10,19 @@ namespace Sepiabox.Ingest.Scanning;
 /// </summary>
 public static class Scanner
 {
-    public static ScanResult Scan(ScanOptions options, IProgress<int>? filesSeen = null, CancellationToken cancellationToken = default)
+    public static ScanResult Scan(ScanOptions options, IProgress<int>? filesSeen = null, CancellationToken cancellationToken = default) =>
+        Scan(options, TimeProvider.System, ReadCaptureDate, filesSeen, cancellationToken);
+
+    /// <summary>
+    /// The same with <paramref name="clock"/> as "now" for the plausibility of capture dates (D-046), and
+    /// <paramref name="readCaptureDate"/> to read a file's metadata date, which may throw for a damaged file.
+    /// </summary>
+    internal static ScanResult Scan(
+        ScanOptions options,
+        TimeProvider clock,
+        Func<string, DateTime?> readCaptureDate,
+        IProgress<int>? filesSeen = null,
+        CancellationToken cancellationToken = default)
     {
         var root = FileTree.ResolveRoot(options.Root);
 
@@ -36,7 +48,7 @@ public static class Scanner
             if (kind is MediaKind.Photo or MediaKind.Video)
             {
                 media.Add(new FileSample(path, size));
-                var year = ReadYear(path, problems);
+                var year = ReadYear(path, clock, readCaptureDate, problems);
                 mediaByYear[year] = mediaByYear.GetValueOrDefault(year) + 1;
             }
 
@@ -66,18 +78,24 @@ public static class Scanner
         };
     }
 
-    private static string ReadYear(string path, List<ScanProblem> problems)
+    // The same rule as process (D-046), so "by year" matches the dates process will record.
+    private static string ReadYear(string path, TimeProvider clock, Func<string, DateTime?> readCaptureDate, List<ScanProblem> problems)
     {
+        DateTime? fromMetadata = null;
         try
         {
-            var taken = CaptureDateReader.TryRead(path);
-            return taken?.Year.ToString(CultureInfo.InvariantCulture) ?? ScanResult.UnknownYear;
+            fromMetadata = readCaptureDate(path);
         }
         catch (Exception ex)
         {
-            // A damaged file must not stop a scan of the whole drive; it is listed instead.
+            // A damaged file must not stop a scan of the whole drive; it is listed, and its path may still date it.
             problems.Add(new ScanProblem(path, ex.Message));
-            return ScanResult.UnknownYear;
         }
+
+        var taken = CaptureDate.Resolve(fromMetadata, path, clock)?.Value;
+        return taken?.Year.ToString(CultureInfo.InvariantCulture) ?? ScanResult.UnknownYear;
     }
+
+    // The same reader as process, so both see the same metadata date.
+    private static DateTime? ReadCaptureDate(string path) => MetadataReader.Read(path).RawCapturedAt;
 }

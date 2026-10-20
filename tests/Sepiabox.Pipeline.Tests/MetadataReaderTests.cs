@@ -12,7 +12,7 @@ public class MetadataReaderTests
 
         var metadata = MetadataReader.Read(path);
 
-        Assert.Equal(new DateTime(2019, 7, 14, 16, 30, 5), metadata.CapturedAt);
+        Assert.Equal(new DateTime(2019, 7, 14, 16, 30, 5), metadata.RawCapturedAt);
         Assert.Equal(new GeoPoint(41.18, -8.69), metadata.Location);
         Assert.Equal(new CameraInfo("Apple", "iPhone 8"), metadata.Camera);
         Assert.Equal(64, metadata.Width);
@@ -39,4 +39,44 @@ public class MetadataReaderTests
 
         Assert.Equal(MediaMetadata.Empty, MetadataReader.Read(path));
     }
+
+    [Fact]
+    public void Reads_the_capture_date_from_a_real_camera_jpeg() =>
+        Assert.Equal(new DateTime(2019, 7, 14, 16, 30, 5), MetadataReader.Read(TestData("taken-2019-07-14.jpg")).RawCapturedAt);
+
+    [Fact]
+    public void Returns_no_capture_date_when_a_jpeg_has_no_exif() =>
+        Assert.Null(MetadataReader.Read(TestData("no-exif.jpg")).RawCapturedAt);
+
+    [Fact]
+    public void Returns_the_capture_date_as_written_when_the_camera_clock_was_reset()
+    {
+        using var folder = new TempFolder();
+        var path = folder.Write("reset.jpg", TestPhotos.Taken("1980:01:01 00:00:00"));
+
+        // Plausibility is decided with the path fallback, in CaptureDate.Resolve (D-046).
+        Assert.Equal(new DateTime(1980, 1, 1), MetadataReader.Read(path).RawCapturedAt);
+    }
+
+    [Fact]
+    public void Throws_when_the_file_is_gone()
+    {
+        using var folder = new TempFolder();
+
+        Assert.Throws<FileNotFoundException>(() => MetadataReader.Read(Path.Combine(folder.Path, "gone.jpg")));
+    }
+
+    [Fact]
+    public void Throws_when_the_path_is_a_folder()
+    {
+        using var folder = new TempFolder();
+        var path = Path.Combine(folder.Path, "album.jpg");
+        Directory.CreateDirectory(path);
+
+        // Opening a folder as a file is refused on every OS; the caller reports it as a problem.
+        var error = Record.Exception(() => MetadataReader.Read(path));
+        Assert.True(error is IOException or UnauthorizedAccessException, error?.ToString());
+    }
+
+    private static string TestData(string name) => Path.Combine(AppContext.BaseDirectory, "TestData", name);
 }

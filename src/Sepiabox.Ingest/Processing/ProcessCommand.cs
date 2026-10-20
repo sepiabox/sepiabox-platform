@@ -56,19 +56,23 @@ public static class ProcessCommand
         // A wrong folder fails before the model is checked, which can take seconds the first time.
         var (root, output) = Resolve(options);
         using var embedder = ClipImageEmbedder.TryCreate(options.ModelFolder ?? ModelFolder.Default(), out var embedderWarning);
-        return Run(options, root, output, embedder, embedderWarning, filesDone, cancellationToken);
+        return Run(options, root, output, embedder, embedderWarning, TimeProvider.System, filesDone, cancellationToken);
     }
 
-    /// <summary>The same with a given embedder, or none; <paramref name="embedderWarning"/> says why there is none.</summary>
+    /// <summary>
+    /// The same with a given embedder, or none; <paramref name="embedderWarning"/> says why there is none.
+    /// <paramref name="clock"/> gives "now" for the plausibility of capture dates (D-046); the system clock when null.
+    /// </summary>
     internal static ProcessResult Run(
         ProcessOptions options,
         IImageEmbedder? embedder,
         string? embedderWarning,
         IProgress<int>? filesDone = null,
+        TimeProvider? clock = null,
         CancellationToken cancellationToken = default)
     {
         var (root, output) = Resolve(options);
-        return Run(options, root, output, embedder, embedderWarning, filesDone, cancellationToken);
+        return Run(options, root, output, embedder, embedderWarning, clock ?? TimeProvider.System, filesDone, cancellationToken);
     }
 
     /// <summary>The folder to read, which must exist, and the work folder, both as full paths.</summary>
@@ -81,6 +85,7 @@ public static class ProcessCommand
         string output,
         IImageEmbedder? embedder,
         string? embedderWarning,
+        TimeProvider clock,
         IProgress<int>? filesDone,
         CancellationToken cancellationToken)
     {
@@ -207,7 +212,7 @@ public static class ProcessCommand
                     RemoveSource(output, oldSha256, source);
                 }
 
-                var described = Describe(manifestFolder, sha256, kind, file, source);
+                var described = Describe(manifestFolder, sha256, kind, file, source, clock);
                 var (manifest, status, derivativeProblem, noVideo) = AddDerivatives(output, file, described, video, cancellationToken);
                 if (status == FileStatus.NotVideo)
                 {
@@ -314,14 +319,20 @@ public static class ProcessCommand
         }
     }
 
-    private static Manifest Describe(string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source)
+    private static Manifest Describe(
+        string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source, TimeProvider clock)
     {
         var path = ManifestPath(manifestFolder, sha256);
         if (File.Exists(path))
         {
-            // Same bytes seen at another path: the description is unchanged, only the list of sources grows.
+            // A copy of the same bytes: the description is unchanged and the list of sources grows. Keep the stored
+            // date unless this path gives a stronger one (D-046); the bytes' metadata is already in the manifest.
             var existing = ManifestJson.Deserialize(File.ReadAllText(path));
-            return existing with { Sources = WithSource(existing.Sources, source) };
+            return existing with
+            {
+                Captured = CaptureDate.Stronger(existing.Captured, CaptureDate.Resolve(null, file.Path, clock)),
+                Sources = WithSource(existing.Sources, source),
+            };
         }
 
         var metadata = MetadataReader.Read(file.Path);
@@ -331,7 +342,8 @@ public static class ProcessCommand
             Kind = kind,
             SizeBytes = file.Size,
             ContentType = MediaTypes.ContentType(file.Path),
-            CapturedAt = metadata.CapturedAt,
+            // The file's own date when plausible, otherwise one from its path (D-046).
+            Captured = CaptureDate.Resolve(metadata.RawCapturedAt, file.Path, clock),
             Location = metadata.Location,
             Camera = metadata.Camera,
             Width = metadata.Width,

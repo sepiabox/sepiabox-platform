@@ -10,8 +10,17 @@ public sealed record GeoPoint(double Latitude, double Longitude);
 
 public sealed record CameraInfo(string? Make, string? Model);
 
+/// <param name="RawCapturedAt">
+/// The capture date as the file writes it, unfiltered: a camera with a reset clock gives 1980-01-01. Never record
+/// it as is; resolve it with <see cref="CaptureDate.Resolve"/>, which also falls back to the file's path (D-046).
+/// </param>
+/// <param name="Location">Where it was taken, from GPS.</param>
+/// <param name="Camera">Make and model.</param>
+/// <param name="Width">Width in pixels.</param>
+/// <param name="Height">Height in pixels.</param>
+/// <param name="DurationSeconds">Length of a video.</param>
 public sealed record MediaMetadata(
-    DateTime? CapturedAt,
+    DateTime? RawCapturedAt,
     GeoPoint? Location,
     CameraInfo? Camera,
     int? Width,
@@ -23,7 +32,7 @@ public sealed record MediaMetadata(
 
 /// <summary>
 /// Reads what a photo or video says about itself: when and where it was taken, with which camera,
-/// and its size. Missing fields are null. I/O errors are not caught, as in <see cref="CaptureDateReader"/>.
+/// and its size. Missing fields are null. I/O errors are not caught: a file that cannot be read is a problem to report.
 /// </summary>
 public static class MetadataReader
 {

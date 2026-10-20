@@ -14,6 +14,15 @@ public sealed record Manifest
 {
     public const int CurrentSchemaVersion = 1;
 
+    public Manifest()
+    {
+    }
+
+    // For System.Text.Json, which passes both capture fields together whatever their order in the file.
+    [JsonConstructor]
+    private Manifest(DateTime? capturedAt, CaptureDateSource? capturedAtSource) =>
+        Captured = capturedAt is { } value ? new CaptureDate(value, capturedAtSource ?? CaptureDateSource.Metadata) : null;
+
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
 
     /// <summary>SHA-256 of the content, lowercase hex.</summary>
@@ -25,8 +34,22 @@ public sealed record Manifest
 
     public required string ContentType { get; init; }
 
-    /// <summary>Local time on the camera's clock; cameras rarely record the time zone.</summary>
-    public DateTime? CapturedAt { get; init; }
+    /// <summary>
+    /// When the asset was taken and how that is known (D-046): one value, so a source can never sit next to a missing
+    /// date. Written as <c>capturedAt</c> and <c>capturedAtSource</c>.
+    /// </summary>
+    [JsonIgnore]
+    public CaptureDate? Captured { get; init; }
+
+    /// <summary>Wall-clock capture time (D-037); see <see cref="CapturedAtSource"/>.</summary>
+    public DateTime? CapturedAt => Captured?.Value;
+
+    /// <summary>
+    /// Where <see cref="CapturedAt"/> came from; omitted when there is no date. Manifests written before S-043 never
+    /// have it, and their dates all came from metadata, so they read as <see cref="CaptureDateSource.Metadata"/>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CaptureDateSource? CapturedAtSource => Captured?.Source;
 
     public GeoPoint? Location { get; init; }
 
@@ -72,7 +95,7 @@ public static class ManifestJson
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase), new LocalDateTimeConverter() },
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false), new LocalDateTimeConverter() },
     };
 
     public static string Serialize(Manifest manifest) => JsonSerializer.Serialize(manifest, Options);

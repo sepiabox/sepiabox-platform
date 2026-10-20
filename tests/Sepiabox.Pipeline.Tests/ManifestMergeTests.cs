@@ -7,6 +7,7 @@ namespace Sepiabox.Pipeline.Tests;
 public sealed class ManifestMergeTests
 {
     private const string Id = "0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9";
+    private static readonly DateTime Taken = new(2019, 7, 14, 16, 30, 5);
 
     [Fact]
     public void Keeps_every_source_and_takes_the_newer_time_for_the_same_file()
@@ -144,11 +145,121 @@ public sealed class ManifestMergeTests
     }
 
     [Fact]
+    public void Keeps_the_metadata_date_when_the_incoming_date_comes_from_a_path()
+    {
+        var existing = Photo(Source("HD da Ana", "a.jpg")) with { Captured = new(Taken, CaptureDateSource.Metadata) };
+        var incoming = Photo(Source("HD do Jonathas", "2005-07-14/a.jpg")) with { Captured = new(new DateTime(2005, 7, 14), CaptureDateSource.Folder) };
+
+        var merged = ManifestMerge.Merge(existing, incoming);
+
+        Assert.Equal((Taken, CaptureDateSource.Metadata), (merged.CapturedAt, merged.CapturedAtSource));
+    }
+
+    [Fact]
+    public void Takes_the_metadata_date_when_the_stored_date_comes_from_a_path()
+    {
+        var existing = Photo(Source("HD da Ana", "2005-07-14/a.jpg")) with { Captured = new(new DateTime(2005, 7, 14), CaptureDateSource.Folder) };
+        var incoming = Photo(Source("HD do Jonathas", "a.jpg")) with { Captured = new(Taken, CaptureDateSource.Metadata) };
+
+        var merged = ManifestMerge.Merge(existing, incoming);
+
+        Assert.Equal((Taken, CaptureDateSource.Metadata), (merged.CapturedAt, merged.CapturedAtSource));
+    }
+
+    [Fact]
+    public void Merges_to_the_same_json_in_either_order_when_one_metadata_date_predates_the_source_field()
+    {
+        // Read from JSON, as an upload reads a stored manifest written before S-043.
+        var old = ReadWithoutSource(Photo(Source("HD da Ana", "a.jpg")) with { Captured = new(Taken, CaptureDateSource.Metadata) });
+        var incoming = Photo(Source("HD do Jonathas", "a.jpg")) with { Captured = new(Taken, CaptureDateSource.Metadata) };
+
+        var expected = new CaptureDate(Taken, CaptureDateSource.Metadata);
+        Assert.Equal(expected, old.Captured);
+        Assert.Equal(expected, ManifestMerge.Merge(old, incoming).Captured);
+        Assert.Equal(ManifestJson.Serialize(ManifestMerge.Merge(old, incoming)), ManifestJson.Serialize(ManifestMerge.Merge(incoming, old)));
+        Assert.Equal("metadata", (string?)JsonNode.Parse(ManifestJson.Serialize(ManifestMerge.Merge(old, incoming)))!["capturedAtSource"]);
+    }
+
+    [Fact]
+    public void Keeps_a_date_without_a_source_over_a_file_name_date_when_the_manifest_predates_the_field()
+    {
+        var old = ReadWithoutSource(Photo(Source("HD da Ana", "a.jpg")) with { Captured = new(Taken, CaptureDateSource.Metadata) });
+        var incoming = Photo(Source("HD do Jonathas", "IMG_20120304_101112.jpg")) with
+        {
+            Captured = new(new DateTime(2012, 3, 4, 10, 11, 12), CaptureDateSource.FileName),
+        };
+
+        Assert.Equal(new CaptureDate(Taken, CaptureDateSource.Metadata), ManifestMerge.Merge(old, incoming).Captured);
+        Assert.Equal(new CaptureDate(Taken, CaptureDateSource.Metadata), ManifestMerge.Merge(incoming, old).Captured);
+    }
+
+    [Fact]
+    public void Takes_the_file_name_date_over_the_folder_date_in_either_order()
+    {
+        var folder = Video(Source("HD da Ana", "2011-09-26/clip.MTS")) with { Captured = new(new DateTime(2011, 9, 26), CaptureDateSource.Folder) };
+        var fileName = Video(Source("HD do Jonathas", "2011-09-25/MNU_110425_a.MTS")) with
+        {
+            Captured = new(new DateTime(2011, 9, 25, 11, 4, 25), CaptureDateSource.FileName),
+        };
+
+        Assert.Equal((new DateTime(2011, 9, 25, 11, 4, 25), CaptureDateSource.FileName), DateOf(ManifestMerge.Merge(folder, fileName)));
+        Assert.Equal((new DateTime(2011, 9, 25, 11, 4, 25), CaptureDateSource.FileName), DateOf(ManifestMerge.Merge(fileName, folder)));
+    }
+
+    [Fact]
+    public void Takes_the_earlier_date_in_either_order_when_both_come_from_folders()
+    {
+        var first = Video(Source("HD da Ana", "2008-12-24/clip.mod")) with { Captured = new(new DateTime(2008, 12, 24), CaptureDateSource.Folder) };
+        var second = Video(Source("HD do Jonathas", "2008-12-25/clip.mod")) with { Captured = new(new DateTime(2008, 12, 25), CaptureDateSource.Folder) };
+
+        var merged = ManifestMerge.Merge(first, second);
+
+        Assert.Equal((new DateTime(2008, 12, 24), CaptureDateSource.Folder), DateOf(merged));
+        Assert.Equal(DateOf(merged), DateOf(ManifestMerge.Merge(second, first)));
+        // Merging the result again changes nothing, so a re-upload from either drive writes nothing.
+        Assert.Equal(ManifestJson.Serialize(merged), ManifestJson.Serialize(ManifestMerge.Merge(merged, second)));
+        Assert.Equal(ManifestJson.Serialize(merged), ManifestJson.Serialize(ManifestMerge.Merge(merged, first)));
+    }
+
+    [Fact]
+    public void Keeps_a_path_date_when_the_incoming_manifest_has_no_date()
+    {
+        var existing = Video(Source("HD da Ana", "2008-12-24/clip.mod")) with { Captured = new(new DateTime(2008, 12, 24), CaptureDateSource.Folder) };
+        var incoming = Video(Source("HD do Jonathas", "backup/clip.mod"));
+
+        Assert.Equal((new DateTime(2008, 12, 24), CaptureDateSource.Folder), DateOf(ManifestMerge.Merge(existing, incoming)));
+        Assert.Equal((new DateTime(2008, 12, 24), CaptureDateSource.Folder), DateOf(ManifestMerge.Merge(incoming, existing)));
+    }
+
+    [Fact]
+    public void Takes_the_date_of_the_complete_description_when_both_come_from_metadata()
+    {
+        var pending = Video(Source("HD da Ana", "v.mp4")) with { Captured = new(Taken, CaptureDateSource.Metadata) };
+        var done = Video(Source("HD do Jonathas", "v.mp4")) with
+        {
+            Captured = new(Taken.AddHours(1), CaptureDateSource.Metadata),
+            Derivatives = [Derivative("poster", 1280)],
+        };
+
+        Assert.Equal(Taken.AddHours(1), ManifestMerge.Merge(done, pending).CapturedAt);
+        Assert.Equal(Taken.AddHours(1), ManifestMerge.Merge(pending, done).CapturedAt);
+    }
+
+    [Fact]
     public void Refuses_to_merge_different_assets()
     {
         var other = Photo(Source("HD da Ana", "a.jpg")) with { Id = new string('f', 64) };
 
         Assert.Throws<ArgumentException>(() => ManifestMerge.Merge(Photo(Source("HD da Ana", "a.jpg")), other));
+    }
+
+    private static (DateTime?, CaptureDateSource?) DateOf(Manifest manifest) => (manifest.CapturedAt, manifest.CapturedAtSource);
+
+    private static Manifest ReadWithoutSource(Manifest manifest)
+    {
+        var json = JsonNode.Parse(ManifestJson.Serialize(manifest))!.AsObject();
+        json.Remove("capturedAtSource");
+        return ManifestJson.Deserialize(json.ToJsonString());
     }
 
     private static ManifestSource Source(string name, string path, int hour = 17) =>
