@@ -1,3 +1,4 @@
+using Azure.Monitor.OpenTelemetry.Exporter;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +19,7 @@ public static class Extensions
 {
     public const string HealthEndpointPath = "/health";
     public const string AlivenessEndpointPath = "/alive";
+    public const string ApplicationInsightsConnectionStringKey = "APPLICATIONINSIGHTS_CONNECTION_STRING";
 
     public static TBuilder AddServiceDefaults<TBuilder>(this TBuilder builder)
         where TBuilder : IHostApplicationBuilder
@@ -60,6 +62,12 @@ public static class Extensions
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
         {
             builder.Services.AddOpenTelemetry().UseOtlpExporter();
+        }
+
+        // Set in Azure, where the AppHost references Application Insights (S-032); never set locally.
+        if (!string.IsNullOrWhiteSpace(builder.Configuration[ApplicationInsightsConnectionStringKey]))
+        {
+            builder.Services.AddOpenTelemetry().UseAzureMonitorExporter();
         }
 
         return builder;

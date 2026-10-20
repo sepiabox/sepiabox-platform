@@ -22,6 +22,11 @@
   <ItemGroup>
     <Using Include="Aspire.Hosting.Testing" />
     <Using Include="Xunit" />
+    <Using Include="Sepiabox.Tests.Shared" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\UnixFactAttribute.cs" LinkBase="Shared" />
   </ItemGroup>
 
   <ItemGroup>

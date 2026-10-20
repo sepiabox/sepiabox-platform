@@ -28,3 +28,6 @@ models/*
 *.sqlite
 *.db
 samples/private/
+
+# azd environments (subscription ids, generated parameters such as the PostgreSQL password)
+.azure/

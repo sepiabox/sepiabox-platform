@@ -67,7 +67,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-032 | [Publish the app to Azure with azd](S-032-publish-the-app-to-azure-with-azd.md) | Cloud and costs | S-010, S-031 | High | M | `todo` |
+| S-032 | [Publish the app to Azure with azd](S-032-publish-the-app-to-azure-with-azd.md) | Cloud and costs | S-010, S-031 | High | M | `done` |
 | S-058 | [Give the Azure services their identities and secrets](S-058-give-the-azure-services-their-identities.md) | Cloud and costs | S-032 | High | M | `todo` |
 
 ### Sprint 5 — Deploys and automatic import

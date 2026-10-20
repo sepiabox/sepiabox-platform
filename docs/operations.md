@@ -14,11 +14,14 @@ Steps that need a person, because they depend on accounts, consents or external 
 | The deploy identity needs *AcrDelete* (or Contributor) on the container registry, for the image purge after each deploy (Owner on `rg-sepiabox` already includes it) | S-034 | Azure portal → Container Registry → Access control |
 | Google OAuth client (Testing mode, the two e-mails as test users; Drive API enabled) | S-010, S-037 | Google Cloud Console |
 | Microsoft app registration for personal accounts (sign-in and Files.Read) | S-010, S-039 | Azure portal → Entra ID |
-| Anthropic API key for `claude-haiku-5-5` (an Anthropic Console organization with billing and a low monthly spend limit; billed separately, outside the €50/month Azure ceiling of D-008); locally in the web's user secrets as `Anthropic:ApiKey`, in Azure as the Key Vault secret `Anthropic--ApiKey` (D-052) | S-025, S-032 | Anthropic Console; Key Vault |
+| Anthropic API key for `claude-haiku-5-5` (an Anthropic Console organization with billing and a low monthly spend limit; billed separately, outside the €50/month Azure ceiling of D-008); locally in the web's user secrets as `Anthropic:ApiKey`, in Azure as the Key Vault secret `Anthropic--ApiKey` (D-052) | S-025, S-058 | Anthropic Console; Key Vault |
 | DNS records at GoDaddy: `app` (CNAME + TXT `asuid.app`) and `sepiabox.com` for GitHub Pages | S-035, S-042 | GoDaddy |
 | GitHub Pages enabled on `sepiabox-site` with source "GitHub Actions", then "Enforce HTTPS" once the certificate is issued; DNS: A records for `@` and a CNAME for `www` (values in the sepiabox-site README) | S-042 | GitHub → sepiabox-site → Settings → Pages; GoDaddy |
-| List of allowed e-mails (`Access:Emails`) in Key Vault | S-010, S-032 | Key Vault |
-| Sign-in secrets in Key Vault: `Auth--Google--ClientId`, `Auth--Google--ClientSecret`, `Auth--Microsoft--ClientId`, `Auth--Microsoft--ClientSecret`, `Access--Emails` | S-032 | Key Vault |
+| List of allowed e-mails (`Access:Emails`) in Key Vault | S-010, S-058 | Key Vault |
+| Sign-in secrets in Key Vault: `Auth--Google--ClientId`, `Auth--Google--ClientSecret`, `Auth--Microsoft--ClientId`, `Auth--Microsoft--ClientSecret`, `Access--Emails` | S-058 | Key Vault |
+| Deploy tools on the computer that deploys: the [Azure Developer CLI](https://aka.ms/azd-install) (`azd`), the Azure CLI (`az`) with the `containerapp` extension (`az extension add --name containerapp`), the .NET 10 SDK and Docker, plus Bash (Linux, macOS, WSL or Git Bash). Sign in to both: `azd auth login` and `az login` | S-032 | Your computer |
+| The `sepiabox-logs` Log Analytics workspace deployed by `sepiabox-infra` (S-031) before the first deploy: the app's Application Insights and Container Apps environment write to it and publishing never creates another one | S-032 | sepiabox-infra deploy workflow |
+| An azd environment named `sepiabox` in France Central, once per computer: `azd env new sepiabox --location francecentral --subscription <subscription id>` in the repository root. azd names the resource group `rg-<environment>`, so the name must be `sepiabox`. The environment lives in `.azure/` (ignored by git) and keeps the PostgreSQL administrator login and password azd generates on the first provision: back them up (see "Deploying to Azure") | S-032 | Your computer |
 | Storage Blob Data Contributor on the storage account for each person who runs `sepiabox-ingest upload --destination azure` (Owner on the resource group grants no data access): give their Entra object ids to S-058's `uploaderPrincipalIds` parameter (`az ad signed-in-user show --query id -o tsv`) | S-058, upload | azd environment; Azure portal |
 | After the first deploy: add `https://<Container Apps default host>/signin-google` and `/signin-microsoft` to the Google and Microsoft OAuth clients | S-058 | Google Cloud Console; Azure portal → Entra ID |
 | Anthropic API key for the agents' required live golden runs (S-025, S-026, S-054), as an environment variable of the agents' environment: Claude Code environment settings → Edit → environment variables, `ANTHROPIC_API_KEY` = the Anthropic API key (the network-secret form cannot send a header without a prefix, which the API's `x-api-key` needs). The `LiveApi` tests read `ANTHROPIC_API_KEY`, the SDK's default; agents never print or log it. Set a monthly spend limit in the Anthropic Console. It takes effect in new sessions. Never in the repository or CI; tests in `Category=LiveApi` are excluded from CI. Without it those stories are `blocked` (D-054). Production is unchanged: the web reads `Anthropic:ApiKey` from Key Vault (S-058) | S-025, S-026, S-054 | Claude Code environment settings; Anthropic Console |
@@ -30,7 +33,7 @@ Checks only a person can do. A story whose automated criteria pass is `done` and
 
 | Check | Story |
 |---|---|
-| After the first deploy: `GET https://<Container Apps default host>/health` answers 200 | S-032 |
+| After `scripts/deploy.sh` (see "Deploying to Azure"): (1) `az containerapp job execution list --name sepiabox-migrate --resource-group rg-sepiabox --query "[0].{status:properties.status,end:properties.endTime}" -o table` shows `Succeeded`, and its end time is before the `createdTime` of the web's newest revision in `az containerapp revision list --name sepiabox-web --resource-group rg-sepiabox --query "[].{name:name,created:properties.createdTime}" -o table`. (2) With `host=$(az containerapp show --name sepiabox-web --resource-group rg-sepiabox --query properties.configuration.ingress.fqdn -o tsv)`, `curl -s -o /dev/null -w "%{http_code}\n" https://$host/health` prints `200` (the first call after scale to zero can take up to a minute). (3) `curl -s -o /dev/null -w "%{http_code}\n" http://$host/health` prints `301` or `308` (the ingress sends plain HTTP to HTTPS). (4) `curl -s -o /dev/null -w "%{http_code}\n" -H "Host: example.com" https://$host/health` does not print `200` (`AllowedHosts`; the ingress itself may answer 404) | S-032 |
 | Sign in with Google and with Microsoft on `https://<Container Apps default host>`, restart the web revision, reload (still signed in); then try an account not on the list (lands on the no-access page) | S-058 |
 | The same on `https://app.sepiabox.com` once the custom domain is set | S-035 |
 | `upload` one folder to Azure: its assets appear in the cloud timeline without running anything else; the dead-letter count stays 0 | S-033 |
@@ -39,6 +42,41 @@ Checks only a person can do. A story whose automated criteria pass is `done` and
 | MVP acceptance on the real data: after uploading the drive and the import finishing, ask in the web a few counting questions (photos per year, videos per year, items with no date) and compare each answer with `sepiabox-ingest report` on every work folder that was uploaded, in upload order; no test data is ever uploaded to Azure | S-054 |
 | The video playback check in the table above | S-011 |
 | In Azure, with the browser set to English: the timeline's month headings read like "July 2019"; choose Português (Brasil) in the header: the same page comes back with "julho de 2019", and the detail page's date reads like "14 de julho de 2019, 10:32" (the container image has ICU, D-058) | S-044 |
+
+## Deploying to Azure
+
+Everything the app runs on is described by the AppHost (`src/Sepiabox.AppHost`) and provisioned by azd in `rg-sepiabox`, France Central (S-032). Deploy only with the script, from the repository root:
+
+```bash
+azd env select sepiabox
+./scripts/deploy.sh
+```
+
+It refuses to start unless the selected azd environment is `sepiabox` in `francecentral`, then:
+
+1. `azd provision`: PostgreSQL `sepiabox-pg` (B1ms, 32 GB, auto-grow off, PostgreSQL 17, `vector` and `postgis` allowed), the storage account with its private containers (`originals`, `derivatives`, `manifests`, `incoming`, `exports`, `dataprotection`), Key Vault, the container registry (Basic), Application Insights on `sepiabox-logs`, the Container Apps environment and the two managed identities. The first run asks nothing: azd generates the PostgreSQL login and password and keeps them in `.azure/`.
+2. `azd deploy migrate`: builds the worker image and updates the `sepiabox-migrate` Container Apps job (manual trigger, 10 minutes, no retries).
+3. Starts one execution of `sepiabox-migrate` (`sepiabox-worker migrate` against the cloud database) and waits for it, up to 15 minutes.
+4. Only if it succeeded, `azd deploy web`: builds the web image and creates the `sepiabox-web` revision (0–1 replicas, HTTPS ingress, `AllowedHosts` = its default host).
+
+If the migration fails, is stopped or times out, the script stops before step 4 and the running web is left as it was; the job's logs are in the `sepiabox-logs` workspace (table `ContainerAppConsoleLogs_CL`, container `migrate`). Fix the cause and run the script again: migrations already applied are skipped. `azd up` and a bare `azd deploy` are refused by the `predeploy` hook in `azure.yaml`, since they would start the web before the migrations.
+
+**Keep the PostgreSQL login and password.** azd generates them once, on the first provision, and keeps them only in `.azure/sepiabox/config.json` (under `infra.parameters`, as `pg_username` and `pg_password`). Losing that folder does not regenerate them harmlessly: a new azd environment would generate a new login, which cannot be applied to the existing server, so provisioning fails; a new password alone would be applied, and the running web and job would fail to connect until their Key Vault references refresh (up to 30 minutes). So after the first provision, copy both values into a password manager (or a backup of `.azure/sepiabox/config.json`). They can also be read back from the Key Vault secret `connectionstrings--catalog` (`Username=` and `Password=`), which needs a Key Vault data role such as *Key Vault Secrets User* for your account: Owner on the resource group alone cannot read secrets. If the first provision rejects the generated password (Azure's password rules), set a new one with `azd env config set infra.parameters.pg_password <letters and digits, with upper and lower case and a digit>` and provision again. To restore them on a new computer: `azd env new sepiabox --location francecentral --subscription <subscription id>`, then `azd env config set infra.parameters.pg_username <login>` and `azd env config set infra.parameters.pg_password <password>` (check the key names against your backup), and only then run the script. S-034's workflow supplies the same two values from GitHub secrets.
+
+**The deploy hook is a guard, not a lock.** It only stops an accidental `azd up` or `azd deploy`; anyone who sets `SEPIABOX_DEPLOY_SCRIPT=1` by hand bypasses it. On Windows the hook runs in PowerShell 7 (`pwsh`), which must be installed; the script itself needs Bash.
+
+**If azd cannot deploy one resource at a time.** The script relies on `azd deploy migrate` and `azd deploy web` deploying a single AppHost resource, and on azd deploying a Container Apps job; neither could be tried before the first real deploy. If either is refused or the job is not created, deploy by hand in the same order:
+
+1. `export SEPIABOX_DEPLOY_SCRIPT=1 && azd provision --no-prompt`.
+2. Generate the modules: `dotnet run --project src/Sepiabox.AppHost -- --publisher manifest --output-path .azure/publish`.
+3. Build and push the worker image: `az acr login --name <registry name>` (from `azd env get-values`, `AZURE_CONTAINER_REGISTRY_ENDPOINT` without `.azurecr.io`), then `dotnet publish src/Sepiabox.Worker -c Release -t:PublishContainer -p:ContainerRegistry=<registry endpoint> -p:ContainerRepository=sepiabox/migrate -p:ContainerImageTag=$(git rev-parse --short HEAD)`.
+4. Create or update the job: `az deployment group create --resource-group rg-sepiabox --template-file .azure/publish/migrate-containerapp.module.bicep --parameters migrate_containerimage=<registry endpoint>/sepiabox/migrate:<tag> ...`, giving every other parameter of the module its value from `azd env get-values`: the `AZURE_CONTAINER_APPS_ENVIRONMENT_*` and `AZURE_CONTAINER_REGISTRY_*` values give the `aca_outputs_*` parameters, and the vault and identity outputs give `vault_outputs_name` and `migrate_identity_outputs_*`.
+5. Run the job and wait for it as the script does: `az containerapp job start --name sepiabox-migrate --resource-group rg-sepiabox`, then `az containerapp job execution show ... --query properties.status` until `Succeeded`.
+6. Only then the web: the same as steps 3 and 4 with `src/Sepiabox.Web`, repository `sepiabox/web` and `web-containerapp.module.bicep`.
+
+After the first deploy, record here which of the two behaviours azd showed (single-resource deploys and the job worked, or the manual steps were needed), so the script can be fixed if needed.
+
+Until S-058, the web has no sign-in secrets in Azure: it starts with no sign-in buttons and lets no one in, but `/health` answers. The web's address is `https://sepiabox-web.<environment default domain>`: `az containerapp show --name sepiabox-web --resource-group rg-sepiabox --query properties.configuration.ingress.fqdn -o tsv`.
 
 ## MVP acceptance on the real data
 
