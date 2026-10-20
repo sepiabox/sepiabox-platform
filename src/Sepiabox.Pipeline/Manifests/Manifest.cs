@@ -95,7 +95,7 @@ public static class ManifestJson
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase), new LocalDateTimeConverter() },
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false), new LocalDateTimeConverter() },
     };
 
     public static string Serialize(Manifest manifest) => JsonSerializer.Serialize(manifest, Options);

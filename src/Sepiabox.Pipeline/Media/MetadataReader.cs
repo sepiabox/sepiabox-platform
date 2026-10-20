@@ -32,7 +32,7 @@ public sealed record MediaMetadata(
 
 /// <summary>
 /// Reads what a photo or video says about itself: when and where it was taken, with which camera,
-/// and its size. Missing fields are null. I/O errors are not caught, as in <see cref="CaptureDateReader"/>.
+/// and its size. Missing fields are null. I/O errors are not caught: a file that cannot be read is a problem to report.
 /// </summary>
 public static class MetadataReader
 {

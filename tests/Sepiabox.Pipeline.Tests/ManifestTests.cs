@@ -104,6 +104,17 @@ public class ManifestTests
     }
 
     [Theory]
+    [InlineData("1")]
+    [InlineData("0")]
+    public void Rejects_a_number_for_the_capture_date_source_when_reading(string number)
+    {
+        var json = JsonNode.Parse(ManifestJson.Serialize(Sample))!.AsObject();
+        json["capturedAtSource"] = JsonNode.Parse(number);
+
+        Assert.Throws<System.Text.Json.JsonException>(() => ManifestJson.Deserialize(json.ToJsonString()));
+    }
+
+    [Theory]
     [InlineData(CaptureDateSource.Metadata, "metadata")]
     [InlineData(CaptureDateSource.FileName, "fileName")]
     [InlineData(CaptureDateSource.Folder, "folder")]
