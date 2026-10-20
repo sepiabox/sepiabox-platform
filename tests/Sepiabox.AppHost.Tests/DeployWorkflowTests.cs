@@ -142,6 +142,8 @@ public sealed partial class DeployWorkflowTests
         Assert.Equal("${{ vars.CUSTOM_DOMAIN_BINDING }}", Text(environment["CUSTOM_DOMAIN_BINDING"]));
         Assert.Contains("azd env config set infra.parameters.customDomain \"$domain\"", run, StringComparison.Ordinal);
         Assert.Contains("azd env config set infra.parameters.customDomainBinding \"$binding\"", run, StringComparison.Ordinal);
+        Assert.Equal("${{ vars.UPLOADER_PRINCIPAL_IDS }}", Text(environment["UPLOADER_PRINCIPAL_IDS"]));
+        Assert.Contains("azd env config set infra.parameters.uploaderPrincipalIds \"$UPLOADER_PRINCIPAL_IDS\"", run, StringComparison.Ordinal);
         // A missing secret, or jq's "null" saved as one, stops the run before azd could generate a value.
         Assert.Contains("if [[ -z \"${!name}\" || \"${!name}\" == \"null\" ]]; then", run, StringComparison.Ordinal);
         // azd's vault reference copied from config.json is refused too: a runner cannot resolve it.
@@ -166,6 +168,18 @@ public sealed partial class DeployWorkflowTests
         Assert.Equal(0, exitCode);
         Assert.Contains($"env config set infra.parameters.customDomain {expectedDomain}".TrimEnd(), calls);
         Assert.Contains($"env config set infra.parameters.customDomainBinding {expectedBinding}", calls);
+    }
+
+    [UnixTheory]
+    [InlineData("")]
+    [InlineData("00000000-0000-0000-0000-00000000000a,00000000-0000-0000-0000-00000000000b")]
+    public async Task Uploader_ids_always_reach_azd_config_even_when_empty(string uploaders)
+    {
+        // azd reads the parameter only from infra.parameters (D-072): an unset one would stop the deploy.
+        var (exitCode, calls, _) = await RunEnvironmentStepAsync("", "", uploaders: uploaders);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains($"env config set infra.parameters.uploaderPrincipalIds {uploaders}".TrimEnd(), calls);
     }
 
     [UnixTheory]
@@ -243,7 +257,7 @@ public sealed partial class DeployWorkflowTests
 
     /// <summary>Runs the "Create the azd environment" step's script with a stand-in azd that records its calls.</summary>
     private async Task<(int ExitCode, List<string> Calls, string Output)> RunEnvironmentStepAsync(
-        string domain, string binding, string password = "example")
+        string domain, string binding, string password = "example", string uploaders = "")
     {
         var folder = Path.Combine(Path.GetTempPath(), "sepiabox-workflow-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
@@ -269,6 +283,7 @@ public sealed partial class DeployWorkflowTests
             start.Environment["AZURE_SUBSCRIPTION_ID"] = "00000000-0000-0000-0000-000000000000";
             start.Environment["CUSTOM_DOMAIN"] = domain;
             start.Environment["CUSTOM_DOMAIN_BINDING"] = binding;
+            start.Environment["UPLOADER_PRINCIPAL_IDS"] = uploaders;
 
             using var process = Process.Start(start)!;
             var output = await process.StandardOutput.ReadToEndAsync();

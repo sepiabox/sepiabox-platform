@@ -39,6 +39,17 @@ if [[ -n "$azd_group" && "$azd_group" != "$resource_group" ]]; then
   exit 1
 fi
 
+# azd takes these AppHost parameters from the environment's infra.parameters (D-072); one never set would stop
+# `azd provision --no-prompt` and `azd deploy web`, so it gets its "none" value. Set values are left alone.
+ensure_parameter() {
+  if ! azd env config get "infra.parameters.$1" >/dev/null 2>&1; then
+    azd env config set "infra.parameters.$1" "$2"
+  fi
+}
+ensure_parameter customDomain ""
+ensure_parameter customDomainBinding Disabled
+ensure_parameter uploaderPrincipalIds ""
+
 # After the €45 shutdown (S-030) the server is stopped and provisioning would fail half-way. Before the
 # first deploy neither the group nor the server exists; any other failure of these queries (no login, no
 # network) stops the script rather than skipping the check.

@@ -67,8 +67,8 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
             published.Modules["access.bicep"],
             StringComparison.Ordinal);
         Assert.Equal("{uploaderPrincipalIds.value}", published.ModuleParameters["access.bicep"]["uploaderPrincipalIds"]!.GetValue<string>());
-        // Empty unless the owner sets it, so a first deploy needs no answer (docs/operations.md).
-        Assert.Equal("", parameter["inputs"]!["value"]!["default"]!["value"]!.GetValue<string>());
+        // No published default, which would make azd ignore infra.parameters.uploaderPrincipalIds (D-072).
+        Assert.Null(parameter["inputs"]!["value"]!["default"]);
         Assert.False(parameter["inputs"]!["value"]!["secret"]?.GetValue<bool>() ?? false);
     }
 

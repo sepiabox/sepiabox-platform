@@ -40,6 +40,13 @@ public sealed class DeployScriptTests : IDisposable
                 exit 1
               fi
             fi
+            if [ "$1 $2 $3" = "env config get" ]; then
+              # STUB_CONFIG lists the infra.parameters the environment already has.
+              case " $STUB_CONFIG " in
+                *" ${4#infra.parameters.} "*) echo '"set"' ;;
+                *) echo "ERROR: no value at path '$4'" >&2; exit 1 ;;
+              esac
+            fi
             if [ "$1 $2" = "env get-value" ]; then
               case "$3" in
                 AZURE_ENV_NAME) echo "$STUB_ENV_NAME" ;;
@@ -258,6 +265,35 @@ public sealed class DeployScriptTests : IDisposable
     }
 
     [UnixFact]
+    public async Task Deploy_gives_unset_azd_parameters_their_none_values_before_provisioning()
+    {
+        var result = await RunDeployAsync("Succeeded");
+
+        Assert.Equal(0, result.ExitCode);
+        // azd reads them only from infra.parameters (D-072); unset, --no-prompt would stop the deploy.
+        var calls = Calls().Select(call => call.TrimEnd()).ToList();
+        var provision = calls.IndexOf("azd provision --no-prompt");
+        foreach (var set in new[]
+        {
+            "azd env config set infra.parameters.customDomain",
+            "azd env config set infra.parameters.customDomainBinding Disabled",
+            "azd env config set infra.parameters.uploaderPrincipalIds",
+        })
+        {
+            Assert.InRange(calls.IndexOf(set), 0, provision);
+        }
+    }
+
+    [UnixFact]
+    public async Task Deploy_keeps_the_azd_parameters_the_owner_set()
+    {
+        var result = await RunDeployAsync("Succeeded", config: "customDomain customDomainBinding uploaderPrincipalIds");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("azd env config set", StringComparison.Ordinal));
+    }
+
+    [UnixFact]
     public async Task Deploy_succeeds_on_the_first_provision_when_azd_has_no_resource_group_yet()
     {
         var result = await RunDeployAsync("Succeeded", resourceGroup: "", postgresState: "NO_GROUP");
@@ -342,7 +378,8 @@ public sealed class DeployScriptTests : IDisposable
         string execution = "sepiabox-migrate-run1",
         string stop = "",
         string failingDeploy = "",
-        string resume = "") =>
+        string resume = "",
+        string config = "") =>
         RunAsync("bash", [Path.Combine(Repository.Root, "scripts", "deploy.sh")], new()
         {
             ["PATH"] = _stubs + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
@@ -352,6 +389,7 @@ public sealed class DeployScriptTests : IDisposable
             ["STUB_LOCATION"] = location,
             ["STUB_RESOURCE_GROUP"] = resourceGroup,
             ["STUB_PG_STATE"] = postgresState,
+            ["STUB_CONFIG"] = config,
             ["STUB_EXECUTION"] = execution,
             ["STUB_STOP"] = stop,
             ["STUB_FAILING_DEPLOY"] = failingDeploy,
