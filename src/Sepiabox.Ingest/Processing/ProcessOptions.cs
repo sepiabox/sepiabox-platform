@@ -9,13 +9,17 @@ namespace Sepiabox.Ingest.Processing;
 /// <param name="FfmpegFolder">Folder with <c>ffmpeg</c> and <c>ffprobe</c>; null to look on the PATH.</param>
 /// <param name="Encoder">H.264 encoder for the 720p versions.</param>
 /// <param name="ModelFolder">Folder with the downloaded models; null for the default (<c>models download</c>).</param>
+/// <param name="RetryLeftOut">Read again the files earlier runs left out as holding no video, even when unchanged.</param>
+/// <param name="ListLeftOut">List every file left out by earlier runs, not just how many.</param>
 public sealed record ProcessOptions(
     string Root,
     string OutputPath,
     string? SourceName,
     string? FfmpegFolder = null,
     VideoEncoder Encoder = VideoEncoder.Software,
-    string? ModelFolder = null)
+    string? ModelFolder = null,
+    bool RetryLeftOut = false,
+    bool ListLeftOut = false)
 {
     public static bool TryParse(
         IReadOnlyList<string> args,
@@ -29,6 +33,8 @@ public sealed record ProcessOptions(
         string? ffmpegFolder = null;
         var encoder = VideoEncoder.Software;
         string? modelFolder = null;
+        var retryLeftOut = false;
+        var listLeftOut = false;
 
         for (var i = 0; i < args.Count; i++)
         {
@@ -52,6 +58,14 @@ public sealed record ProcessOptions(
 
                 case "--models":
                     modelFolder = args[++i];
+                    break;
+
+                case "--retry-left-out":
+                    retryLeftOut = true;
+                    break;
+
+                case "--list-left-out":
+                    listLeftOut = true;
                     break;
 
                 case "--hw" when args[i + 1] == "nvenc":
@@ -90,7 +104,8 @@ public sealed record ProcessOptions(
         }
 
         options = new ProcessOptions(
-            root, outputPath, string.IsNullOrWhiteSpace(sourceName) ? null : sourceName.Trim(), ffmpegFolder, encoder, modelFolder);
+            root, outputPath, string.IsNullOrWhiteSpace(sourceName) ? null : sourceName.Trim(), ffmpegFolder, encoder, modelFolder,
+            retryLeftOut, listLeftOut);
         error = null;
         return true;
     }

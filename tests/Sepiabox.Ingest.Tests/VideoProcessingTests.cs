@@ -1,4 +1,9 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using ImageMagick;
+using Microsoft.Data.Sqlite;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
@@ -12,6 +17,9 @@ public class VideoProcessingTests
 {
     private static readonly FfmpegTools s_tools = FfmpegTools.Find(null)
         ?? throw new InvalidOperationException("Integration tests need ffmpeg and ffprobe on the PATH.");
+
+    // Every run that should find FFmpeg is given this folder, so no test depends on how PATH is searched.
+    private static readonly string s_ffmpegFolder = Path.GetDirectoryName(s_tools.Ffmpeg)!;
 
     [Fact]
     public void Makes_a_720p_version_and_a_poster_of_a_1080p_video()
@@ -36,6 +44,11 @@ public class VideoProcessingTests
         Assert.Equal((1280, 720), (probe.Width, probe.Height));
         Assert.InRange(probe.DurationSeconds!.Value, 2.9, 3.2);
         Assert.True(File.Exists(Path.Combine(work.Path, manifest.Derivatives[0].Path)));
+        // Progressive footage passes the deinterlacer untouched: only the scaling and encoding change it.
+        Assert.InRange(InterlacedShare(Path.Combine(work.Path, proxy.Path)), 0, 0.1);
+        // Loose on purpose: it catches a damaged or wrongly scaled picture, while idet above is what tells whether a
+        // deinterlacer touched it, which encoder noise would hide from SSIM.
+        Assert.True(Similarity(Path.Combine(work.Path, proxy.Path), Path.Combine(drive.Path, "party.mp4"), 1280, 720) > 0.95);
     }
 
     [Fact]
@@ -92,24 +105,461 @@ public class VideoProcessingTests
         // MPEG program stream, as camcorders write it: no creation time anywhere in the file.
         var clip = Path.Combine(drive.Path, "2011-09-25", "MNU_110425_x.mpg");
         Directory.CreateDirectory(Path.GetDirectoryName(clip)!);
-        MakeVideo(clip, 720, 576, seconds: 1, "-c:v", "mpeg2video", "-c:a", "mp2");
+        Run(s_tools.Ffmpeg,
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc=duration=1:size=720x576:rate=25",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+            "-c:v", "mpeg2video", "-pix_fmt", "yuv420p", "-c:a", "mp2", "-shortest", "-f", "mpeg",
+            clip,
+        ]);
 
         var result = Process(drive, work);
 
         Assert.Empty(result.Problems);
         Assert.Equal(1, result.Processed);
         var file = Assert.Single(Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json"));
-        var json = File.ReadAllText(file);
-        Assert.True(new ManifestValidator().TryValidate(json, out var manifest, out var error), error);
-        Assert.Equal(new DateTime(2011, 9, 25, 11, 4, 25), manifest.CapturedAt);
-        Assert.Equal(CaptureDateSource.FileName, manifest.CapturedAtSource);
+        Assert.True(new ManifestValidator().TryValidate(File.ReadAllText(file), out var manifest, out var error), error);
+        Assert.Equal(new CaptureDate(new DateTime(2011, 9, 25, 11, 4, 25), CaptureDateSource.FileName), manifest.Captured);
         Assert.Equal(("video/mpeg", "2011-09-25/MNU_110425_x.mpg"), (manifest.ContentType, Assert.Single(manifest.Sources).Path));
         // As a set: this test is about the date, and the order of derivatives is covered by the tests above.
         Assert.Equal(["poster", "proxy-720p", "thumb-256"], manifest.Derivatives.Select(d => d.Name).Order(StringComparer.Ordinal));
     }
 
+    [Fact]
+    public void Deinterlaces_and_shows_at_16_9_an_interlaced_anamorphic_camcorder_mod_file()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // What SD camcorders record: MPEG-2 program stream, PAL 720x576 interlaced, flagged 16:9 (SAR 64:45).
+        var clip = Path.Combine(drive.Path, "MOV001.MOD");
+        Run(s_tools.Ffmpeg, [.. Interlaced(720, 576, seconds: 2), "-c:v", "mpeg2video", "-pix_fmt", "yuv420p", "-b:v", "5M", "-flags", "+ilme+ildct", "-top", "1", "-aspect", "16:9", "-c:a", "mp2", "-shortest", "-f", "vob", clip]);
+        Assert.Equal(("mpeg2video", "64:45", "tt"), StreamInfo(clip));
+        Assert.InRange(InterlacedShare(clip), 0.9, 1);
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal(("video/mpeg", 1024, 576), (manifest.ContentType, manifest.Width, manifest.Height));
+        Assert.InRange(manifest.DurationSeconds!.Value, 1.9, 2.2);
+        Assert.Equal((1024, 576), Size(manifest, "poster"));
+        Assert.Equal((256, 144), Size(manifest, "thumb-256"));
+
+        var proxy = Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p");
+        Assert.Equal((1024, 576), (proxy.Width, proxy.Height));
+        var proxyPath = Path.Combine(work.Path, proxy.Path);
+        Assert.Equal(("h264", "1:1", "progressive"), StreamInfo(proxyPath));
+        Assert.InRange(InterlacedShare(proxyPath), 0, 0.1);
+        Assert.InRange(new VideoProcessor(s_tools).Probe(proxyPath).DurationSeconds!.Value, 1.9, 2.2);
+    }
+
+    [Fact]
+    public void Makes_a_720p_version_of_an_interlaced_anamorphic_1440x1080_mts_file()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // AVCHD and HDV camcorders store 1440x1080 interlaced with SAR 4:3, shown at 1920x1080, with short GOPs.
+        var clip = Path.Combine(drive.Path, "00001.MTS");
+        Run(s_tools.Ffmpeg, [.. Interlaced(1440, 1080, seconds: 2), "-c:v", "libx264", "-preset", "ultrafast", "-g", "12", "-flags", "+ilme+ildct", "-x264-params", "tff=1", "-aspect", "16:9", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "-f", "mpegts", clip]);
+        Assert.Equal(("h264", "4:3", "tt"), StreamInfo(clip));
+        Assert.InRange(InterlacedShare(clip), 0.9, 1);
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal(("video/mp2t", 1920, 1080), (manifest.ContentType, manifest.Width, manifest.Height));
+        Assert.Equal((1280, 720), Size(manifest, "poster"));
+        var proxy = Path.Combine(work.Path, Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p").Path);
+        Assert.Equal(("h264", "1:1", "progressive"), StreamInfo(proxy));
+        Assert.Equal(new VideoProbe(1280, 720, null), new VideoProcessor(s_tools).Probe(proxy) with { DurationSeconds = null });
+    }
+
+    [Fact]
+    public void Turns_a_phone_video_recorded_upright_into_portrait_derivatives()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var scratch = new TempFolder();
+        // Stored landscape, red with a blue top-left corner, and tagged to turn 90 degrees clockwise on
+        // playback, as phones do: shown upright, the blue corner is at the top right.
+        var stored = Path.Combine(scratch.Path, "stored.mp4");
+        Run(s_tools.Ffmpeg,
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "color=c=red:size=1920x1080:duration=1:rate=25,drawbox=x=0:y=0:w=480:h=270:color=blue:t=fill",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", stored,
+        ]);
+        var upright = Path.Combine(drive.Path, "upright.mp4");
+        Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-display_rotation:v:0", "-90", "-i", stored, "-c", "copy", upright]);
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal((1080, 1920), (manifest.Width, manifest.Height));
+        Assert.Equal((720, 1280), Size(manifest, "poster"));
+        Assert.Equal((144, 256), Size(manifest, "thumb-256"));
+        var proxy = Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p");
+        Assert.Equal((720, 1280), (proxy.Width, proxy.Height));
+        // The proxy's pixels are turned and it carries no rotation, so players show it as it is.
+        var proxyProbe = new VideoProcessor(s_tools).Probe(Path.Combine(work.Path, proxy.Path));
+        Assert.Equal((720, 1280), (proxyProbe.Width, proxyProbe.Height));
+
+        var poster = Assert.Single(manifest.Derivatives, d => d.Name == "poster");
+        AssertBlueCornerAtTopRight(Path.Combine(work.Path, poster.Path));
+        var proxyFrame = Path.Combine(scratch.Path, "proxy-frame.png");
+        Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", Path.Combine(work.Path, proxy.Path), "-frames:v", "1", proxyFrame]);
+        AssertBlueCornerAtTopRight(proxyFrame);
+    }
+
+    [Theory]
+    // With FFmpeg 6.1 (CI's version), seeking into a transport stream past its only keyframe decodes nothing;
+    // the stand-in tests below cover the same fallback whatever the FFmpeg version.
+    [InlineData("one-keyframe.mts", 2, 50, 2)]
+    [InlineData("long-audio.mp4", 0.2, 50, 3)]
+    public void Takes_the_poster_from_the_first_frame_when_the_seek_finds_none(string name, double videoSeconds, int gop, double audioSeconds)
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, name);
+        MakeRedThenBlue(clip, videoSeconds, gop, audioSeconds);
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal(["poster", "thumb-256", "proxy-720p"], manifest.Derivatives.Select(d => d.Name));
+        Assert.Equal((640, 360), Size(manifest, "poster"));
+        AssertPosterColour(work, manifest, red: true);
+    }
+
+    [UnixTheory]
+    // Newer FFmpeg builds may fail outright when the seek decodes nothing.
+    [InlineData("exit 1")]
+    // Or leave an empty file behind.
+    [InlineData(": > \"$last\"; exit 0")]
+    public void Takes_the_poster_from_the_first_frame_when_the_seek_fails_or_writes_an_empty_file(string atTheSeek)
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        MakeRedThenBlue(Path.Combine(drive.Path, "clip.mp4"), seconds: 2, gop: 12, audioSeconds: 2);
+        var marker = Path.Combine(tools.Path, "seek-misbehaved");
+        // The real tools, except that ffmpeg misbehaves when asked for a frame anywhere but the start, and
+        // leaves a marker to show it did.
+        TestTools.FakeTool(tools, "ffprobe", $"exec '{s_tools.Ffprobe}' \"$@\"");
+        TestTools.FakeTool(tools, "ffmpeg", $$"""
+            seek=""; previous=""
+            for last; do
+              if [ "$previous" = "-ss" ]; then seek="$last"; fi
+              previous="$last"
+            done
+            if [ -n "$seek" ] && [ "$seek" != "0" ]; then touch '{{marker}}'; {{atTheSeek}}; fi
+            exec '{{s_tools.Ffmpeg}}' "$@"
+            """);
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.True(File.Exists(marker), "The stand-in was never asked for a frame after the start.");
+        Assert.Empty(result.Problems);
+        AssertPosterColour(work, Assert.Single(ReadManifests(work)), red: true);
+    }
+
+    [Fact]
+    public void Takes_the_poster_at_a_tenth_of_the_duration_when_the_seek_finds_a_frame()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        MakeRedThenBlue(Path.Combine(drive.Path, "clip.mp4"), seconds: 2, gop: 12, audioSeconds: 2);
+
+        Process(drive, work);
+
+        AssertPosterColour(work, Assert.Single(ReadManifests(work)), red: false);
+    }
+
+    [UnixFact]
+    public void Keeps_the_manifest_and_reports_a_problem_when_ffmpeg_writes_no_poster_frame()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        MakeVideo(Path.Combine(drive.Path, "clip.mp4"), 640, 360, seconds: 1);
+        // Stand-ins that succeed without writing anything, as FFmpeg does when a seek decodes no frame.
+        TestTools.FakeTool(tools, "ffprobe", """echo '{ "streams": [ { "width": 640, "height": 360 } ], "format": { "duration": "1.0" } }'""");
+        TestTools.FakeTool(tools, "ffmpeg", "exit 0");
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Contains("no poster frame", problem.Reason, StringComparison.Ordinal);
+        Assert.Empty(Assert.Single(ReadManifests(work)).Derivatives);
+    }
+
+    [Fact]
+    public void Ignores_a_file_with_a_video_extension_but_no_video_stream()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // A phone's sound recording saved as .mp4: nothing to show, nothing to catalogue.
+        MakeSoundOnly(Path.Combine(drive.Path, "memo.mp4"));
+        MakeVideo(Path.Combine(drive.Path, "party.mp4"), 640, 360, seconds: 1);
+
+        var first = Process(drive, work);
+        var second = Process(drive, work);
+
+        Assert.Empty(first.Problems);
+        Assert.Equal((1, 1), (first.Processed, first.NotVideo));
+        Assert.Single(ReadManifests(work));
+        Assert.Empty(second.Problems);
+        Assert.Equal((0, 1, 1), (second.Processed, second.Skipped, second.NotVideo));
+    }
+
+    [Fact]
+    public void Reports_a_sound_only_mpeg_file_as_a_problem_because_it_looks_like_camcorder_video()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // MPEG with sound and no picture: more likely a camcorder clip that lost its video than a sound file.
+        Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "mp2", "-f", "mpeg", Path.Combine(drive.Path, "MOV001.MOD")]);
+
+        var result = Process(drive, work);
+
+        Assert.Contains("may be damaged", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Empty(result.LeftOut);
+        Assert.Single(ReadManifests(work));
+    }
+
+    [Fact]
+    public void Removes_the_manifest_and_derivatives_once_ffmpeg_finds_no_video_in_any_copy()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        MakeSoundOnly(Path.Combine(drive.Path, "memo.mp4"));
+        Directory.CreateDirectory(Path.Combine(drive.Path, "copy"));
+        File.Copy(Path.Combine(drive.Path, "memo.mp4"), Path.Combine(drive.Path, "copy", "memo.mp4"));
+        var withoutFfmpeg = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
+        var pending = Assert.Single(ReadManifests(work));
+        Assert.Equal((2, 2), (withoutFfmpeg.VideosPending, pending.Sources.Count));
+        // As if an earlier build had made derivatives for it.
+        var derivatives = Path.Combine(work.Path, "derivatives", pending.Id);
+        Directory.CreateDirectory(derivatives);
+        File.WriteAllBytes(Path.Combine(derivatives, "poster.webp"), [1, 2, 3]);
+
+        var withFfmpeg = Process(drive, work);
+
+        Assert.Empty(withFfmpeg.Problems);
+        Assert.Equal((0, 0, 2), (withFfmpeg.Processed, withFfmpeg.VideosPending, withFfmpeg.NotVideo));
+        Assert.All(withFfmpeg.LeftOut, file => Assert.Equal(new LeftOutFile(file.Path, NoVideoReason.NoStream, Earlier: false), file));
+        Assert.Empty(ReadManifests(work));
+        Assert.False(Directory.Exists(derivatives));
+    }
+
+    [UnixFact]
+    public void Probes_again_with_a_larger_window_before_leaving_a_file_out()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        MakeVideo(Path.Combine(drive.Path, "late.mp4"), 640, 360, seconds: 1);
+        // An ffprobe that, like FFmpeg on an MPEG file that declares its video late, sees no video at first.
+        TestTools.FakeTool(tools, "ffprobe", $$"""
+            for argument; do
+              if [ "$argument" = "-probesize" ]; then exec '{{s_tools.Ffprobe}}' "$@"; fi
+            done
+            echo '{ "streams": [], "format": {} }'
+            """);
+        TestTools.FakeTool(tools, "ffmpeg", $"exec '{s_tools.Ffmpeg}' \"$@\"");
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Empty(result.Problems);
+        Assert.Equal((1, 0), (result.Processed, result.NotVideo));
+        Assert.Equal(3, Assert.Single(ReadManifests(work)).Derivatives.Count);
+    }
+
+    [Fact]
+    public void Keeps_sources_not_seen_in_this_run_when_another_copy_is_left_out()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var elsewhere = new TempFolder();
+        MakeSoundOnly(Path.Combine(drive.Path, "memo.mp4"));
+        Directory.CreateDirectory(Path.Combine(drive.Path, "copy"));
+        File.Copy(Path.Combine(drive.Path, "memo.mp4"), Path.Combine(drive.Path, "copy", "memo.mp4"));
+        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
+        var id = Assert.Single(ReadManifests(work)).Id;
+        var derivatives = Path.Combine(work.Path, "derivatives", id);
+        Directory.CreateDirectory(derivatives);
+        // The copy is away during the next run, so only the first path is found to hold no video.
+        File.Move(Path.Combine(drive.Path, "copy", "memo.mp4"), Path.Combine(elsewhere.Path, "memo.mp4"));
+
+        var withFfmpeg = Process(drive, work);
+
+        Assert.Equal(1, withFfmpeg.NotVideo);
+        var remaining = Assert.Single(ReadManifests(work));
+        Assert.Equal(id, remaining.Id);
+        Assert.Equal("copy/memo.mp4", Assert.Single(remaining.Sources).Path);
+        Assert.True(Directory.Exists(derivatives));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Leaves_out_a_tracker_music_module_whether_or_not_ffmpeg_is_installed(bool withFfmpeg)
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        drive.Write("music/song.mod", TestTrackerModules.Module());
+
+        var result = ProcessCommand.Run(new ProcessOptions(
+            drive.Path, work.Path, "HD", FfmpegFolder: withFfmpeg ? s_ffmpegFolder : TestFfmpeg.None, ModelFolder: TestModels.None));
+
+        Assert.Empty(result.Problems);
+        Assert.Equal((0, 0), (result.Processed, result.VideosPending));
+        Assert.Equal(NoVideoReason.TrackerModule, Assert.Single(result.LeftOut).Reason);
+        Assert.Empty(ReadManifests(work));
+    }
+
+    [UnixFact]
+    public void Reads_a_left_out_file_again_only_when_asked_to_retry_left_out_files()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var sound = Path.Combine(drive.Path, "memo.mp4");
+        MakeSoundOnly(sound);
+        Process(drive, work);
+        // The real tools, except that every probe leaves a line behind, so a test can tell whether the file was read.
+        var probes = Path.Combine(tools.Path, "probes");
+        TestTools.FakeTool(tools, "ffprobe", $"echo x >> '{probes}'; exec '{s_tools.Ffprobe}' \"$@\"");
+        TestTools.FakeTool(tools, "ffmpeg", $"exec '{s_tools.Ffmpeg}' \"$@\"");
+        var options = new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None);
+
+        var unchanged = ProcessCommand.Run(options);
+
+        Assert.False(File.Exists(probes), "An unchanged left-out file was read again.");
+        Assert.Equal(new LeftOutFile(sound, NoVideoReason.NoStream, Earlier: true), Assert.Single(unchanged.LeftOut));
+
+        var retried = ProcessCommand.Run(options with { RetryLeftOut = true });
+
+        Assert.True(File.Exists(probes), "--retry-left-out did not read the file again.");
+        Assert.Equal(new LeftOutFile(sound, NoVideoReason.NoStream, Earlier: false), Assert.Single(retried.LeftOut));
+        Assert.Empty(retried.Problems);
+    }
+
+    [UnixFact]
+    public void Reports_an_mpeg_file_in_which_ffprobe_finds_no_video_as_a_problem_and_keeps_its_manifest()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        byte[] packHeader = [0x00, 0x00, 0x01, 0xBA, 0x44, 0x00, 0x04, 0x00, 0x04, 0x01, 0x01, 0x89, 0xC3, 0xF8];
+        drive.Write("MOV001.MOD", [.. packHeader, .. new byte[64 * 1024]]);
+        // An ffprobe that opens the file but lists no streams, as it might for a camcorder file damaged mid-way.
+        TestTools.FakeTool(tools, "ffprobe", """echo '{ "streams": [], "format": {} }'""");
+        TestTools.FakeTool(tools, "ffmpeg", "exit 1");
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Contains("may be damaged", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Empty(result.LeftOut);
+        Assert.Single(ReadManifests(work));
+    }
+
+    [Fact]
+    public void Reads_again_a_file_an_earlier_build_left_out_without_recording_why()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        byte[] packHeader = [0x00, 0x00, 0x01, 0xBA, 0x44, 0x00, 0x04, 0x00, 0x04, 0x01, 0x01, 0x89, 0xC3, 0xF8];
+        var clip = drive.Write("MOV001.MOD", [.. packHeader, .. new byte[64 * 1024]]);
+        // What a build before stored reasons wrote for it: left out, unchanged since, no reason.
+        using (var old = new SqliteConnection($"Data Source={Path.Combine(work.Path, "state.db")};Pooling=False"))
+        {
+            old.Open();
+            using var create = old.CreateCommand();
+            create.CommandText = """
+                CREATE TABLE files (path TEXT PRIMARY KEY, size INTEGER NOT NULL, modified_ticks INTEGER NOT NULL, sha256 TEXT, status TEXT NOT NULL);
+                INSERT INTO files VALUES ($path, $size, $modified, NULL, 'NotVideo');
+                """;
+            create.Parameters.AddWithValue("$path", clip);
+            create.Parameters.AddWithValue("$size", new FileInfo(clip).Length);
+            create.Parameters.AddWithValue("$modified", new DateTimeOffset(File.GetLastWriteTimeUtc(clip)).UtcTicks);
+            create.ExecuteNonQuery();
+        }
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.LeftOut);
+        Assert.Single(result.Problems);
+        Assert.Single(ReadManifests(work));
+    }
+
+    [Fact]
+    public void Finds_ffmpeg_and_ffprobe_in_the_folder_every_test_passes()
+    {
+        Assert.Equal(s_ffmpegFolder, Path.GetDirectoryName(s_tools.Ffprobe));
+        Assert.Equal(s_tools, FfmpegTools.Find(s_ffmpegFolder));
+    }
+
+    [Fact]
+    public void Reports_a_damaged_camcorder_file_as_a_problem_rather_than_leaving_it_out()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // An MPEG program stream pack header, then nothing an MPEG demuxer can use: ffprobe fails on it.
+        byte[] packHeader = [0x00, 0x00, 0x01, 0xBA, 0x44, 0x00, 0x04, 0x00, 0x04, 0x01, 0x01, 0x89, 0xC3, 0xF8];
+        drive.Write("MOV001.MOD", [.. packHeader, .. new byte[64 * 1024]]);
+
+        var result = Process(drive, work);
+
+        Assert.Single(result.Problems);
+        Assert.Equal(0, result.NotVideo);
+        Assert.Single(ReadManifests(work));
+    }
+
+    // Frame 0 is red and every later frame blue, so a poster's colour tells which frame it came from.
+    private static void MakeRedThenBlue(string path, double seconds, int gop, double audioSeconds)
+    {
+        Run(s_tools.Ffmpeg,
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", $"color=c=blue:size=640x360:rate=25:duration={seconds.ToString(CultureInfo.InvariantCulture)},drawbox=c=red:t=fill:enable='eq(n,0)'",
+            "-f", "lavfi", "-i", $"sine=frequency=440:duration={audioSeconds.ToString(CultureInfo.InvariantCulture)}",
+            "-c:v", "libx264", "-g", gop.ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv420p", "-c:a", "aac",
+            path,
+        ]);
+    }
+
+    // Sound only, in MP4 rather than MPEG, so it can be left out (MPEG with no picture is reported as damaged).
+    private static void MakeSoundOnly(string path) =>
+        Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "aac", "-f", "mp4", path]);
+
+    private static void AssertPosterColour(TempFolder work, Manifest manifest, bool red)
+    {
+        using var poster = new MagickImage(Path.Combine(work.Path, Assert.Single(manifest.Derivatives, d => d.Name == "poster").Path));
+        using var pixels = poster.GetPixels();
+        var centre = pixels.GetPixel((int)poster.Width / 2, (int)poster.Height / 2).ToColor()!;
+        Assert.True(
+            red ? centre.R > 200 && centre.B < 60 : centre.B > 200 && centre.R < 60,
+            $"Expected a {(red ? "red (first)" : "blue (later)")} frame, got {centre}.");
+    }
+
+    private static void AssertBlueCornerAtTopRight(string imagePath)
+    {
+        using var image = new MagickImage(imagePath);
+        Assert.Equal((720u, 1280u), (image.Width, image.Height));
+        using var pixels = image.GetPixels();
+        var topRight = pixels.GetPixel(700, 20).ToColor()!;
+        var topLeft = pixels.GetPixel(20, 20).ToColor()!;
+        Assert.True(topRight.B > 200 && topRight.R < 60, $"Expected blue at the top right, got {topRight}.");
+        Assert.True(topLeft.R > 200 && topLeft.B < 60, $"Expected red at the top left, got {topLeft}.");
+    }
+
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
-        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", ModelFolder: TestModels.None));
+        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: s_ffmpegFolder, ModelFolder: TestModels.None));
 
     private static List<Manifest> ReadManifests(TempFolder work) =>
         [.. Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json").Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];
@@ -120,23 +570,83 @@ public class VideoProcessingTests
         return (derivative.Width, derivative.Height);
     }
 
-    // codecs: FFmpeg codec options; H.264 and AAC when none are given.
-    private static void MakeVideo(string path, int width, int height, int seconds, params string[] codecs)
+    private static void MakeVideo(string path, int width, int height, int seconds)
     {
-        List<string> arguments =
+        Run(s_tools.Ffmpeg,
         [
             "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
             "-f", "lavfi", "-i", $"testsrc=duration={seconds}:size={width}x{height}:rate=25",
             "-f", "lavfi", "-i", $"sine=frequency=440:duration={seconds}",
-            .. codecs.Length > 0 ? codecs : ["-c:v", "libx264", "-c:a", "aac"],
-            "-pix_fmt", "yuv420p", "-shortest", path,
-        ];
-        var info = new ProcessStartInfo(s_tools.Ffmpeg, arguments) { RedirectStandardError = true, UseShellExecute = false };
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+            path,
+        ]);
+        Assert.Equal(MediaKind.Video, MediaTypes.Classify(path));
+    }
+
+    // An interlaced camera records 50 fields a second, each from its own moment. Weaving the fields of a
+    // 50 fps scrolling picture into 25 frames gives the combing it records on anything that moves.
+    private static string[] Interlaced(int width, int height, int seconds) =>
+    [
+        "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+        "-f", "lavfi", "-i", $"testsrc2=duration={seconds}:size={width}x{height}:rate=50,scroll=h=0.005",
+        "-f", "lavfi", "-i", $"sine=frequency=440:duration={seconds}",
+        "-vf", "tinterlace=interleave_top,fieldorder=tff",
+    ];
+
+    private static (string Codec, string AspectRatio, string FieldOrder) StreamInfo(string path)
+    {
+        var json = Run(s_tools.Ffprobe,
+        [
+            "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name,sample_aspect_ratio,field_order", "-of", "json",
+            path,
+        ]).Output;
+        using var document = JsonDocument.Parse(json);
+        var stream = document.RootElement.GetProperty("streams")[0];
+        return (stream.GetProperty("codec_name").GetString()!, stream.GetProperty("sample_aspect_ratio").GetString()!, stream.GetProperty("field_order").GetString()!);
+    }
+
+    // FFmpeg's idet filter classifies each frame by looking for combing between lines. The share of frames
+    // it calls interlaced, among those it could classify. Only the brightness plane is checked: combing shows
+    // there, and the colour planes are blurred by chroma subsampling either way.
+    private static double InterlacedShare(string path)
+    {
+        var errors = Run(s_tools.Ffmpeg, ["-hide_banner", "-nostats", "-nostdin", "-i", path, "-an", "-vf", "extractplanes=y,idet", "-f", "null", "-"]).Errors;
+        var summary = errors.Split('\n').LastOrDefault(line => line.Contains("Multi frame detection", StringComparison.Ordinal));
+        Assert.True(summary is not null, $"idet printed no summary for {Path.GetFileName(path)}:\n{errors}");
+        var counts = Regex.Matches(summary, @"(\w+):\s+(\d+)").ToDictionary(m => m.Groups[1].Value, m => int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture));
+        var interlaced = counts["TFF"] + counts["BFF"];
+        var classified = interlaced + counts["Progressive"];
+        Assert.True(classified > 0, $"idet classified no frames of {Path.GetFileName(path)}:\n{errors}");
+        return (double)interlaced / classified;
+    }
+
+    // Structural similarity of a video's frames to the reference's, scaled to the same size; 1 is identical.
+    private static double Similarity(string video, string reference, int width, int height)
+    {
+        var errors = Run(s_tools.Ffmpeg,
+        [
+            "-hide_banner", "-nostats", "-nostdin", "-i", video, "-i", reference,
+            "-lavfi", $"[1:v]scale={width}:{height},setsar=1[reference];[0:v][reference]ssim", "-f", "null", "-",
+        ]).Errors;
+        var match = Regex.Match(errors, @"All:(\d+(\.\d+)?)");
+        Assert.True(match.Success, $"ssim printed no score:\n{errors}");
+        return double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+    }
+
+    private static (string Output, string Errors) Run(string tool, IEnumerable<string> arguments)
+    {
+        var info = new ProcessStartInfo(tool) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var argument in arguments)
+        {
+            info.ArgumentList.Add(argument);
+        }
 
         using var process = System.Diagnostics.Process.Start(info)!;
-        var errors = process.StandardError.ReadToEnd();
+        var errors = process.StandardError.ReadToEndAsync();
+        var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, errors);
-        Assert.Equal(MediaKind.Video, MediaTypes.Classify(path));
+        Assert.True(process.ExitCode == 0, errors.Result);
+        return (output, errors.Result);
     }
 }

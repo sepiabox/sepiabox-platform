@@ -27,6 +27,8 @@ const string Usage = """
       --ffmpeg <folder>     Folder with ffmpeg and ffprobe. Default: look on the PATH.
       --hw nvenc            Encode the 720p versions on an NVIDIA GPU.
       --models <folder>     Folder with the downloaded models. Default: where models download puts them.
+      --retry-left-out      Read again the files earlier runs left out as holding no video.
+      --list-left-out       List every file earlier runs left out, not just how many.
 
     Options for models download:
       --models <folder>     Where to put the models. Default: %LOCALAPPDATA%\Sepiabox\models on
@@ -109,7 +111,7 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
     var result = ProcessCommand.Run(options, progress, cancellationToken);
     Console.Error.WriteLine();
 
-    Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, embeddings added {result.Embedded:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
+    Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, left out {result.NotVideo:N0}, embeddings added {result.Embedded:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
     // Warnings, not failures: the files are processed and the next run computes their embeddings again.
     EmbeddingWarnings.Write(result.EmbeddingProblems, Console.Error);
 
@@ -119,6 +121,8 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
         Console.Error.WriteLine($"Warning: {result.Warning}");
     }
 
+    // Next to the problems, on the same output: not failures, but never catalogued, so each one can be checked.
+    LeftOutReport.Write(result.LeftOut, options.ListLeftOut, Console.Out);
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");

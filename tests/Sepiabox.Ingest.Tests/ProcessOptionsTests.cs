@@ -44,6 +44,16 @@ public class ProcessOptionsTests
     }
 
     [Fact]
+    public void Reads_the_left_out_flags_and_leaves_them_off_by_default()
+    {
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work", "--retry-left-out", "--list-left-out"], out var options, out _));
+        Assert.True(options.RetryLeftOut);
+        Assert.True(options.ListLeftOut);
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work"], out var defaults, out _));
+        Assert.False(defaults.RetryLeftOut || defaults.ListLeftOut);
+    }
+
+    [Fact]
     public void Uses_the_software_encoder_and_the_path_by_default()
     {
         Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work"], out var options, out _));

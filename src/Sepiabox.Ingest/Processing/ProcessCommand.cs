@@ -26,9 +26,15 @@ public sealed record ProcessResult(
     int VideosPending = 0,
     string? Warning = null,
     int Embedded = 0,
-    IReadOnlyList<EmbeddingProblem>? EmbeddingProblems = null)
+    IReadOnlyList<EmbeddingProblem>? EmbeddingProblems = null,
+    IReadOnlyList<LeftOutFile>? LeftOut = null)
 {
     public IReadOnlyList<EmbeddingProblem> EmbeddingProblems { get; init; } = EmbeddingProblems ?? [];
+
+    /// <summary>Files with a video extension that hold no video, found in this run or earlier; they are not catalogued.</summary>
+    public IReadOnlyList<LeftOutFile> LeftOut { get; init; } = LeftOut ?? [];
+
+    public int NotVideo => LeftOut.Count;
 }
 
 /// <summary>
@@ -99,6 +105,7 @@ public static class ProcessCommand
         var problems = new List<ScanProblem>();
         var embeddingProblems = new List<EmbeddingProblem>();
         int processed = 0, skipped = 0, pending = 0, embedded = 0, handled = 0;
+        var leftOut = new List<LeftOutFile>();
         // By asset, so the same photo in two folders counts once.
         var withoutDerivative = new HashSet<string>(StringComparer.Ordinal);
         var withoutManifest = new HashSet<string>(StringComparer.Ordinal);
@@ -175,6 +182,15 @@ public static class ProcessCommand
                 return;
             }
 
+            // Nothing about an unchanged file can make a video stream appear, short of a newer FFmpeg: that is
+            // what --retry-left-out is for. A row with no reason was written under earlier, weaker rules, so it
+            // is read again once.
+            if (unchanged && previous!.Status == FileStatus.NotVideo && previous.Reason is not null && !options.RetryLeftOut)
+            {
+                leftOut.Add(new LeftOutFile(file.Path, previous.Reason, Earlier: true));
+                return;
+            }
+
             // Still no FFmpeg: re-reading a large unchanged video would change nothing.
             if (unchanged && previous!.Status == FileStatus.Pending && video is null)
             {
@@ -197,19 +213,30 @@ public static class ProcessCommand
                 }
 
                 var described = Describe(manifestFolder, sha256, kind, file, source, clock);
-                var (manifest, status, derivativeProblem) = AddDerivatives(output, file, described, video, cancellationToken);
-                var embeddingAdded = false;
-                if (embedder is not null && status == FileStatus.Done)
+                var (manifest, status, derivativeProblem, noVideo) = AddDerivatives(output, file, described, video, cancellationToken);
+                if (status == FileStatus.NotVideo)
                 {
-                    var withDerivatives = manifest;
-                    var outcome = AddEmbedding(file.Path, sha256, () => ManifestEmbeddings.TryAdd(withDerivatives, output, embedder));
-                    embeddingAdded = outcome?.Status == EmbeddingStatus.Added;
-                    manifest = outcome?.Manifest ?? manifest;
+                    // Not catalogued. A run without FFmpeg may have written a manifest for it already: this path
+                    // leaves it, and with the last path the manifest and derivatives go too.
+                    RemoveSource(output, sha256, source);
+                }
+                else
+                {
+                    var embeddingAdded = false;
+                    if (embedder is not null && status == FileStatus.Done)
+                    {
+                        var withDerivatives = manifest;
+                        var outcome = AddEmbedding(file.Path, sha256, () => ManifestEmbeddings.TryAdd(withDerivatives, output, embedder));
+                        embeddingAdded = outcome?.Status == EmbeddingStatus.Added;
+                        manifest = outcome?.Manifest ?? manifest;
+                    }
+
+                    ManifestJson.WriteFile(ManifestPath(manifestFolder, sha256), manifest);
+                    embedded += embeddingAdded ? 1 : 0;
                 }
 
-                ManifestJson.WriteFile(ManifestPath(manifestFolder, sha256), manifest);
-                embedded += embeddingAdded ? 1 : 0;
-                state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, status));
+                // NotVideo is remembered too, with its reason, so an unchanged file is not read again.
+                state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, status, noVideo));
 
                 switch (status)
                 {
@@ -219,9 +246,12 @@ public static class ProcessCommand
                     case FileStatus.Pending:
                         pending++;
                         break;
+                    case FileStatus.NotVideo:
+                        leftOut.Add(new LeftOutFile(file.Path, noVideo, Earlier: false));
+                        break;
                     default:
                         // The manifest is kept so the file is still catalogued; the next run tries the derivatives again.
-                        problems.Add(new ScanProblem(file.Path, derivativeProblem!));
+                        problems.Add(new ScanProblem(file.Path, derivativeProblem ?? "Could not make its previews."));
                         break;
                 }
             }
@@ -262,7 +292,7 @@ public static class ProcessCommand
 
         var warning = warnings.Count == 0 ? null : string.Join(Environment.NewLine, warnings);
         return new ProcessResult(
-            root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems);
+            root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems, leftOut);
     }
 
     /// <summary>
@@ -323,13 +353,16 @@ public static class ProcessCommand
         };
     }
 
-    /// <summary>Generates the derivatives the manifest is still missing. Problem is set when the status is Failed.</summary>
-    private static (Manifest Manifest, FileStatus Status, string? Problem) AddDerivatives(
+    /// <summary>
+    /// Generates the derivatives the manifest is still missing. Problem is set when the status is Failed, and
+    /// NoVideo when it is NotVideo.
+    /// </summary>
+    private static (Manifest Manifest, FileStatus Status, string? Problem, NoVideoReason? NoVideo) AddDerivatives(
         string output, FoundFile file, Manifest manifest, VideoProcessor? video, CancellationToken cancellationToken)
     {
         if (manifest.Derivatives.Count > 0)
         {
-            return (manifest, FileStatus.Done, null);
+            return (manifest, FileStatus.Done, null, null);
         }
 
         var folder = DerivativeFolder(manifest.Id);
@@ -338,12 +371,18 @@ public static class ProcessCommand
             if (manifest.Kind == MediaKind.Photo)
             {
                 var thumbnails = ThumbnailGenerator.Generate(file.Path, output, folder, ThumbnailGenerator.PhotoSizes);
-                return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null);
+                return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null, null);
+            }
+
+            // Checked without FFmpeg, whose module support depends on how it was built.
+            if (TrackerModule.IsTrackerModule(file.Path))
+            {
+                return (manifest, FileStatus.NotVideo, null, NoVideoReason.TrackerModule);
             }
 
             if (video is null)
             {
-                return (manifest, FileStatus.Pending, null);
+                return (manifest, FileStatus.Pending, null, null);
             }
 
             var probe = video.Probe(file.Path, cancellationToken);
@@ -354,12 +393,16 @@ public static class ProcessCommand
                 Height = probe.Height,
                 DurationSeconds = probe.DurationSeconds ?? manifest.DurationSeconds,
                 Derivatives = derivatives,
-            }, FileStatus.Done, null);
+            }, FileStatus.Done, null, null);
+        }
+        catch (NoVideoStreamException ex)
+        {
+            return (manifest, FileStatus.NotVideo, null, ex.Reason);
         }
         catch (Exception ex) when (ex is MagickException or VideoProcessingException)
         {
             var what = manifest.Kind == MediaKind.Photo ? "thumbnails" : "the poster and 720p version";
-            return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}");
+            return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}", null);
         }
     }
 
