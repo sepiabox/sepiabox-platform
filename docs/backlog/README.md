@@ -80,15 +80,15 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-034 | [Deploy from GitHub Actions with OIDC](S-034-deploy-from-github-actions-with-oidc.md) | Cloud and costs | S-032 | Medium | S | `todo` |
 | S-035 | [Serve the app at app.sepiabox.com](S-035-serve-the-app-at-app-sepiabox-com.md) | Cloud and costs | S-032, S-058 | Low | S | `todo` |
 
-### Sprint 6 — Place names and test-data cleanup
+### Sprint 6 — Place names and a fixture library
 
-**Demonstrable increment:** Photos show their place, locally and in Azure; everything that came only from one named source can be deleted.
+**Demonstrable increment:** Photos show their place, locally and in Azure; tests can generate a folder of photos and videos whose counts are known.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-012 | [Name places with GeoNames](S-012-name-places-with-geonames.md) | Cloud catalog | S-008 | High | M | `todo` |
 | S-059 | [Load GeoNames in Azure](S-059-load-geonames-in-azure.md) | Cloud catalog | S-012, S-058 | High | S | `todo` |
-| S-057 | [Delete a source's assets from the library](S-057-delete-a-source-s-assets-from-the.md) | Cloud catalog | S-008, S-012 | High | S | `todo` |
+| S-061 | [Generate a fixture library with known contents](S-061-generate-a-fixture-library-with-known.md) | Questions | S-004, S-053 | High | S | `todo` |
 
 ### Sprint 7 — Filters and description search
 
@@ -110,12 +110,12 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 ### Sprint 9 — Counting answers and MVP acceptance (end of the MVP)
 
-**Demonstrable increment:** Ask "How many videos did we take in 2019?" and get the correct number; a generated folder goes from `process` to answers in Azure with every count matching, and is deleted afterwards. **End of the MVP.**
+**Demonstrable increment:** Ask "How many videos did we take in 2019?" and get the correct number; an end-to-end test takes a generated folder from `scan` to answers and every count matches; the owner compares a few counts on the real data in Azure with `scan`. **End of the MVP.**
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-026 | [Answer counting questions](S-026-answer-counting-questions.md) | Questions | S-025 | Medium | M | `todo` |
-| S-054 | [Accept the MVP from drive to answers](S-054-accept-the-mvp-from-drive-to-answers.md) | Questions | S-026, S-033, S-053, S-056, S-057, S-059 | High | M | `todo` |
+| S-054 | [Accept the MVP from drive to answers](S-054-accept-the-mvp-from-drive-to-answers.md) | Questions | S-026, S-061, S-012 | High | M | `todo` |
 
 ### After the MVP
 
@@ -139,14 +139,15 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-021 | [Filter by people](S-021-filter-by-people.md) | People | S-020, S-013, S-026 | High | M | `todo` |
 | S-022 | [Turn off face recognition and delete face data](S-022-turn-off-face-recognition-and-delete-face.md) | People | S-019 | Medium | S | `todo` |
 
-### Sprint 12 — Personal places and similar photos
+### Sprint 12 — Personal places, similar photos and video locations refresh
 
-**Demonstrable increment:** Save "Beach house" and "home", filter and ask by them; open "more like this".
+**Demonstrable increment:** Save "Beach house" and "home", filter and ask by them; open "more like this"; work folders processed before S-053 get their video locations.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-014 | [Save personal places and filter by them](S-014-save-personal-places-and-filter-by-them.md) | Search | S-013, S-025 | Medium | M | `todo` |
 | S-017 | [Show more photos similar to this one](S-017-show-more-photos-similar-to-this-one.md) | Search | S-015, S-013 | Medium | S | `todo` |
+| S-060 | [Refresh video locations in processed work folders](S-060-refresh-video-locations-in-processed-work-folders.md) | Local ingest | S-053 | Low | S | `todo` |
 
 ### Sprint 13 — Occasions
 
@@ -193,15 +194,15 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036 | Medium | M | `todo` |
 | S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010 | Medium | M | `todo` |
 
-### Sprint 18 — Export, region search and video locations refresh
+### Sprint 18 — Export, undoing an upload and region search
 
-**Demonstrable increment:** Full export as a zip; find photos similar to a selected region; work folders processed before S-053 get their video locations.
+**Demonstrable increment:** Full export as a zip; everything that came only from one named source can be deleted safely; find photos similar to a selected region.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010, S-051 | Medium | S | `todo` |
+| S-057 | [Delete a source's assets from the library](S-057-delete-a-source-s-assets-from-the.md) | Cloud catalog | S-008, S-050, S-058 | Medium | M | `todo` |
 | S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `todo` |
-| S-060 | [Refresh video locations in processed work folders](S-060-refresh-video-locations-in-processed-work-folders.md) | Local ingest | S-053 | Low | S | `todo` |
 
 ### Sprint 19 — Import exports I
 
@@ -241,7 +242,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Search | S-013, S-014, S-015, S-016, S-017, S-041, S-056 |
 | People | S-018, S-019, S-020, S-021, S-022 |
 | Occasions | S-023, S-024 |
-| Questions | S-025, S-026, S-054 |
+| Questions | S-025, S-026, S-054, S-061 |
 | Organization | S-027, S-028 |
 | Cloud and costs | S-029, S-030, S-031, S-032, S-033, S-034, S-035, S-058 |
 | Cloud sources | S-036, S-037, S-038, S-039 |
@@ -251,8 +252,8 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 ## Validation
 
-- **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-060 were added with D-050, D-051, D-053 and the reviews of D-054; the sprints were re-cut by D-054); there are no cycles and no forward dependencies (checked by script when this index is generated).
-- **Size:** 20 stories S, 40 M, none L.
+- **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-061 were added with D-050, D-051, D-053 and the reviews of D-054; the sprints were re-cut by D-054); there are no cycles and no forward dependencies (checked by script when this index is generated).
+- **Size:** 20 stories S, 41 M, none L.
 - **Sprints:** 21 sprints. Sprints 3–21 hold 2 or 3 stories each (M + M, or up to 3 when some are S, D-054); Sprints 1 (11 stories) and 2 (7) gather the work done before D-054.
 - **Decisions covered:** D-001 to D-024 in [`decisions.md`](../decisions.md) are applied: each is cited in the technical notes of at least one story, except D-021, which this backlog itself applies.
 - Story status is kept up to date by each story's PR (see [How to use](#how-to-use)).
@@ -277,6 +278,6 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 - **Epics:** 14
 - **Sprints:** 21
-- **Stories:** 60
-- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (35 stories), with the external drive as the only source; Sprints 10–21 (25 stories) come after it. What is left of the MVP (17 stories): S-044, S-055, S-053, S-032, S-058, S-033, S-034, S-035, S-012, S-059, S-057, S-013, S-016, S-056, S-025, S-026, S-054; its longest chain is 11 stories (S-001 → … → S-008 → S-012 → S-013 → S-016 → S-025 → S-026 → S-054).
+- **Stories:** 61
+- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (35 stories), with the external drive as the only source; Sprints 10–21 (26 stories) come after it. What is left of the MVP (17 stories): S-044, S-055, S-053, S-032, S-058, S-033, S-034, S-035, S-012, S-059, S-061, S-013, S-016, S-056, S-025, S-026, S-054; its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
 - **Critical path (13 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-032 → S-058 → S-033 → S-050 → S-036 → S-038, and others as long: the same chain ending in S-036 → S-039, or in S-050 → S-051 → S-040.

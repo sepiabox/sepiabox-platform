@@ -9,7 +9,7 @@ S-032 creates the resources. The web and the worker jobs then need managed ident
 
 ### Scope
 - Web managed identity: *Storage Blob Data Reader* on the storage account (reads, and the user delegation key for SAS links, D-039; so *Storage Blob Delegator* is not added), *Storage Blob Data Contributor* only on the `dataprotection` container (the data protection key ring is the web's only write), *Key Vault Secrets User*, and *Key Vault Crypto User* on the data protection key.
-- Worker identity (the migrate job now, the import and GeoNames jobs later): *Key Vault Secrets User* for the catalog connection and `Anthropic:ApiKey`, *Storage Blob Data Reader* on the storage account. S-033 adds the Service Bus receiver role.
+- Worker identity (the migrate job now, the import and GeoNames jobs later): *Storage Blob Data Reader* on the storage account and *Key Vault Secrets User* for the catalog connection only. Only the web receives `Anthropic:ApiKey`. S-033 adds the Service Bus receiver role.
 - Uploader access: a parameter `uploaderPrincipalIds` (the Entra object ids of the people who run `sepiabox-ingest upload --destination azure`) gets *Storage Blob Data Contributor* on the storage account; Owner on the resource group grants no data access (`docs/operations.md`).
 - Key Vault holds the OAuth secrets, `Access:Emails`, the catalog connection and `Anthropic--ApiKey` (D-052); they reach the apps as Key Vault references or Aspire secret parameters, read through `IConfiguration` (D-051).
 - Data protection: the web persists its keys to Blob Storage (`dataprotection` container) and protects them with a Key Vault key (`PersistKeysToAzureBlobStorage` + `ProtectKeysWithAzureKeyVault`, managed identity), as host wiring in `Program.cs`.
