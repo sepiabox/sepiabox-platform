@@ -47,7 +47,8 @@ tests/
 docs/
   architecture.md, decisions.md, operations.md
   backlog/             one file per story plus the index
-.github/workflows/ci.yml      lint, tests (Linux + Windows), integration (Linux)
+.github/workflows/ci.yml      lint (format, actionlint, ShellCheck), tests (Linux + Windows), integration (Linux)
+.github/workflows/deploy.yml  deploy main to Azure after green CI or by hand: OIDC, production approval, scripts/deploy.sh
 ```
 
 New projects follow the names in `docs/architecture.md` and are added to `Sepiabox.slnx`.

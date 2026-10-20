@@ -1,0 +1,100 @@
+name: Deploy
+
+# Deploys main to Azure once CI is green on it, or by hand (S-034, D-064). Never on a pull request: this
+# repository is public, and a pull request's code must never reach the production environment's identity.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+# One deploy at a time, and a running one is never cancelled half-way (the migrate job, the paused queue).
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  AZURE_DEV_COLLECT_TELEMETRY: no
+  RESOURCE_GROUP: rg-sepiabox
+
+jobs:
+  deploy:
+    # A green CI run of a push to main (not of a pull request), or a manual run.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    # Its protection rule (manual approval) and the federated credential's subject both name it.
+    environment: production
+    steps:
+      # The commit CI tested, not whatever main points at by now.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: Azure/setup-azd@v2
+
+      # OIDC: the Entra ID app has a federated credential for this repository's production environment.
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign azd in with the same federated credential
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: |
+          azd auth login --client-id "$AZURE_CLIENT_ID" --tenant-id "$AZURE_TENANT_ID" \
+            --federated-credential-provider github
+          az extension add --name containerapp --upgrade --yes --only-show-errors
+
+      # A fresh runner has no .azure folder, so the azd environment is created here, with the values azd
+      # generated on the first deploy: a new administrator login cannot be applied to the existing server
+      # (D-061), so azd must never generate them here.
+      - name: Create the azd environment from the saved parameters
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          PG_USERNAME: ${{ secrets.PG_USERNAME }}
+          PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
+          PG_APP_PASSWORD: ${{ secrets.PG_APP_PASSWORD }}
+          UPLOADER_PRINCIPAL_IDS: ${{ vars.UPLOADER_PRINCIPAL_IDS }}
+        run: |
+          for name in PG_USERNAME PG_PASSWORD PG_APP_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Set the $name secret of the production environment (docs/operations.md)."
+              exit 1
+            fi
+          done
+          azd env new sepiabox --location francecentral --subscription "$AZURE_SUBSCRIPTION_ID" --no-prompt
+          azd env config set infra.parameters.pg_username "$PG_USERNAME"
+          azd env config set infra.parameters.pg_password "$PG_PASSWORD"
+          azd env config set infra.parameters.pg_app_password "$PG_APP_PASSWORD"
+          azd env config set infra.parameters.uploaderPrincipalIds "$UPLOADER_PRINCIPAL_IDS"
+
+      # Provision, run the migrate job and wait for it, then the import jobs and the web (S-032, S-033). A
+      # failed migration ends the script, and so this job, before anything else is deployed.
+      - name: Deploy
+        run: scripts/deploy.sh
+
+      # Keeps the last 5 images of every repository azd pushes (one per app or job), whatever azd names
+      # them, so the registry's 10 GB never fill up (D-055). Only after a successful deploy.
+      - name: Purge old images
+        run: |
+          registry=$(az acr list --resource-group "$RESOURCE_GROUP" --query "[0].name" --output tsv)
+          for repository in $(az acr repository list --name "$registry" --output tsv); do
+            az acr run --registry "$registry" \
+              --cmd "acr purge --filter '${repository}:.*' --ago 0d --keep 5 --untagged" /dev/null
+          done

@@ -77,7 +77,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-033 | [Import manifests automatically when they arrive](S-033-import-manifests-automatically-when-they-arrive.md) | Cloud and costs | S-032, S-008, S-058 | High | M | `done` |
-| S-034 | [Deploy from GitHub Actions with OIDC](S-034-deploy-from-github-actions-with-oidc.md) | Cloud and costs | S-032 | Medium | S | `todo` |
+| S-034 | [Deploy from GitHub Actions with OIDC](S-034-deploy-from-github-actions-with-oidc.md) | Cloud and costs | S-032 | Medium | S | `done` |
 | S-035 | [Serve the app at app.sepiabox.com](S-035-serve-the-app-at-app-sepiabox-com.md) | Cloud and costs | S-032, S-058 | Low | S | `todo` |
 
 ### Sprint 6 — Place names and a fixture library
