@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using ImageMagick;
+using Microsoft.Data.Sqlite;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
@@ -435,6 +436,35 @@ public class VideoProcessingTests
 
         Assert.Contains("may be damaged", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
         Assert.Empty(result.LeftOut);
+        Assert.Single(ReadManifests(work));
+    }
+
+    [Fact]
+    public void Reads_again_a_file_an_earlier_build_left_out_without_recording_why()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        byte[] packHeader = [0x00, 0x00, 0x01, 0xBA, 0x44, 0x00, 0x04, 0x00, 0x04, 0x01, 0x01, 0x89, 0xC3, 0xF8];
+        var clip = drive.Write("MOV001.MOD", [.. packHeader, .. new byte[64 * 1024]]);
+        // What a build before stored reasons wrote for it: left out, unchanged since, no reason.
+        using (var old = new SqliteConnection($"Data Source={Path.Combine(work.Path, "state.db")};Pooling=False"))
+        {
+            old.Open();
+            using var create = old.CreateCommand();
+            create.CommandText = """
+                CREATE TABLE files (path TEXT PRIMARY KEY, size INTEGER NOT NULL, modified_ticks INTEGER NOT NULL, sha256 TEXT, status TEXT NOT NULL);
+                INSERT INTO files VALUES ($path, $size, $modified, NULL, 'NotVideo');
+                """;
+            create.Parameters.AddWithValue("$path", clip);
+            create.Parameters.AddWithValue("$size", new FileInfo(clip).Length);
+            create.Parameters.AddWithValue("$modified", new DateTimeOffset(File.GetLastWriteTimeUtc(clip)).UtcTicks);
+            create.ExecuteNonQuery();
+        }
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.LeftOut);
+        Assert.Single(result.Problems);
         Assert.Single(ReadManifests(work));
     }
 

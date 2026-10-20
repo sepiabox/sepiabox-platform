@@ -86,4 +86,30 @@ public class StateStoreTests
         using var reopened = new StateStore(database);
         Assert.Equal(NoVideoReason.NoStream, reopened.Get("/drive/b.mod")!.Reason);
     }
+
+    [Theory]
+    [InlineData("Unknown")]
+    [InlineData("2")]
+    [InlineData("ReasonFromALaterBuild")]
+    public void Reads_no_reason_when_the_stored_one_is_not_a_known_name(string stored)
+    {
+        using var folder = new TempFolder();
+        var database = Path.Combine(folder.Path, "state.db");
+        using (var store = new StateStore(database))
+        {
+            store.Save(new FileState("/drive/b.mod", 1, 1, null, FileStatus.NotVideo, NoVideoReason.NoStream));
+        }
+
+        using (var connection = new SqliteConnection($"Data Source={database};Pooling=False"))
+        {
+            connection.Open();
+            using var update = connection.CreateCommand();
+            update.CommandText = "UPDATE files SET reason = $reason";
+            update.Parameters.AddWithValue("$reason", stored);
+            update.ExecuteNonQuery();
+        }
+
+        using var reopened = new StateStore(database);
+        Assert.Null(reopened.Get("/drive/b.mod")!.Reason);
+    }
 }

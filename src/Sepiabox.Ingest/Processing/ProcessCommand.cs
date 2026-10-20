@@ -178,8 +178,9 @@ public static class ProcessCommand
             }
 
             // Nothing about an unchanged file can make a video stream appear, short of a newer FFmpeg: that is
-            // what --retry-left-out is for.
-            if (unchanged && previous!.Status == FileStatus.NotVideo && !options.RetryLeftOut)
+            // what --retry-left-out is for. A row with no reason was written under earlier, weaker rules, so it
+            // is read again once.
+            if (unchanged && previous!.Status == FileStatus.NotVideo && previous.Reason is not null && !options.RetryLeftOut)
             {
                 leftOut.Add(new LeftOutFile(file.Path, previous.Reason, Earlier: true));
                 return;

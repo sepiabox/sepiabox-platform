@@ -1,8 +1,14 @@
 namespace Sepiabox.Pipeline.Media;
 
-/// <summary>Why a file with a video extension is left out as holding no video (D-045).</summary>
+/// <summary>
+/// Why a file with a video extension is left out as holding no video (D-045). The names are stored in each work
+/// folder's state, so they are never renamed.
+/// </summary>
 public enum NoVideoReason
 {
+    /// <summary>Not a reason; the default, so an unset value is never mistaken for one.</summary>
+    Unknown = 0,
+
     /// <summary>A tracker-music module, recognised by its ProTracker-family tag.</summary>
     TrackerModule,
 

@@ -125,13 +125,16 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
     {
         // A failing ffprobe throws from Run and is not probed again: the file cannot be read, however much of it.
         var json = Run(tools.Ffprobe, FfmpegArguments.Probe(path), cancellationToken);
+        bool firstSawSomething;
         try
         {
             return FfmpegArguments.ParseProbe(json);
         }
         catch (Exception ex) when (ex is VideoProcessingException or NoVideoStreamException { Reason: NoVideoReason.NoStream })
         {
-            // No video stream, no picture size, or output of an unexpected shape: read more of the file.
+            // No video stream, no picture size, or output of an unexpected shape: read more of the file. Only the
+            // first case is evidence of no video; the others mean the first probe saw a stream it could not use.
+            firstSawSomething = ex is VideoProcessingException;
         }
 
         json = Run(tools.Ffprobe, FfmpegArguments.Probe(path, thorough: true), cancellationToken);
@@ -141,12 +144,30 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
         }
         catch (NoVideoStreamException ex) when (ex.Reason == NoVideoReason.NoStream)
         {
-            if (MpegSignature.IsMatch(path))
+            if (firstSawSomething)
+            {
+                throw new VideoProcessingException("FFmpeg first saw a video stream without a picture size, then none with a longer probe; the file may be damaged.");
+            }
+
+            if (LooksLikeMpeg(path))
             {
                 throw new VideoProcessingException("FFmpeg finds no video stream in this MPEG file, even with a longer probe; it may be damaged.");
             }
 
             throw new NoVideoStreamException(NoVideoReason.NoStream, "No video stream, even with a longer probe.");
+        }
+    }
+
+    // A file whose start cannot be read is a problem: leaving it out would need proof that it is not MPEG.
+    private static bool LooksLikeMpeg(string path)
+    {
+        try
+        {
+            return MpegSignature.IsMatch(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new VideoProcessingException($"Could not read the start of the file: {ex.Message}", ex);
         }
     }
 
@@ -348,7 +369,8 @@ public static class FfmpegArguments
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
-        // Cover art in a music file or a video container shows up as a one-picture video stream.
+        // Probe asks for video streams only (-select_streams v), so every stream here is a video stream; an
+        // attached picture (cover art in a music file or a video container) is one too, so they are told apart.
         var all = root.TryGetProperty("streams", out var streams)
             ? streams.EnumerateArray().Select((stream, index) => (Stream: stream, Index: index)).ToList()
             : [];

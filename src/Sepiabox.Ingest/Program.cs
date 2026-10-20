@@ -121,7 +121,6 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
         Console.Error.WriteLine($"Warning: {result.Warning}");
     }
 
-
     // Next to the problems, on the same output: not failures, but never catalogued, so each one can be checked.
     LeftOutReport.Write(result.LeftOut, options.ListLeftOut, Console.Out);
     foreach (var problem in result.Problems)

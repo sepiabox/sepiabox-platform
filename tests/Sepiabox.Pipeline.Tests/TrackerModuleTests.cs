@@ -89,9 +89,21 @@ public class TrackerModuleTests
         var module = TestTrackerModules.Module("M.K.");
         module[0] = 0x47;
         module[188] = 0x47;
+        module[376] = 0x47;
 
         using var stream = new MemoryStream(module);
         Assert.False(TrackerModule.IsMatch(stream));
+    }
+
+    [Fact]
+    public void Recognises_a_module_whose_title_starts_with_g_when_a_sample_header_also_has_g_188_bytes_later()
+    {
+        var module = TestTrackerModules.Module("M.K.");
+        module[0] = (byte)'G';
+        module[188] = (byte)'G';
+
+        using var stream = new MemoryStream(module);
+        Assert.True(TrackerModule.IsMatch(stream));
     }
 
     [Fact]

@@ -189,22 +189,55 @@ public class VideoProcessorTests
     [InlineData(new byte[] { 0x00, 0x00, 0x01, 0xBA }, 0)]
     [InlineData(new byte[] { 0x00, 0x00, 0x01, 0xB3 }, 0)]
     [InlineData(new byte[] { 0x47 }, 188)]
-    [InlineData(new byte[] { 0, 0, 0, 0, 0x47 }, 196)]
-    public void Reports_an_mpeg_file_without_video_as_damaged_rather_than_leaving_it_out(byte[] start, int secondSync)
+    [InlineData(new byte[] { 0, 0, 0, 0, 0x47 }, 192)]
+    public void Reports_an_mpeg_file_without_video_as_damaged_rather_than_leaving_it_out(byte[] start, int packet)
     {
         using var temp = new TempFolder();
         var ffprobe = TestTools.FakeTool(temp, "ffprobe", """echo '{ "streams": [], "format": {} }'""");
         var bytes = new byte[4096];
         start.CopyTo(bytes, 0);
-        if (secondSync > 0)
+        if (packet > 0)
         {
-            bytes[secondSync] = 0x47;
+            bytes[start.Length - 1 + packet] = 0x47;
+            bytes[start.Length - 1 + (2 * packet)] = 0x47;
         }
 
         var clip = temp.Write("MOV001.MOD", bytes);
 
         var error = Assert.Throws<VideoProcessingException>(() => new VideoProcessor(new FfmpegTools("ffmpeg", ffprobe)).Probe(clip));
         Assert.Contains("may be damaged", error.Message, StringComparison.Ordinal);
+    }
+
+    [UnixFact]
+    public void Reports_a_file_as_damaged_when_the_first_probe_saw_a_video_stream_and_the_longer_one_none()
+    {
+        using var temp = new TempFolder();
+        var ffprobe = TestTools.FakeTool(temp, "ffprobe", """
+            for argument; do
+              if [ "$argument" = "-probesize" ]; then echo '{ "streams": [], "format": {} }'; exit 0; fi
+            done
+            echo '{ "streams": [ { "width": 0, "height": 0 } ], "format": {} }'
+            """);
+        // Not MPEG-looking, so only what the first probe saw keeps it from being left out.
+        var clip = temp.Write("clip.mp4", new byte[4096]);
+
+        var error = Assert.Throws<VideoProcessingException>(() => new VideoProcessor(new FfmpegTools("ffmpeg", ffprobe)).Probe(clip));
+
+        Assert.Contains("may be damaged", error.Message, StringComparison.Ordinal);
+    }
+
+    [UnixFact]
+    public void Reports_a_problem_rather_than_leaving_out_a_file_whose_start_cannot_be_read()
+    {
+        using var temp = new TempFolder();
+        var ffprobe = TestTools.FakeTool(temp, "ffprobe", """echo '{ "streams": [], "format": {} }'""");
+        // A folder named like a video: the stand-in ffprobe answers, but the file's start cannot be read.
+        var unreadable = Path.Combine(temp.Path, "clip.mod");
+        Directory.CreateDirectory(unreadable);
+
+        var error = Assert.Throws<VideoProcessingException>(() => new VideoProcessor(new FfmpegTools("ffmpeg", ffprobe)).Probe(unreadable));
+
+        Assert.StartsWith("Could not read the start of the file", error.Message, StringComparison.Ordinal);
     }
 
     [UnixFact]

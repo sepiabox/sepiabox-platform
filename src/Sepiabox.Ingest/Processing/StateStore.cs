@@ -51,7 +51,8 @@ public sealed class StateStore : IDisposable
                 size INTEGER NOT NULL,
                 modified_ticks INTEGER NOT NULL,
                 sha256 TEXT,
-                status TEXT NOT NULL
+                status TEXT NOT NULL,
+                reason TEXT
             );
             """);
 
@@ -82,7 +83,7 @@ public sealed class StateStore : IDisposable
             reader.GetInt64(1),
             reader.IsDBNull(2) ? null : reader.GetString(2),
             Enum.Parse<FileStatus>(reader.GetString(3)),
-            !reader.IsDBNull(4) && Enum.TryParse<NoVideoReason>(reader.GetString(4), out var reason) ? reason : null);
+            reader.IsDBNull(4) ? null : ParseReason(reader.GetString(4)));
     }
 
     public void Save(FileState state)
@@ -105,6 +106,14 @@ public sealed class StateStore : IDisposable
     }
 
     public void Dispose() => _connection.Dispose();
+
+    // Only a known reason's name; a number, Unknown or a name from a later build reads as no reason, so the file
+    // is read again.
+    private static NoVideoReason? ParseReason(string value) =>
+        Enum.GetNames<NoVideoReason>().Contains(value, StringComparer.Ordinal)
+        && Enum.Parse<NoVideoReason>(value) is var reason and not NoVideoReason.Unknown
+            ? reason
+            : null;
 
     private void Execute(string sql)
     {
