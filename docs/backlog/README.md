@@ -39,7 +39,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-008 | [Import manifests into the catalog](S-008-import-manifests-into-the-catalog.md) | Cloud catalog | S-003, S-007 | High | M | `done` |
 | S-009 | [Browse the library on a timeline](S-009-browse-the-library-on-a-timeline.md) | Web app | S-008 | High | M | `done` |
 | S-010 | [Sign in with Google or Microsoft and allow only the access list](S-010-sign-in-with-google-or-microsoft-and.md) | Web app | S-009 | High | M | `done` |
-| S-011 | [Watch videos on the detail page](S-011-watch-videos-on-the-detail-page.md) | Web app | S-006, S-010 | Medium | S | `doing` |
+| S-011 | [Watch videos on the detail page](S-011-watch-videos-on-the-detail-page.md) | Web app | S-006, S-010 | Medium | S | `done` |
 
 ### Sprint 3 — Find by date, place and similarity
 
