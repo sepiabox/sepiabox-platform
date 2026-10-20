@@ -26,12 +26,12 @@ namespace Sepiabox.Web.Auth;
 /// </remarks>
 public static partial class AuthSetup
 {
-    public const string SignInPath = "/entrar";
-    public const string NoAccessPath = "/sem-acesso";
-    public const string SignOutPath = "/sair";
+    public const string SignInPath = "/sign-in";
+    public const string NoAccessPath = "/no-access";
+    public const string SignOutPath = "/sign-out";
     public const string DevLoginPath = "/dev-login";
     public const string CookieName = "sepiabox-auth";
-    public const string SignInErrorQuery = "erro";
+    public const string SignInErrorQuery = "error";
     public static readonly TimeSpan SessionLifetime = TimeSpan.FromDays(14);
 
     // Personal accounts only: in a work or school tenant, the tenant's administrator chooses the e-mail the
@@ -141,8 +141,8 @@ public static partial class AuthSetup
         app.MapPost(SignOutPath, SignOutAsync).AllowAnonymous();
 
         // Mapped everywhere so that it answers 404 to everyone outside Development (left unmapped, an anonymous
-        // request would be sent to /entrar like any unknown address); it only signs in with a POST from
-        // the /entrar form, in Development, without OAuth clients, from this computer.
+        // request would be sent to /sign-in like any unknown address); it only signs in with a POST from
+        // the /sign-in form, in Development, without OAuth clients, from this computer.
         app.MapMethods(DevLoginPath, [HttpMethods.Get, HttpMethods.Post],
             (HttpContext http, IAntiforgery antiforgery, AccessList access) => devLogin
                 ? DevLoginAsync(http, antiforgery, access)
@@ -209,7 +209,7 @@ public static partial class AuthSetup
 
     private static bool IsSignInPage(HttpRequest request, string url)
     {
-        // Compared unescaped, as routing will see it: "/%65ntrar" is "/entrar".
+        // Compared unescaped, as routing will see it: "/%73ign-in" is "/sign-in".
         var path = PathString.FromUriComponent(url.Split('?', '#')[0]);
         return path.StartsWithSegments(request.PathBase, StringComparison.OrdinalIgnoreCase, out var rest)
             && SignInPages.Any(page => rest.StartsWithSegments(page, StringComparison.OrdinalIgnoreCase));
@@ -304,7 +304,7 @@ public static partial class AuthSetup
     }
 
     /// <summary>
-    /// Pages and media (<c>/fotos/{id}/...</c>) send an anonymous visitor to <c>/entrar</c>; only
+    /// Pages and media (<c>/photos/{id}/...</c>) send an anonymous visitor to <c>/sign-in</c>; only
     /// <c>/api</c> answers 401, since a script cannot follow a sign-in page (D-048).
     /// </summary>
     private static Task RedirectToSignInAsync(RedirectContext<CookieAuthenticationOptions> context)
@@ -324,7 +324,7 @@ public static partial class AuthSetup
     }
 
     /// <summary>
-    /// Someone signed in but not on the list: a page shows <c>/sem-acesso</c>; anything else that is not a
+    /// Someone signed in but not on the list: a page shows <c>/no-access</c>; anything else that is not a
     /// page (media, <c>/api</c>) answers 403, so it never reaches storage or a sign-in loop (D-048).
     /// </summary>
     private static Task RedirectToNoAccessAsync(RedirectContext<CookieAuthenticationOptions> context)

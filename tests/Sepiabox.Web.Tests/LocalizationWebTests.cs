@@ -58,7 +58,7 @@ public sealed partial class LocalizationWebTests
             http.DefaultRequestHeaders.Add("Accept-Language", acceptLanguage);
         }
 
-        var html = await GetPageAsync(http, "/entrar");
+        var html = await GetPageAsync(http, "/sign-in");
 
         Assert.Equal("en", HtmlLang(html));
         Assert.Contains("<h1>Sign in</h1>", html, StringComparison.Ordinal);
@@ -72,7 +72,7 @@ public sealed partial class LocalizationWebTests
         http.DefaultRequestHeaders.Add("Accept-Language", "pt-BR");
         http.DefaultRequestHeaders.Add("Cookie", CultureCookie("en"));
 
-        var html = await GetPageAsync(http, $"/fotos/{Photo}");
+        var html = await GetPageAsync(http, $"/photos/{Photo}");
 
         Assert.Equal("en", HtmlLang(html));
         Assert.Contains("Download the original", html, StringComparison.Ordinal);
@@ -85,7 +85,7 @@ public sealed partial class LocalizationWebTests
         await using var web = CreateWithPhoto();
         using var http = web.CreateSignedInClient(followRedirects: false);
         http.DefaultRequestHeaders.Add("Accept-Language", "en-US");
-        var detail = $"/fotos/{Photo}?pagina=2";
+        var detail = $"/photos/{Photo}?page=2";
         var before = await GetPageAsync(http, detail);
         Assert.Contains("Download the original", before, StringComparison.Ordinal);
 
@@ -127,7 +127,7 @@ public sealed partial class LocalizationWebTests
     {
         await using var web = Create(settings: BothClients);
         using var http = web.CreateAnonymousClient();
-        var signIn = "/entrar?ReturnUrl=%2Ffotos%2Fabc";
+        var signIn = "/sign-in?ReturnUrl=%2Fphotos%2Fabc";
 
         using var response = await SwitchAsync(http, signIn, "pt-BR", signIn);
 
@@ -136,7 +136,7 @@ public sealed partial class LocalizationWebTests
         var html = await GetPageAsync(http, signIn);
         Assert.Equal("pt-BR", HtmlLang(html));
         Assert.Contains("Entrar com o Google", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"entrar/google?returnUrl=%2Ffotos%2Fabc\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"sign-in/google?returnUrl=%2Fphotos%2Fabc\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -145,11 +145,11 @@ public sealed partial class LocalizationWebTests
         await using var web = Create();
         using var http = web.CreateSignedInClient(TestUsers.Stranger, followRedirects: false);
 
-        using var response = await SwitchAsync(http, "/sem-acesso", "pt-BR", "/sem-acesso");
+        using var response = await SwitchAsync(http, "/no-access", "pt-BR", "/no-access");
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal("/sem-acesso", response.Headers.Location!.OriginalString);
-        var html = await GetPageAsync(http, "/sem-acesso");
+        Assert.Equal("/no-access", response.Headers.Location!.OriginalString);
+        var html = await GetPageAsync(http, "/no-access");
         Assert.Contains("<h1>Sem acesso</h1>", html, StringComparison.Ordinal);
         Assert.Contains("Sair e entrar com outra conta", html, StringComparison.Ordinal);
     }
@@ -164,7 +164,7 @@ public sealed partial class LocalizationWebTests
         await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
-        using var response = await SwitchAsync(http, "/entrar", "pt-BR", returnUrl);
+        using var response = await SwitchAsync(http, "/sign-in", "pt-BR", returnUrl);
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal("/", response.Headers.Location!.OriginalString);
@@ -179,7 +179,7 @@ public sealed partial class LocalizationWebTests
         await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
-        using var response = await SwitchAsync(http, "/entrar", culture, "/entrar");
+        using var response = await SwitchAsync(http, "/sign-in", culture, "/sign-in");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Empty(await response.Content.ReadAsStringAsync());
@@ -196,7 +196,7 @@ public sealed partial class LocalizationWebTests
         using var response = await http.PostAsync(Url("/language"), new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["culture"] = "pt-BR",
-            ["returnUrl"] = "/entrar",
+            ["returnUrl"] = "/sign-in",
         }));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -210,7 +210,7 @@ public sealed partial class LocalizationWebTests
         await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
-        using var response = await SwitchAsync(http, "/entrar", "pt-BR", "/fotos/é");
+        using var response = await SwitchAsync(http, "/sign-in", "pt-BR", "/photos/é");
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal("/", response.Headers.Location!.OriginalString);
@@ -226,7 +226,7 @@ public sealed partial class LocalizationWebTests
             AllowAutoRedirect = false,
         });
 
-        using var response = await SwitchAsync(http, "/entrar", "pt-BR", "/entrar");
+        using var response = await SwitchAsync(http, "/sign-in", "pt-BR", "/sign-in");
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var cookie = Assert.Single(SetCookieHeaderValue.ParseList(response.Headers.GetValues("Set-Cookie").ToList()),
@@ -257,12 +257,12 @@ public sealed partial class LocalizationWebTests
         using var http = web.CreateSignedInClient();
         http.DefaultRequestHeaders.Add("Accept-Language", acceptLanguage);
 
-        using var response = await http.GetAsync(Url("/?pagina=2"));
+        using var response = await http.GetAsync(Url("/?page=2"));
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Contains($"<h1>{heading}</h1>", WebUtility.HtmlDecode(html), StringComparison.Ordinal);
-        Assert.Equal("/?pagina=2", SwitchReturnUrl(html));
+        Assert.Equal("/?page=2", SwitchReturnUrl(html));
     }
 
     [Theory]
@@ -293,8 +293,8 @@ public sealed partial class LocalizationWebTests
         using var http = web.CreateSignedInClient();
         http.DefaultRequestHeaders.Add("Accept-Language", acceptLanguage);
 
-        var playing = await GetPageAsync(http, $"/fotos/{Ids.Of(2)}");
-        var waiting = await GetPageAsync(http, $"/fotos/{Ids.Of(3)}");
+        var playing = await GetPageAsync(http, $"/photos/{Ids.Of(2)}");
+        var waiting = await GetPageAsync(http, $"/photos/{Ids.Of(3)}");
 
         Assert.Contains($"data-message=\"{playbackError}\"", playing, StringComparison.Ordinal);
         Assert.Contains($"<p class=\"processing\">{processing}</p>", waiting, StringComparison.Ordinal);

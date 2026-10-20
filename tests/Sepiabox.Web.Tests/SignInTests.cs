@@ -17,7 +17,7 @@ namespace Sepiabox.Web.Tests;
 public sealed class SignInTests
 {
     [Fact]
-    public async Task Redirects_an_anonymous_request_for_the_timeline_to_entrar()
+    public async Task Redirects_an_anonymous_request_for_the_timeline_to_sign_in()
     {
         await using var web = Create();
         using var http = web.CreateAnonymousClient();
@@ -25,7 +25,7 @@ public sealed class SignInTests
         using var response = await http.GetAsync(Url("/"));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal("/entrar", response.Headers.Location!.AbsolutePath);
+        Assert.Equal("/sign-in", response.Headers.Location!.AbsolutePath);
         Assert.Equal("/", HttpUtility.ParseQueryString(response.Headers.Location.Query)["ReturnUrl"]);
     }
 
@@ -55,7 +55,7 @@ public sealed class SignInTests
         await using var web = Create();
         using var http = web.CreateSignedInClient(TestUsers.Stranger, followRedirects: false);
 
-        using var response = await http.GetAsync(Url($"/fotos/{Photo}/{media}"));
+        using var response = await http.GetAsync(Url($"/photos/{Photo}/{media}"));
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Null(response.Headers.Location);
@@ -74,7 +74,7 @@ public sealed class SignInTests
     }
 
     [Fact]
-    public async Task Sends_a_signed_in_user_not_on_the_list_from_a_page_to_sem_acesso()
+    public async Task Sends_a_signed_in_user_not_on_the_list_from_a_page_to_no_access()
     {
         await using var web = Create();
         using var http = web.CreateSignedInClient(TestUsers.Stranger, followRedirects: false);
@@ -82,7 +82,7 @@ public sealed class SignInTests
         using var response = await http.GetAsync(Url("/"));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal("/sem-acesso", response.Headers.Location!.AbsolutePath);
+        Assert.Equal("/no-access", response.Headers.Location!.AbsolutePath);
     }
 
     [Theory]
@@ -96,12 +96,12 @@ public sealed class SignInTests
         await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
-        using var response = await http.GetAsync(Url($"/fotos/{Photo}/{media}"));
+        using var response = await http.GetAsync(Url($"/photos/{Photo}/{media}"));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var location = response.Headers.Location!;
         Assert.Equal("localhost", location.Host);
-        Assert.Equal("/entrar", location.AbsolutePath);
+        Assert.Equal("/sign-in", location.AbsolutePath);
         Assert.DoesNotContain("sig=", location.Query, StringComparison.Ordinal);
         Assert.DoesNotContain("devstoreaccount1", location.AbsoluteUri, StringComparison.Ordinal);
     }
@@ -113,7 +113,7 @@ public sealed class SignInTests
         await using var web = Create();
         using var http = web.CreateSignedInClient(followRedirects: false);
 
-        using var response = await http.GetAsync(Url($"/fotos/{Photo}/thumb-256"));
+        using var response = await http.GetAsync(Url($"/photos/{Photo}/thumb-256"));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Contains("sig=", response.Headers.Location!.Query, StringComparison.Ordinal);
@@ -131,12 +131,12 @@ public sealed class SignInTests
         Assert.Null(response.Headers.Location);
         var challenge = Assert.Single(response.Headers.WwwAuthenticate);
         Assert.Equal("Cookie", challenge.Scheme);
-        Assert.Contains("sign-in=\"/entrar\"", challenge.Parameter, StringComparison.Ordinal);
+        Assert.Contains("sign-in=\"/sign-in\"", challenge.Parameter, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData("/entrar")]
-    [InlineData("/sem-acesso")]
+    [InlineData("/sign-in")]
+    [InlineData("/no-access")]
     [InlineData("/alive")]
     [InlineData("/app.css")]
     [InlineData("/video.js")]
@@ -162,43 +162,43 @@ public sealed class SignInTests
     }
 
     [Fact]
-    public async Task Sends_a_user_who_already_has_access_from_entrar_to_where_they_were_going()
+    public async Task Sends_a_user_who_already_has_access_from_sign_in_to_where_they_were_going()
     {
         await using var web = Create();
         using var http = web.CreateSignedInClient(followRedirects: false);
 
-        using var response = await http.GetAsync(Url("/entrar?ReturnUrl=%2Ffotos%2Fabc"));
+        using var response = await http.GetAsync(Url("/sign-in?ReturnUrl=%2Fphotos%2Fabc"));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal("/fotos/abc", response.Headers.Location!.AbsolutePath);
+        Assert.Equal("/photos/abc", response.Headers.Location!.AbsolutePath);
     }
 
     [Theory]
-    [InlineData("%2Fentrar")]
-    [InlineData("%2Fsem-acesso")]
-    [InlineData("%2Fsair")]
+    [InlineData("%2Fsign-in")]
+    [InlineData("%2Fno-access")]
+    [InlineData("%2Fsign-out")]
     public async Task Sends_a_user_who_already_has_access_home_instead_of_back_to_a_sign_in_page(string returnUrl)
     {
         await using var web = Create();
         using var http = web.CreateSignedInClient(followRedirects: false);
 
-        using var response = await http.GetAsync(Url($"/entrar?ReturnUrl={returnUrl}"));
+        using var response = await http.GetAsync(Url($"/sign-in?ReturnUrl={returnUrl}"));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal("/", response.Headers.Location!.AbsolutePath);
     }
 
     [Fact]
-    public async Task Shows_a_button_for_each_configured_provider_on_entrar()
+    public async Task Shows_a_button_for_each_configured_provider_on_sign_in()
     {
         await using var web = Create(settings: BothClients);
         using var http = web.CreateAnonymousClient();
 
-        var html = await http.GetStringAsync(Url("/entrar?ReturnUrl=%2Ffotos%2Fabc"));
+        var html = await http.GetStringAsync(Url("/sign-in?ReturnUrl=%2Fphotos%2Fabc"));
 
         Assert.Contains("Sign in with Google", html, StringComparison.Ordinal);
         Assert.Contains("Sign in with Microsoft", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"entrar/google?returnUrl=%2Ffotos%2Fabc\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"sign-in/google?returnUrl=%2Fphotos%2Fabc\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("dev-login", html, StringComparison.Ordinal);
         Assert.DoesNotContain("class=\"error\"", html, StringComparison.Ordinal);
     }
@@ -211,7 +211,7 @@ public sealed class SignInTests
         await using var web = Create(settings: BothClients);
         using var http = web.CreateAnonymousClient();
 
-        using var response = await http.GetAsync(Url($"/entrar/{provider}?returnUrl=%2Ffotos%2Fabc"));
+        using var response = await http.GetAsync(Url($"/sign-in/{provider}?returnUrl=%2Fphotos%2Fabc"));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var location = response.Headers.Location!;
@@ -227,7 +227,7 @@ public sealed class SignInTests
     {
         await using var web = Create(environment: "Production", settings: BothClients);
         using var http = web.CreateAnonymousClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, Url("/entrar/google"));
+        using var request = new HttpRequestMessage(HttpMethod.Get, Url("/sign-in/google"));
         request.Headers.Add("X-Forwarded-Proto", "https");
         request.Headers.Add("X-Forwarded-For", "203.0.113.7");
         // The ingress keeps the browser's Host; a forwarded host from anyone else must not move the callback.
@@ -287,11 +287,11 @@ public sealed class SignInTests
     }
 
     [Theory]
-    [InlineData("""{"sub":"1","email":"Ana@Example.com","email_verified":true}""", "/fotos/abc")]
-    [InlineData("""{"id":"1","email":"ana@example.com","verified_email":true}""", "/fotos/abc")]
-    [InlineData("""{"sub":"1","email":"ana@example.com"}""", "/sem-acesso")]
-    [InlineData("""{"sub":"1","email":"ana@example.com","email_verified":false}""", "/sem-acesso")]
-    [InlineData("""{"sub":"1","email":"stranger@example.com","email_verified":true}""", "/sem-acesso")]
+    [InlineData("""{"sub":"1","email":"Ana@Example.com","email_verified":true}""", "/photos/abc")]
+    [InlineData("""{"id":"1","email":"ana@example.com","verified_email":true}""", "/photos/abc")]
+    [InlineData("""{"sub":"1","email":"ana@example.com"}""", "/no-access")]
+    [InlineData("""{"sub":"1","email":"ana@example.com","email_verified":false}""", "/no-access")]
+    [InlineData("""{"sub":"1","email":"stranger@example.com","email_verified":true}""", "/no-access")]
     public async Task Signs_in_through_the_real_google_handler_only_with_a_verified_email_on_the_list(string userInfo, string landsOn)
     {
         using var google = new FakeGoogle(userInfo);
@@ -299,7 +299,7 @@ public sealed class SignInTests
         using var http = web.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = false });
 
         // The button: the handler writes its correlation cookie and sends the browser to Google with a state.
-        using var challenge = await http.GetAsync(Url("/entrar/google?returnUrl=%2Ffotos%2Fabc"));
+        using var challenge = await http.GetAsync(Url("/sign-in/google?returnUrl=%2Fphotos%2Fabc"));
         var state = HttpUtility.ParseQueryString(challenge.Headers.Location!.Query)["state"];
         var correlation = SetCookieHeaderValue.ParseList(challenge.Headers.GetValues("Set-Cookie").ToList())
             .Single(cookie => cookie.Name.StartsWith(".AspNetCore.Correlation.", StringComparison.Ordinal));
@@ -313,7 +313,7 @@ public sealed class SignInTests
         Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
         Assert.Equal(landsOn, callback.Headers.Location!.OriginalString);
         var session = SessionCookie(callback);
-        if (landsOn == "/sem-acesso")
+        if (landsOn == "/no-access")
         {
             // At most the cookie that deletes an earlier session.
             Assert.True(session is null || session.Value.Length == 0);
@@ -328,7 +328,7 @@ public sealed class SignInTests
     [Theory]
     [InlineData("google")]
     [InlineData("microsoft")]
-    public async Task Sends_a_cancelled_sign_in_back_to_entrar_with_a_message(string provider)
+    public async Task Sends_a_cancelled_sign_in_back_to_sign_in_with_a_message(string provider)
     {
         await using var web = Create(settings: BothClients);
         using var http = web.CreateAnonymousClient();
@@ -336,9 +336,9 @@ public sealed class SignInTests
         using var callback = await http.GetAsync(Url($"/signin-{provider}?error=access_denied&state=anything"));
 
         Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
-        Assert.Equal("/entrar?erro=1", callback.Headers.Location!.OriginalString);
+        Assert.Equal("/sign-in?error=1", callback.Headers.Location!.OriginalString);
         Assert.Null(SessionCookie(callback));
-        var page = await http.GetStringAsync(Url("/entrar?erro=1"));
+        var page = await http.GetStringAsync(Url("/sign-in?error=1"));
         Assert.Contains("Couldn&#x27;t sign in", page, StringComparison.Ordinal);
     }
 
@@ -350,7 +350,7 @@ public sealed class SignInTests
         await using var web = Create();
         using var http = web.CreateAnonymousClient();
 
-        using var response = await http.GetAsync(Url($"/entrar/{provider}"));
+        using var response = await http.GetAsync(Url($"/sign-in/{provider}"));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -361,7 +361,7 @@ public sealed class SignInTests
         await using var web = Create(accessEmails: "");
         using var http = web.CreateSignedInClient(followRedirects: false);
 
-        using var response = await http.GetAsync(Url($"/fotos/{Photo}/thumb-256"));
+        using var response = await http.GetAsync(Url($"/photos/{Photo}/thumb-256"));
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }

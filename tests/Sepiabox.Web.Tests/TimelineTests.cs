@@ -32,7 +32,7 @@ public sealed class TimelineTests : LocalizedContext
         var page = Render<Timeline>();
 
         var cards = page.FindAll("a.thumb");
-        Assert.Equal($"fotos/{Ids.Of(15)}", cards[0].GetAttribute("href"));
+        Assert.Equal($"photos/{Ids.Of(15)}", cards[0].GetAttribute("href"));
         Assert.Equal("0:03", cards[0].QuerySelector(".badge")!.TextContent);
         Assert.NotNull(cards[0].QuerySelector(".play"));
         Assert.Null(cards[1].QuerySelector(".play"));
@@ -50,7 +50,7 @@ public sealed class TimelineTests : LocalizedContext
         var groups = page.FindAll("section.month");
         Assert.Equal(2, groups.Count);
         Assert.Equal("No date", groups[^1].QuerySelector("h2")!.TextContent);
-        Assert.Contains($"fotos/{Ids.Of(4)}", groups[^1].InnerHtml, StringComparison.Ordinal);
+        Assert.Contains($"photos/{Ids.Of(4)}", groups[^1].InnerHtml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class TimelineTests : LocalizedContext
 
         var page = Render<Timeline>();
 
-        Assert.Equal($"fotos/{Ids.Of(6)}/thumb-256", page.Find("ul.grid img").GetAttribute("src"));
+        Assert.Equal($"photos/{Ids.Of(6)}/thumb-256", page.Find("ul.grid img").GetAttribute("src"));
         Assert.DoesNotContain("sig=", page.Markup, StringComparison.Ordinal);
     }
 
@@ -74,7 +74,7 @@ public sealed class TimelineTests : LocalizedContext
 
         var page = Render<Timeline>();
 
-        Assert.Equal("./?pagina=2", page.Find("nav.pages a").GetAttribute("href"));
+        Assert.Equal("./?page=2", page.Find("nav.pages a").GetAttribute("href"));
         Assert.Equal("Older →", page.Find("nav.pages a").TextContent);
         Assert.Equal("Pages", page.Find("nav.pages").GetAttribute("aria-label"));
         Assert.Contains("without a thumbnail", page.Find("ul.grid .placeholder").TextContent, StringComparison.Ordinal);
@@ -130,7 +130,7 @@ public sealed class TimelineTests : LocalizedContext
 
         var page = RenderPage(2);
 
-        Assert.Equal($"fotos/{Ids.Of(11)}?pagina=2", page.Find("a.thumb").GetAttribute("href"));
+        Assert.Equal($"photos/{Ids.Of(11)}?page=2", page.Find("a.thumb").GetAttribute("href"));
     }
 
     [Fact]
@@ -141,11 +141,11 @@ public sealed class TimelineTests : LocalizedContext
             new TimelineItem(Ids.Of(13), AssetKinds.Photo, new DateTime(2026, 1, 2), true, DurationSeconds: null),
             new TimelineItem(Ids.Of(14), AssetKinds.Photo, new DateTime(2026, 1, 1), true, DurationSeconds: null))
         { PageSize = 1 });
-        Services.GetRequiredService<NavigationManager>().NavigateTo("/?pagina=2&vista=grelha");
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/?page=2&vista=grelha");
 
         var page = Render<Timeline>();
 
-        Assert.Equal(["./?vista=grelha", "./?vista=grelha&pagina=3"], page.FindAll("nav.pages a").Select(a => a.GetAttribute("href")));
+        Assert.Equal(["./?vista=grelha", "./?vista=grelha&page=3"], page.FindAll("nav.pages a").Select(a => a.GetAttribute("href")));
     }
 
     [Fact]
@@ -212,10 +212,10 @@ public sealed class TimelineTests : LocalizedContext
 
     private void Use(FakeLibrary library) => Services.AddSingleton<ILibraryQueries>(library);
 
-    // The page reads `pagina` from the URL, as a visitor's browser would send it.
-    private IRenderedComponent<Timeline> RenderPage(object pagina)
+    // The page reads `page` from the URL, as a visitor's browser would send it.
+    private IRenderedComponent<Timeline> RenderPage(object page)
     {
-        Services.GetRequiredService<NavigationManager>().NavigateTo($"/?pagina={pagina}");
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/?page={page}");
         return Render<Timeline>();
     }
 }

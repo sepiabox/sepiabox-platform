@@ -49,15 +49,15 @@ else
 
 @code {
     // Text, not int: a hand-typed "abc" or 99999999999 must become a page, not a binding error.
-    [SupplyParameterFromQuery(Name = "pagina")]
-    public string? Pagina { get; set; }
+    [SupplyParameterFromQuery(Name = "page")]
+    public string? PageQuery { get; set; }
 
     private TimelinePage? _page;
     private IReadOnlyList<TimelineGroup> _groups = [];
 
     protected override async Task OnParametersSetAsync()
     {
-        var page = await Library.GetTimelinePageAsync(LibraryQueries.ParsePage(Pagina));
+        var page = await Library.GetTimelinePageAsync(LibraryQueries.ParsePage(PageQuery));
         _groups = TimelineGroups.ByMonth(page.Items);
         _page = page;
     }
@@ -66,17 +66,17 @@ else
     private string PageLink(int page)
     {
         var query = QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query)
-            .Where(p => !string.Equals(p.Key, "pagina", StringComparison.OrdinalIgnoreCase))
+            .Where(p => !string.Equals(p.Key, "page", StringComparison.OrdinalIgnoreCase))
             .SelectMany(p => p.Value, (p, value) => new KeyValuePair<string, string?>(p.Key, value))
             .ToList();
         if (page > 1)
         {
-            query.Add(new("pagina", page.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            query.Add(new("page", page.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         }
 
         return QueryHelpers.AddQueryString("./", query);
     }
 
     private string DetailLink(TimelineItem item) =>
-        _page is { Page: > 1 } page ? $"fotos/{item.Id}?pagina={page.Page}" : $"fotos/{item.Id}";
+        _page is { Page: > 1 } page ? $"photos/{item.Id}?page={page.Page}" : $"photos/{item.Id}";
 }

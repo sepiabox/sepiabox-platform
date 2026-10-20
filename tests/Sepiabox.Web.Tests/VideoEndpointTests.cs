@@ -25,7 +25,7 @@ public sealed class VideoEndpointTests
         await using var web = Create();
         using var http = web.CreateSignedInClient(followRedirects: false);
 
-        using var response = await http.GetAsync(new Uri($"/fotos/{s_video}/proxy-720p", UriKind.Relative));
+        using var response = await http.GetAsync(new Uri($"/photos/{s_video}/proxy-720p", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.True(response.Headers.CacheControl?.Private);
@@ -46,7 +46,7 @@ public sealed class VideoEndpointTests
         await using var web = Create();
         using var http = web.CreateSignedInClient(followRedirects: false);
 
-        using var response = await http.GetAsync(new Uri($"/fotos/{s_video}/{derivative}", UriKind.Relative));
+        using var response = await http.GetAsync(new Uri($"/photos/{s_video}/{derivative}", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal(s_windowStart + SasUrlFactory.DerivativeLifetime, Expiry(response.Headers.Location!));
@@ -59,10 +59,10 @@ public sealed class VideoEndpointTests
         await using var web = Create();
         using var http = web.CreateSignedInClient();
 
-        var html = await http.GetStringAsync(new Uri($"/fotos/{s_video}", UriKind.Relative));
+        var html = await http.GetStringAsync(new Uri($"/photos/{s_video}", UriKind.Relative));
 
-        Assert.Contains($"src=\"fotos/{s_video}/proxy-720p\"", html, StringComparison.Ordinal);
-        Assert.Contains($"poster=\"fotos/{s_video}/poster\"", html, StringComparison.Ordinal);
+        Assert.Contains($"src=\"photos/{s_video}/proxy-720p\"", html, StringComparison.Ordinal);
+        Assert.Contains($"poster=\"photos/{s_video}/poster\"", html, StringComparison.Ordinal);
         using var document = await new HtmlParser().ParseDocumentAsync(html);
         var scripts = document.Scripts.Select(s => s.GetAttribute("src") ?? string.Empty).ToList();
         // The file name exactly, fingerprinted or not.

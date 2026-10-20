@@ -1,4 +1,4 @@
-@page "/sem-acesso"
+@page "/no-access"
 @attribute [AllowAnonymous]
 @* Static server rendering, like the sign-in page. *@
 
@@ -15,7 +15,7 @@
         }
         else
         {
-            <a class="button" href="entrar">@Text["NoAccess_SwitchAccount"]</a>
+            <a class="button" href="sign-in">@Text["NoAccess_SwitchAccount"]</a>
         }
     </div>
 </section>
