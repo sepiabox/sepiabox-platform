@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Sepiabox.Pipeline.Media;
 
@@ -22,9 +23,7 @@ public static class ManifestMerge
             ? (existing, incoming)
             : (incoming, existing);
 
-        // Faces are opt-in (S-018): a work folder processed without --faces knows nothing about them, so it never
-        // replaces faces that another one found.
-        var faces = incoming.FacesProcessed || !existing.FacesProcessed ? incoming : existing;
+        var faces = FacesOf(existing, incoming);
 
         return description with
         {
@@ -36,6 +35,30 @@ public static class ManifestMerge
             FacesProcessed = faces.FacesProcessed,
             Faces = faces.Faces,
         };
+    }
+
+    /// <summary>
+    /// The side whose faces the merge keeps (S-018, D-047). Faces are opt-in: a work folder processed without
+    /// --faces knows nothing about them, so it never replaces faces another one found. When both sides looked, the
+    /// choice depends only on the faces, never on which side is incoming, so uploads of the same asset from two
+    /// computers converge on one blob instead of flipping it: more faces wins, then the larger serialized list.
+    /// </summary>
+    private static Manifest FacesOf(Manifest existing, Manifest incoming)
+    {
+        if (existing.FacesProcessed != incoming.FacesProcessed)
+        {
+            return existing.FacesProcessed ? existing : incoming;
+        }
+
+        if (existing.Faces.Count != incoming.Faces.Count)
+        {
+            return existing.Faces.Count > incoming.Faces.Count ? existing : incoming;
+        }
+
+        var order = string.CompareOrdinal(
+            JsonSerializer.Serialize(existing.Faces, ManifestJson.Options),
+            JsonSerializer.Serialize(incoming.Faces, ManifestJson.Options));
+        return order > 0 ? existing : incoming;
     }
 
     /// <summary>
