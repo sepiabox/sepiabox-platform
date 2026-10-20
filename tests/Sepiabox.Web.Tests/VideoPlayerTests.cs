@@ -34,7 +34,9 @@ public sealed class VideoPlayerTests : BunitContext
         var message = player.Find(".player .player-error");
         Assert.True(message.HasAttribute("hidden"));
         Assert.Equal("alert", message.GetAttribute("role"));
-        Assert.Equal("Não foi possível reproduzir o vídeo. Descarregue o original.", message.TextContent);
+        // Empty until video.js reveals it, so the alert is announced when its text appears.
+        Assert.Equal(string.Empty, message.TextContent);
+        Assert.Equal("Não foi possível reproduzir o vídeo. Descarregue o original.", message.GetAttribute("data-message"));
     }
 
     [Fact]

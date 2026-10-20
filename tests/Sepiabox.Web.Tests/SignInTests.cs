@@ -140,7 +140,7 @@ public sealed class SignInTests
     [InlineData("/alive")]
     [InlineData("/app.css")]
     [InlineData("/video.js")]
-    public async Task Serves_the_sign_in_pages_probes_and_styles_anonymously(string path)
+    public async Task Serves_the_sign_in_pages_probes_and_static_assets_anonymously(string path)
     {
         await using var web = Create();
         using var http = web.CreateAnonymousClient();

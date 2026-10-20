@@ -210,6 +210,8 @@ main {
     width: 40px;
     height: 40px;
     margin: -20px 0 0 -20px;
+    /* The same brown, for browsers without color-mix. */
+    background: rgb(35 26 20 / 0.7);
     background: color-mix(in srgb, var(--developer) 70%, transparent);
     color: var(--white);
     border-radius: 50%;

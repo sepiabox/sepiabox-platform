@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Web;
+using AngleSharp.Html.Parser;
 using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
@@ -61,7 +62,9 @@ public sealed class VideoEndpointTests
 
         Assert.Contains($"src=\"fotos/{s_video}/proxy-720p\"", html, StringComparison.Ordinal);
         Assert.Contains($"poster=\"fotos/{s_video}/poster\"", html, StringComparison.Ordinal);
-        Assert.Matches("<script src=\"video(\\.[a-z0-9]+)?\\.js\"></script>", html);
+        using var document = await new HtmlParser().ParseDocumentAsync(html);
+        var scripts = document.Scripts.Select(s => s.GetAttribute("src") ?? string.Empty).ToList();
+        Assert.Contains(scripts, src => src.StartsWith("video", StringComparison.Ordinal) && src.EndsWith(".js", StringComparison.Ordinal));
         Assert.DoesNotContain("sig=", html, StringComparison.Ordinal);
     }
 

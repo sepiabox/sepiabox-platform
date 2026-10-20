@@ -52,13 +52,14 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
 
     public static readonly TimeSpan OriginalLifetime = TimeSpan.FromMinutes(5);
 
-    // Declared after the lifetimes it reads: static fields are initialised in order.
-    private static readonly TimeSpan s_longestLink = new[] { DerivativeLifetime, VideoLifetime, OriginalLifetime }.Max();
     private static readonly TimeSpan s_clockSkew = TimeSpan.FromMinutes(5);
+
+    private static TimeSpan LongestLink =>
+        TimeSpan.FromTicks(Math.Max(DerivativeLifetime.Ticks, Math.Max(VideoLifetime.Ticks, OriginalLifetime.Ticks)));
 
     // A user delegation SAS stops working when its key expires, so a key is reused only while it outlives the
     // longest link by the clock skew; the margin lets one key serve about two hours of signing.
-    private static readonly TimeSpan s_delegationKeyLifetime = s_longestLink + TimeSpan.FromHours(2);
+    private static TimeSpan DelegationKeyLifetime => LongestLink + TimeSpan.FromHours(2);
 
     private readonly SemaphoreSlim _keyLock = new(1, 1);
     private volatile UserDelegationKey? _delegationKey;
@@ -122,7 +123,7 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
             if (_delegationKey is not { } key || !IsStillGood(key))
             {
                 var now = time.GetUtcNow();
-                key = await service.GetUserDelegationKeyAsync(now - s_clockSkew, now + s_delegationKeyLifetime, cancellationToken);
+                key = await service.GetUserDelegationKeyAsync(now - s_clockSkew, now + DelegationKeyLifetime, cancellationToken);
                 _delegationKey = key;
             }
 
@@ -135,5 +136,5 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
     }
 
     private bool IsStillGood(UserDelegationKey key) =>
-        key.SignedExpiresOn - time.GetUtcNow() >= s_longestLink + s_clockSkew;
+        key.SignedExpiresOn - time.GetUtcNow() >= LongestLink + s_clockSkew;
 }
