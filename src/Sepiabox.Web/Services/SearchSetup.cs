@@ -23,6 +23,17 @@ public static class SearchSetup
     }
 
     /// <summary>
+    /// <c>Search:WarmUp</c>: load the CLIP text model before taking requests (S-056). By default only in Production,
+    /// where the image ships the model; elsewhere the first description search loads it.
+    /// </summary>
+    public static bool WarmUp(IConfiguration configuration, IHostEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(environment);
+        return configuration.GetValue("Search:WarmUp", environment.IsProduction());
+    }
+
+    /// <summary>
     /// <c>Search:ModelFolder</c>, where the web reads the CLIP text model and tokenizer (S-016); unset, the folder
     /// <c>sepiabox-ingest models download</c> fills on this computer (<c>SEPIABOX_MODELS</c> or the default). S-056
     /// points it at the copy in the web's image.

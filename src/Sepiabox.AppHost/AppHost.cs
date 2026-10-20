@@ -193,6 +193,8 @@ else
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
         .WithEnvironment("DataProtection__KeyUri", access.GetOutput("dataProtectionKeyUri"))
         .WithEnvironment("Search__TimeZone", AzureInfrastructure.SearchTimeZone)
+        // The CLIP text model in the web's image (S-056): its base image sepiabox-web-models, built by scripts/web-models.sh.
+        .WithEnvironment("Search__ModelFolder", AzureInfrastructure.WebModelFolder)
         // Only the Container Apps default host and the custom domain, if any, reach the app (D-048, D-065);
         // an empty custom domain leaves an empty entry, which host filtering ignores.
         .WithEnvironment("AllowedHosts", ReferenceExpression.Create(

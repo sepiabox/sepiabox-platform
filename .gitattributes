@@ -1,0 +1,14 @@
+# Line ends: LF in the repository whatever the checkout's platform (S-056). Shell scripts, Dockerfiles and the
+# pinned models list must stay LF in the working tree too: bash refuses CRLF scripts, and web-models.sh hashes
+# models.json into the web's base image tag.
+* text=auto
+*.sh text eol=lf
+Dockerfile text eol=lf
+models/models.json text eol=lf
+# Never converted or diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.woff2 binary
+*.gz binary
+*.onnx binary

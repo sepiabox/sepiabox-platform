@@ -23,28 +23,39 @@ public sealed partial class ClipQueryEmbedder : IQueryEmbedder, IDisposable
     private readonly Func<bool> _filesPresent;
     private readonly TimeProvider _clock;
     private readonly ILogger<ClipQueryEmbedder> _log;
+    private readonly bool _failuresAreErrors;
 
     // Replaced whole, never changed in place, so a reader sees one consistent state without a lock.
     private volatile State _state = State.NotLoaded;
 
-    public ClipQueryEmbedder(string modelFolder, ILogger<ClipQueryEmbedder> log, TimeProvider? clock = null)
+    /// <param name="modelFolder">Where the text model and tokenizer are.</param>
+    /// <param name="log">Where a failure to load is reported.</param>
+    /// <param name="clock">For the retry after an I/O failure.</param>
+    /// <param name="failuresAreErrors">
+    /// Reports a model that cannot be used as an error rather than a warning: in Production, where the image ships it
+    /// (S-056, D-071), its absence is a broken deploy.
+    /// </param>
+    public ClipQueryEmbedder(string modelFolder, ILogger<ClipQueryEmbedder> log, TimeProvider? clock = null, bool failuresAreErrors = false)
         : this(
             modelFolder,
             (out string? warning, out ClipLoadFailure failure) => ClipTextEncoder.TryCreate(modelFolder, out warning, out failure),
             () => ClipTextEncoder.FilesPresent(modelFolder),
             log,
-            clock)
+            clock,
+            failuresAreErrors)
     {
     }
 
     /// <summary>With another loader, for tests.</summary>
-    internal ClipQueryEmbedder(string modelFolder, Loader load, Func<bool> filesPresent, ILogger<ClipQueryEmbedder> log, TimeProvider? clock = null)
+    internal ClipQueryEmbedder(
+        string modelFolder, Loader load, Func<bool> filesPresent, ILogger<ClipQueryEmbedder> log, TimeProvider? clock = null, bool failuresAreErrors = false)
     {
         _modelFolder = modelFolder;
         _load = load;
         _filesPresent = filesPresent;
         _log = log;
         _clock = clock ?? TimeProvider.System;
+        _failuresAreErrors = failuresAreErrors;
     }
 
     public string ModelFolder => _modelFolder;
@@ -97,7 +108,20 @@ public sealed partial class ClipQueryEmbedder : IQueryEmbedder, IDisposable
 
             if (CanTry(state))
             {
-                var encoder = _load(out var warning, out var failure);
+                ITextEncoder? encoder;
+                string? warning;
+                ClipLoadFailure failure;
+                try
+                {
+                    encoder = _load(out warning, out failure);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // ONNX Runtime's native library missing, a model that crashes the session, anything TryCreate did
+                    // not foresee: kept off until a restart like an invalid file, never thrown at the caller as is.
+                    (encoder, warning, failure) = (null, $"The CLIP text model could not be loaded ({ex.GetType().Name}: {ex.Message}).", ClipLoadFailure.Invalid);
+                }
+
                 if (encoder is not null)
                 {
                     _state = new State(encoder, null, null);
@@ -114,7 +138,14 @@ public sealed partial class ClipQueryEmbedder : IQueryEmbedder, IDisposable
 
                 if (reason != state.Failure)
                 {
-                    LogUnavailable(_log, reason);
+                    if (_failuresAreErrors)
+                    {
+                        LogUnavailableError(_log, reason);
+                    }
+                    else
+                    {
+                        LogUnavailable(_log, reason);
+                    }
                 }
 
                 state = new State(null, reason, failure == ClipLoadFailure.Unreadable ? _clock.GetUtcNow() + RetryAfter : null);
@@ -135,4 +166,7 @@ public sealed partial class ClipQueryEmbedder : IQueryEmbedder, IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Search by description is off: {Reason}")]
     private static partial void LogUnavailable(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Search by description is off: {Reason}")]
+    private static partial void LogUnavailableError(ILogger logger, string reason);
 }

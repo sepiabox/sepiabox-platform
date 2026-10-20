@@ -27,6 +27,8 @@ public sealed class DeployScriptTests : IDisposable
     private readonly string _stubs = Path.Combine(Path.GetTempPath(), "sepiabox-deploy-" + Guid.NewGuid().ToString("N"));
     private readonly string _calls;
 
+    private string Models => Path.Combine(_stubs, "models");
+
     public DeployScriptTests()
     {
         Directory.CreateDirectory(_stubs);
@@ -35,6 +37,7 @@ public sealed class DeployScriptTests : IDisposable
             echo "azd $*" >> "$CALLS"
             if [ "$1" = "deploy" ]; then
               echo "$SEPIABOX_DEPLOY_SCRIPT" >> "$CALLS.guard"
+              echo "$2 ${SEPIABOX_WEB_BASE_IMAGE:-}" >> "$CALLS.base"
               if [ "$2" = "$STUB_FAILING_DEPLOY" ]; then
                 echo "deploy of $2 failed" >&2
                 exit 1
@@ -44,6 +47,7 @@ public sealed class DeployScriptTests : IDisposable
               case "$3" in
                 AZURE_ENV_NAME) echo "$STUB_ENV_NAME" ;;
                 AZURE_LOCATION) echo "$STUB_LOCATION" ;;
+                AZURE_CONTAINER_REGISTRY_ENDPOINT) echo "sepiaboxacr.azurecr.io" ;;
                 AZURE_RESOURCE_GROUP)
                   if [ -z "$STUB_RESOURCE_GROUP" ]; then
                     echo "ERROR: key not found" >&2
@@ -71,6 +75,8 @@ public sealed class DeployScriptTests : IDisposable
                 fi
                 if [ "$STUB_PG_STATE" != "MISSING" ]; then echo "$STUB_PG_STATE"; fi ;;
               "containerapp job start"*) echo "$STUB_EXECUTION" ;;
+              "acr repository show"*)
+                if [ "$STUB_MODELS_IMAGE" = "MISSING" ]; then exit 1; fi ;;
               "servicebus queue update"*"--status Active"*)
                 if [ "$STUB_RESUME" = "FAIL" ]; then exit 1; fi ;;
               "containerapp job stop"*)
@@ -86,6 +92,26 @@ public sealed class DeployScriptTests : IDisposable
                 echo "$status" ;;
             esac
             """);
+        // Docker and the .NET SDK, for scripts/web-models.sh (S-056): the build records its context's files.
+        WriteStub("docker", """
+            echo "docker $*" >> "$CALLS"
+            case "$1 $2" in
+              "image inspect"*) echo "mcr.microsoft.com/dotnet/aspnet@sha256:0123abcd" ;;
+              build*)
+                for last; do :; done
+                ls "$last/models" > "$CALLS.context" ;;
+            esac
+            """);
+        WriteStub("dotnet", """
+            echo "dotnet $*" >> "$CALLS"
+            if [ "$STUB_DOWNLOAD" = "FAIL" ]; then
+              echo "clip-vit-b32-text: SHA-256 differs" >&2
+              exit 1
+            fi
+            """);
+        Directory.CreateDirectory(Models);
+        File.WriteAllText(Path.Combine(Models, "clip-vit-b32-text.onnx"), "model");
+        File.WriteAllText(Path.Combine(Models, "clip-bpe-simple-vocab-16e6.txt.gz"), "merges");
     }
 
     public void Dispose() => Directory.Delete(_stubs, recursive: true);
@@ -99,6 +125,12 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Equal(
             [
                 "azd provision --no-prompt",
+                // The web's base image with the CLIP text model (S-056), already in the registry here: before the
+                // queue is paused and the schema changes, so a failure there leaves everything as it was.
+                "az acr login --name sepiaboxacr",
+                "docker pull --quiet mcr.microsoft.com/dotnet/aspnet:10.0",
+                "docker image inspect --format {{index .RepoDigests 0}} mcr.microsoft.com/dotnet/aspnet:10.0",
+                $"az acr repository show --name sepiaboxacr --image sepiabox-web-models:{ModelsTag()} --output none",
                 // Nothing receives from the queue until the import jobs run the new image (D-063).
                 PauseQueue,
                 "azd deploy migrate --no-prompt",
@@ -116,6 +148,7 @@ public sealed class DeployScriptTests : IDisposable
                 && !call.StartsWith("az postgres", StringComparison.Ordinal)));
         // What azure.yaml's predeploy hook checks, so that only this script deploys.
         Assert.Equal(["1", "1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
+        Assert.Equal($"web sepiaboxacr.azurecr.io/sepiabox-web-models:{ModelsTag()}", File.ReadAllLines(_calls + ".base")[^1]);
         Assert.Contains("Migrations applied.", result.Output, StringComparison.Ordinal);
     }
 
@@ -243,6 +276,16 @@ public sealed class DeployScriptTests : IDisposable
     }
 
     [UnixFact]
+    public async Task Deploy_refuses_to_start_when_sepiabox_registry_is_set()
+    {
+        var result = await RunDeployAsync("Succeeded", registry: "localhost:5000");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("SEPIABOX_REGISTRY", result.Error, StringComparison.Ordinal);
+        Assert.Empty(Calls());
+    }
+
+    [UnixFact]
     public async Task Deploy_leaves_the_web_alone_when_the_job_start_returns_no_execution()
     {
         var result = await RunDeployAsync("Succeeded", execution: "");
@@ -332,6 +375,121 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Equal(expected, result.ExitCode);
     }
 
+    [UnixFact]
+    public async Task Web_models_image_is_built_from_the_verified_files_and_pushed_when_the_registry_lacks_it()
+    {
+        var result = await RunWebModelsAsync(image: "MISSING");
+
+        Assert.Equal(0, result.ExitCode);
+        var image = $"sepiaboxacr.azurecr.io/sepiabox-web-models:{ModelsTag()}";
+        Assert.Equal(image, result.Output.Trim());
+        Assert.Contains(
+            $"dotnet run --project src/Sepiabox.Ingest --configuration Release -- models download --models {Models} --only clip-vit-b32-text,clip-bpe-vocab",
+            Calls());
+        Assert.Contains(
+            Calls(),
+            call => call.StartsWith(
+                $"docker build --platform linux/amd64 --provenance=false --sbom=false --build-arg BASE_IMAGE=mcr.microsoft.com/dotnet/aspnet@sha256:0123abcd --file infra/web-models/Dockerfile --tag {image} ",
+                StringComparison.Ordinal));
+        Assert.Equal($"docker push --quiet {image}", Calls()[^1]);
+        // Exactly the two files the web reads and the list that pins them.
+        Assert.Equal(
+            ["clip-bpe-simple-vocab-16e6.txt.gz", "clip-vit-b32-text.onnx", "models.json"],
+            File.ReadAllLines(_calls + ".context").Order(StringComparer.Ordinal));
+    }
+
+    [UnixFact]
+    public async Task Web_models_image_is_reused_without_a_download_when_the_registry_has_it()
+    {
+        var result = await RunWebModelsAsync(image: "PRESENT");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal($"sepiaboxacr.azurecr.io/sepiabox-web-models:{ModelsTag()}", result.Output.Trim());
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("dotnet", StringComparison.Ordinal) || call.StartsWith("docker build", StringComparison.Ordinal));
+    }
+
+    [UnixFact]
+    public async Task Web_models_image_is_not_built_when_a_download_does_not_verify()
+    {
+        var result = await RunWebModelsAsync(image: "MISSING", download: "FAIL");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("docker build", StringComparison.Ordinal) || call.StartsWith("docker push", StringComparison.Ordinal));
+    }
+
+    [UnixFact]
+    public async Task Deploy_stops_before_touching_the_queue_or_the_schema_when_the_models_image_cannot_be_built()
+    {
+        var result = await RunDeployAsync("Succeeded", modelsImage: "MISSING", download: "FAIL");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("azd deploy", StringComparison.Ordinal));
+        Assert.DoesNotContain(PauseQueue, Calls());
+    }
+
+    [UnixFact]
+    public async Task Web_models_tag_is_the_same_for_a_models_json_checked_out_with_crlf()
+    {
+        // A copy of the script beside a models.json with Windows line ends, as a checkout with core.autocrlf gives.
+        var root = Path.Combine(_stubs, "crlf-checkout");
+        Directory.CreateDirectory(Path.Combine(root, "scripts"));
+        Directory.CreateDirectory(Path.Combine(root, "models"));
+        File.Copy(Path.Combine(Repository.Root, "scripts", "web-models.sh"), Path.Combine(root, "scripts", "web-models.sh"));
+        var lf = File.ReadAllText(Path.Combine(Repository.Root, "models", "models.json"));
+        Assert.DoesNotContain('\r', lf);
+        File.WriteAllText(Path.Combine(root, "models", "models.json"), lf.Replace("\n", "\r\n", StringComparison.Ordinal));
+
+        var result = await RunWebModelsAsync(image: "PRESENT", script: Path.Combine(root, "scripts", "web-models.sh"));
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal($"sepiaboxacr.azurecr.io/sepiabox-web-models:{ModelsTag()}", result.Output.Trim());
+    }
+
+    [UnixFact]
+    public async Task Web_models_uses_the_ingest_s_default_folder_without_sepiabox_models()
+    {
+        var home = Path.Combine(_stubs, "home");
+        Directory.CreateDirectory(Path.Combine(home, ".sepiabox", "models"));
+        foreach (var file in Directory.GetFiles(Models))
+        {
+            File.Copy(file, Path.Combine(home, ".sepiabox", "models", Path.GetFileName(file)));
+        }
+
+        var result = await RunWebModelsAsync(image: "MISSING", models: null, home: home);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains(Calls(), call => call.Contains($"--models {Path.Combine(home, ".sepiabox", "models")} ", StringComparison.Ordinal));
+    }
+
+    // The tag the script gives: the first 16 hex digits of the SHA-256 of models.json followed by the base digest.
+    private static string ModelsTag()
+    {
+        var bytes = File.ReadAllBytes(Path.Combine(Repository.Root, "models", "models.json"))
+            .Concat(System.Text.Encoding.UTF8.GetBytes("mcr.microsoft.com/dotnet/aspnet@sha256:0123abcd"))
+            .ToArray();
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes))[..16];
+    }
+
+    private Task<ProcessResult> RunWebModelsAsync(
+        string image, string download = "", string? script = null, string? models = "default", string? home = null)
+    {
+        var environment = new Dictionary<string, string>
+        {
+            ["PATH"] = _stubs + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
+            ["CALLS"] = _calls,
+            ["STUB_MODELS_IMAGE"] = image,
+            ["STUB_DOWNLOAD"] = download,
+            ["SEPIABOX_MODELS"] = models == "default" ? Models : "",
+            ["LOCALAPPDATA"] = "",
+        };
+        if (home is not null)
+        {
+            environment["HOME"] = home;
+        }
+
+        return RunAsync("bash", [script ?? Path.Combine(Repository.Root, "scripts", "web-models.sh")], environment);
+    }
+
     private Task<ProcessResult> RunDeployAsync(
         string statuses,
         string environmentName = "sepiabox",
@@ -342,9 +500,13 @@ public sealed class DeployScriptTests : IDisposable
         string execution = "sepiabox-migrate-run1",
         string stop = "",
         string failingDeploy = "",
-        string resume = "") =>
+        string resume = "",
+        string modelsImage = "PRESENT",
+        string download = "",
+        string registry = "") =>
         RunAsync("bash", [Path.Combine(Repository.Root, "scripts", "deploy.sh")], new()
         {
+            ["SEPIABOX_REGISTRY"] = registry,
             ["PATH"] = _stubs + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
             ["CALLS"] = _calls,
             ["STUB_STATUSES"] = statuses,
@@ -356,6 +518,9 @@ public sealed class DeployScriptTests : IDisposable
             ["STUB_STOP"] = stop,
             ["STUB_FAILING_DEPLOY"] = failingDeploy,
             ["STUB_RESUME"] = resume,
+            ["SEPIABOX_MODELS"] = Models,
+            ["STUB_MODELS_IMAGE"] = modelsImage,
+            ["STUB_DOWNLOAD"] = download,
             ["SEPIABOX_MIGRATE_TIMEOUT_SECONDS"] = timeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["SEPIABOX_MIGRATE_POLL_SECONDS"] = "0.1",
         });
