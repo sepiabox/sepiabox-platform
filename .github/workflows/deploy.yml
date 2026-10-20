@@ -134,6 +134,12 @@ jobs:
               echo "::error::Set the $name secret of the production environment (docs/operations.md)."
               exit 1
             fi
+            # azd keeps generated secure parameters in a local vault and writes only a reference to
+            # config.json; a runner has no such vault, and azd panics resolving it.
+            if [[ "${!name}" == vault://* ]]; then
+              echo "::error::The $name secret holds an azd vault reference, not the value: set it from Key Vault (docs/operations.md)."
+              exit 1
+            fi
           done
           # The domain goes into AllowedHosts, where a ";" or "*" would let any host in: a plain host name only.
           domain="${CUSTOM_DOMAIN,,}"
