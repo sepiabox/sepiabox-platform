@@ -90,7 +90,9 @@ public sealed class SearchService(
         }
 
         var vector = embedder.Embed(visual.Text);
-        var ranked = PgvectorSimilarity.Rank(db, Filtered(query), vector, visual.EffectiveMinScore);
+        // With other filters, every candidate is ranked exactly: an index walk can miss what the filters keep (D-070).
+        var filtered = !(query.Filters with { Visual = null }).IsEmpty;
+        var ranked = PgvectorSimilarity.Rank(db, Filtered(query), vector, visual.EffectiveMinScore, exact: filtered);
         // One transaction, so the index setting applies to this query only and leaves the pooled connection as it was.
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await PgvectorSimilarity.PrepareAsync(db, cancellationToken);

@@ -80,6 +80,47 @@ public sealed class ClipTokenizerTests
         Assert.Equal(FirstMerge + 1, ids[^2]);
     }
 
+    [Theory]
+    [InlineData("don\u2019t \u2018x\u201B \u201Ca\u201D \u201Eb\u201F", "don't 'x' \"a\" \"b\"")]
+    [InlineData("\uFB01ne \uFB00 \uFB06", "fine ff st")]
+    [InlineData("\uFF22\uFF45\uFF41\uFF43\uFF48\uFF01", "beach!")]
+    [InlineData("cafe\u0301", "caf\u00E9")]
+    [InlineData("a\u001Cb\u001Fc\t\nd", "a b c d")]
+    [InlineData("&amp;lt;b&amp;gt;", "<b>")]
+    public void Cleans_text_as_ftfy_and_clip_do_before_splitting(string text, string expected)
+    {
+        Assert.Equal(expected, ClipTokenizer.Clean(text));
+    }
+
+    [Fact]
+    public void Keeps_its_word_memory_under_the_cap()
+    {
+        var tokenizer = Tokenizer("c a");
+        var before = tokenizer.Encode("cat");
+
+        for (var i = 0; i < ClipTokenizer.MaxCachedWords + 50; i++)
+        {
+            tokenizer.Encode(Letters(i));
+        }
+
+        Assert.InRange(tokenizer.CachedWords, 1, ClipTokenizer.MaxCachedWords);
+        Assert.Equal(before, tokenizer.Encode("cat"));
+    }
+
+    // A distinct word of letters only for each number, so every one is a new entry.
+    private static string Letters(int n)
+    {
+        var word = string.Empty;
+        do
+        {
+            word += (char)('a' + (n % 26));
+            n /= 26;
+        }
+        while (n > 0);
+
+        return word + "z";
+    }
+
     [Fact]
     public void Refuses_a_merges_file_with_a_malformed_line()
     {

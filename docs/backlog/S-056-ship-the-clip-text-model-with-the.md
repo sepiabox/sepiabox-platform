@@ -25,6 +25,7 @@ Search by description (S-016) needs the CLIP text model (~250 MB, `onnx/text_mod
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), when the first description search runs after a cold start, then it answers within 30 s and later ones within 2 s.
 
 ### Technical notes
+- Follow-ups from the S-016 review: warm the model at start-up in Production (load it, and embed one short text, before the web reports ready) so the first description search after a cold start does not pay for loading; measure the web's memory after the model is loaded and before raising or keeping 1 GiB.
 - Registry growth is capped by S-034's `acr purge --keep 5`; the shared model layer is stored once.
 - Decisions: D-016, D-027, D-038, D-044, D-055.
 

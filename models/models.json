@@ -10,6 +10,15 @@
       "source": "Xenova/clip-vit-base-patch32 (ONNX export of openai/clip-vit-base-patch32)"
     },
     {
+      "name": "clip-vit-b32-text",
+      "file": "clip-vit-b32-text.onnx",
+      "url": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/onnx/text_model.onnx",
+      "revision": "d15189d7028b43f1d3e65039190477f6af591c2a",
+      "sha256": "3f6571f5bad13a97c469c1622e1cfc4d9aef78b79fdbfcff804ca357bfada8cc",
+      "license": "MIT",
+      "source": "Xenova/clip-vit-base-patch32 (ONNX export of openai/clip-vit-base-patch32), text encoder"
+    },
+    {
       "name": "clip-bpe-vocab",
       "file": "clip-bpe-simple-vocab-16e6.txt.gz",
       "url": "https://raw.githubusercontent.com/openai/CLIP/dcba3cb2e2827b402d2701e7e1c7d9fed8a20ef1/clip/bpe_simple_vocab_16e6.txt.gz",

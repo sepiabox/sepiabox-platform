@@ -9,7 +9,7 @@ namespace Sepiabox.Search.Clip;
 /// <c>process</c> stores (D-016), so a description can be compared with every photo by cosine similarity.
 /// One instance per process: ONNX Runtime sessions are expensive to create and safe to share.
 /// </summary>
-public sealed class ClipTextEncoder : IDisposable
+public sealed class ClipTextEncoder : ITextEncoder
 {
     public const int Dimensions = 512;
 
@@ -42,16 +42,36 @@ public sealed class ClipTextEncoder : IDisposable
     /// The text encoder from <paramref name="modelFolder"/>, or null with a warning that says why: a file is not pinned,
     /// missing, or not the pinned one, or ONNX Runtime cannot load it. Never throws for any of those.
     /// </summary>
-    public static ClipTextEncoder? TryCreate(string modelFolder, out string? warning)
+    public static ClipTextEncoder? TryCreate(string modelFolder, out string? warning) => TryCreate(modelFolder, out warning, out _);
+
+    /// <summary>As the other overload, also saying what kind of failure it was, so a caller can try again after one that may pass.</summary>
+    public static ClipTextEncoder? TryCreate(string modelFolder, out string? warning, out ClipLoadFailure failure)
     {
         const string Consequence = "so search by description is off";
         const string Remedy = "Run `sepiabox-ingest models download`, then restart.";
         if (ModelCatalog.Find(ModelCatalog.ClipText) is not { } textModel || ModelCatalog.Find(ModelCatalog.ClipBpe) is not { } bpe)
         {
+            failure = ClipLoadFailure.NotPinned;
             warning = $"models.json does not pin the CLIP text model and its tokenizer, {Consequence}.";
             return null;
         }
 
+        if (!FilesPresent(modelFolder))
+        {
+            failure = ClipLoadFailure.Missing;
+            warning = $"The CLIP text model or its tokenizer is not in {modelFolder}, {Consequence}. {Remedy}";
+            return null;
+        }
+
+        // A file that cannot be opened now (locked, a share that is not mounted yet) may open later.
+        if ((Unreadable(ModelFolder.PathOf(modelFolder, textModel)) ?? Unreadable(ModelFolder.PathOf(modelFolder, bpe))) is { } problem)
+        {
+            failure = ClipLoadFailure.Unreadable;
+            warning = $"{problem}, {Consequence}.";
+            return null;
+        }
+
+        failure = ClipLoadFailure.Invalid;
         if (TryLoadTokenizer(modelFolder, bpe, Consequence, Remedy, out warning) is not { } tokenizer)
         {
             return null;
@@ -59,7 +79,26 @@ public sealed class ClipTextEncoder : IDisposable
 
         var session = ModelSession.TryOpen(
             modelFolder, textModel, "The CLIP text model", Consequence, Remedy, [new ModelInput(InputIds)], [OutputName], out warning);
-        return session is null ? null : new ClipTextEncoder(session, tokenizer);
+        if (session is null)
+        {
+            return null;
+        }
+
+        failure = ClipLoadFailure.None;
+        return new ClipTextEncoder(session, tokenizer);
+    }
+
+    private static string? Unreadable(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"Could not open {path} ({ex.Message})";
+        }
     }
 
     /// <summary>The tokenizer alone, verified against its pin; null with a warning otherwise.</summary>
@@ -141,4 +180,29 @@ public sealed class ClipTextEncoder : IDisposable
         warning = message;
         return null;
     }
+}
+
+/// <summary>A text encoder the web can swap for a fake in tests.</summary>
+public interface ITextEncoder : IDisposable
+{
+    /// <summary>The embedding of <paramref name="text"/>: L2-normalized.</summary>
+    float[] Encode(string text);
+}
+
+/// <summary>Why <see cref="ClipTextEncoder.TryCreate(string, out string?, out ClipLoadFailure)"/> gave no encoder.</summary>
+public enum ClipLoadFailure
+{
+    None,
+
+    /// <summary>models.json does not list the text model or the tokenizer.</summary>
+    NotPinned,
+
+    /// <summary>A file is not in the folder.</summary>
+    Missing,
+
+    /// <summary>A file is there but could not be opened; trying again later may work.</summary>
+    Unreadable,
+
+    /// <summary>A file is not the pinned one, or ONNX Runtime cannot use it: only new files fix that.</summary>
+    Invalid,
 }

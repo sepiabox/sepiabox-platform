@@ -18,7 +18,7 @@ The CLIP text encoder turns "snow" into a vector comparable with the photo embed
 
 ### Acceptance criteria
 - [x] Given "a photo of a cat", when I tokenize it, then I get `[49406, 320, 1125, 539, 320, 2368, 49407]` followed by padding.
-- [ ] Given a text, then the embedding has 512 values and norm 1. *(Test written; skipped until the CLIP text model is pinned in `models.json`, a human step in `docs/operations.md`, D-070.)*
+- [ ] Given a text, then the embedding has 512 values and norm 1. *(Pinned with the owner's SHA-256; verified by CI's integration job, which downloads the model, not in the agents' sandbox.)*
 - [x] Given assets with known synthetic embeddings, when I search with a vector close to one of them, then that one comes first.
 - [x] Given `visual` with `years=[2019]`, then only assets from 2019 come back, sorted by similarity.
 - [x] Given the web without the text model, when the timeline renders, then the description box is not shown and the other filters work.

@@ -54,25 +54,61 @@ public static class PgvectorSimilarity
     /// <paramref name="assets"/> that have an embedding at least <paramref name="minScore"/> similar to
     /// <paramref name="embedding"/>, most similar first. Assets without an embedding never match.
     /// </summary>
-    public static IQueryable<ScoredAsset> Rank(CatalogDbContext db, IQueryable<Asset> assets, float[] embedding, double minScore)
+    /// <param name="db">The catalog, for the embeddings.</param>
+    /// <param name="assets">The candidates, already filtered.</param>
+    /// <param name="embedding">The description's embedding, L2-normalized.</param>
+    /// <param name="minScore">The least cosine similarity kept.</param>
+    /// <param name="exact">
+    /// Order by the exact distance of every candidate, never through the HNSW index. For a search with other filters:
+    /// the index walk can miss matches the filters keep, even with an iterative scan, because an HNSW graph does not
+    /// reach every point from the others (D-070).
+    /// </param>
+    public static IQueryable<ScoredAsset> Rank(CatalogDbContext db, IQueryable<Asset> assets, float[] embedding, double minScore, bool exact = false)
     {
         ArgumentNullException.ThrowIfNull(db);
         var vector = new Vector(embedding);
         var maxDistance = 1 - minScore;
-        return assets
+        var scored = assets
             .Join(
                 db.AssetEmbeddings.Where(e => e.Model == ModelKey),
                 a => a.Id,
                 e => e.AssetId,
                 (a, e) => new ScoredAsset { Asset = a, Distance = e.Embedding.CosineDistance(vector) })
-            .Where(s => s.Distance <= maxDistance)
-            .OrderBy(s => s.Distance);
+            .Where(s => s.Distance <= maxDistance);
+        // The index serves only ORDER BY the distance expression itself; adding zero keeps the order and rules it out.
+        // The id only breaks ties, so equal distances come back in the same order every time.
+        return exact
+            ? scored.OrderBy(s => s.Distance + 0.0).ThenBy(s => s.Asset.Id)
+            : scored.OrderBy(s => s.Distance).ThenBy(s => s.Asset.Id);
     }
 
-    /// <summary>Applies <see cref="EfSearch"/> to the current transaction; call inside one.</summary>
-    public static Task PrepareAsync(CatalogDbContext db, CancellationToken cancellationToken)
+    /// <summary>The first pgvector version with iterative index scans (<c>hnsw.iterative_scan</c>).</summary>
+    public static readonly Version MinimumVersion = new(0, 8, 0);
+
+    /// <summary>
+    /// Sets the index scan for the current transaction (call inside one): <see cref="EfSearch"/> candidates, and an
+    /// iterative scan in strict distance order, so filters applied after the index (a year, a city) still find every
+    /// match instead of only those among the first candidates. Before pgvector 0.8 there is no iterative scan, and a
+    /// filtered search could silently miss photos: it is refused with <see cref="VisualSearchUnavailableException"/>.
+    /// </summary>
+    public static async Task PrepareAsync(CatalogDbContext db, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Database.ExecuteSqlRawAsync($"SET LOCAL hnsw.ef_search = {EfSearch}", cancellationToken);
+        var installed = await db.Database
+            .SqlQuery<string>($"SELECT extversion AS \"Value\" FROM pg_extension WHERE extname = 'vector'")
+            .SingleOrDefaultAsync(cancellationToken);
+        if (!SupportsIterativeScan(installed))
+        {
+            throw new VisualSearchUnavailableException(
+                $"Search by description needs pgvector {MinimumVersion} or later; the catalog has {installed ?? "none"}.");
+        }
+
+        await db.Database.ExecuteSqlRawAsync(
+            $"SET LOCAL hnsw.ef_search = {EfSearch}; SET LOCAL hnsw.iterative_scan = strict_order", cancellationToken);
     }
+
+    /// <summary>True for pgvector 0.8.0 and later ("0.8.0", "0.8.1", "1.0.0").</summary>
+    public static bool SupportsIterativeScan(string? extensionVersion) =>
+        Version.TryParse(extensionVersion, out var version)
+        && new Version(version.Major, version.Minor, Math.Max(version.Build, 0)) >= MinimumVersion;
 }

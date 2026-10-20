@@ -29,6 +29,9 @@ public sealed partial class ClipTokenizer
 
     private readonly Dictionary<string, int> _ids;
     private readonly Dictionary<(string, string), int> _ranks;
+    /// <summary>Words remembered with their ids; past this many the memory starts again, so a long-running web stays small.</summary>
+    internal const int MaxCachedWords = 10_000;
+
     private readonly ConcurrentDictionary<string, int[]> _cache = new(StringComparer.Ordinal);
 
     private readonly int _start;
@@ -99,7 +102,17 @@ public sealed partial class ClipTokenizer
         foreach (Match token in Pattern().Matches(Clean(text)))
         {
             var symbols = string.Concat(Encoding.UTF8.GetBytes(token.Value).Select(b => s_bytes.ByByte[b]));
-            ids.AddRange(_cache.GetOrAdd(symbols, Bpe));
+            if (!_cache.TryGetValue(symbols, out var word))
+            {
+                if (_cache.Count >= MaxCachedWords)
+                {
+                    _cache.Clear();
+                }
+
+                word = _cache.GetOrAdd(symbols, Bpe);
+            }
+
+            ids.AddRange(word);
         }
 
         ids.Add(_end);
@@ -128,10 +141,38 @@ public sealed partial class ClipTokenizer
         return padded;
     }
 
-    // ftfy's repairs are left out: the text is typed by a person or written by the translator, not scraped.
-    private static string Clean(string text)
+    // U+FB00 to U+FB06: ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ.
+    private static readonly string[] s_ligatures = ["ff", "fi", "fl", "ffi", "ffl", "st", "st"];
+
+    internal int CachedWords => _cache.Count;
+
+    /// <summary>
+    /// The parts of <c>ftfy.fix_text</c>, which CLIP's text went through, that typed text needs: curly quotes become
+    /// straight ones (phones type them by default), Latin ligatures and full-width forms become plain letters, and
+    /// the text is composed (NFC). Then, as OpenAI's tokenizer: HTML unescaped twice, white space collapsed, lower case.
+    /// </summary>
+    internal static string Clean(string text)
     {
-        var unescaped = WebUtility.HtmlDecode(WebUtility.HtmlDecode(text));
+        var straight = new StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            straight.Append(c switch
+            {
+                '\u2018' or '\u2019' or '\u201A' or '\u201B' => "'",
+                '\u201C' or '\u201D' or '\u201E' or '\u201F' => "\"",
+                // Latin ligatures and full-width ASCII forms, as NFKC maps them (ftfy's fixes); written out, since
+                // a process without ICU (InvariantGlobalization) cannot normalize.
+                >= '\uFB00' and <= '\uFB06' => s_ligatures[c - '\uFB00'],
+                >= '\uFF01' and <= '\uFF5E' => ((char)(c - 0xFEE0)).ToString(),
+                _ => c.ToString(),
+            });
+        }
+
+        // Composing needs ICU, which the web has (D-058); without it the text stays as typed.
+        var composed = straight.ToString().Normalize(NormalizationForm.FormC);
+        var unescaped = WebUtility.HtmlDecode(WebUtility.HtmlDecode(composed));
+        // Simple case mapping: "İ" and a word-final "Σ" lower-case differently from Python's full mapping ("i̇", "ς");
+        // typed descriptions in English (D-017) do not meet them.
         return Whitespace().Replace(unescaped, " ").Trim().ToLowerInvariant();
     }
 
@@ -214,6 +255,7 @@ public sealed partial class ClipTokenizer
     [GeneratedRegex(@"<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Pattern();
 
-    [GeneratedRegex(@"\s+")]
+    // Python's \s also counts the separators U+001C–U+001F as white space.
+    [GeneratedRegex(@"[\s\x1C-\x1F]+")]
     private static partial Regex Whitespace();
 }
