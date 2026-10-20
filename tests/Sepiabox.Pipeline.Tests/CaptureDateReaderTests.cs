@@ -21,5 +21,15 @@ public class CaptureDateReaderTests
         Assert.Null(CaptureDateReader.TryRead(path));
     }
 
+    [Fact]
+    public void Returns_the_date_as_written_when_the_camera_clock_was_reset()
+    {
+        using var folder = new TempFolder();
+        var path = folder.Write("reset.jpg", TestPhotos.Taken("1980:01:01 00:00:00"));
+
+        // Plausibility is decided with the path fallback, in CaptureDate.Resolve (D-046).
+        Assert.Equal(new DateTime(1980, 1, 1), CaptureDateReader.TryRead(path));
+    }
+
     private static string TestData(string name) => Path.Combine(AppContext.BaseDirectory, "TestData", name);
 }

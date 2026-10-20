@@ -24,6 +24,16 @@ internal static class TestPhotos
         return image.ToByteArray(MagickFormat.Jpeg);
     }
 
+    /// <summary>A 64×48 JPEG whose EXIF says it was taken at <paramref name="dateTimeOriginal"/> ("yyyy:MM:dd HH:mm:ss").</summary>
+    public static byte[] Taken(string dateTimeOriginal, string color = "khaki")
+    {
+        using var image = new MagickImage(new MagickColor(color), 64, 48);
+        var exif = new ExifProfile();
+        exif.SetValue(ExifTag.DateTimeOriginal, dateTimeOriginal);
+        image.SetProfile(exif);
+        return image.ToByteArray(MagickFormat.Jpeg);
+    }
+
     /// <summary>A solid-colour JPEG of the given size, optionally with an EXIF orientation (6 = rotate 90° clockwise).</summary>
     public static byte[] Sized(int width, int height, ushort? orientation = null)
     {
