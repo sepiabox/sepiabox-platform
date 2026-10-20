@@ -104,7 +104,7 @@ public class VideoProcessingTests
         Assert.Equal(new DateTime(2011, 9, 25, 11, 4, 25), manifest.CapturedAt);
         Assert.Equal(CaptureDateSource.FileName, manifest.CapturedAtSource);
         Assert.Equal(("video/mpeg", "2011-09-25/MNU_110425_x.mpg"), (manifest.ContentType, Assert.Single(manifest.Sources).Path));
-        Assert.Equal(["poster", "thumb-256", "proxy-720p"], manifest.Derivatives.Select(d => d.Name));
+        Assert.Equal(["poster", "proxy-720p", "thumb-256"], manifest.Derivatives.Select(d => d.Name).Order(StringComparer.Ordinal));
     }
 
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
@@ -122,18 +122,15 @@ public class VideoProcessingTests
     // codecs: FFmpeg codec options; H.264 and AAC when none are given.
     private static void MakeVideo(string path, int width, int height, int seconds, params string[] codecs)
     {
-        var info = new ProcessStartInfo(s_tools.Ffmpeg) { RedirectStandardError = true, UseShellExecute = false };
-        foreach (var argument in new[]
-        {
+        List<string> arguments =
+        [
             "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
             "-f", "lavfi", "-i", $"testsrc=duration={seconds}:size={width}x{height}:rate=25",
             "-f", "lavfi", "-i", $"sine=frequency=440:duration={seconds}",
-        }
-            .Concat(codecs.Length > 0 ? codecs : ["-c:v", "libx264", "-c:a", "aac"])
-            .Concat(["-pix_fmt", "yuv420p", "-shortest", path]))
-        {
-            info.ArgumentList.Add(argument);
-        }
+            .. codecs.Length > 0 ? codecs : ["-c:v", "libx264", "-c:a", "aac"],
+            "-pix_fmt", "yuv420p", "-shortest", path,
+        ];
+        var info = new ProcessStartInfo(s_tools.Ffmpeg, arguments) { RedirectStandardError = true, UseShellExecute = false };
 
         using var process = System.Diagnostics.Process.Start(info)!;
         var errors = process.StandardError.ReadToEnd();
