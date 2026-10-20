@@ -1,6 +1,6 @@
 ## S-040 — Export all data
 **Epic:** Privacy
-**Depends on:** S-020, S-010
+**Depends on:** S-020, S-010, S-051
 **Priority:** Medium
 **Size:** S
 
@@ -21,7 +21,7 @@
 - [ ] Given `originals.txt`, then each SAS expires in ≤ 24 h.
 
 ### Technical notes
-- `System.IO.Compression.ZipArchive` streaming to the blob.
+- `System.IO.Compression.ZipArchive` streaming to the blob through `IBlobStore`'s staged upload, and the links from its signed read URL (D-051, S-050), not the Blob SDK directly.
 
 ### Expected tests
 - Integration (Azurite + PostgreSQL): zip contents and expirations.

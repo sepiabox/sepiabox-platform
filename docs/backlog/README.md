@@ -91,8 +91,10 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-029 | [Protect the budget with alerts](S-029-protect-the-budget-with-alerts.md) | Cloud and costs | — | High | S | `done` |
 | S-030 | [Shut everything down automatically at €45](S-030-shut-everything-down-automatically-at-45.md) | Cloud and costs | S-029 | High | M | `done` |
 | S-031 | [Restrict resource types and cap logging](S-031-restrict-resource-types-and-cap-logging.md) | Cloud and costs | S-029 | High | S | `done` |
+| S-050 | [Put blob storage behind the project's own interface](S-050-put-blob-storage-behind-the-project-s.md) | Foundation | S-007, S-008, S-009 | High | M | `todo` |
+| S-051 | [Upload originals through the storage interface](S-051-upload-originals-through-the-storage-interface.md) | Foundation | S-050 | Medium | M | `todo` |
 | S-032 | [Publish the app to Azure with azd](S-032-publish-the-app-to-azure-with-azd.md) | Cloud and costs | S-010, S-031 | High | M | `todo` |
-| S-033 | [Import manifests automatically when they arrive](S-033-import-manifests-automatically-when-they-arrive.md) | Cloud and costs | S-032, S-008 | High | M | `todo` |
+| S-033 | [Import manifests automatically when they arrive](S-033-import-manifests-automatically-when-they-arrive.md) | Cloud and costs | S-032, S-008, S-050 | High | M | `todo` |
 | S-034 | [Deploy from GitHub Actions with OIDC](S-034-deploy-from-github-actions-with-oidc.md) | Cloud and costs | S-032 | Medium | S | `todo` |
 | S-035 | [Serve the app at app.sepiabox.com](S-035-serve-the-app-at-app-sepiabox-com.md) | Cloud and costs | S-032 | Low | S | `todo` |
 
@@ -106,7 +108,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-037 | [Connect a Google Drive account](S-037-connect-a-google-drive-account.md) | Cloud sources | S-010 | Medium | M | `todo` |
 | S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036 | Medium | M | `todo` |
 | S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010 | Medium | M | `todo` |
-| S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010 | Medium | S | `todo` |
+| S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010, S-051 | Medium | S | `todo` |
 | S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `todo` |
 | S-042 | [Publish the showcase site at sepiabox.com](S-042-publish-the-showcase-site-at-sepiabox-com.md) | Site | — | Low | S | `done` |
 
@@ -114,7 +116,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 | Epic | Stories |
 |---|---|
-| Foundation | S-001, S-003 |
+| Foundation | S-001, S-003, S-050, S-051 |
 | Local ingest | S-002, S-004, S-005, S-006, S-007, S-043 |
 | Cloud catalog | S-008, S-012 |
 | Web app | S-009, S-010, S-011, S-044 |
@@ -149,7 +151,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | Per-user encryption (crypto-shredding) | Only needed for the multi-family product; two users in a shared library (D-018). |
 | Business plan, pricing and billing | Lives in the private `sepiabox-planning` repository; there is no sellable product in v1. |
 | Outlined wordmark and site waiting list | Needs a design tool / a backend; the S-042 site uses the symbol and the name as text, with no form. |
-| Human steps (subscription, OIDC, OAuth clients, DNS, Foundry) | Cannot be automated; listed in [`operations.md`](../operations.md) and referenced by the stories that depend on them. |
+| Human steps (subscription, OIDC, OAuth clients, DNS, Anthropic API key) | Cannot be automated; listed in [`operations.md`](../operations.md) and referenced by the stories that depend on them. |
 
 ## Summary
 

@@ -61,7 +61,7 @@ Documentation:
 - ONNX Runtime for faces and CLIP embeddings, FFmpeg and Magick.NET for media
 - PostgreSQL with pgvector and PostGIS
 - Azure: Container Apps, Blob Storage, Service Bus, Event Grid, Key Vault
-- Claude Haiku (via Microsoft Foundry) turns free-text questions into filters; it only receives the question text, never the photos
+- Claude Haiku (through the Anthropic API) turns free-text questions into filters; it only receives the question text, never the photos
 - .NET Aspire for local development
 
 ## Privacy principles

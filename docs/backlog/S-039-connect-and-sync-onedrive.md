@@ -22,6 +22,7 @@ The same as Google Drive, for personal Microsoft accounts, via Microsoft Graph.
 
 ### Technical notes
 - `Microsoft.Graph` package. `IOneDriveClient` interface for tests.
+- Portability (D-051): write to `incoming` through `IBlobStore` (S-050).
 
 ### Expected tests
 - Integration with a fake client.

@@ -24,6 +24,7 @@ Many of the family's photos are in Google Drive. First step: connect the account
 
 ### Technical notes
 - `Google.Apis.Drive.v3` package. `IDriveClient` interface for tests.
+- Portability (D-051): Data Protection's key storage is configured in `Program.cs` (S-032); the token code depends only on `IDataProtector`.
 - Decisions: D-024.
 
 ### Expected tests

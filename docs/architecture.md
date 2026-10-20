@@ -26,7 +26,7 @@ PC with the drive ──sepiabox-ingest──► Blob Storage ──Event Grid�
                                                                                                                             │ SQL + kNN
 Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsoft sign-in + access list ──────────────────────────────────┘
                        │
-                       └── question text ──► Claude Haiku 5.5 (Microsoft Foundry) ──► filters (JSON DSL)
+                       └── question text ──► Claude Haiku 5.5 (Anthropic API) ──► filters (JSON DSL)
 ```
 
 ## Components (.NET 10)
@@ -36,6 +36,7 @@ Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsof
 | `Sepiabox.Pipeline` | library | Processing stages: classification, hashing, metadata, thumbnails, video, embeddings, faces. Does not know where a file comes from. |
 | `Sepiabox.Ingest` (`sepiabox-ingest`) | user's PC | `scan`, `process`, `upload`, `models download`. Processes the drive locally and uploads only what is new. |
 | `Sepiabox.Catalog` | library | EF Core + Npgsql: schema, migrations, queries. |
+| `Sepiabox.Storage` | library | The project's storage and queue interfaces (`IBlobStore`, `IBlobEventQueue`), `BlobLayout`, and their Azure implementations (D-051, from S-050). |
 | `Sepiabox.Worker` (`sepiabox-worker`) | Container Apps job | Imports manifests, processes files that arrive through the cloud, groups events, syncs cloud sources. |
 | `Sepiabox.Web` | Container Apps | Blazor (interactive server): sign-in, timeline, search, people, occasions, questions. |
 | `Sepiabox.AppHost` / `Sepiabox.ServiceDefaults` | PC (dev) / azd | .NET Aspire: local environment (PostgreSQL + Azurite) and infrastructure description for `azd`. |
@@ -65,7 +66,7 @@ Originals are **never re-read** in the cloud during local ingest (reading the Co
 
 All search goes through a **JSON DSL** (`docs/schemas/search.v1.json`): filters for time, place, people, source, kind, occasion, visual similarity and aggregations. The filter UI and the question translator produce the same DSL; a single service executes it (SQL + kNN in pgvector).
 
-Natural-language questions: the text (never the photos) goes to **Claude Haiku 5.5** (`claude-haiku-5-5`) on **Microsoft Foundry**, with *structured outputs* restricted to the DSL schema. Visual terms are translated to English (CLIP is English-only). Daily question limit per user.
+Natural-language questions: the text (never the photos) goes to **Claude Haiku 5.5** (`claude-haiku-5-5`) through the **Anthropic API** (D-052), with *structured outputs* restricted to the DSL schema. Visual terms are translated to English (CLIP is English-only). Daily question limit per user.
 
 ## Access and privacy
 
@@ -79,6 +80,7 @@ Natural-language questions: the text (never the photos) goes to **Claude Haiku 5
 - Container Apps (web scales to zero; worker as a job), PostgreSQL B1ms, Storage, Service Bus Basic, Event Grid, Key Vault, Application Insights with a daily cap, Container Registry Basic.
 - Safeguards (repository `sepiabox-infra`): €50 budget with alerts at €25/€40/forecast, anomaly alerts, automatic shutdown at €45, Azure Policy of allowed resource types, log cap.
 - Deploy: `azd` from the AppHost; GitHub Actions with OIDC (no secrets in the repository).
+- **Portability (D-051):** blob storage, queue and events, secrets and the LLM sit behind the project's own small interfaces; Azure (and the Anthropic API for Claude) is one implementation, wired in the composition roots, so any part can move.
 
 ## Repositories (organization `sepiabox`)
 

@@ -8,7 +8,7 @@
 The AppHost describes the infrastructure; `azd` provisions it in France Central with the cheap and secure settings already decided (D-002, D-003, D-004, D-022).
 
 ### Scope
-- AppHost for Azure: PostgreSQL Flexible B1ms Burstable, 32 GB, storage auto-grow off, PostgreSQL 17, extensions `vector` and `postgis` allowed (`azure.extensions`); Storage with containers `originals`, `derivatives`, `manifests`, `incoming`, `exports` and public access off; Container Apps environment; web with 0–1 scale and external ingress; Key Vault (OAuth secrets, `Access:Emails`, Foundry key); App Insights wired to the S-031 workspace; Container Registry Basic.
+- AppHost for Azure: PostgreSQL Flexible B1ms Burstable, 32 GB, storage auto-grow off, PostgreSQL 17, extensions `vector` and `postgis` allowed (`azure.extensions`); Storage with containers `originals`, `derivatives`, `manifests`, `incoming`, `exports` and public access off; Container Apps environment; web with 0–1 scale and external ingress; Key Vault (OAuth secrets, `Access:Emails`, the Anthropic API key `Anthropic--ApiKey`, D-052); App Insights wired to the S-031 workspace; Container Registry Basic.
 - Web managed identity: Storage Blob Data Contributor (user delegation SAS) and Key Vault Secrets User.
 - Database migrations in the cloud (D-034): a Container Apps job running `sepiabox-worker migrate` (manual trigger, replica timeout 10 min, no retries) with the catalog connection, run by the deploy before the new web revision receives traffic. The run-once `worker-migrate`/`worker-import` resources of the AppHost exist only in run mode and must stay out of publishing.
 - `azure.yaml`; deploy steps in `docs/operations.md`.
@@ -32,7 +32,8 @@ The AppHost describes the infrastructure; `azd` provisions it in France Central 
 - Human prerequisites in `docs/operations.md`.
 - The web signs blob links with a user delegation key (D-039): its managed identity needs *Storage Blob Data Reader* on the storage account. That role includes the user delegation key action, so *Storage Blob Delegator* is not added.
 - Sign-in (S-010, D-048): the web already reads `X-Forwarded-For` and `X-Forwarded-Proto` outside Development (never `X-Forwarded-Host`: the ingress keeps the browser's Host); set `AllowedHosts` to `app.sepiabox.com` and the Container Apps default host so no other Host reaches the app. S-032 also adds the data protection key ring (a blob in the storage account, a key in Key Vault; the web identity needs *Key Vault Crypto User* on that key and write access to that blob) and wires the sign-in secrets.
-- Decisions: D-002, D-003, D-004, D-022, D-034, D-048.
+- Portability (D-051): the web and the worker read secrets through `IConfiguration` (Key Vault added as a configuration source or as Container Apps secret references, in the composition root only); storage is registered as `IBlobStore` (S-050) with the Azure implementation. Data protection keys in Blob Storage and Key Vault are host wiring in `Program.cs`. No Foundry or Cognitive Services resource is created (D-052).
+- Decisions: D-002, D-003, D-004, D-022, D-034, D-048, D-051, D-052.
 
 ### Expected tests
 - A test that generates the infrastructure and checks the properties in the Bicep. Manual smoke test after deploy.

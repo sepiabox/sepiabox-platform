@@ -25,6 +25,7 @@ With the account connected, Drive photos appear alongside the HD ones, without d
 
 ### Technical notes
 - Container Apps Job cron in the AppHost.
+- Portability (D-051): write to `incoming` through `IBlobStore` (S-050), never the Blob SDK directly.
 - Sources are add-only (D-036): a file deleted or moved in Drive keeps its old source until a removal mechanism exists. If sync needs it, add a `removedAt` tombstone to `ManifestSource`, merged like `modifiedAt` (newer wins), and have the import mark the source as removed instead of deleting it.
 - Manifests written by the sync go through `ManifestStore.WriteMergedAsync` (D-036).
 - Decisions: D-023, D-024, D-036.

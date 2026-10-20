@@ -24,6 +24,7 @@ Files from cloud sources (Drive, OneDrive) arrive without the PC processing. The
 
 ### Technical notes
 - Reuse the stages from S-004/S-005/S-006/S-015.
+- Portability (D-051): read `incoming` and write `originals`, `derivatives` and manifests through `IBlobStore` (S-050), and receive work through `IBlobEventQueue` (S-033); no Azure SDK type outside `Sepiabox.Storage` and the composition root.
 - Apply the same "not a video" rules as `process` (D-045): `TrackerModule.IsTrackerModule` before probing, then `VideoProcessor.Probe`, whose `NoVideoStreamException.Reason` says why (no video stream after a second, longer probe in a file that does not look like MPEG, or cover art only). An MPEG-looking file without video is a `VideoProcessingException`, a problem, not left out. A left-out file gets no manifest; log it with the reason instead of failing the message.
 - Faces (D-047): the worker looks for them only when the library's face recognition setting from S-022 is on, which is off by default; use `FaceDetector` and `ManifestFaces` like `process --faces`, and write the manifest through `ManifestStore.WriteMergedAsync`. Like `process`, treat faces whose `facesVersion` (missing reads as 1) is older than `ManifestFaces.CurrentVersion` as not processed: detect again and replace them.
 - Decide `capturedAt` with `CaptureDate.Resolve` (Sepiabox.Pipeline), never from `MediaMetadata.RawCapturedAt` alone, and set `capturedAtSource` whenever `capturedAt` is set (D-046). The path given to it is the file's path in the cloud source.
