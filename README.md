@@ -1,6 +1,6 @@
 # Sepiabox
 
-**Ask your photos.** Sepiabox brings a family's photos and videos together from external drives, Google Photos, Google Drive, OneDrive and phones, understands each one once, and then finds any moment when you ask.
+**Ask your photos.** Sepiabox brings a family's photos and videos together from external drives, Google Photos, Apple Photos, Instagram, Facebook, Google Drive, OneDrive and phones, understands each one once, and then finds any moment when you ask.
 
 > "How many weddings did we go to this year?"
 > "Old photos of me with Fabio"

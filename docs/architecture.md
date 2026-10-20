@@ -4,7 +4,7 @@ Summary of the architecture chosen for the first version. Individual decisions, 
 
 ## The product
 
-Sepiabox brings a family's photos and videos together (external drive, Google Drive, OneDrive and, later, phones) in one place and finds any moment when you ask a question. Each file is interpreted **once, on arrival**; search only filters the stored metadata and never re-reads the photos.
+Sepiabox brings a family's photos and videos together (external drive first; after the MVP Google Drive, OneDrive and the exports of Google Photos, Apple Photos / iCloud, Instagram and Facebook; later, phones) in one place and finds any moment when you ask a question. Each file is interpreted **once, on arrival**; search only filters the stored metadata and never re-reads the photos.
 
 Examples of questions the system must answer (the app UI is English by default, with Brazilian Portuguese as the first translation, D-050; the family asks in Portuguese):
 
@@ -48,7 +48,7 @@ Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsof
 3. `sepiabox-ingest upload <workdir>`: uploads originals (**Cold** tier), derivatives (**Hot**) and, last, the manifest. Resumes where it stopped.
 4. In the cloud, each new manifest triggers the import (Event Grid filtered to the `manifests` container → queue → worker job, one execution at a time).
 
-Originals are **never re-read** in the cloud during local ingest (reading the Cold tier costs ~US$ 0.03/GB). Files that arrive through the cloud (Drive, OneDrive) go through the same pipeline in the worker.
+Originals are **never re-read** in the cloud during local ingest (reading the Cold tier costs ~US$ 0.03/GB). Files that arrive through the cloud (Drive, OneDrive) go through the same pipeline in the worker. Exports of Google Photos, Apple Photos / iCloud, Instagram and Facebook are extracted on the PC and read by `process --export <kind>`, which takes dates, places, captions and albums from the export's metadata files (D-053).
 
 ## Data
 
@@ -98,6 +98,6 @@ Colors: Sepia `#9A5A2C` (brand), Cyanotype `#1F4C74` (actions), Developer `#231A
 
 ## Phases
 
-- **MVP**: local drive → cloud, timeline, date/place filters, visual search, people, restricted sign-in, deploy with cost safeguards.
-- **Phase 2**: occasions and types, natural-language questions, Google Drive and OneDrive, organization (blurry photos, bursts), export.
+- **MVP** (Sprints 1–6 plus S-044, D-053): the external drive (local folders) is the only source → cloud, timeline, date/place filters, visual search, people, occasions and types, natural-language questions, organization (blurry photos, bursts), restricted sign-in, English and Brazilian Portuguese UI, deploy with cost safeguards.
+- **Phase 2** (after the MVP): Google Drive and OneDrive, full export, region search (Sprint 7); official exports of Google Photos (Takeout), Apple Photos / iCloud, Instagram and Facebook processed locally by `sepiabox-ingest process --export` (Sprint 8, D-053); later, a local UI for pre-processing.
 - **Phase 3 (outside this backlog)**: relationship graph between people, captions from a vision model, mobile apps, dedicated object/clothing detection, OCR and transcription.

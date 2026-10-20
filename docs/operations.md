@@ -35,6 +35,18 @@ Steps that need a person, because they depend on accounts, consents or external 
 - Manifests written by `process --faces` carry faces and `facesVersion` (S-018, D-047). Older `sepiabox-ingest` and `sepiabox-worker` builds reject `facesVersion`, so update every computer that runs `sepiabox-ingest` and deploy the worker before uploading manifests from a `--faces` run; otherwise `upload` from an old build fails to merge them (that asset is reported and retried, the stored blob is left alone) and the old worker's import reports them as problems.
 - Files processed before S-043 keep the date they had (none, for undated videos): `process` skips unchanged files. To date them from their folder or file name, run `process` again into a fresh work folder and upload from it.
 
+## Importing exports (after the MVP)
+
+Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from their official exports (D-053, Sprint 8), which only the account owner can request:
+
+| Source | How to get it |
+|---|---|
+| Google Photos | takeout.google.com → only Google Photos → zip parts; extract them all into one folder |
+| Apple Photos | On a Mac, Photos → File → Export → Export Unmodified Originals (tick "Export IPTC as XMP"); or privacy.apple.com → Request a copy of your data → iCloud Photos |
+| Instagram, Facebook | Accounts Center → Your information and permissions → Download your information → format **JSON**, media quality high |
+
+Keep the extracted export on the PC and run `sepiabox-ingest process <folder> --export <kind>`; the export is only read. Exports hold personal data: never commit them or attach them to issues. When a story asks for a small real export to confirm the format, share it privately with the person running it.
+
 ## Sign-in configuration
 
 The web reads these keys (D-048). Locally they go into the web's user secrets; in Azure into Key Vault, where `:` becomes `--` in the secret name (`Auth--Google--ClientId`, `Access--Emails`). Never put them in `appsettings*.json`.

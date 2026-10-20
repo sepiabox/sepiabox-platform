@@ -13,6 +13,8 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 **Order overrides** ([D-041](../decisions.md)): after S-009 come S-015, S-043, then S-018, ahead of S-010–S-014, so the drive is processed once with embeddings, faces and the dates of undated files.
 
+**MVP** ([D-053](../decisions.md)): Sprints 1–6, including S-044. The only source in the MVP is the external drive (local folders and drives). Sprint 7 (Google Drive and OneDrive, full export, region search; S-042, the site, is already done) and Sprint 8 (Import exports) come after the MVP, in the order below; there is no order override for them.
+
 **UI text** ([D-050](../decisions.md)): from S-044 on, every story writes the text the user sees as resources in English and Brazilian Portuguese, and uses English routes. Portuguese strings quoted in stories are the `pt-BR` translation.
 
 ## Execution order
@@ -112,6 +114,19 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `todo` |
 | S-042 | [Publish the showcase site at sepiabox.com](S-042-publish-the-showcase-site-at-sepiabox-com.md) | Site | — | Low | S | `done` |
 
+### Sprint 8 — Import exports
+
+**Demonstrable increment:** A Google Takeout, an Apple Photos export and Instagram and Facebook downloads, processed by `sepiabox-ingest process --export <kind>` and uploaded, show up in the timeline with their dates, places, captions and albums ([D-053](../decisions.md)).
+
+| Story | Title | Epic | Depends on | Priority | Size | Status |
+|---|---|---|---|---|---|---|
+| S-045 | [Read metadata from photo exports during process](S-045-read-metadata-from-photo-exports-during-process.md) | Import exports | S-004, S-043 | Medium | M | `todo` |
+| S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` |
+| S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045 | Medium | M | `todo` |
+| S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045 | Medium | M | `todo` |
+| S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045 | Medium | M | `todo` |
+| S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `todo` |
+
 ## Epics
 
 | Epic | Stories |
@@ -129,12 +144,13 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | Cloud sources | S-036, S-037, S-038, S-039 |
 | Privacy | S-040 |
 | Site | S-042 |
+| Import exports | S-045, S-046, S-047, S-048, S-049, S-052 |
 
 ## Validation
 
-- **Dependencies:** all point to stories in the same or an earlier sprint (S-043 was added later and listed in Sprint 1); there are no cycles and no forward dependencies (checked by script when this index is generated).
-- **Size:** 14 stories S, 29 M, none L.
-- **Sprints:** 7 sprints, between 5 and 7 stories each.
+- **Dependencies:** all point to stories in the same or an earlier sprint, and to stories listed above them (S-043 was added later and listed in Sprint 1; S-044, S-050–S-052 were added with D-050, D-051 and D-053); there are no cycles and no forward dependencies (checked by script when this index is generated).
+- **Size:** 16 stories S, 36 M, none L.
+- **Sprints:** 8 sprints, between 5 and 9 stories each.
 - **Decisions covered:** D-001 to D-024 in [`decisions.md`](../decisions.md) are applied: each is cited in the technical notes of at least one story, except D-021, which this backlog itself applies.
 - Story status is kept up to date by each story's PR (see [How to use](#how-to-use)).
 
@@ -142,8 +158,8 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 | Topic | Reason |
 |---|---|
-| Google Photos (Picker API / Takeout with sidecar JSON) | The Library API no longer gives access to the whole library; a Takeout export works as a local folder and can be read by `process` once extracted. Deferred until there is real use. |
-| Dropbox and iCloud | Not used by the family today; the source model (S-037 to S-039) allows adding them later. |
+| Dropbox | Not used by the family today; the source model (S-037 to S-039) allows adding it later. Google Photos, Apple Photos / iCloud, Instagram and Facebook are now covered by Sprint 8 through their exports (D-053). |
+| A local UI for pre-processing (a future epic) | A nicer desktop interface for `scan`, `process --export` and `upload` (progress, problems, choosing folders). For now the `sepiabox-ingest` console is enough. |
 | Mobile apps and Sign in with Apple | Phase 3; Apple sign-in only makes sense with the iOS app (D-006). |
 | Dedicated object and clothing detection ("red dress") | In v1 covered by CLIP visual search (S-016, S-041); a dedicated detector is phase 3. |
 | OCR and video transcription | Phase 3; processing cost without a target question in v1. |
@@ -155,7 +171,8 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 ## Summary
 
-- **Epics:** 13
-- **Sprints:** 7
-- **Stories:** 43
+- **Epics:** 14
+- **Sprints:** 8
+- **Stories:** 52
+- **MVP** ([D-053](../decisions.md)): Sprints 1–6, which include S-044 (39 stories), with the external drive as the only source; Sprints 7 and 8 come after it.
 - **Critical path (13 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-015 → S-018 → S-019 → S-020 → S-021 → S-025 → S-026 → S-028
