@@ -85,25 +85,38 @@ public static class PgvectorSimilarity
     /// <summary>The first pgvector version with iterative index scans (<c>hnsw.iterative_scan</c>).</summary>
     public static readonly Version MinimumVersion = new(0, 8, 0);
 
+    // The extension's version by server and database: read once, it changes only with an upgrade and a restart.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string?> s_versions = new(StringComparer.Ordinal);
+
     /// <summary>
-    /// Sets the index scan for the current transaction (call inside one): <see cref="EfSearch"/> candidates, and an
-    /// iterative scan in strict distance order, so filters applied after the index (a year, a city) still find every
-    /// match instead of only those among the first candidates. Before pgvector 0.8 there is no iterative scan, and a
-    /// filtered search could silently miss photos: it is refused with <see cref="VisualSearchUnavailableException"/>.
+    /// True when this catalog's pgvector can walk the HNSW index iteratively (0.8 and later), read once per database.
+    /// Without it, an index walk stops after <see cref="EfSearch"/> candidates, so callers rank exactly instead.
     /// </summary>
-    public static async Task PrepareAsync(CatalogDbContext db, CancellationToken cancellationToken)
+    public static async Task<bool> CanWalkIndexAsync(CatalogDbContext db, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
-        var installed = await db.Database
-            .SqlQuery<string>($"SELECT extversion AS \"Value\" FROM pg_extension WHERE extname = 'vector'")
-            .SingleOrDefaultAsync(cancellationToken);
-        if (!SupportsIterativeScan(installed))
+        var connection = db.Database.GetDbConnection();
+        var key = connection.DataSource + "/" + connection.Database;
+        if (!s_versions.TryGetValue(key, out var installed))
         {
-            throw new VisualSearchUnavailableException(
-                $"Search by description needs pgvector {MinimumVersion} or later; the catalog has {installed ?? "none"}.");
+            installed = await db.Database
+                .SqlQuery<string>($"SELECT extversion AS \"Value\" FROM pg_extension WHERE extname = 'vector'")
+                .SingleOrDefaultAsync(cancellationToken);
+            s_versions[key] = installed;
         }
 
-        await db.Database.ExecuteSqlRawAsync(
+        return SupportsIterativeScan(installed);
+    }
+
+    /// <summary>
+    /// Sets the index walk for the current transaction (call inside one): <see cref="EfSearch"/> candidates, and an
+    /// iterative scan in strict distance order, so the threshold never cuts the walk short. Needs pgvector 0.8
+    /// (<see cref="CanWalkIndexAsync"/>).
+    /// </summary>
+    public static Task PrepareIndexWalkAsync(CatalogDbContext db, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.Database.ExecuteSqlRawAsync(
             $"SET LOCAL hnsw.ef_search = {EfSearch}; SET LOCAL hnsw.iterative_scan = strict_order", cancellationToken);
     }
 

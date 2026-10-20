@@ -431,23 +431,8 @@ public sealed class SearchServiceTests(CatalogFixture catalog)
         // 0.4). Walking the HNSW index, even iteratively with no limits, reaches only one of the five: an HNSW graph
         // does not link every outlier from the cluster (reproduced in plain SQL, D-070). So a filtered search ranks
         // its candidates exactly, which finds all five even with the planner pushed towards indexes.
-        var random = new Random(16);
-        var description = Unit(Gaussian(random));
-        var db = await catalog.CreateMigratedDatabaseAsync();
+        var (db, description, _) = await LargeLibraryAsync();
         await using var _ = db;
-        for (var n = 1; n <= 2505; n++)
-        {
-            var near = n > 5;
-            db.Assets.Add(Asset(n, new DateTime(near ? 2020 : 2019, 6, 1)));
-            db.AssetEmbeddings.Add(Embedding(n, Unit(Mix(description, Gaussian(random), near ? 0.6 : 0.3))));
-        }
-
-        await db.SaveChangesAsync();
-        db.ChangeTracker.Clear();
-        await db.Database.ExecuteSqlRawAsync("ANALYZE assets; ANALYZE asset_embeddings;");
-        // The planner then has to walk the HNSW index in distance order, as it would on a large library.
-        await db.Database.OpenConnectionAsync();
-        await db.Database.ExecuteSqlRawAsync("SET enable_seqscan = off; SET enable_sort = off; SET enable_bitmapscan = off");
         var query = new SearchQuery { Filters = new SearchFilters { Visual = new VisualFilter { Text = "snow" }, Years = [2019] } };
 
         var result = await new SearchService(db, s_clock, embedder: new FakeQueryEmbedder(embed: _ => description)).ExecuteAsync(query);
@@ -455,6 +440,63 @@ public sealed class SearchServiceTests(CatalogFixture catalog)
         var plan = await ExplainAsync(db, query, description);
         Assert.False(plan.Contains("ix_asset_embeddings_embedding", StringComparison.Ordinal), plan);
         Assert.Equal([Ids.Of(1), Ids.Of(2), Ids.Of(3), Ids.Of(4), Ids.Of(5)], result.Hits.Select(h => h.Id).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task Finds_every_match_above_the_threshold_without_filters_in_exact_mode()
+    {
+        // What counting needs (S-025, S-026): exactly the photos above the threshold, as a brute-force check finds them.
+        var (db, description, vectors) = await LargeLibraryAsync();
+        await using var _ = db;
+        const double MinScore = 0.84;
+        // Scores computed here in double precision and in PostgreSQL in single precision can differ in the last digits,
+        // so a photo within 0.0001 of the threshold may land on either side.
+        var scores = vectors.ToDictionary(v => Ids.Of(v.Key), v => v.Value.Zip(description, (a, b) => (double)a * b).Sum());
+        var certain = scores.Where(s => s.Value >= MinScore + 1e-4).Select(s => s.Key).ToHashSet();
+        var possible = scores.Where(s => s.Value >= MinScore - 1e-4).Select(s => s.Key).ToHashSet();
+        var query = new SearchQuery
+        {
+            Filters = new SearchFilters { Visual = new VisualFilter { Text = "snow", MinScore = MinScore } },
+            Limit = SearchQuery.MaxLimit,
+        };
+        var service = new SearchService(db, s_clock, embedder: new FakeQueryEmbedder(embed: _ => description));
+
+        var exact = await service.ExecuteAsync(query, SimilarityMode.Exact);
+        var ranking = await service.ExecuteAsync(query);
+
+        var found = exact.Hits.Select(h => h.Id).ToHashSet();
+        Assert.InRange(certain.Count, 20, SearchQuery.MaxLimit - 1);
+        Assert.False(exact.HasMore);
+        Assert.Subset(found, certain);
+        Assert.Superset(found, possible);
+        Assert.Equal(exact.Hits.Select(h => h.Score).OrderDescending(), exact.Hits.Select(h => h.Score));
+        // The index walk is approximate: never more than the exact answer, every hit it gives is a real match.
+        Assert.Subset(found, ranking.Hits.Select(h => h.Id).ToHashSet());
+    }
+
+    // 2,505 photos with random 512-value embeddings: 2,500 from 2020 near the description, 5 from 2019 further away.
+    // Random directions, as real embeddings are: an HNSW graph of near-copies is degenerate.
+    private async Task<(CatalogDbContext Db, float[] Description, Dictionary<int, float[]> Vectors)> LargeLibraryAsync()
+    {
+        var random = new Random(16);
+        var description = Unit(Gaussian(random));
+        var vectors = new Dictionary<int, float[]>();
+        var db = await catalog.CreateMigratedDatabaseAsync();
+        for (var n = 1; n <= 2505; n++)
+        {
+            var near = n > 5;
+            vectors[n] = Unit(Mix(description, Gaussian(random), near ? 0.6 : 0.3));
+            db.Assets.Add(Asset(n, new DateTime(near ? 2020 : 2019, 6, 1)));
+            db.AssetEmbeddings.Add(Embedding(n, vectors[n]));
+        }
+
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        await db.Database.ExecuteSqlRawAsync("ANALYZE assets; ANALYZE asset_embeddings;");
+        // The planner then prefers indexes wherever it can, as it would on a large library.
+        await db.Database.OpenConnectionAsync();
+        await db.Database.ExecuteSqlRawAsync("SET enable_seqscan = off; SET enable_sort = off; SET enable_bitmapscan = off");
+        return (db, description, vectors);
     }
 
     private static float[] Gaussian(Random random) =>
@@ -492,7 +534,7 @@ public sealed class SearchServiceTests(CatalogFixture catalog)
         var filtered = new SearchService(db, s_clock).Filtered(query with { Filters = query.Filters with { Visual = null } });
         var sql = PgvectorSimilarity.Rank(db, filtered, description, 0.2, exact: true).Take(201).ToQueryString();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        await PgvectorSimilarity.PrepareAsync(db, CancellationToken.None);
+        await PgvectorSimilarity.PrepareIndexWalkAsync(db, CancellationToken.None);
         var lines = sql.Split('\n');
         var body = string.Join('\n', lines.SkipWhile(l => l.StartsWith("-- ", StringComparison.Ordinal)));
         var command = (Npgsql.NpgsqlCommand)db.Database.GetDbConnection().CreateCommand();

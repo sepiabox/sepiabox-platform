@@ -11,6 +11,19 @@ public sealed record SearchOptions
     public TimeZoneInfo? TimeZone { get; init; }
 }
 
+/// <summary>How a search by description ranks its candidates (D-070).</summary>
+public enum SimilarityMode
+{
+    /// <summary>
+    /// Top results fast: without other filters, through the HNSW index, which is approximate and can miss some matches
+    /// above the threshold; with other filters, exactly.
+    /// </summary>
+    Ranking,
+
+    /// <summary>Every candidate's exact distance: every match above the threshold. For counting (S-025, S-026).</summary>
+    Exact,
+}
+
 /// <summary>One asset a search found; <see cref="Score"/> is its cosine similarity to the description, for a visual search.</summary>
 public sealed record SearchHit(
     string Id, string Kind, DateTime? CapturedAt, double? DurationSeconds, string? PlaceCity, string? PlaceCountry, double? Score = null);
@@ -54,13 +67,15 @@ public sealed class SearchService(
             : assets.OrderBy(a => a.CapturedAt == null).ThenByDescending(a => a.CapturedAt).ThenBy(a => a.Id);
     }
 
-    public async Task<SearchResult> ExecuteAsync(SearchQuery query, CancellationToken cancellationToken = default)
+    public async Task<SearchResult> ExecuteAsync(
+        SearchQuery query, SimilarityMode similarity = SimilarityMode.Ranking, CancellationToken cancellationToken = default)
     {
         var hits = await RunAsync(
             query,
             assets => assets.Select(a => new SearchHit(a.Id, a.Kind, a.CapturedAt, a.DurationSeconds, a.PlaceCity, a.PlaceCountry, null)),
             scored => scored.Select(s => new SearchHit(
                 s.Asset.Id, s.Asset.Kind, s.Asset.CapturedAt, s.Asset.DurationSeconds, s.Asset.PlaceCity, s.Asset.PlaceCountry, 1 - s.Distance)),
+            similarity,
             cancellationToken);
         return new SearchResult([.. hits.Take(query.Limit)], hits.Count > query.Limit);
     }
@@ -74,6 +89,7 @@ public sealed class SearchService(
         SearchQuery query,
         Func<IQueryable<Asset>, IQueryable<T>> byDate,
         Func<IQueryable<ScoredAsset>, IQueryable<T>> bySimilarity,
+        SimilarityMode similarity = SimilarityMode.Ranking,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -90,12 +106,20 @@ public sealed class SearchService(
         }
 
         var vector = embedder.Embed(visual.Text);
-        // With other filters, every candidate is ranked exactly: an index walk can miss what the filters keep (D-070).
-        var filtered = !(query.Filters with { Visual = null }).IsEmpty;
-        var ranked = PgvectorSimilarity.Rank(db, Filtered(query), vector, visual.EffectiveMinScore, exact: filtered);
-        // One transaction, so the index setting applies to this query only and leaves the pooled connection as it was.
+        // The index walk only for top results without other filters, on a pgvector that can walk it iteratively; with
+        // filters, for counting, or on an older pgvector, every candidate is ranked exactly (D-070).
+        var walkIndex = similarity == SimilarityMode.Ranking
+            && (query.Filters with { Visual = null }).IsEmpty
+            && await PgvectorSimilarity.CanWalkIndexAsync(db, cancellationToken);
+        var ranked = PgvectorSimilarity.Rank(db, Filtered(query), vector, visual.EffectiveMinScore, exact: !walkIndex);
+        if (!walkIndex)
+        {
+            return await bySimilarity(ranked).Take(query.Limit + 1).ToListAsync(cancellationToken);
+        }
+
+        // One transaction, so the index settings apply to this query only and leave the pooled connection as it was.
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await PgvectorSimilarity.PrepareAsync(db, cancellationToken);
+        await PgvectorSimilarity.PrepareIndexWalkAsync(db, cancellationToken);
         var rows = await bySimilarity(ranked).Take(query.Limit + 1).ToListAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return rows;

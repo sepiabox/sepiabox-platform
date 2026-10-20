@@ -16,15 +16,16 @@ public sealed partial class ClipQueryEmbedder : IQueryEmbedder, IDisposable
 
     public delegate ITextEncoder? Loader(out string? warning, out ClipLoadFailure failure);
 
-    private readonly Lock _lock = new();
+    // Taken only by the one thread that loads the model; IsAvailable never waits for it.
+    private readonly Lock _loading = new();
     private readonly string _modelFolder;
     private readonly Loader _load;
     private readonly Func<bool> _filesPresent;
     private readonly TimeProvider _clock;
     private readonly ILogger<ClipQueryEmbedder> _log;
-    private ITextEncoder? _encoder;
-    private string? _failure;
-    private DateTimeOffset? _retryAt;
+
+    // Replaced whole, never changed in place, so a reader sees one consistent state without a lock.
+    private volatile State _state = State.NotLoaded;
 
     public ClipQueryEmbedder(string modelFolder, ILogger<ClipQueryEmbedder> log, TimeProvider? clock = null)
         : this(
@@ -48,14 +49,16 @@ public sealed partial class ClipQueryEmbedder : IQueryEmbedder, IDisposable
 
     public string ModelFolder => _modelFolder;
 
+    /// <summary>
+    /// Read on every timeline render: no lock, so it answers at once even while the model loads (it is then true: the
+    /// files are there). Checking the files touches the disk, outside any lock.
+    /// </summary>
     public bool IsAvailable
     {
         get
         {
-            lock (_lock)
-            {
-                return _encoder is not null || (CanTry() && _filesPresent());
-            }
+            var state = _state;
+            return state.Encoder is not null || (CanTry(state) && _filesPresent());
         }
     }
 
@@ -72,28 +75,34 @@ public sealed partial class ClipQueryEmbedder : IQueryEmbedder, IDisposable
         }
     }
 
-    public void Dispose() => _encoder?.Dispose();
+    public void Dispose() => _state.Encoder?.Dispose();
 
     // Never after a failure that only new files fix; after one that may pass, once the wait is over.
-    private bool CanTry() => _failure is null || (_retryAt is { } at && _clock.GetUtcNow() >= at);
+    private bool CanTry(State state) => state.Failure is null || (state.RetryAt is { } at && _clock.GetUtcNow() >= at);
 
     private ITextEncoder Load()
     {
-        lock (_lock)
+        if (_state.Encoder is { } loaded)
         {
-            if (_encoder is not null)
+            return loaded;
+        }
+
+        lock (_loading)
+        {
+            var state = _state;
+            if (state.Encoder is not null)
             {
-                return _encoder;
+                return state.Encoder;
             }
 
-            if (CanTry())
+            if (CanTry(state))
             {
-                _encoder = _load(out var warning, out var failure);
-                if (_encoder is not null)
+                var encoder = _load(out var warning, out var failure);
+                if (encoder is not null)
                 {
-                    (_failure, _retryAt) = (null, null);
+                    _state = new State(encoder, null, null);
                     LogLoaded(_log, _modelFolder);
-                    return _encoder;
+                    return encoder;
                 }
 
                 var reason = warning ?? "The CLIP text model could not be loaded.";
@@ -103,17 +112,22 @@ public sealed partial class ClipQueryEmbedder : IQueryEmbedder, IDisposable
                     throw new VisualSearchUnavailableException(reason);
                 }
 
-                if (reason != _failure)
+                if (reason != state.Failure)
                 {
                     LogUnavailable(_log, reason);
                 }
 
-                _failure = reason;
-                _retryAt = failure == ClipLoadFailure.Unreadable ? _clock.GetUtcNow() + RetryAfter : null;
+                state = new State(null, reason, failure == ClipLoadFailure.Unreadable ? _clock.GetUtcNow() + RetryAfter : null);
+                _state = state;
             }
 
-            throw new VisualSearchUnavailableException(_failure!);
+            throw new VisualSearchUnavailableException(state.Failure!);
         }
+    }
+
+    private sealed record State(ITextEncoder? Encoder, string? Failure, DateTimeOffset? RetryAt)
+    {
+        public static readonly State NotLoaded = new(null, null, null);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "CLIP text model loaded from {Folder}.")]

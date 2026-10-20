@@ -71,6 +71,31 @@ public sealed class ClipQueryEmbedderTests
         Assert.Equal(Vector, embedder.Embed("snow"));
     }
 
+    [Fact]
+    public async Task Answers_is_available_at_once_while_the_model_is_loading()
+    {
+        using var loading = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var embedder = Embedder(new ListLogger<ClipQueryEmbedder>(), () =>
+        {
+            loading.Set();
+            release.Wait(TimeSpan.FromSeconds(30));
+            return Loaded();
+        }, () => true);
+
+        var search = Task.Run(() => embedder.Embed("snow"));
+        Assert.True(loading.Wait(TimeSpan.FromSeconds(10)));
+
+        // A timeline render while ONNX Runtime opens the model: no waiting on the load.
+        var render = Task.Run(() => embedder.IsAvailable);
+        var answered = await Task.WhenAny(render, Task.Delay(TimeSpan.FromSeconds(5))) == render;
+        release.Set();
+
+        Assert.True(answered, "IsAvailable waited for the model to load.");
+        Assert.True(await render);
+        Assert.Equal(Vector, await search);
+    }
+
     private static readonly float[] Vector = [1, 0];
 
     private static ClipQueryEmbedder Embedder(

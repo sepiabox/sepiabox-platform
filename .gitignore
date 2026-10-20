@@ -23,6 +23,9 @@ secrets.json
 models/*
 !models/models.json
 
+# Python packages downloaded by tools (reviews, probes): never part of the repository
+*.whl
+
 # Local ingestion state and test media
 .sepiabox/
 *.sqlite

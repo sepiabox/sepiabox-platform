@@ -212,7 +212,7 @@ public sealed class LibraryQueries(
             scored => scored.Select(s => new TimelineItem(
                 s.Asset.Id, s.Asset.Kind, s.Asset.CapturedAt, s.Asset.Derivatives.Any(d => d.Name == DerivativeNames.Thumbnail),
                 s.Asset.DurationSeconds)),
-            cancellationToken);
+            cancellationToken: cancellationToken);
         return new SearchPage([.. rows.Take(query.Limit)], rows.Count > query.Limit);
     }
 

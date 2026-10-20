@@ -171,7 +171,8 @@ public sealed partial class ClipTokenizer
         // Composing needs ICU, which the web has (D-058); without it the text stays as typed.
         var composed = straight.ToString().Normalize(NormalizationForm.FormC);
         var unescaped = WebUtility.HtmlDecode(WebUtility.HtmlDecode(composed));
-        // Simple case mapping: "İ" and a word-final "Σ" lower-case differently from Python's full mapping ("i̇", "ς");
+        // Half-width katakana (U+FF61–FF9F), which ftfy also widens, are left as typed: English descriptions do not
+        // contain them. Simple case mapping: "İ" and a word-final "Σ" lower-case differently from Python's full mapping ("i̇", "ς");
         // typed descriptions in English (D-017) do not meet them.
         return Whitespace().Replace(unescaped, " ").Trim().ToLowerInvariant();
     }
