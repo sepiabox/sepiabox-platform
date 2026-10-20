@@ -50,7 +50,7 @@ New projects follow the names in `docs/architecture.md` and are added to `Sepiab
 
 ## Code conventions
 
-- Docs, code, identifiers and comments in English. Text the user sees in the app is in Portuguese.
+- Docs, code, identifiers and comments in English. The app UI is English by default and localizable: every string the user sees comes from resource files through `IStringLocalizer`, with English and Brazilian Portuguese (`pt-BR`, never European Portuguese wording); routes are English (D-050).
 - The product name is written `Sepiabox` in prose and namespaces (`Sepiabox.*`), `sepiabox` in lowercase identifiers such as executables, containers and URLs. Never `SepiaBox`, `Sepia Box` or `sepia-box`.
 - Style is defined in `.editorconfig` and enforced in the build: file-scoped namespaces, braces always, `var` only when the type is evident.
 - Comments explain why, not what. No commented-out code.

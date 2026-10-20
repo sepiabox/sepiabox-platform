@@ -6,7 +6,7 @@ Summary of the architecture chosen for the first version. Individual decisions, 
 
 Sepiabox brings a family's photos and videos together (external drive, Google Drive, OneDrive and, later, phones) in one place and finds any moment when you ask a question. Each file is interpreted **once, on arrival**; search only filters the stored metadata and never re-reads the photos.
 
-Examples of questions the system must answer (the app UI is in Portuguese):
+Examples of questions the system must answer (the app UI is English by default, with Brazilian Portuguese as the first translation, D-050; the family asks in Portuguese):
 
 - "Fotos minhas com a Ana e o Pedro juntos" (photos of me with Ana and Pedro together — people)
 - "Fotos de Lisboa em dezembro", "O que fazia neste dia há cinco anos?" (photos of Lisbon in December, what was I doing on this day five years ago — time and place)
@@ -92,7 +92,7 @@ Natural-language questions: the text (never the photos) goes to **Claude Haiku 5
 
 ## Visual identity (for the UI)
 
-Colors: Sepia `#9A5A2C` (brand), Cyanotype `#1F4C74` (actions), Developer `#231A14` (text), Silver paper `#EEECE7` (background), Mat `#D8D1C6` (lines). Typefaces: Bricolage Grotesque (headings), Figtree (body), IBM Plex Mono (filters and metadata). Symbol in `sepiabox-brand/assets/`. The app UI is in **Portuguese**; code, comments, docs and technical names are in **English**. The web app targets **desktop** (minimum width ~1024 px); on phones it only needs to open without breaking.
+Colors: Sepia `#9A5A2C` (brand), Cyanotype `#1F4C74` (actions), Developer `#231A14` (text), Silver paper `#EEECE7` (background), Mat `#D8D1C6` (lines). Typefaces: Bricolage Grotesque (headings), Figtree (body), IBM Plex Mono (filters and metadata). Symbol in `sepiabox-brand/assets/`. The app UI is in **English** by default and localizable, with **Brazilian Portuguese** (`pt-BR`) as the first translation: user-facing text lives in resource files, the culture comes from the browser or an explicit switch (D-050). Code, comments, docs and technical names are in **English**. The web app targets **desktop** (minimum width ~1024 px); on phones it only needs to open without breaking.
 
 ## Phases
 

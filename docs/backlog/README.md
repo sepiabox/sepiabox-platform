@@ -31,7 +31,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 ### Sprint 2 — See the photos in the browser
 
-**Demonstrable increment:** After `upload`, sign in locally with Google or Microsoft and browse the drive's photos and videos by date; e-mails not on the list are refused.
+**Demonstrable increment:** After `upload`, sign in locally with Google or Microsoft and browse the drive's photos and videos by date, in English or Brazilian Portuguese; e-mails not on the list are refused.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
@@ -40,6 +40,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | S-009 | [Browse the library on a timeline](S-009-browse-the-library-on-a-timeline.md) | Web app | S-008 | High | M | `done` |
 | S-010 | [Sign in with Google or Microsoft and allow only the access list](S-010-sign-in-with-google-or-microsoft-and.md) | Web app | S-009 | High | M | `done` |
 | S-011 | [Watch videos on the detail page](S-011-watch-videos-on-the-detail-page.md) | Web app | S-006, S-010 | Medium | S | `todo` |
+| S-044 | [Localize the web app: English first, Brazilian Portuguese](S-044-localize-the-web-app-english-first-brazilian.md) | Web app | S-011 | High | M | `todo` |
 
 ### Sprint 3 — Find by date, place and similarity
 
@@ -114,7 +115,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | Foundation | S-001, S-003 |
 | Local ingest | S-002, S-004, S-005, S-006, S-007, S-043 |
 | Cloud catalog | S-008, S-012 |
-| Web app | S-009, S-010, S-011 |
+| Web app | S-009, S-010, S-011, S-044 |
 | Search | S-013, S-014, S-015, S-016, S-017, S-041 |
 | People | S-018, S-019, S-020, S-021, S-022 |
 | Occasions | S-023, S-024 |
