@@ -144,6 +144,8 @@ public sealed partial class DeployWorkflowTests
         Assert.Contains("azd env config set infra.parameters.customDomainBinding \"$binding\"", run, StringComparison.Ordinal);
         // A missing secret, or jq's "null" saved as one, stops the run before azd could generate a value.
         Assert.Contains("if [[ -z \"${!name}\" || \"${!name}\" == \"null\" ]]; then", run, StringComparison.Ordinal);
+        // azd's vault reference copied from config.json is refused too: a runner cannot resolve it.
+        Assert.Contains("if [[ \"${!name}\" == vault://* ]]; then", run, StringComparison.Ordinal);
         Assert.Contains("exit 1", run, StringComparison.Ordinal);
         Assert.True(
             run.IndexOf("exit 1", StringComparison.Ordinal) < run.IndexOf("azd env new", StringComparison.Ordinal),
@@ -183,6 +185,18 @@ public sealed partial class DeployWorkflowTests
         Assert.Equal(1, exitCode);
         Assert.Empty(calls);
         Assert.Contains(message, output, StringComparison.Ordinal);
+    }
+
+    [UnixFact]
+    public async Task Azd_vault_reference_saved_as_a_secret_stops_the_run_before_azd()
+    {
+        // What config.json holds for a generated secure parameter; azd panics resolving it on a runner.
+        var (exitCode, calls, output) = await RunEnvironmentStepAsync(
+            "", "", "vault://00000000-0000-0000-0000-000000000000/00000000-0000-0000-0000-000000000001");
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(calls);
+        Assert.Contains("The PG_PASSWORD secret holds an azd vault reference", output, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -228,7 +242,8 @@ public sealed partial class DeployWorkflowTests
     private const string NewestStep = "Skip a commit that is no longer the newest on main";
 
     /// <summary>Runs the "Create the azd environment" step's script with a stand-in azd that records its calls.</summary>
-    private async Task<(int ExitCode, List<string> Calls, string Output)> RunEnvironmentStepAsync(string domain, string binding)
+    private async Task<(int ExitCode, List<string> Calls, string Output)> RunEnvironmentStepAsync(
+        string domain, string binding, string password = "example")
     {
         var folder = Path.Combine(Path.GetTempPath(), "sepiabox-workflow-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
@@ -249,7 +264,7 @@ public sealed partial class DeployWorkflowTests
             start.Environment["PATH"] = folder + Path.PathSeparator + System.Environment.GetEnvironmentVariable("PATH");
             start.Environment["CALLS"] = calls;
             start.Environment["PG_USERNAME"] = "example";
-            start.Environment["PG_PASSWORD"] = "example";
+            start.Environment["PG_PASSWORD"] = password;
             start.Environment["PG_APP_PASSWORD"] = "example";
             start.Environment["AZURE_SUBSCRIPTION_ID"] = "00000000-0000-0000-0000-000000000000";
             start.Environment["CUSTOM_DOMAIN"] = domain;

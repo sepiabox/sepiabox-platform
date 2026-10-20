@@ -72,7 +72,9 @@ It refuses to start unless the selected azd environment is `sepiabox` in `france
 
 If the migration fails, is stopped or times out, the script stops before step 5 and the running web is left as it was; the job's logs are in the `sepiabox-logs` workspace (table `ContainerAppConsoleLogs_CL`, container `migrate`). Fix the cause and run the script again: migrations already applied are skipped. `azd up` and a bare `azd deploy` are refused by the `predeploy` hook in `azure.yaml`, since they would start the web before the migrations.
 
-**Keep the PostgreSQL login and password.** azd generates them once, on the first provision, and keeps them only in `.azure/sepiabox/config.json` (under `infra.parameters`, as `pg_username` and `pg_password`). Losing that folder does not regenerate them harmlessly: a new azd environment would generate a new login, which cannot be applied to the existing server, so provisioning fails; a new password alone would be applied, and the migrate job would fail to connect until its Key Vault reference refreshes (up to 30 minutes). So after the first provision, copy both values into a password manager (or a backup of `.azure/sepiabox/config.json`). They can also be read back from the secret `connectionstrings--catalog` (`Username=` and `Password=`) in the **database vault** (`databasevault-…`, which only the migrate job reads, D-062), which needs a Key Vault data role such as *Key Vault Secrets User* on that vault for your account: Owner on the resource group alone cannot read secrets. The third generated value, `pg_app_password` (the web's application role), needs no backup: if it is lost, the next deploy generates a new one and the migrate job sets it on the role before the web's new revision starts. If the first provision rejects the generated password (Azure's password rules), set a new one with `azd env config set infra.parameters.pg_password <letters and digits, with upper and lower case and a digit>` and provision again. To restore them on a new computer: `azd env new sepiabox --location francecentral --subscription <subscription id>`, then `azd env config set infra.parameters.pg_username <login>` and `azd env config set infra.parameters.pg_password <password>` (check the key names against your backup), and only then run the script. S-034's workflow supplies the same two values from GitHub secrets.
+**Keep the PostgreSQL login and password.** azd generates them once, on the first provision: the login in `.azure/sepiabox/config.json` (under `infra.parameters`, as `pg_username`), the password in azd's own local vault on that computer, with only a `vault://…` reference in `config.json`. Losing that folder does not regenerate them harmlessly: a new azd environment would generate a new login, which cannot be applied to the existing server, so provisioning fails; a new password alone would be applied, and the migrate job would fail to connect until its Key Vault reference refreshes (up to 30 minutes). So after the first provision, copy both values into a password manager, from the database vault as below (a backup of `config.json` alone keeps only the reference). They can also be read back from the secret `connectionstrings--catalog` (`Username=` and `Password=`) in the **database vault** (`databasevault-…`, which only the migrate job reads, D-062), which needs a Key Vault data role such as *Key Vault Secrets User* on that vault for your account: Owner on the resource group alone cannot read secrets. The third generated value, `pg_app_password` (the web's application role), needs no backup: if it is lost, the next deploy generates a new one and the migrate job sets it on the role before the web's new revision starts. If the first provision rejects the generated password (Azure's password rules), set a new one with `azd env config set infra.parameters.pg_password <letters and digits, with upper and lower case and a digit>` and provision again. To restore them on a new computer: `azd env new sepiabox --location francecentral --subscription <subscription id>`, then `azd env config set infra.parameters.pg_username <login>` and `azd env config set infra.parameters.pg_password <password>` (check the key names against your backup), and only then run the script. S-034's workflow supplies the same two values from GitHub secrets.
+
+**Windows (Git Bash).** Git Bash rewrites arguments that start with `/` into Windows paths, which breaks `az` commands taking a resource id such as `--scope /subscriptions/…` (`MissingSubscription`). Run `export MSYS_NO_PATHCONV=1` first (or add it to `~/.bashrc`).
 
 **The deploy hook is a guard, not a lock.** It only stops an accidental `azd up` or `azd deploy`; anyone who sets `SEPIABOX_DEPLOY_SCRIPT=1` by hand bypasses it. On Windows the hook runs in PowerShell 7 (`pwsh`), which must be installed; the script itself needs Bash.
 
@@ -87,7 +89,7 @@ If the migration fails, is stopped or times out, the script stops before step 5 
    3. After `migrate` only: run the job and wait for it as the script does (`az containerapp job start --name sepiabox-migrate --resource-group rg-sepiabox`, then `az containerapp job execution show ... --query properties.status` until `Succeeded`); stop here if it fails.
    4. After `geonames`: make the queue receive again (`... --status Active`).
 
-After the first deploy, record here which of the two behaviours azd showed (single-resource deploys and the job worked, or the manual steps were needed), so the script can be fixed if needed.
+The first deploy (2026-10-20) showed that single-resource deploys and the jobs work with azd, so these manual steps are only a fallback.
 
 Until the owner creates the secrets below, the web starts with no sign-in buttons and lets no one in, but `/health` answers. On the first deploy the web may restart a few times while its new role assignments reach Key Vault (a few minutes); it then starts normally. The web's address is `https://sepiabox-web.<environment default domain>`: `az containerapp show --name sepiabox-web --resource-group rg-sepiabox --query properties.configuration.ingress.fqdn -o tsv`.
 
@@ -95,35 +97,24 @@ Until the owner creates the secrets below, the web starts with no sign-in button
 
 `.github/workflows/deploy.yml` (S-034, D-064) deploys `main` after CI passes on a push to it, and on demand (Actions → Deploy → Run workflow). It waits for approval in the `production` environment, signs in with OIDC (no secret), recreates the azd environment `sepiabox` from the saved parameters, runs `scripts/deploy.sh` (so a failed migration stops it before the import jobs and the web), and then keeps the last 5 images of every repository in the container registry. It never runs for pull requests. A run whose commit is no longer the newest on `main` ends in its first job, without asking for approval and without deploying, because the newer commit's own run deploys it. If that newer commit's CI fails, nothing is deployed until `main` is green again: fix `main`, or run Deploy by hand once it is green.
 
-**The first deploy is from your computer** (`./scripts/deploy.sh`, see "Deploying to Azure"): azd generates the PostgreSQL parameters there, once. Then copy them into the `production` environment's secrets, straight from your `.azure` backup to GitHub, without pasting them anywhere (you need the GitHub CLI, `gh auth login`):
+**The first deploy is from your computer** (`./scripts/deploy.sh`, see "Deploying to Azure"): azd generates the PostgreSQL parameters there, once. azd keeps generated secure parameters (`pg_password`, `pg_app_password`) in its own local vault and writes only a `vault://…` reference to `.azure/sepiabox/config.json`, so **never copy them from `config.json`**: a runner cannot resolve the reference (azd panics with a nil pointer, and the workflow now refuses such a secret). Copy the login and password from the database vault's secret `connectionstrings--catalog` instead, straight to GitHub without showing them (you need the GitHub CLI, `gh auth login`, and *Key Vault Secrets User* on that vault for your account; Owner on the resource group grants no data access):
 
 ```bash
-cd sepiabox-platform   # the folder with .azure/sepiabox/config.json
-set -o pipefail
-for pair in PG_USERNAME:pg_username PG_PASSWORD:pg_password PG_APP_PASSWORD:pg_app_password; do
-  # -e makes jq fail on a missing key instead of printing "null"; the secret is set only when it succeeded.
-  if value=$(jq -er ".infra.parameters.${pair#*:}" .azure/sepiabox/config.json); then
-    printf '%s' "$value" | gh secret set "${pair%%:*}" --env production --repo sepiabox/sepiabox-platform
-  else
-    echo "Not set: ${pair%%:*} (check the key names in config.json)" >&2
-  fi
-done
-unset value
+dbvault=$(az keyvault list --resource-group rg-sepiabox --query "[?starts_with(name, 'databasevault-')].name | [0]" -o tsv)
+az role assignment create --role "Key Vault Secrets User" --assignee "$(az ad signed-in-user show --query id -o tsv)" \
+  --scope "$(az keyvault show --name "$dbvault" --query id -o tsv)"
+# Wait a couple of minutes for the role to apply, then:
+conn=$(az keyvault secret show --vault-name "$dbvault" --name connectionstrings--catalog --query value -o tsv)
+printf '%s' "$conn" | sed -n 's/.*Username=\([^;]*\).*/\1/p' | tr -d '\n' | gh secret set PG_USERNAME --env production --repo sepiabox/sepiabox-platform
+printf '%s' "$conn" | sed -n 's/.*Password=\([^;]*\).*/\1/p' | tr -d '\n' | gh secret set PG_PASSWORD --env production --repo sepiabox/sepiabox-platform
+unset conn
 gh variable set UPLOADER_PRINCIPAL_IDS --env production --repo sepiabox/sepiabox-platform \
   --body "$(jq -r '.infra.parameters.uploaderPrincipalIds // ""' .azure/sepiabox/config.json)"
 ```
 
-`gh secret set` reads the value from its input, so it never appears on the screen or in the shell history. Without the `.azure` folder, the login and password can be read from the database vault's secret `connectionstrings--catalog` instead (it needs *Key Vault Secrets User* on that vault for your account):
+`gh secret set` reads the value from its input, so it never appears on the screen or in the shell history. The database vault is also where the login and password can always be read back; the `.azure` folder alone is not a backup of them (it holds references), so keep a copy of `connectionstrings--catalog` in a password manager if you want one outside Azure.
 
-```bash
-vault=$(az keyvault list --resource-group rg-sepiabox --query "[?starts_with(name, 'databasevault-')].name | [0]" -o tsv)
-az keyvault secret show --vault-name "$vault" --name connectionstrings--catalog --query value -o tsv \
-  | sed -n 's/.*Username=\([^;]*\).*/\1/p' | gh secret set PG_USERNAME --env production --repo sepiabox/sepiabox-platform
-az keyvault secret show --vault-name "$vault" --name connectionstrings--catalog --query value -o tsv \
-  | sed -n 's/.*Password=\([^;]*\).*/\1/p' | gh secret set PG_PASSWORD --env production --repo sepiabox/sepiabox-platform
-```
-
-`PG_APP_PASSWORD` (the web's application role) is not kept in Key Vault; if it is lost, set a new one of 64 letters and digits, which the next deploy's migrate job gives the role before the web restarts: `LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64 | gh secret set PG_APP_PASSWORD --env production --repo sepiabox/sepiabox-platform`. The workflow stops before azd if any of the three is missing, so azd never generates new ones on a runner (D-061).
+`PG_APP_PASSWORD` (the web's application role) is not kept in Key Vault and `config.json` holds only a reference to it, so give the workflow a new one of 64 letters and digits, which the next deploy's migrate job gives the role before the web restarts: `LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64 | gh secret set PG_APP_PASSWORD --env production --repo sepiabox/sepiabox-platform`. The workflow stops before azd if any of the three is missing, so azd never generates new ones on a runner (D-061).
 
 After a workflow deploy, check the run's "Purge old images" step: one `acr purge` per repository, each keeping 5 images.
 
