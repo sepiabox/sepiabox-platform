@@ -104,6 +104,7 @@ public class VideoProcessingTests
         Assert.Equal(new DateTime(2011, 9, 25, 11, 4, 25), manifest.CapturedAt);
         Assert.Equal(CaptureDateSource.FileName, manifest.CapturedAtSource);
         Assert.Equal(("video/mpeg", "2011-09-25/MNU_110425_x.mpg"), (manifest.ContentType, Assert.Single(manifest.Sources).Path));
+        // As a set: this test is about the date, and the order of derivatives is covered by the tests above.
         Assert.Equal(["poster", "proxy-720p", "thumb-256"], manifest.Derivatives.Select(d => d.Name).Order(StringComparer.Ordinal));
     }
 

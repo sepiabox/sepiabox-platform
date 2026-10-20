@@ -1,4 +1,7 @@
+using System.Globalization;
+using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Scanning;
+using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 
 namespace Sepiabox.Ingest.Tests;
@@ -73,27 +76,55 @@ public class ScannerTests
     }
 
     [Fact]
-    public void Counts_a_file_in_the_year_of_its_folder_when_its_metadata_cannot_be_read()
+    public void Counts_a_damaged_photo_in_the_year_of_its_folder_when_its_format_is_not_recognised()
     {
         using var folder = new TempFolder();
         folder.Write("2005-07-14/damaged.jpg", RandomBytes(500, seed: 11));
-        // Reading this one throws, yet its path still dates it: on Windows it is locked by another handle; elsewhere
-        // it is a link whose target is gone, since files cannot be locked against reading there.
-        var unreadable = Path.Combine(folder.Path, "2006-01-02", "gone.jpg");
-        Directory.CreateDirectory(Path.GetDirectoryName(unreadable)!);
-        using var lockHandle = OperatingSystem.IsWindows()
-            ? new FileStream(unreadable, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None)
-            : null;
-        if (!OperatingSystem.IsWindows())
-        {
-            File.CreateSymbolicLink(unreadable, Path.Combine(folder.Path, "missing.jpg"));
-        }
 
         var result = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false));
 
         Assert.Equal(1, result.MediaByYear["2005"]);
+        Assert.Empty(result.Problems);
+    }
+
+    [Fact]
+    public void Counts_a_file_in_the_year_of_its_folder_and_lists_it_when_reading_its_metadata_throws()
+    {
+        using var folder = new TempFolder();
+        folder.Write("2006-01-02/unreadable.jpg", RandomBytes(500, seed: 12));
+        folder.Write("2007-03-04/fine.jpg", RandomBytes(500, seed: 13));
+
+        var result = Scanner.Scan(
+            new ScanOptions(folder.Path, null, FindDuplicates: false),
+            clock: TimeProvider.System,
+            readCaptureDate: path => Path.GetFileName(path) == "unreadable.jpg" ? throw new IOException("Device not ready.") : null);
+
         Assert.Equal(1, result.MediaByYear["2006"]);
-        Assert.Equal(unreadable, Assert.Single(result.Problems).Path);
+        Assert.Equal(1, result.MediaByYear["2007"]);
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal(("unreadable.jpg", "Device not ready."), (Path.GetFileName(problem.Path), problem.Reason));
+    }
+
+    [Fact]
+    public void Counts_the_same_years_as_the_dates_process_records_when_given_the_same_files()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        drive.Write("2005-07-14/praia.jpg", TestPhotos.Porto());
+        drive.Write("2005-07-14/reset.jpg", TestPhotos.Taken("1980:01:01 00:00:00"));
+        drive.Write("1978-08-15/scan.jpg", TestPhotos.Plain());
+        drive.Write("2011-09-25/MNU_110425_d8b2.MTS", RandomBytes(800, seed: 14));
+        drive.Write("Telemovel/VID_20120304_101112.mp4", RandomBytes(800, seed: 15));
+        drive.Write("2011-02-30/clip.mpg", RandomBytes(800, seed: 16));
+
+        var scan = Scanner.Scan(new ScanOptions(drive.Path, null, FindDuplicates: false));
+        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
+
+        var processed = Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json")
+            .Select(file => ManifestJson.Deserialize(File.ReadAllText(file)).CapturedAt?.Year.ToString(CultureInfo.InvariantCulture) ?? ScanResult.UnknownYear)
+            .GroupBy(year => year)
+            .ToDictionary(group => group.Key, group => group.Count());
+        Assert.Equal(processed.OrderBy(pair => pair.Key, StringComparer.Ordinal), scan.MediaByYear);
     }
 
     [Fact]
@@ -113,8 +144,8 @@ public class ScannerTests
         using var folder = new TempFolder();
         folder.Write("2027-01-01/clip.mpg", RandomBytes(1_000, seed: 10));
 
-        var before = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false), null, new FixedClock(new DateTime(2026, 10, 20)));
-        var after = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false), null, new FixedClock(new DateTime(2027, 2, 1)));
+        var before = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false), clock: new FixedClock(new DateTime(2026, 10, 20)), readCaptureDate: _ => null);
+        var after = Scanner.Scan(new ScanOptions(folder.Path, null, FindDuplicates: false), clock: new FixedClock(new DateTime(2027, 2, 1)), readCaptureDate: _ => null);
 
         Assert.Equal(1, before.MediaByYear[ScanResult.UnknownYear]);
         Assert.Equal(1, after.MediaByYear["2027"]);
