@@ -35,7 +35,15 @@ public sealed class GeoNamesUpdate(
         }
         finally
         {
-            Directory.Delete(folder, recursive: true);
+            try
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The replica's storage goes with it; what failed before matters more than a leftover folder.
+                Log.TemporaryFolderLeft(logger, folder, ex);
+            }
         }
     }
 }

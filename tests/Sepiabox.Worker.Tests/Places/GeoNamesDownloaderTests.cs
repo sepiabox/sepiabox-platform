@@ -95,4 +95,82 @@ public sealed class GeoNamesDownloaderTests : IDisposable
         await Assert.ThrowsAsync<InvalidDataException>(
             () => new GeoNamesDownloader(http, _logger).DownloadAsync(_folder.Path, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task A_body_that_stalls_fails_the_download_after_the_body_timeout()
+    {
+        var geoNames = FakeGeoNames.WithSample();
+        geoNames.Override = _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new StalledStream()) };
+        using var http = new HttpClient(geoNames);
+        var downloader = new GeoNamesDownloader(http, _logger, bodyTimeout: TimeSpan.FromMilliseconds(200));
+
+        var error = await Assert.ThrowsAsync<TimeoutException>(() => downloader.DownloadAsync(_folder.Path, CancellationToken.None));
+
+        Assert.Contains("did not finish downloading", error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFiles(_folder.Path));
+    }
+
+    [Fact]
+    public async Task A_body_longer_than_the_cap_fails_the_download_without_a_length_announced()
+    {
+        var geoNames = FakeGeoNames.WithSample();
+        geoNames.Override = _ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new GeneratedStream(GeoNamesDownloader.MaxFileBytes + 1)),
+        };
+        using var http = new HttpClient(geoNames);
+
+        var error = await Assert.ThrowsAsync<InvalidDataException>(
+            () => new GeoNamesDownloader(http, _logger).DownloadAsync(_folder.Path, CancellationToken.None));
+
+        Assert.Contains("more than the 104857600 bytes", error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFiles(_folder.Path));
+    }
+
+    /// <summary>A body that never sends a byte, as a stalled connection.</summary>
+    private sealed class StalledStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    /// <summary><paramref name="length"/> zero bytes, produced as read rather than held in memory.</summary>
+    private sealed class GeneratedStream(long length) : Stream
+    {
+        private long _left = length;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var read = (int)Math.Min(count, _left);
+            Array.Clear(buffer, offset, read);
+            _left -= read;
+            return read;
+        }
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
 }

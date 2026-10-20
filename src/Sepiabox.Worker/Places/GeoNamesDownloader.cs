@@ -23,15 +23,20 @@ public sealed class GeoNamesDownloader
     /// <summary>cities500.zip is about 10 MB; anything far larger is not the file we expect.</summary>
     public const long MaxFileBytes = 100L * 1024 * 1024;
 
+    /// <summary>How long one file's body may take; <see cref="HttpClient.Timeout"/> stops at the headers.</summary>
+    public static readonly TimeSpan DefaultBodyTimeout = TimeSpan.FromMinutes(5);
+
     private readonly HttpClient _http;
     private readonly Uri _baseUri;
     private readonly ILogger _logger;
+    private readonly TimeSpan _bodyTimeout;
 
-    public GeoNamesDownloader(HttpClient http, ILogger logger, Uri? baseUri = null)
+    public GeoNamesDownloader(HttpClient http, ILogger logger, Uri? baseUri = null, TimeSpan? bodyTimeout = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _baseUri = baseUri ?? DefaultBaseUri;
+        _bodyTimeout = bodyTimeout ?? DefaultBodyTimeout;
         EnsureGeoNames(_baseUri);
     }
 
@@ -69,12 +74,15 @@ public sealed class GeoNamesDownloader
         var path = Path.Combine(folder, name);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         long size = 0;
-        await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken))
-        await using (var target = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+        using var body = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        body.CancelAfter(_bodyTimeout);
+        try
         {
+            await using var source = await response.Content.ReadAsStreamAsync(body.Token);
+            await using var target = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true);
             var buffer = new byte[81920];
             int read;
-            while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
+            while ((read = await source.ReadAsync(buffer, body.Token)) > 0)
             {
                 size += read;
                 if (size > MaxFileBytes)
@@ -83,8 +91,19 @@ public sealed class GeoNamesDownloader
                 }
 
                 hash.AppendData(buffer, 0, read);
-                await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                await target.WriteAsync(buffer.AsMemory(0, read), body.Token);
             }
+        }
+        catch (Exception ex)
+        {
+            // No partial file is left for a later load to read.
+            File.Delete(path);
+            if (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException($"{uri} did not finish downloading within {_bodyTimeout}.", ex);
+            }
+
+            throw;
         }
 
         var lastModified = response.Content.Headers.LastModified?.ToString("u", CultureInfo.InvariantCulture) ?? "unknown";

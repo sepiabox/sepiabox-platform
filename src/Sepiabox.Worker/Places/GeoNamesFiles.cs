@@ -18,15 +18,22 @@ public static class GeoNamesFiles
     private const int CityColumns = 19;
 
     /// <summary>The cities of <c>cities500.txt</c>, or of the one <c>.txt</c> inside <c>cities500.zip</c>.</summary>
-    public static IEnumerable<GeoNamesCity> ReadCities(string path)
+    /// <remarks>
+    /// More than <paramref name="maxCities"/> lines fails the read: cities500 has about 200,000, and the whole
+    /// file is held in memory by <c>geonames update</c>, so a far larger file is not the one expected.
+    /// </remarks>
+    public static IEnumerable<GeoNamesCity> ReadCities(string path, int maxCities = MaxCities)
     {
         if (!string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase))
         {
-            return ReadCities(File.OpenRead(path), path);
+            return ReadCities(File.OpenRead(path), path, maxCities);
         }
 
-        return ReadZippedCities(path);
+        return ReadZippedCities(path, maxCities);
     }
+
+    /// <summary>The most cities a file may have: five times cities500's.</summary>
+    public const int MaxCities = 1_000_000;
 
     /// <summary><c>admin1CodesASCII.txt</c>: <c>PT.13</c> → <c>Porto</c>.</summary>
     public static Dictionary<string, string> ReadAdmin1(string path)
@@ -70,7 +77,7 @@ public static class GeoNamesFiles
         return names;
     }
 
-    private static IEnumerable<GeoNamesCity> ReadZippedCities(string path)
+    private static IEnumerable<GeoNamesCity> ReadZippedCities(string path, int maxCities)
     {
         using var zip = ZipFile.OpenRead(path);
         var texts = zip.Entries.Where(e => e.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
@@ -79,16 +86,22 @@ public static class GeoNamesFiles
             throw new InvalidDataException($"{Path.GetFileName(path)}: expected exactly one .txt file, as in GeoNames' cities500.zip.");
         }
 
-        foreach (var city in ReadCities(texts[0].Open(), path))
+        foreach (var city in ReadCities(texts[0].Open(), path, maxCities))
         {
             yield return city;
         }
     }
 
-    private static IEnumerable<GeoNamesCity> ReadCities(Stream stream, string path)
+    private static IEnumerable<GeoNamesCity> ReadCities(Stream stream, string path, int maxCities)
     {
         foreach (var (number, text) in ReadLines(stream, path))
         {
+            if (number > maxCities)
+            {
+                throw new InvalidDataException(
+                    $"{Path.GetFileName(path)} has more than {maxCities} lines; cities500 has about 200,000, so this is not that file.");
+            }
+
             var columns = text.Split('\t');
             if (columns.Length != CityColumns)
             {

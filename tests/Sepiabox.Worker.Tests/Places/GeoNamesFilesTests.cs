@@ -88,4 +88,17 @@ public sealed class GeoNamesFilesTests : IDisposable
 
         Assert.Equal("cities500.zip: expected exactly one .txt file, as in GeoNames' cities500.zip.", error.Message);
     }
+
+    [Fact]
+    public void A_file_with_more_cities_than_the_ceiling_fails_clearly()
+    {
+        var source = GeoNamesSample.Write(_folder);
+
+        var text = Assert.Throws<InvalidDataException>(() => GeoNamesFiles.ReadCities(source.Cities, maxCities: 3).ToList());
+        var zipped = Assert.Throws<InvalidDataException>(() => GeoNamesFiles.ReadCities(GeoNamesSample.WriteZip(_folder), maxCities: 3).ToList());
+
+        Assert.Equal("cities500.txt has more than 3 lines; cities500 has about 200,000, so this is not that file.", text.Message);
+        Assert.Equal("cities500.zip has more than 3 lines; cities500 has about 200,000, so this is not that file.", zipped.Message);
+        Assert.Equal(1_000_000, GeoNamesFiles.MaxCities);
+    }
 }

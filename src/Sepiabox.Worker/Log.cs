@@ -49,6 +49,9 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Information, Message = "Downloaded {File}: SHA-256 {Sha256}, {Bytes} bytes, last modified {LastModified}, from {Uri}.")]
     public static partial void GeoNamesFileDownloaded(ILogger logger, string file, string sha256, long bytes, string lastModified, Uri uri);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not delete the temporary folder {Folder}.")]
+    public static partial void TemporaryFolderLeft(ILogger logger, string folder, Exception exception);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Named the place of {Assets} assets.")]
     public static partial void PlacesRefreshed(ILogger logger, int assets);
 
