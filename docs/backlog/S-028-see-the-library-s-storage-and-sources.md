@@ -5,11 +5,11 @@
 **Size:** S
 
 ### Context
-"Quanto espaço ocupam os vídeos de 2019?" ("How much space do the 2019 videos take?") and "que fotos só existem numa fonte?" ("which photos exist in only one source?") help decide what to keep.
+"How much space do the 2019 videos take?" ("Quanto espaço ocupam os vídeos de 2019?") and "Which photos exist in only one source?" ("Que fotos só existem em uma fonte?") help decide what to keep.
 
 ### Scope
 - DSL: `aggregate.sum: "bytes"`; filter `sourceCount: { "eq": 1 }` or `{ "gte": 2 }`.
-- Page `/acervo`: totals by kind and year (count and size), assets in only one source, assets in several sources (with names), the 20 largest videos.
+- Page `/storage`: totals by kind and year (count and size), assets in only one source, assets in several sources (with names), the 20 largest videos.
 
 ### Out of scope
 - Automatic cleanup recommendations.

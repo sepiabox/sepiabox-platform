@@ -8,8 +8,8 @@
 "Your photos are yours": at any time, the family can take everything with them, in open formats.
 
 ### Scope
-- `/definicoes/exportar`: requests an export; the worker generates `exports/<date>.zip` with `catalog.json` (assets, sources, people with names, occasions, personal places), `originals.txt` (one line per original with a 24 h SAS) and `README.txt`.
-- Face data (embeddings) only with the "incluir dados de rosto" ("include face data") option.
+- `/settings/export`: requests an export; the worker generates `exports/<date>.zip` with `catalog.json` (assets, sources, people with names, occasions, personal places), `originals.txt` (one line per original with a 24 h SAS) and `README.txt`.
+- Face data (embeddings) only with the "Include face data" option.
 - 1 h SAS download link.
 
 ### Out of scope

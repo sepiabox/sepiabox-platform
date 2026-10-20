@@ -5,7 +5,7 @@
 **Size:** S
 
 ### Context
-"Em que ocasiões usei este vestido vermelho?" ("On which occasions did I wear this red dress?"): the user marks the dress in a photo and Sepiabox searches for similar photos, grouped by occasion.
+"On which occasions did I wear this red dress?" ("Em que ocasiões usei este vestido vermelho?"): the user marks the dress in a photo and Sepiabox searches for similar photos, grouped by occasion.
 
 ### Scope
 - In the detail view: draw a rectangle on the preview.

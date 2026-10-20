@@ -10,7 +10,7 @@ The same as Google Drive, for personal Microsoft accounts, via Microsoft Graph.
 ### Scope
 - Connect a Microsoft account with scopes `Files.Read offline_access`; token protected as in S-037 (reuse `connected_sources`).
 - Daily job: `delta` on `/me/drive/root` filtering images and videos; stored `deltaLink`; new files to `incoming` in reference mode; removed ones marked.
-- "Reconectar" status on `invalid_grant`.
+- `reconnect` status on `invalid_grant` (as S-037).
 
 ### Out of scope
 - SharePoint, work accounts.
@@ -18,7 +18,7 @@ The same as Google Drive, for personal Microsoft accounts, via Microsoft Graph.
 ### Acceptance criteria
 - [ ] Given a fake Graph client, when the first sync runs, then the image/video files land in `incoming` and the rest do not.
 - [ ] Given the `deltaLink`, when the second sync runs, then only the changes land.
-- [ ] Given `invalid_grant`, then the status becomes "Reconectar".
+- [ ] Given `invalid_grant`, then the status becomes `reconnect`.
 
 ### Technical notes
 - `Microsoft.Graph` package. `IOneDriveClient` interface for tests.

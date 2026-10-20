@@ -5,13 +5,13 @@
 **Size:** M
 
 ### Context
-The CLIP text encoder turns "snow" into a vector comparable with the photo embeddings. Search is in English (D-017); the question translator (S-025) handles Portuguese.
+The CLIP text encoder turns "snow" into a vector comparable with the photo embeddings. Search is in English (D-017); the question translator (S-025) turns visual terms asked in Portuguese into English.
 
 ### Scope
 - Text model `Xenova/clip-vit-base-patch32` (`onnx/text_model.onnx`, `vocab.json`, `merges.txt`) in `models.json`.
 - CLIP BPE tokenizer in C# (lowercase, CLIP regex, `</w>` suffix, start 49406, end 49407, length 77).
 - DSL: `visual: { "text": "snow", "minScore": 0.2 }`; sorts by similarity, combinable with the other filters.
-- UI: "Descrever (em inglês)" ("Describe (in English)") box in the search bar.
+- UI: "Describe (in English)" box in the search bar ("Descrever (em inglês)" in pt-BR).
 
 ### Out of scope
 - Translation from Portuguese (S-025).

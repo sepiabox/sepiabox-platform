@@ -13,6 +13,8 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 **Order overrides** ([D-041](../decisions.md)): after S-009 come S-015, S-043, then S-018, ahead of S-010–S-014, so the drive is processed once with embeddings, faces and the dates of undated files.
 
+**UI text** ([D-050](../decisions.md)): from S-044 on, every story writes the text the user sees as resources in English and Brazilian Portuguese, and uses English routes. Portuguese strings quoted in stories are the `pt-BR` translation.
+
 ## Execution order
 
 ### Sprint 1 — Foundation and first read of the drive
@@ -69,13 +71,13 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 ### Sprint 5 — Occasions and questions
 
-**Demonstrable increment:** Ask "Quantos casamentos fomos em 2026?" (how many weddings did we go to in 2026?) and get the number with the occasions; see blurry photos, bursts and space per source.
+**Demonstrable increment:** Ask "How many weddings did we go to in 2026?" (or, in Portuguese, "Quantos casamentos fomos em 2026?") and get the number with the occasions; see blurry photos, bursts and space per source.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-023 | [Group photos into occasions](S-023-group-photos-into-occasions.md) | Occasions | S-012 | Medium | M | `todo` |
 | S-024 | [Classify occasions by type](S-024-classify-occasions-by-type.md) | Occasions | S-023, S-016 | Medium | M | `todo` |
-| S-025 | [Ask questions in Portuguese with Claude Haiku](S-025-ask-questions-in-portuguese-with-claude-haiku.md) | Questions | S-016, S-021, S-024, S-014 | Medium | M | `todo` |
+| S-025 | [Ask questions in English or Brazilian Portuguese with Claude Haiku](S-025-ask-questions-in-english-or-brazilian-portuguese.md) | Questions | S-016, S-021, S-024, S-014 | Medium | M | `todo` |
 | S-026 | [Answer counting questions](S-026-answer-counting-questions.md) | Questions | S-025 | Medium | M | `todo` |
 | S-027 | [Find blurry photos and bursts](S-027-find-blurry-photos-and-bursts.md) | Organization | S-005, S-013 | Low | M | `todo` |
 | S-028 | [See the library's storage and sources](S-028-see-the-library-s-storage-and-sources.md) | Organization | S-026 | Low | S | `todo` |

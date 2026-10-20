@@ -25,7 +25,7 @@ The AppHost describes the infrastructure; `azd` provisions it in France Central 
 - [ ] Given the generated infrastructure, when it is inspected, then the web is reached only through the Container Apps ingress (HTTPS only, no other exposed port), which the web's forwarded-header handling relies on (enabled by the web outside Development, D-048); verified by a test on the Bicep.
 - [ ] Given the web in Azure, when it starts, then its data protection keys are persisted to Blob Storage and protected with a Key Vault key (`PersistKeysToAzureBlobStorage` + `ProtectKeysWithAzureKeyVault`, managed identity), so a restart, a new revision or a second replica keeps everyone signed in (verified by a test of the web's service registration in the `Production` environment).
 - [ ] Given the generated infrastructure, when it is inspected, then `Auth:Google:ClientId`, `Auth:Google:ClientSecret`, `Auth:Microsoft:ClientId`, `Auth:Microsoft:ClientSecret` and `Access:Emails` reach the web as Key Vault references or Aspire secret parameters, never as plain values.
-- [ ] Given a real (manual) deploy, when I sign in with Google on `https://app.sepiabox.com`, restart the web revision and reload the page, then I am still signed in; and an account not on `Access:Emails` lands on `/sem-acesso` (steps in `docs/operations.md`).
+- [ ] Given a real (manual) deploy, when I sign in with Google on `https://app.sepiabox.com`, restart the web revision and reload the page, then I am still signed in; and an account not on `Access:Emails` lands on `/no-access` (steps in `docs/operations.md`).
 
 ### Technical notes
 - Customizations via Aspire's `ConfigureInfrastructure`.

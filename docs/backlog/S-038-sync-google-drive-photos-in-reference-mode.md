@@ -12,7 +12,7 @@ With the account connected, Drive photos appear alongside the HD ones, without d
 - Each new file is downloaded to `incoming` with metadata (source google-drive, fileId, path, reference mode).
 - File removed in Drive → source marked as removed.
 - Same content already from the HD → only gains a source (no new asset).
-- Photo detail: "Abrir original" ("Open original") downloads from Drive through the server.
+- Photo detail: "Open original" downloads from Drive through the server.
 
 ### Out of scope
 - Google Photos (restricted API).

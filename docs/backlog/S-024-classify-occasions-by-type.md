@@ -8,23 +8,23 @@
 Knowing that an occasion is a wedding uses the CLIP embeddings already stored (zero-shot), with no new model (D-019).
 
 ### Scope
-- `eventTypes.json`: casamento/wedding ("a photo of a wedding"), aniversário/birthday ("a photo of a birthday party"), praia/beach ("a photo at the beach"), natal/Christmas ("a photo of a Christmas celebration"), formatura/graduation ("a photo of a graduation ceremony"), neve/snow ("a photo in the snow"), festa/party ("a photo of a party"). No religion or health categories.
+- `eventTypes.json`: English keys with their CLIP prompt: `wedding` ("a photo of a wedding"), `birthday` ("a photo of a birthday party"), `beach` ("a photo at the beach"), `christmas` ("a photo of a Christmas celebration"), `graduation` ("a photo of a graduation ceremony"), `snow` ("a photo in the snow"), `party` ("a photo of a party"). Labels shown to the user come from the resources (English and pt-BR: casamento, aniversário, praia, Natal, formatura, neve, festa, viagem; D-050). No religion or health categories.
 - Per photo: softmax (temperature 100) across the texts; event type = the label with the most photos at probability ≥ 0.35, if that is ≥ 30% of the photos; otherwise no type.
-- Extra "viagem" (trip) rule: an occasion more than 100 km from the "Casa" (home) place (S-014, if it exists) lasting ≥ 1 day.
-- DSL `eventTypes: ["casamento"]`; filter on the occasions page.
+- Extra `trip` rule: an occasion more than 100 km from the place marked as home (S-014, if there is one) lasting ≥ 1 day.
+- DSL `eventTypes: ["wedding"]`; filter on the occasions page.
 
 ### Out of scope
 - Counts and answers (S-026).
 
 ### Acceptance criteria
-- [ ] Given synthetic embeddings aligned with "wedding" in 60% of the photos, when the occasion is classified, then the type is casamento.
+- [ ] Given synthetic embeddings aligned with "wedding" in 60% of the photos, when the occasion is classified, then the type is `wedding`.
 - [ ] Given no label above the threshold in 30% of the photos, when the occasion is classified, then the type stays empty.
-- [ ] Given a 2-day occasion 300 km from Casa, when it is classified, then it has the type viagem.
-- [ ] Given `eventTypes=[casamento]`, when occasions are searched, then only occasions of that type are returned.
+- [ ] Given a 2-day occasion 300 km from the home place, when it is classified, then it has the type `trip`.
+- [ ] Given `eventTypes=[wedding]`, when occasions are searched, then only occasions of that type are returned.
 
 ### Technical notes
 - Text embeddings computed once (S-016) and kept in memory; tests use a fake encoder.
-- Decisions: D-019.
+- Decisions: D-019, D-050.
 
 ### Expected tests
 - Unit: voting, thresholds, trip. Integration: filter.
