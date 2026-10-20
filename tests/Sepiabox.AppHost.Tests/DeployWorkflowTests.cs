@@ -19,11 +19,53 @@ public sealed partial class DeployWorkflowTests
         Assert.Equal(["CI"], Sequence(afterCi, "workflows"));
         Assert.Equal(["completed"], Sequence(afterCi, "types"));
         Assert.Equal(["main"], Sequence(afterCi, "branches"));
-        // Only a green CI run of a push: a workflow_run also follows CI runs of pull requests.
-        var condition = Text(Job()["if"]);
-        Assert.Contains("github.event.workflow_run.conclusion == 'success'", condition, StringComparison.Ordinal);
-        Assert.Contains("github.event.workflow_run.event == 'push'", condition, StringComparison.Ordinal);
-        Assert.Contains("github.event_name == 'workflow_dispatch'", condition, StringComparison.Ordinal);
+        // The whole condition, so a dropped clause or operator shows: only a green CI run of a push to main in
+        // this repository (a workflow_run also follows CI runs of pull requests and forks), or a manual run of main.
+        Assert.Equal(
+            "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || "
+            + "(github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && "
+            + "github.event.workflow_run.event == 'push' && "
+            + "github.event.workflow_run.head_repository.full_name == github.repository)",
+            Normalized(Text(Job()["if"])));
+    }
+
+    [Fact]
+    public void A_manual_run_deploys_only_from_main()
+    {
+        // Another branch's manual run would use that branch's copy of this file; the environment's deployment
+        // branch rule (operations.md) refuses it too.
+        Assert.Contains(
+            "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
+            Normalized(Text(Job()["if"])),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Only_the_newest_commit_on_main_is_deployed()
+    {
+        var names = Steps().Select(Name).ToList();
+        var newest = Steps().Single(step => Name(step) == "Skip a commit that is no longer the newest on main");
+        var run = Run("Skip a commit that is no longer the newest on main");
+
+        Assert.Equal("newest", Text(newest["id"]));
+        Assert.Equal("${{ github.event.workflow_run.head_sha || github.sha }}", Text(Map(newest, "env")["DEPLOY_SHA"]));
+        Assert.Contains("git fetch --no-tags --depth=1 origin main", run, StringComparison.Ordinal);
+        Assert.Contains("latest=$(git rev-parse FETCH_HEAD)", run, StringComparison.Ordinal);
+        Assert.Contains("if [[ \"$latest\" == \"$DEPLOY_SHA\" ]]", run, StringComparison.Ordinal);
+        Assert.Contains("echo \"deploy=false\" >> \"$GITHUB_OUTPUT\"", run, StringComparison.Ordinal);
+        // Every step after the check runs only for the newest commit, and only while the job succeeds.
+        var index = Steps().IndexOf(newest);
+        Assert.True(index < names.IndexOf("Deploy"));
+        Assert.All(Steps().Skip(index + 1), step => Assert.Equal("steps.newest.outputs.deploy == 'true'", Text(step["if"])));
+    }
+
+    [Fact]
+    public void Job_has_a_time_limit_and_the_checkout_keeps_no_token()
+    {
+        var checkout = Steps().Single(step => Uses(step).StartsWith("actions/checkout@", StringComparison.Ordinal));
+
+        Assert.Equal("60", Text(Job()["timeout-minutes"]));
+        Assert.Equal("false", Text(Map(checkout, "with")["persist-credentials"]));
     }
 
     [Fact]
@@ -88,7 +130,8 @@ public sealed partial class DeployWorkflowTests
         }
 
         Assert.Contains("azd env new sepiabox --location francecentral", run, StringComparison.Ordinal);
-        // A missing secret stops the run before azd could generate a value.
+        // A missing secret, or jq's "null" saved as one, stops the run before azd could generate a value.
+        Assert.Contains("if [[ -z \"${!name}\" || \"${!name}\" == \"null\" ]]; then", run, StringComparison.Ordinal);
         Assert.Contains("exit 1", run, StringComparison.Ordinal);
         Assert.True(
             run.IndexOf("exit 1", StringComparison.Ordinal) < run.IndexOf("azd env new", StringComparison.Ordinal),
@@ -105,7 +148,9 @@ public sealed partial class DeployWorkflowTests
         // deploy.sh runs the migrate job and stops before the web when it fails (DeployScriptTests).
         Assert.Equal("scripts/deploy.sh", Run("Deploy"));
         Assert.True(deploy >= 0 && purge > deploy, "The purge comes after the deploy.");
-        Assert.DoesNotContain(Steps(), step => step.Children.ContainsKey(new YamlScalarNode("if")));
+        // No step runs after a failure (their only condition is the newest-commit check) or ignores one.
+        Assert.DoesNotContain(Steps(), step => step.Children.ContainsKey(new YamlScalarNode("if"))
+            && Text(step["if"]) != "steps.newest.outputs.deploy == 'true'");
         Assert.DoesNotContain(Steps(), step => step.Children.ContainsKey(new YamlScalarNode("continue-on-error")));
         // A bare azd deploy would skip the migrate job (and the predeploy hook refuses it).
         Assert.DoesNotContain("azd deploy", File.ReadAllText(s_path), StringComparison.Ordinal);
@@ -159,4 +204,9 @@ public sealed partial class DeployWorkflowTests
         [.. ((YamlSequenceNode)node[key]).Children.Select(Text)];
 
     private static string Text(YamlNode node) => ((YamlScalarNode)node).Value ?? "";
+
+    private static string Normalized(string expression) => Whitespace().Replace(expression, " ").Trim();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
 }

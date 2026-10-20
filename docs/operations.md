@@ -12,8 +12,9 @@ Steps that need a person, because they depend on accounts, consents or external 
 | GitHub variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` and a `production` environment with manual approval | S-029, S-034 | GitHub → Settings |
 | GitHub variable `BUDGET_ALERT_EMAILS` in `sepiabox-infra`: comma-separated e-mails that receive the budget and cost-anomaly alerts | S-029 | GitHub → sepiabox-infra → Settings → Variables |
 | The deploy identity (the OIDC app registration) needs Owner, or User Access Administrator plus Resource Policy Contributor, on `rg-sepiabox`, to assign the shutdown runbook's role and the resource policy | S-030, S-031 | Azure portal → rg-sepiabox → Access control |
-| The deploy identity needs *AcrDelete* (or Contributor) on the container registry, for the image purge after each deploy (Owner on `rg-sepiabox` already includes it) | S-034 | Azure portal → Container Registry → Access control |
-| The deploy identity, and anyone who runs `scripts/deploy.sh`, needs rights at **subscription** scope to create deployments and to read and write the resource group: azd deploys the AppHost's infrastructure as a subscription-scoped deployment that declares `rg-sepiabox` itself, which Owner on the resource group alone does not allow. The narrowest choice is a custom role assigned on the subscription with the actions `Microsoft.Resources/deployments/*`, `Microsoft.Resources/subscriptions/resourceGroups/read` and `Microsoft.Resources/subscriptions/resourceGroups/write`; Contributor on the subscription also works but grants far more. If the first deploy from GitHub fails with `AuthorizationFailed` on `Microsoft.Resources/deployments/write` at the subscription, this is the missing step | S-034 | Azure portal → Subscriptions → Access control |
+| The deploy identity needs *Contributor* on the container registry (or Owner on `rg-sepiabox`, which includes it) for the image purge after each deploy: `az acr run` starts a registry task, which *AcrDelete* alone does not allow | S-034 | Azure portal → Container Registry → Access control |
+| The `production` environment deploys only `main`: GitHub → sepiabox-platform → Settings → Environments → production → Deployment branches and tags → Selected branches and tags → add `main`. The workflow also refuses a manual run of another branch, which would use that branch's copy of the workflow | S-034 | GitHub → Settings → Environments |
+| The deploy identity, and anyone who runs `scripts/deploy.sh`, needs rights at **subscription** scope to create deployments and to read and write the resource group: azd deploys the AppHost's infrastructure as a subscription-scoped deployment that declares `rg-sepiabox` itself, which Owner on the resource group alone does not allow. The narrowest choice is a custom role assigned on the subscription with the actions `Microsoft.Resources/deployments/*`, `Microsoft.Resources/subscriptions/read`, `Microsoft.Resources/subscriptions/locations/read`, `Microsoft.Resources/subscriptions/resourceGroups/read` and `Microsoft.Resources/subscriptions/resourceGroups/write`; if azd then reports `AuthorizationFailed` on another read, add that action too. Contributor on the subscription also works but grants far more. If the first deploy from GitHub fails with `AuthorizationFailed` on `Microsoft.Resources/deployments/write` at the subscription, this is the missing step | S-034 | Azure portal → Subscriptions → Access control |
 | GitHub secrets of the `production` environment `PG_USERNAME`, `PG_PASSWORD` and `PG_APP_PASSWORD`, and optionally the variable `UPLOADER_PRINCIPAL_IDS`, copied from the first deploy (see "Deploying from GitHub Actions") | S-034 | GitHub → sepiabox-platform → Settings → Environments → production |
 | Google OAuth client (Testing mode, the two e-mails as test users; Drive API enabled) | S-010, S-037 | Google Cloud Console |
 | Microsoft app registration for personal accounts (sign-in and Files.Read) | S-010, S-039 | Azure portal → Entra ID |
@@ -92,15 +93,21 @@ Until the owner creates the secrets below, the web starts with no sign-in button
 
 ```bash
 cd sepiabox-platform   # the folder with .azure/sepiabox/config.json
+set -o pipefail
 for pair in PG_USERNAME:pg_username PG_PASSWORD:pg_password PG_APP_PASSWORD:pg_app_password; do
-  jq -r ".infra.parameters.${pair#*:}" .azure/sepiabox/config.json \
-    | gh secret set "${pair%%:*}" --env production --repo sepiabox/sepiabox-platform
+  # -e makes jq fail on a missing key instead of printing "null"; the secret is set only when it succeeded.
+  if value=$(jq -er ".infra.parameters.${pair#*:}" .azure/sepiabox/config.json); then
+    printf '%s' "$value" | gh secret set "${pair%%:*}" --env production --repo sepiabox/sepiabox-platform
+  else
+    echo "Not set: ${pair%%:*} (check the key names in config.json)" >&2
+  fi
 done
+unset value
 gh variable set UPLOADER_PRINCIPAL_IDS --env production --repo sepiabox/sepiabox-platform \
   --body "$(jq -r '.infra.parameters.uploaderPrincipalIds // ""' .azure/sepiabox/config.json)"
 ```
 
-`gh secret set` reads the value from its input, so it never appears on the screen or in the shell history; check that each `jq` prints nothing on its own (the key names are as in your `config.json`). Without the `.azure` folder, the login and password can be read from the database vault's secret `connectionstrings--catalog` instead (it needs *Key Vault Secrets User* on that vault for your account):
+`gh secret set` reads the value from its input, so it never appears on the screen or in the shell history. Without the `.azure` folder, the login and password can be read from the database vault's secret `connectionstrings--catalog` instead (it needs *Key Vault Secrets User* on that vault for your account):
 
 ```bash
 vault=$(az keyvault list --resource-group rg-sepiabox --query "[?starts_with(name, 'databasevault-')].name | [0]" -o tsv)
