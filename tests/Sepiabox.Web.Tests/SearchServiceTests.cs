@@ -471,6 +471,7 @@ public sealed class SearchServiceTests(CatalogFixture catalog)
         Assert.Superset(found, possible);
         Assert.Equal(exact.Hits.Select(h => h.Score).OrderDescending(), exact.Hits.Select(h => h.Score));
         // The index walk is approximate: never more than the exact answer, every hit it gives is a real match.
+        Assert.NotEmpty(ranking.Hits);
         Assert.Subset(found, ranking.Hits.Select(h => h.Id).ToHashSet());
     }
 
