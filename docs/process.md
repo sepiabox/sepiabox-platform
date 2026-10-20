@@ -13,7 +13,7 @@ How agents deliver the backlog without waiting for a person. Read `CLAUDE.md`, `
 ## Step 0 — Pick the story
 
 1. Update `main`.
-2. Take the next `todo` story in `docs/backlog/README.md` whose dependencies are all `done`, in backlog order.
+2. Take the next `todo` story in `docs/backlog/README.md` whose dependencies are all `done`, in backlog order; a sprint is finished before the next one starts and there are no order overrides (D-054).
 3. Set it to `doing` and create the branch.
 4. If nothing is eligible but some stories are `blocked`, go to "End of the cycle".
 
