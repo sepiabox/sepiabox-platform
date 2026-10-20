@@ -16,7 +16,7 @@ public sealed class AccessListRevalidation(ILoggerFactory loggerFactory, AccessL
 
     protected override TimeSpan RevalidationInterval => Interval;
 
-    public bool IsStillAllowed(ClaimsPrincipal user) =>
+    internal bool IsStillAllowed(ClaimsPrincipal user) =>
         user.Identity?.IsAuthenticated == true && access.Allows(user.FindFirstValue(ClaimTypes.Email));
 
     protected override Task<bool> ValidateAuthenticationStateAsync(AuthenticationState authenticationState, CancellationToken cancellationToken) =>

@@ -7,7 +7,7 @@
     </a>
     <AuthorizeView>
         <Authorized>
-            <span class="user">@context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value</span>
+            <span class="user">@context.User.FindFirst(ClaimTypes.Email)?.Value</span>
             <SignOutButton />
         </Authorized>
     </AuthorizeView>

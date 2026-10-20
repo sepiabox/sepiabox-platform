@@ -1,7 +1,8 @@
 @page "/entrar"
 @attribute [AllowAnonymous]
 @inject SignInProviders Providers
-@inject AccessList Access
+@inject IAuthorizationService Authorization
+@inject IAuthorizationPolicyProvider Policies
 @inject IWebHostEnvironment Environment
 @inject NavigationManager Navigation
 @* Static server rendering: the buttons are plain links that leave for Google or Microsoft. *@
@@ -32,7 +33,7 @@
     }
     else if (Environment.IsDevelopment())
     {
-        <form class="dev-login" method="post" action="/dev-login" data-enhance="false">
+        <form class="dev-login" method="post" action="dev-login" data-enhance="false">
             <AntiforgeryToken />
             <input type="hidden" name="returnUrl" value="@Return" />
             <label for="email">E-mail (só em desenvolvimento)</label>
@@ -47,8 +48,9 @@
 </section>
 
 @code {
+    // The page is rendered statically on the server (no @rendermode), so the request is always there.
     [CascadingParameter]
-    private HttpContext HttpContext { get; set; } = null!;
+    private HttpContext? HttpContext { get; set; }
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationState { get; set; }
@@ -60,14 +62,16 @@
     [SupplyParameterFromQuery(Name = AuthSetup.SignInErrorQuery)]
     private string? Error { get; set; }
 
-    private string Return => AuthSetup.LocalReturnUrl(HttpContext.Request, ReturnUrl);
+    private string Return => AuthSetup.LocalReturnUrl(
+        HttpContext?.Request ?? throw new InvalidOperationException("/entrar is only rendered on the server."),
+        ReturnUrl);
 
     protected override async Task OnInitializedAsync()
     {
-        // Someone who already has access has nothing to do here.
+        // Someone who already has access (the same policy as every page) has nothing to do here.
         if (AuthenticationState is not null
-            && (await AuthenticationState).User is { Identity.IsAuthenticated: true } user
-            && Access.Allows(user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value))
+            && await Policies.GetDefaultPolicyAsync() is { } policy
+            && (await Authorization.AuthorizeAsync((await AuthenticationState).User, policy)).Succeeded)
         {
             Navigation.NavigateTo(Return);
         }

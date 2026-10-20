@@ -35,25 +35,31 @@ public static partial class AuthSetup
     // Personal accounts only: in a work or school tenant, the tenant's administrator chooses the e-mail the
     // app receives. On the consumers endpoint Microsoft itself owns the account, which is what makes the
     // e-mail trustworthy (Google's is checked with email_verified instead).
-    public const string MicrosoftConsumers = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
+    internal const string MicrosoftConsumers = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
 
     public static WebApplicationBuilder AddSepiaboxAuth(this WebApplicationBuilder builder)
     {
         var providers = SignInProviders.From(builder.Configuration);
         var development = builder.Environment.IsDevelopment();
         builder.Services.AddSingleton(providers);
-        builder.Services.AddSingleton(services => AccessList.From(services.GetRequiredService<IConfiguration>()));
+        builder.Services.AddSingleton(services => AccessList.From(
+            services.GetRequiredService<IConfiguration>(),
+            services.GetRequiredService<ILoggerFactory>().CreateLogger(AccessTicketHandler.LoggerCategory)));
         builder.Services.AddSingleton<IAuthorizationHandler, AccessListHandler>();
 
         // In Azure the Container Apps ingress ends TLS and is the only way in, so the forwarded scheme and
-        // host are trusted from any address; without them the OAuth redirect URI would be http. Not used
-        // in Development, where nothing sits in front and /dev-login trusts the connection's own address.
-        builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        // client address are trusted from any address; without them the OAuth redirect URI would be http.
+        // The ingress keeps the browser's Host, so X-Forwarded-Host is never read (D-048). Nothing of this
+        // applies in Development, where nothing sits in front.
+        if (!development)
         {
-            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
-            options.KnownIPNetworks.Clear();
-            options.KnownProxies.Clear();
-        });
+            builder.Services.Configure<ForwardedHeadersOptions>(options =>
+            {
+                options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+                options.KnownIPNetworks.Clear();
+                options.KnownProxies.Clear();
+            });
+        }
 
         var authentication = builder.Services
             .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -159,8 +165,8 @@ public static partial class AuthSetup
     public static string AppPath(HttpRequest request, string path) => request.PathBase + path;
 
     /// <summary>
-    /// A full local path to go back to after sign-in, or the app's home when it is missing or could lead
-    /// to another site.
+    /// A full local path to go back to after sign-in, or the app's home when it is missing, could lead to
+    /// another site, or is one of the sign-in pages themselves (which would loop).
     /// </summary>
     public static string LocalReturnUrl(HttpRequest request, string? url) =>
         url is not null
@@ -168,8 +174,17 @@ public static partial class AuthSetup
         && (url.Length == 1 || url[1] is not ('/' or '\\'))
         // Browsers drop tabs and line breaks, which would turn "/\t/host" into "//host".
         && !url.Any(char.IsControl)
+        && !IsSignInPage(request, url)
             ? url
             : AppPath(request, "/");
+
+    private static bool IsSignInPage(HttpRequest request, string url)
+    {
+        var path = new PathString(url.Split('?', '#')[0]);
+        return path.StartsWithSegments(request.PathBase, StringComparison.OrdinalIgnoreCase, out var rest)
+            && ((string[])[SignInPath, NoAccessPath, SignOutPath, DevLoginPath])
+                .Any(page => rest.StartsWithSegments(page, StringComparison.OrdinalIgnoreCase));
+    }
 
     private static string? EmailVerified(JsonElement user)
     {
@@ -224,10 +239,15 @@ public static partial class AuthSetup
     /// <summary>Local testing without OAuth clients: signs in as any e-mail on the access list.</summary>
     private static async Task<IResult> DevLoginAsync(HttpContext http, IAntiforgery antiforgery, AccessList access)
     {
-        // Another computer on the network never gets a password-less sign-in, even from a developer's machine.
+        // Meant for a browser on the developer's own computer talking to the app directly: a request from
+        // another address, through a proxy, or for another host name is refused. A best effort for a
+        // Development-only route, not a security boundary.
         if (!HttpMethods.IsPost(http.Request.Method)
             || http.Connection.RemoteIpAddress is not { } remote
-            || !IPAddress.IsLoopback(remote))
+            || !IPAddress.IsLoopback(remote)
+            || http.Request.Headers.ContainsKey("X-Forwarded-For")
+            || http.Request.Headers.ContainsKey("X-Original-For")
+            || !IsLocalHost(http.Request.Host.Host))
         {
             return BareNotFound(http);
         }
@@ -295,12 +315,15 @@ public static partial class AuthSetup
         return Task.CompletedTask;
     }
 
+    private static bool IsLocalHost(string host) =>
+        host is "localhost" or "127.0.0.1" or "[::1]" or "::1";
+
     // Status code pages would re-execute a POST as a POST to the /not-found page, which then fails its own
-    // antiforgery check with a 400.
+    // antiforgery check with a 400; an empty body with the 404 already set avoids that.
     private static IResult BareNotFound(HttpContext http)
     {
         Bare(http, StatusCodes.Status404NotFound);
-        return Results.NotFound();
+        return Results.Empty;
     }
 
     private static bool IsApiPath(HttpRequest request) => request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase);

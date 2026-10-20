@@ -7,7 +7,7 @@ namespace Sepiabox.Web.Auth;
 /// The e-mails allowed into Sepiabox (D-006). Sign-in only proves who someone is; this list decides
 /// whether they get in. An empty list lets no one in (D-048).
 /// </summary>
-public sealed class AccessList
+public sealed partial class AccessList
 {
     public const string ConfigurationKey = "Access:Emails";
 
@@ -26,10 +26,19 @@ public sealed class AccessList
     /// reloads. Environment variables and Container Apps secrets never reload: a change there takes effect
     /// with the next restart or revision (docs/operations.md).
     /// </summary>
-    public static AccessList From(IConfiguration configuration)
+    public static AccessList From(IConfiguration configuration, ILogger? logger = null)
     {
         var access = new AccessList(Read(configuration));
-        ChangeToken.OnChange(configuration.GetReloadToken, () => access._emails = Parse(Read(configuration)));
+        ChangeToken.OnChange(configuration.GetReloadToken, () =>
+        {
+            var emails = Parse(Read(configuration));
+            if (emails.Count == 0 && access.Count > 0 && logger is not null)
+            {
+                LogEmptied(logger, ConfigurationKey);
+            }
+
+            access._emails = emails;
+        });
         return access;
     }
 
@@ -50,4 +59,7 @@ public sealed class AccessList
 
     // Providers and people type addresses with any casing; the comparison ignores it and stray spaces.
     private static string Normalize(string email) => email.Trim().ToUpperInvariant();
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Key} was reloaded empty: nobody can sign in any more.")]
+    private static partial void LogEmptied(ILogger logger, string key);
 }

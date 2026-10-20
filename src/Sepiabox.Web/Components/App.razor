@@ -4,7 +4,8 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="/" />
+    @* With the app's PathBase, so every relative link in the pages stays inside the app (D-048). *@
+    <base href="@BaseHref" />
     <ResourcePreloader />
     <link rel="icon" href="symbol.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
@@ -20,3 +21,10 @@
 </body>
 
 </html>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string BaseHref => (HttpContext?.Request.PathBase ?? PathString.Empty) + "/";
+}

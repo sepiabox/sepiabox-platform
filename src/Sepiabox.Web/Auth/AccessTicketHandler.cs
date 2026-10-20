@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 
 namespace Sepiabox.Web.Auth;
 
@@ -12,7 +13,7 @@ namespace Sepiabox.Web.Auth;
 /// </summary>
 public static partial class AccessTicketHandler
 {
-    /// <summary>The claim Google's <c>verified_email</c> is mapped to (D-048).</summary>
+    /// <summary>The claim Google's <c>verified_email</c> is mapped to; required to be true for Google (D-048).</summary>
     public const string EmailVerifiedClaim = "email_verified";
 
     public const string LoggerCategory = "Sepiabox.Web.Auth.SignIn";
@@ -22,8 +23,7 @@ public static partial class AccessTicketHandler
         var services = context.HttpContext.RequestServices;
         var principal = context.Principal;
         var email = principal?.FindFirstValue(ClaimTypes.Email);
-        var unverified = principal?.FindFirstValue(EmailVerifiedClaim) is { } verified
-            && !string.Equals(verified, "true", StringComparison.OrdinalIgnoreCase);
+        var unverified = !IsEmailVerified(context.Scheme.Name, principal);
 
         if (!unverified && services.GetRequiredService<AccessList>().Allows(email))
         {
@@ -41,14 +41,34 @@ public static partial class AccessTicketHandler
         context.HandleResponse();
     }
 
+    /// <summary>
+    /// Whether the provider vouches that the address belongs to the person who signed in.
+    /// </summary>
+    private static bool IsEmailVerified(string scheme, ClaimsPrincipal? principal) => scheme switch
+    {
+        // A Google account can carry an address its owner never confirmed: only an explicit "true" counts,
+        // and a missing claim is a refusal.
+        GoogleDefaults.AuthenticationScheme => string.Equals(principal?.FindFirstValue(EmailVerifiedClaim), "true", StringComparison.Ordinal),
+        // Microsoft's consumers endpoint only signs in personal accounts, whose address Microsoft itself
+        // owns and confirms, and its user info has no such claim.
+        _ => true,
+    };
+
     public static Task OnRemoteFailureAsync(RemoteFailureContext context)
     {
-        // Provider messages carry error codes, never the person's address.
+        // Only the exception type and the OAuth error code, reduced to its expected characters: the rest
+        // of the callback's query string is free text from whoever sent it.
         LogRemoteFailure(Logger(context.HttpContext.RequestServices), context.Scheme.Name,
-            context.Failure?.GetType().Name ?? "unknown", context.Failure?.Message ?? "");
+            context.Failure?.GetType().Name ?? "unknown", ErrorCode(context.Failure));
         context.Response.Redirect(AuthSetup.AppPath(context.Request, AuthSetup.SignInPath + "?" + AuthSetup.SignInErrorQuery + "=1"));
         context.HandleResponse();
         return Task.CompletedTask;
+    }
+
+    internal static string ErrorCode(Exception? failure)
+    {
+        var code = failure?.Data["error"] as string;
+        return code is { Length: > 0 and <= 64 } && code.All(c => char.IsAsciiLetterLower(c) || c == '_') ? code : "none";
     }
 
     private static ILogger Logger(IServiceProvider services) =>
@@ -57,6 +77,6 @@ public static partial class AccessTicketHandler
     [LoggerMessage(Level = LogLevel.Warning, Message = "Refused a {Provider} sign-in: {Reason}.")]
     private static partial void LogRefused(ILogger logger, string provider, string reason);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "A {Provider} sign-in failed: {ErrorType}: {ErrorMessage}")]
-    private static partial void LogRemoteFailure(ILogger logger, string provider, string errorType, string errorMessage);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "A {Provider} sign-in failed: {ErrorType}, OAuth error {ErrorCode}.")]
+    private static partial void LogRemoteFailure(ILogger logger, string provider, string errorType, string errorCode);
 }
