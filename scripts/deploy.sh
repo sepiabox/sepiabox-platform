@@ -62,6 +62,13 @@ export SEPIABOX_DEPLOY_SCRIPT=1
 
 azd provision --no-prompt
 
+# The web's base image with the CLIP text model (S-056): built only when models.json or the ASP.NET Core image
+# changed, and the web's publish builds on it (src/Sepiabox.Web/Sepiabox.Web.csproj, ContainerBaseImage). Before
+# the queue is paused and the database migrated, so a Docker or download failure stops the deploy while the
+# running web, jobs and schema still match.
+SEPIABOX_WEB_BASE_IMAGE=$(scripts/web-models.sh)
+export SEPIABOX_WEB_BASE_IMAGE
+
 # From here until the import jobs run the new image, the queue keeps every upload's events but nothing
 # receives them, so no import runs old code against a new schema or the reverse (D-063). Provisioning
 # comes first because it creates the queue and would set it active again. On the way out the queue is
@@ -150,8 +157,4 @@ azd deploy geonames --no-prompt
 # Never exit 0 with the queue paused.
 resume_queue || exit 1
 
-# The web's base image with the CLIP text model (S-056): built only when models.json or the ASP.NET Core image
-# changed, then the web's publish builds on it (src/Sepiabox.Web/Sepiabox.Web.csproj, ContainerBaseImage).
-SEPIABOX_WEB_BASE_IMAGE=$(scripts/web-models.sh)
-export SEPIABOX_WEB_BASE_IMAGE
 azd deploy web --no-prompt

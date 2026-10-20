@@ -125,6 +125,12 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Equal(
             [
                 "azd provision --no-prompt",
+                // The web's base image with the CLIP text model (S-056), already in the registry here: before the
+                // queue is paused and the schema changes, so a failure there leaves everything as it was.
+                "az acr login --name sepiaboxacr",
+                "docker pull --quiet mcr.microsoft.com/dotnet/aspnet:10.0",
+                "docker image inspect --format {{index .RepoDigests 0}} mcr.microsoft.com/dotnet/aspnet:10.0",
+                $"az acr repository show --name sepiaboxacr --image sepiabox-web-models:{ModelsTag()} --output none",
                 // Nothing receives from the queue until the import jobs run the new image (D-063).
                 PauseQueue,
                 "azd deploy migrate --no-prompt",
@@ -135,11 +141,6 @@ public sealed class DeployScriptTests : IDisposable
                 // The manual GeoNames job runs the new image too (S-059), before the queue receives again.
                 DeployGeoNames,
                 ResumeQueue,
-                // The web's base image with the CLIP text model (S-056), already in the registry here.
-                "az acr login --name sepiaboxacr",
-                "docker pull --quiet mcr.microsoft.com/dotnet/aspnet:10.0",
-                "docker image inspect --format {{index .RepoDigests 0}} mcr.microsoft.com/dotnet/aspnet:10.0",
-                $"az acr repository show --name sepiaboxacr --image sepiabox-web-models:{ModelsTag()} --output none",
                 DeployWeb,
             ],
             Calls().Where(call => !call.StartsWith("azd env", StringComparison.Ordinal)
@@ -378,7 +379,7 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Contains(
             Calls(),
             call => call.StartsWith(
-                $"docker build --platform linux/amd64 --build-arg BASE_IMAGE=mcr.microsoft.com/dotnet/aspnet@sha256:0123abcd --file infra/web-models/Dockerfile --tag {image} ",
+                $"docker build --platform linux/amd64 --provenance=false --sbom=false --build-arg BASE_IMAGE=mcr.microsoft.com/dotnet/aspnet@sha256:0123abcd --file infra/web-models/Dockerfile --tag {image} ",
                 StringComparison.Ordinal));
         Assert.Equal($"docker push --quiet {image}", Calls()[^1]);
         // Exactly the two files the web reads and the list that pins them.
@@ -407,12 +408,47 @@ public sealed class DeployScriptTests : IDisposable
     }
 
     [UnixFact]
-    public async Task Deploy_leaves_the_web_alone_when_its_models_image_cannot_be_built()
+    public async Task Deploy_stops_before_touching_the_queue_or_the_schema_when_the_models_image_cannot_be_built()
     {
         var result = await RunDeployAsync("Succeeded", modelsImage: "MISSING", download: "FAIL");
 
         Assert.NotEqual(0, result.ExitCode);
-        Assert.DoesNotContain(DeployWeb, Calls());
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("azd deploy", StringComparison.Ordinal));
+        Assert.DoesNotContain(PauseQueue, Calls());
+    }
+
+    [UnixFact]
+    public async Task Web_models_tag_is_the_same_for_a_models_json_checked_out_with_crlf()
+    {
+        // A copy of the script beside a models.json with Windows line ends, as a checkout with core.autocrlf gives.
+        var root = Path.Combine(_stubs, "crlf-checkout");
+        Directory.CreateDirectory(Path.Combine(root, "scripts"));
+        Directory.CreateDirectory(Path.Combine(root, "models"));
+        File.Copy(Path.Combine(Repository.Root, "scripts", "web-models.sh"), Path.Combine(root, "scripts", "web-models.sh"));
+        var lf = File.ReadAllText(Path.Combine(Repository.Root, "models", "models.json"));
+        Assert.DoesNotContain('\r', lf);
+        File.WriteAllText(Path.Combine(root, "models", "models.json"), lf.Replace("\n", "\r\n", StringComparison.Ordinal));
+
+        var result = await RunWebModelsAsync(image: "PRESENT", script: Path.Combine(root, "scripts", "web-models.sh"));
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal($"sepiaboxacr.azurecr.io/sepiabox-web-models:{ModelsTag()}", result.Output.Trim());
+    }
+
+    [UnixFact]
+    public async Task Web_models_uses_the_ingest_s_default_folder_without_sepiabox_models()
+    {
+        var home = Path.Combine(_stubs, "home");
+        Directory.CreateDirectory(Path.Combine(home, ".sepiabox", "models"));
+        foreach (var file in Directory.GetFiles(Models))
+        {
+            File.Copy(file, Path.Combine(home, ".sepiabox", "models", Path.GetFileName(file)));
+        }
+
+        var result = await RunWebModelsAsync(image: "MISSING", models: null, home: home);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains(Calls(), call => call.Contains($"--models {Path.Combine(home, ".sepiabox", "models")} ", StringComparison.Ordinal));
     }
 
     // The tag the script gives: the first 16 hex digits of the SHA-256 of models.json followed by the base digest.
@@ -424,15 +460,25 @@ public sealed class DeployScriptTests : IDisposable
         return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes))[..16];
     }
 
-    private Task<ProcessResult> RunWebModelsAsync(string image, string download = "") =>
-        RunAsync("bash", [Path.Combine(Repository.Root, "scripts", "web-models.sh")], new()
+    private Task<ProcessResult> RunWebModelsAsync(
+        string image, string download = "", string? script = null, string? models = "default", string? home = null)
+    {
+        var environment = new Dictionary<string, string>
         {
             ["PATH"] = _stubs + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
             ["CALLS"] = _calls,
-            ["SEPIABOX_MODELS"] = Models,
             ["STUB_MODELS_IMAGE"] = image,
             ["STUB_DOWNLOAD"] = download,
-        });
+            ["SEPIABOX_MODELS"] = models == "default" ? Models : "",
+            ["LOCALAPPDATA"] = "",
+        };
+        if (home is not null)
+        {
+            environment["HOME"] = home;
+        }
+
+        return RunAsync("bash", [script ?? Path.Combine(Repository.Root, "scripts", "web-models.sh")], environment);
+    }
 
     private Task<ProcessResult> RunDeployAsync(
         string statuses,

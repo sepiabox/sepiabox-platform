@@ -23,7 +23,7 @@ public sealed class AzureWebModelTests(PublishedInfrastructure published) : ICla
         var environment = published.Resource("web")["env"]!.AsObject();
 
         Assert.Equal("/models", environment["Search__ModelFolder"]!.GetValue<string>());
-        Assert.Contains("COPY models/ /models/", File.ReadAllText(Path.Combine(Repository.Root, "infra", "web-models", "Dockerfile")), StringComparison.Ordinal);
+        Assert.Contains("COPY --chmod=a+rX models/ /models/", File.ReadAllText(Path.Combine(Repository.Root, "infra", "web-models", "Dockerfile")), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -102,10 +102,19 @@ public sealed class WebModelsImageTests
                 await File.WriteAllBytesAsync(Path.Combine(context, "models", name), bytes);
             }
 
-            await Docker("build", "--file", Path.Combine(Repository.Root, "infra", "web-models", "Dockerfile"), "--tag", image, context);
+            // As a download can leave it: readable by its owner only. The image must still let the app read it.
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(Path.Combine(context, "models", "clip-vit-b32-text.onnx"), UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+
+            await Docker(
+                "build", "--provenance=false", "--sbom=false",
+                "--file", Path.Combine(Repository.Root, "infra", "web-models", "Dockerfile"), "--tag", image, context);
             foreach (var (name, bytes) in files)
             {
-                var sum = await Docker("run", "--rm", "--entrypoint", "sha256sum", image, "/models/" + name);
+                // As the web runs: the image's non-root user.
+                var sum = await Docker("run", "--rm", "--user", "app", "--entrypoint", "sha256sum", image, "/models/" + name);
                 Assert.StartsWith(Convert.ToHexStringLower(SHA256.HashData(bytes)), sum, StringComparison.Ordinal);
             }
 
@@ -115,11 +124,13 @@ public sealed class WebModelsImageTests
         finally
         {
             Directory.Delete(context, recursive: true);
-            await Docker("rmi", "--force", image);
+            await Docker(check: false, "rmi", "--force", image);
         }
     }
 
-    private static async Task<string> Docker(params string[] arguments)
+    private static Task<string> Docker(params string[] arguments) => Docker(check: true, arguments);
+
+    private static async Task<string> Docker(bool check, params string[] arguments)
     {
         var start = new ProcessStartInfo("docker") { RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in arguments)
@@ -131,7 +142,7 @@ public sealed class WebModelsImageTests
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
-        Assert.True(process.ExitCode == 0, $"docker {string.Join(' ', arguments)}: {await error}");
+        Assert.True(!check || process.ExitCode == 0, $"docker {string.Join(' ', arguments)}: {await error}");
         return await output;
     }
 }

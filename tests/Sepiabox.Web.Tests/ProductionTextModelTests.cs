@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Sepiabox.Catalog;
 using Sepiabox.Search.Clip;
@@ -113,8 +115,9 @@ public sealed class ProductionTextModelTests(CatalogFixture catalog) : IDisposab
                 ["ConnectionStrings:blobs"] = catalog.BlobConnectionString,
             },
         };
-        // Starting the host runs the warm-up, as the container does before it takes requests.
-        _ = web.Services;
+        // Starting the host starts the warm-up, as the container does; the tests wait for it to finish.
+        var warmUp = web.Services.GetServices<IHostedService>().OfType<Sepiabox.Web.Services.TextModelWarmUp>().Single();
+        await warmUp.ExecuteTask!;
         return web;
     }
 

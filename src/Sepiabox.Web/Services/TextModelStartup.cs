@@ -19,14 +19,14 @@ public sealed class TextModelHealthCheck(IQueryEmbedder embedder) : IHealthCheck
 }
 
 /// <summary>
-/// Loads the CLIP text model before the web takes requests (S-056, D-071), so the first description search after a
-/// cold start does not pay for it: verifying and opening the model and embedding one short text. A model that is
-/// missing or unusable is logged once as an error and the web starts anyway. The working set after loading is logged
-/// too, the measure for the web's 1 GiB.
+/// Loads the CLIP text model as the web starts (S-056, D-071), in the background so sign-in and the timeline answer at
+/// once after a cold start: verifying and opening the model and embedding one short text. A description search that
+/// arrives meanwhile waits for this load rather than starting another. A missing or unusable model is logged once as
+/// an error and the web carries on. The working set after loading is logged too, the measure for the web's 1 GiB.
 /// </summary>
-public sealed partial class TextModelWarmUp(IQueryEmbedder embedder, ILogger<TextModelWarmUp> log) : IHostedService
+public sealed partial class TextModelWarmUp(IQueryEmbedder embedder, ILogger<TextModelWarmUp> log) : BackgroundService
 {
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var folder = embedder is ClipQueryEmbedder clip ? clip.ModelFolder : "(not a folder)";
         if (!embedder.IsAvailable)
@@ -39,8 +39,8 @@ public sealed partial class TextModelWarmUp(IQueryEmbedder embedder, ILogger<Tex
         var started = TimeProvider.System.GetTimestamp();
         try
         {
-            // Off the start-up thread: verifying and opening ~250 MB takes seconds.
-            await Task.Run(() => embedder.Embed("a photo"), cancellationToken);
+            // Off the start-up path: verifying and opening ~250 MB takes seconds.
+            await Task.Run(() => embedder.Embed("a photo"), stoppingToken);
             var milliseconds = TimeProvider.System.GetElapsedTime(started).TotalMilliseconds;
             var workingSet = Environment.WorkingSet / (1024 * 1024);
             LogWarmedUp(log, milliseconds, workingSet);
@@ -49,9 +49,11 @@ public sealed partial class TextModelWarmUp(IQueryEmbedder embedder, ILogger<Tex
         {
             // Already logged once as an error by the embedder, with the reason.
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // The web is stopping.
+        }
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Search by description is off: the CLIP text model or its tokenizer is not in {Folder}.")]
     private static partial void LogMissing(ILogger logger, string folder);

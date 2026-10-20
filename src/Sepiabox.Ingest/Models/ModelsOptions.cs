@@ -37,8 +37,14 @@ public sealed record ModelsOptions(string? Folder, IReadOnlyList<string>? Only =
 
                 case "--only":
                     only = [.. args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+                    if (only.Count == 0)
+                    {
+                        error = "--only needs at least one model name.";
+                        return false;
+                    }
+
                     var unknown = only.FirstOrDefault(name => Sepiabox.Search.Models.ModelCatalog.Find(name) is null);
-                    if (unknown is not null || only.Count == 0)
+                    if (unknown is not null)
                     {
                         error = $"Unknown model '{unknown}' for --only; the models are "
                             + string.Join(", ", Sepiabox.Search.Models.ModelCatalog.All.Select(m => m.Name)) + ".";

@@ -41,7 +41,7 @@ public sealed class TextModelStartupTests
         var embedder = new FakeQueryEmbedder();
         var log = new ListLogger<TextModelWarmUp>();
 
-        await new TextModelWarmUp(embedder, log).StartAsync(CancellationToken.None);
+        await WarmUpAsync(new TextModelWarmUp(embedder, log));
 
         Assert.Single(embedder.Texts);
         Assert.Contains(log.Entries, e => e.Level == LogLevel.Information && e.Message.Contains("working set", StringComparison.Ordinal));
@@ -52,7 +52,7 @@ public sealed class TextModelStartupTests
     {
         var log = new ListLogger<TextModelWarmUp>();
 
-        await new TextModelWarmUp(new FakeQueryEmbedder(available: false), log).StartAsync(CancellationToken.None);
+        await WarmUpAsync(new TextModelWarmUp(new FakeQueryEmbedder(available: false), log));
 
         var error = Assert.Single(log.Entries);
         Assert.Equal(LogLevel.Error, error.Level);
@@ -78,6 +78,35 @@ public sealed class TextModelStartupTests
         Assert.Throws<VisualSearchUnavailableException>(() => embedder.Embed("snow"));
 
         Assert.Equal(expected, Assert.Single(log.Entries).Level);
+    }
+
+    [Fact]
+    public async Task Lets_the_web_start_while_the_model_is_still_loading()
+    {
+        using var release = new ManualResetEventSlim();
+        var embedder = new FakeQueryEmbedder(embed: _ =>
+        {
+            release.Wait(TimeSpan.FromSeconds(30));
+            return FakeQueryEmbedder.Axis(0);
+        });
+        using var warmUp = new TextModelWarmUp(embedder, new ListLogger<TextModelWarmUp>());
+
+        var start = warmUp.StartAsync(CancellationToken.None);
+        var started = await Task.WhenAny(start, Task.Delay(TimeSpan.FromSeconds(5))) == start;
+        release.Set();
+
+        Assert.True(started, "The web waited for the model to load before taking requests.");
+        await warmUp.ExecuteTask!;
+        Assert.Single(embedder.Texts);
+    }
+
+    private static async Task WarmUpAsync(TextModelWarmUp warmUp)
+    {
+        using (warmUp)
+        {
+            await warmUp.StartAsync(CancellationToken.None);
+            await warmUp.ExecuteTask!;
+        }
     }
 
     private sealed class Environment(string name) : IHostEnvironment

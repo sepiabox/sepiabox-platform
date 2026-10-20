@@ -10,6 +10,7 @@ public class ModelsOptionsTests
     [InlineData(new[] { "download", "--models" }, "--models needs a value.")]
     [InlineData(new[] { "download", "--gpu" }, "Unknown option '--gpu' for models download.")]
     [InlineData(new[] { "download", "--only" }, "--only needs model names separated by commas.")]
+    [InlineData(new[] { "download", "--only", " , " }, "--only needs at least one model name.")]
     public void Explains_what_is_wrong(string[] args, string expected)
     {
         Assert.False(ModelsOptions.TryParse(args, out _, out var error));
