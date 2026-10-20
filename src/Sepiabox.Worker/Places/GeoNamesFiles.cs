@@ -29,30 +29,57 @@ public static class GeoNamesFiles
     }
 
     /// <summary><c>admin1CodesASCII.txt</c>: <c>PT.13</c> → <c>Porto</c>.</summary>
-    public static Dictionary<string, string> ReadAdmin1(string path) =>
-        ReadLines(File.OpenRead(path), path)
-            .Select(line => (line.Number, Columns: line.Text.Split('\t')))
-            .Select(line => line.Columns.Length >= 2
-                ? (Code: line.Columns[0], Name: line.Columns[1])
-                : throw Malformed(path, line.Number, "expected the code and the name"))
-            .ToDictionary(entry => entry.Code, entry => entry.Name, StringComparer.Ordinal);
+    public static Dictionary<string, string> ReadAdmin1(string path)
+    {
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (number, text) in ReadLines(File.OpenRead(path), path))
+        {
+            var columns = text.Split('\t');
+            if (columns.Length < 2)
+            {
+                throw Malformed(path, number, "expected the code and the name");
+            }
+
+            if (!names.TryAdd(columns[0], columns[1]))
+            {
+                throw Malformed(path, number, "duplicate code");
+            }
+        }
+
+        return names;
+    }
 
     /// <summary><c>countryInfo.txt</c>: <c>PT</c> → <c>Portugal</c>; lines starting with <c>#</c> are comments.</summary>
-    public static Dictionary<string, string> ReadCountries(string path) =>
-        ReadLines(File.OpenRead(path), path)
-            .Where(line => !line.Text.StartsWith('#'))
-            .Select(line => (line.Number, Columns: line.Text.Split('\t')))
-            .Select(line => line.Columns.Length >= 5
-                ? (Code: line.Columns[0], Name: line.Columns[4])
-                : throw Malformed(path, line.Number, "expected at least 5 columns"))
-            .ToDictionary(entry => entry.Code, entry => entry.Name, StringComparer.Ordinal);
+    public static Dictionary<string, string> ReadCountries(string path)
+    {
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (number, text) in ReadLines(File.OpenRead(path), path).Where(line => !line.Text.StartsWith('#')))
+        {
+            var columns = text.Split('\t');
+            if (columns.Length < 5)
+            {
+                throw Malformed(path, number, "expected at least 5 columns");
+            }
+
+            if (!names.TryAdd(columns[0], columns[4]))
+            {
+                throw Malformed(path, number, "duplicate code");
+            }
+        }
+
+        return names;
+    }
 
     private static IEnumerable<GeoNamesCity> ReadZippedCities(string path)
     {
         using var zip = ZipFile.OpenRead(path);
-        var entry = zip.Entries.SingleOrDefault(e => e.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidDataException($"{path} holds no single .txt file.");
-        foreach (var city in ReadCities(entry.Open(), path))
+        var texts = zip.Entries.Where(e => e.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+        if (texts.Count != 1)
+        {
+            throw new InvalidDataException($"{Path.GetFileName(path)}: expected exactly one .txt file, as in GeoNames' cities500.zip.");
+        }
+
+        foreach (var city in ReadCities(texts[0].Open(), path))
         {
             yield return city;
         }
@@ -71,6 +98,7 @@ public static class GeoNamesFiles
             if (!long.TryParse(columns[0], NumberStyles.None, CultureInfo.InvariantCulture, out var id)
                 || !double.TryParse(columns[4], NumberStyles.Float, CultureInfo.InvariantCulture, out var latitude)
                 || !double.TryParse(columns[5], NumberStyles.Float, CultureInfo.InvariantCulture, out var longitude)
+                || !double.IsFinite(latitude) || !double.IsFinite(longitude)
                 || latitude is < -90 or > 90 || longitude is < -180 or > 180
                 || columns[1].Length == 0 || columns[8].Length != 2)
             {

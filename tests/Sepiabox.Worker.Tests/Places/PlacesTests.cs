@@ -144,6 +144,28 @@ public sealed class PlacesTests(CatalogFixture fixture) : IDisposable
         Assert.Equal(0, await new PlacesRefresh(db, new PostgisPlaceResolver(db)).RunAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task A_newer_dump_renames_places_only_with_refresh_all()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        await LoadAsync(db, GeoNamesSample.Write(_folder));
+        var container = await fixture.CreateContainerAsync();
+        var madrid = new string('b', 64);
+        await PutAsync(container, PhotoAt(PhotoId, 41.18, -8.69));
+        await PutAsync(container, PhotoAt(madrid, 40.42, -3.70));
+        await ImportAsync(db, container);
+        // The newer dump has no Madrid and calls Matosinhos by another name.
+        var renamed = GeoNamesSample.CitiesText(4).Replace("\tMatosinhos\tMatosinhos\t", "\tMatosinhos (Porto)\tMatosinhos\t", StringComparison.Ordinal);
+        await LoadAsync(db, GeoNamesSample.Write(_folder) with { Cities = _folder.Write("newer.txt", System.Text.Encoding.UTF8.GetBytes(renamed)) });
+
+        Assert.Equal(0, await new PlacesRefresh(db, new PostgisPlaceResolver(db)).RunAsync(CancellationToken.None));
+        Assert.Equal(("Matosinhos", "Porto", "Portugal"), await PlaceAsync(db, PhotoId));
+
+        Assert.Equal(1, await new PlacesRefresh(db, new PostgisPlaceResolver(db), all: true).RunAsync(CancellationToken.None));
+        Assert.Equal(("Matosinhos (Porto)", "Porto", "Portugal"), await PlaceAsync(db, PhotoId));
+        Assert.Equal((null, null, null), await PlaceAsync(db, madrid));
+    }
+
     private static NetTopologySuite.Geometries.Point Point(double latitude, double longitude) =>
         new(longitude, latitude) { SRID = 4326 };
 

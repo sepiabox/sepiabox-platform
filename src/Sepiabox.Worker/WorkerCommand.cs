@@ -17,7 +17,8 @@ public sealed record GeoNamesSource(string Cities, string Admin1, string Countri
 /// <param name="Action">What to run.</param>
 /// <param name="MigrateFirst">Apply pending migrations before importing (D-013).</param>
 /// <param name="GeoNames">The files to load, for <see cref="WorkerAction.GeoNamesLoad"/> only.</param>
-public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNamesSource? GeoNames = null)
+/// <param name="AllPlaces">Name every asset's place again, for <see cref="WorkerAction.PlacesRefresh"/> only.</param>
+public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNamesSource? GeoNames = null, bool AllPlaces = false)
 {
     public const string Usage = """
         Usage: sepiabox-worker <command>
@@ -32,7 +33,8 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
           geonames load <cities500.zip|txt> --admin1 <admin1CodesASCII.txt> --countries <countryInfo.txt>
                                      Replace the GeoNames cities with these dump files
                                      (https://download.geonames.org/export/dump/, CC BY 4.0).
-          places refresh             Name the place of assets that have a location but no place yet.
+          places refresh [--all]     Name the place of assets that have a location but no place yet;
+                                     --all names every asset with a location again (after a newer dump).
         """;
 
     public static bool TryParse(string[] args, [NotNullWhen(true)] out WorkerCommand? command, out string error)
@@ -61,6 +63,9 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                 return TryParseGeoNamesLoad(cities, options, out command, out error);
             case ["places", "refresh"]:
                 command = new WorkerCommand(WorkerAction.PlacesRefresh, false);
+                return true;
+            case ["places", "refresh", "--all"]:
+                command = new WorkerCommand(WorkerAction.PlacesRefresh, false, AllPlaces: true);
                 return true;
             case [_, ..]:
                 error = $"Unknown command or option in '{string.Join(' ', args)}'.";

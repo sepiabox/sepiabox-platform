@@ -43,6 +43,8 @@ public sealed class WorkerCommandTests
     {
         Assert.True(WorkerCommand.TryParse(["places", "refresh"], out var command, out _));
         Assert.Equal(new WorkerCommand(WorkerAction.PlacesRefresh, false), command);
+        Assert.True(WorkerCommand.TryParse(["places", "refresh", "--all"], out var all, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.PlacesRefresh, false, AllPlaces: true), all);
     }
 
     public static TheoryData<string[]> InvalidArguments => new()
@@ -65,7 +67,8 @@ public sealed class WorkerCommandTests
         new[] { "geonames", "load", "cities500.zip", "--admin1", "a.txt", "--countries", "c.txt", "--migrate", "x" },
         new[] { "geonames", "load", "--admin1", "a.txt", "--countries", "c.txt" },
         new[] { "places" },
-        new[] { "places", "refresh", "--all" },
+        new[] { "places", "refresh", "--force" },
+        new[] { "places", "refresh", "--all", "--all" },
     };
 
     [Theory]

@@ -104,7 +104,7 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
     if (command.Action == WorkerAction.PlacesRefresh)
     {
         var named = await new PlacesRefresh(
-                services.GetRequiredService<CatalogDbContext>(), services.GetRequiredService<IPlaceResolver>())
+                services.GetRequiredService<CatalogDbContext>(), services.GetRequiredService<IPlaceResolver>(), command.AllPlaces)
             .RunAsync(cancellationToken);
         Log.PlacesRefreshed(logger, named);
         return ExitCodes.Success;

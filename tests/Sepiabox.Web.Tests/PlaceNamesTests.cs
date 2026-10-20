@@ -7,6 +7,7 @@ public sealed class PlaceNamesTests
     [Theory]
     [InlineData("Matosinhos", "Porto", "Portugal", "Matosinhos, Porto, Portugal")]
     [InlineData("Lisbon", "Lisbon", "Portugal", "Lisbon, Portugal")]
+    [InlineData("Lisbon", "LISBON", "Portugal", "Lisbon, Portugal")]
     [InlineData("Monaco", null, "Monaco", "Monaco, Monaco")]
     [InlineData("Matosinhos", "", null, "Matosinhos")]
     [InlineData(null, "Porto", "Portugal", null)]

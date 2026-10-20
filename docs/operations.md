@@ -202,6 +202,7 @@ Photos get a place ("Matosinhos, Porto, Portugal") from the GeoNames cities load
 1. Download `cities500.zip`, `admin1CodesASCII.txt` and `countryInfo.txt` from https://download.geonames.org/export/dump/ into a folder outside the repository. GeoNames is CC BY 4.0: never commit these files.
 2. Run `dotnet run --project src/Sepiabox.Worker -- geonames load <folder>/cities500.zip --admin1 <folder>/admin1CodesASCII.txt --countries <folder>/countryInfo.txt`. It replaces the cities in one transaction (about 200,000 rows, a minute or two), so running it again with newer files is safe, and a failed load keeps the previous cities.
 3. Run `dotnet run --project src/Sepiabox.Worker -- places refresh` to name assets imported before the load. It only names assets that have a location and no place, so it is safe to run again.
+4. Loading a newer dump does not rename places already set. To name every asset again from the new cities, run `places refresh --all`.
 
 The application role `sepiabox_web` can read the cities but not change them: load them with the administrator connection (D-066).
 

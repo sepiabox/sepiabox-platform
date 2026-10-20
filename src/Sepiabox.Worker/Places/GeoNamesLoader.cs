@@ -7,7 +7,8 @@ namespace Sepiabox.Worker.Places;
 /// <summary>
 /// <c>geonames load</c> (S-012): replaces the <c>geonames</c> table with a dump's cities, in one transaction,
 /// so loading the same files again leaves the same rows and a failed load leaves the old ones. Plain EF Core
-/// (D-051); ~200,000 rows take a minute or two.
+/// (D-051) apart from <c>TRUNCATE</c>, which leaves no dead rows behind on every reload; it needs the table's
+/// owner, the administrator, which is who runs the load (D-066).
 /// </summary>
 public sealed class GeoNamesLoader(CatalogDbContext db)
 {
@@ -22,7 +23,7 @@ public sealed class GeoNamesLoader(CatalogDbContext db)
     {
         ArgumentNullException.ThrowIfNull(cities);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await db.GeoNames.ExecuteDeleteAsync(cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("TRUNCATE geonames", cancellationToken);
 
         var loaded = 0;
         foreach (var batch in cities.Chunk(BatchSize))
