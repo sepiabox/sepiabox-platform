@@ -339,3 +339,10 @@ main {
         padding: 12px 16px 32px;
     }
 }
+
+.error {
+    padding: 8px 12px;
+    color: var(--sepia);
+    border: 1px solid var(--sepia);
+    border-radius: 4px;
+}

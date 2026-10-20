@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Microsoft.Extensions.Primitives;
 
 namespace Sepiabox.Web.Auth;
 
@@ -13,28 +14,39 @@ public sealed class AccessList
     // Key Vault holds the list as one secret, so a single value may carry several e-mails.
     private static readonly char[] Separators = [',', ';', ' ', '\t', '\r', '\n'];
 
-    private readonly FrozenSet<string> _emails;
+    private volatile FrozenSet<string> _emails;
 
-    public AccessList(IEnumerable<string?> emails) =>
-        _emails = emails
-            .SelectMany(value => (value ?? "").Split(Separators, StringSplitOptions.RemoveEmptyEntries))
-            .Select(Normalize)
-            .ToFrozenSet(StringComparer.Ordinal);
+    public AccessList(IEnumerable<string?> emails) => _emails = Parse(emails);
 
     public int Count => _emails.Count;
 
     /// <summary>
     /// Reads <c>Access:Emails</c> either as an array (<c>Access:Emails:0</c>, ...) or as one value with the
-    /// e-mails separated by commas, semicolons or white space.
+    /// e-mails separated by commas, semicolons or white space, and reads it again whenever the configuration
+    /// reloads. Environment variables and Container Apps secrets never reload: a change there takes effect
+    /// with the next restart or revision (docs/operations.md).
     /// </summary>
     public static AccessList From(IConfiguration configuration)
     {
-        var section = configuration.GetSection(ConfigurationKey);
-        return new AccessList([section.Value, .. section.GetChildren().Select(child => child.Value)]);
+        var access = new AccessList(Read(configuration));
+        ChangeToken.OnChange(configuration.GetReloadToken, () => access._emails = Parse(Read(configuration)));
+        return access;
     }
 
     public bool Allows(string? email) =>
         !string.IsNullOrWhiteSpace(email) && _emails.Contains(Normalize(email));
+
+    private static IEnumerable<string?> Read(IConfiguration configuration)
+    {
+        var section = configuration.GetSection(ConfigurationKey);
+        return [section.Value, .. section.GetChildren().Select(child => child.Value)];
+    }
+
+    private static FrozenSet<string> Parse(IEnumerable<string?> emails) =>
+        emails
+            .SelectMany(value => (value ?? "").Split(Separators, StringSplitOptions.RemoveEmptyEntries))
+            .Select(Normalize)
+            .ToFrozenSet(StringComparer.Ordinal);
 
     // Providers and people type addresses with any casing; the comparison ignores it and stray spaces.
     private static string Normalize(string email) => email.Trim().ToUpperInvariant();

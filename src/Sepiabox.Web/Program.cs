@@ -27,6 +27,8 @@ builder.Services.AddRazorComponents()
 
 var app = builder.Build();
 
+app.UseSepiaboxForwardedHeaders();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);

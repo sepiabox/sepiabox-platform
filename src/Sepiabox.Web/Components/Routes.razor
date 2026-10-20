@@ -1,6 +1,15 @@
+@* AuthorizeRouteView applies the same policy as the endpoints to navigation inside an interactive circuit. *@
 <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                <section class="auth">
+                    <h1>Sem acesso</h1>
+                    <p>Esta sessão já não tem acesso ao Sepiabox.</p>
+                    <a class="button" href="/entrar" data-enhance-nav="false">Entrar</a>
+                </section>
+            </NotAuthorized>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
