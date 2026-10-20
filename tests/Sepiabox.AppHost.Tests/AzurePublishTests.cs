@@ -147,15 +147,18 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
     }
 
     [Fact]
-    public void Web_accepts_only_the_container_apps_default_host_when_published()
+    public void Web_accepts_only_the_container_apps_default_host_and_the_custom_domain_when_published()
     {
         var allowedHosts = Regex.Match(
             WebApp().Body, @"name: 'AllowedHosts'\s+value: '(?<value>[^']+)'", RegexOptions.Singleline);
 
         Assert.True(allowedHosts.Success, "The web has no AllowedHosts setting.");
         Assert.Equal(
-            "sepiabox-web.${aca_outputs_azure_container_apps_environment_default_domain}",
+            // An empty custom domain leaves an empty entry, which host filtering ignores (TransportSecurityTests).
+            "sepiabox-web.${aca_outputs_azure_container_apps_environment_default_domain};${customdomain_value}",
             allowedHosts.Groups["value"].Value);
+        Assert.Equal(
+            "{customDomain.value}", published.ModuleParameters["web-containerapp.module.bicep"]["customdomain_value"]!.GetValue<string>());
     }
 
     [Fact]

@@ -136,6 +136,12 @@ public sealed partial class DeployWorkflowTests
         }
 
         Assert.Contains("azd env new sepiabox --location francecentral", run, StringComparison.Ordinal);
+        // The custom domain (S-035) comes from variables, with no domain and a disabled binding when unset.
+        Assert.Equal("${{ vars.CUSTOM_DOMAIN }}", Text(environment["CUSTOM_DOMAIN"]));
+        Assert.Equal("${{ vars.CUSTOM_DOMAIN_BINDING }}", Text(environment["CUSTOM_DOMAIN_BINDING"]));
+        Assert.Contains("azd env config set infra.parameters.customDomain \"$CUSTOM_DOMAIN\"", run, StringComparison.Ordinal);
+        Assert.Contains(
+            "azd env config set infra.parameters.customDomainBinding \"${CUSTOM_DOMAIN_BINDING:-Disabled}\"", run, StringComparison.Ordinal);
         // A missing secret, or jq's "null" saved as one, stops the run before azd could generate a value.
         Assert.Contains("if [[ -z \"${!name}\" || \"${!name}\" == \"null\" ]]; then", run, StringComparison.Ordinal);
         Assert.Contains("exit 1", run, StringComparison.Ordinal);

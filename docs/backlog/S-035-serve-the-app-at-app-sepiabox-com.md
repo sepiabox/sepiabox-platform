@@ -16,10 +16,10 @@ The Google login shows the domain; `app.sepiabox.com` inspires more trust than t
 - Creating the DNS records (human step at GoDaddy).
 
 ### Acceptance criteria
-- [ ] Given `customDomain` set, then the generated Bicep has the domain and the managed certificate.
-- [ ] Given `customDomain` empty, then the Bicep has no custom domain.
-- [ ] Given a request in production, then the response has the `Strict-Transport-Security` header.
-- [ ] Given `customDomain` set, then `AllowedHosts` includes it next to the Container Apps default host.
+- [x] Given `customDomain` set, then the generated Bicep has the domain and the managed certificate.
+- [x] Given `customDomain` empty, then the Bicep has no custom domain.
+- [x] Given a request in production, then the response has the `Strict-Transport-Security` header.
+- [x] Given `customDomain` set, then `AllowedHosts` includes it next to the Container Apps default host.
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), when I sign in with Google and with Microsoft on `https://app.sepiabox.com` (after adding its `/signin-google` and `/signin-microsoft` redirect URIs to the OAuth clients), then sign-in works, and an account not on `Access:Emails` lands on the no-access page.
 
 ### Technical notes

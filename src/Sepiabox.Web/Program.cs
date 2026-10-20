@@ -26,6 +26,15 @@ builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 
 builder.AddSepiaboxAuth();
 builder.AddSepiaboxKeyRing();
+
+// Sent outside Development by UseHsts below, and never for localhost (D-065): a year, for this host only, not
+// preloaded, so a browser that has seen the app never tries plain http for it.
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(365);
+    options.IncludeSubDomains = false;
+    options.Preload = false;
+});
 builder.Services.AddSepiaboxLocalization();
 
 builder.Services.AddRazorComponents()

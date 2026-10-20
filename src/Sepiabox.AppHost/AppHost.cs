@@ -152,6 +152,17 @@ else
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureImportAllJob);
 
+    // The web's custom domain (S-035, D-065), empty for none. Set after the DNS records exist, first with the
+    // binding Disabled (the host name is added), then SniEnabled (domain.bicep creates the managed certificate
+    // and the web binds it); docs/operations.md has the steps.
+    var customDomain = builder.AddParameter(AzureInfrastructure.CustomDomainParameter, "", publishValueAsDefault: true);
+    var customDomainBinding = builder.AddParameter(AzureInfrastructure.CustomDomainBindingParameter, "Disabled", publishValueAsDefault: true);
+    builder.AddBicepTemplate("domain", "Bicep/domain.bicep")
+        .WithParameter("environmentName", environment.GetOutput("AZURE_CONTAINER_APPS_ENVIRONMENT_NAME"))
+        .WithParameter("customDomain", customDomain)
+        .WithParameter("customDomainBinding", customDomainBinding)
+        .WithParameter("certificateName", AzureInfrastructure.CustomDomainCertificateName);
+
     // What the role helpers cannot scope: the key ring's container and key, and the uploaders (D-062).
     var uploaders = builder.AddParameter(AzureInfrastructure.UploaderPrincipalIdsParameter, "", publishValueAsDefault: true);
     var access = builder.AddBicepTemplate("access", "Bicep/access.bicep")
@@ -169,10 +180,12 @@ else
         .WithRoleAssignments(vault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
         .WithEnvironment("DataProtection__KeyUri", access.GetOutput("dataProtectionKeyUri"))
-        // Only the Container Apps default host reaches the app (D-048); S-035 adds the custom domain.
+        // Only the Container Apps default host and the custom domain, if any, reach the app (D-048, D-065);
+        // an empty custom domain leaves an empty entry, which host filtering ignores.
         .WithEnvironment("AllowedHosts", ReferenceExpression.Create(
-            $"{AzureInfrastructure.WebAppName}.{environment.GetOutput("AZURE_CONTAINER_APPS_ENVIRONMENT_DEFAULT_DOMAIN")}"))
-        .PublishAsAzureContainerApp(AzureInfrastructure.ConfigureWebApp);
+            $"{AzureInfrastructure.WebAppName}.{environment.GetOutput("AZURE_CONTAINER_APPS_ENVIRONMENT_DEFAULT_DOMAIN")};{customDomain}"))
+        .PublishAsAzureContainerApp(AzureInfrastructure.ConfigureWebApp(
+            customDomain, customDomainBinding, environment.GetOutput("AZURE_CONTAINER_APPS_ENVIRONMENT_ID")));
 }
 
 builder.Build().Run();
