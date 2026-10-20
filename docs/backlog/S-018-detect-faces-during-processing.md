@@ -16,10 +16,10 @@
 - Grouping into people (S-019).
 
 ### Acceptance criteria
-- [ ] Given a solid-color image, then 0 faces.
-- [ ] Given the fixture with 1 face, then 1 face with score ≥ 0.8 and a box inside the image.
-- [ ] Given the same fixture resized to 70%, then the cosine between the embeddings is ≥ 0.6.
-- [ ] Given `process` without `--faces`, then `facesProcessed` is false and there are no faces.
+- [x] Given a solid-color image, then 0 faces.
+- [x] Given the fixture with 1 face, then 1 face with score ≥ 0.8 and a box inside the image.
+- [x] Given the same fixture resized to 70%, then the cosine between the embeddings is ≥ 0.6.
+- [x] Given `process` without `--faces`, then `facesProcessed` is false and there are no faces.
 
 ### Technical notes
 - Fixture: a public-domain portrait (e.g. an official US government portrait on Wikimedia Commons), with source and license in `tests/.../TestData/README.md`.

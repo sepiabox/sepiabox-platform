@@ -43,7 +43,7 @@ Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsof
 ## Ingest flow
 
 1. `sepiabox-ingest scan <folder>`: read-only; counts photos/videos, years, duplicates, unreadable files.
-2. `sepiabox-ingest process <folder> --out <workdir>`: for each file computes the SHA-256 (asset identity), reads EXIF/QuickTime (date, GPS, camera, dimensions; an undated file takes its date from its file or parent folder name, D-046), generates WebP thumbnails, video posters and 720p versions, the CLIP embedding and, if enabled, faces. Writes **one JSON manifest per asset** (schema v1, `docs/schemas/manifest.v1.json`). State is kept in SQLite so runs can resume.
+2. `sepiabox-ingest process <folder> --out <workdir>`: for each file computes the SHA-256 (asset identity), reads EXIF/QuickTime (date, GPS, camera, dimensions; an undated file takes its date from its file or parent folder name, D-046), generates WebP thumbnails, video posters and 720p versions, the CLIP embedding and, only with `--faces`, faces (D-047). Writes **one JSON manifest per asset** (schema v1, `docs/schemas/manifest.v1.json`). State is kept in SQLite so runs can resume.
 3. `sepiabox-ingest upload <workdir>`: uploads originals (**Cold** tier), derivatives (**Hot**) and, last, the manifest. Resumes where it stopped.
 4. In the cloud, each new manifest triggers the import (Event Grid filtered to the `manifests` container → queue → worker job, one execution at a time).
 
