@@ -170,13 +170,37 @@ public sealed class DeployScriptTests : IDisposable
     }
 
     [UnixFact]
-    public async Task Deploy_resumes_the_queue_when_deploying_the_import_jobs_fails()
+    public async Task Deploy_keeps_the_queue_paused_when_the_migration_succeeded_but_the_import_jobs_were_not_updated()
     {
         var result = await RunDeployAsync("Succeeded", failingDeploy: "import");
 
         Assert.NotEqual(0, result.ExitCode);
+        // The old import image must not receive against the new schema.
+        Assert.Equal([PauseQueue], Calls().Where(call => call.StartsWith("az servicebus", StringComparison.Ordinal)));
+        Assert.Contains(
+            "The import jobs were not updated, so the queue manifests is still paused. Run this script again, or resume it once the import jobs run the new image: az servicebus queue update --resource-group rg-sepiabox --namespace-name sepiabox-sb --name manifests --status Active",
+            result.Error,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(DeployWeb, Calls());
+    }
+
+    [UnixFact]
+    public async Task Deploy_resumes_the_queue_when_the_migration_fails()
+    {
+        // A failed migration leaves the old schema, which the old import image expects.
+        var result = await RunDeployAsync("Failed");
+
+        Assert.Equal(1, result.ExitCode);
         Assert.Equal([PauseQueue, ResumeQueue], Calls().Where(call => call.StartsWith("az servicebus", StringComparison.Ordinal)));
-        Assert.Equal(ResumeQueue, Calls()[^1]);
+    }
+
+    [UnixFact]
+    public async Task Deploy_fails_when_it_cannot_resume_the_queue_after_updating_the_import_jobs()
+    {
+        var result = await RunDeployAsync("Succeeded", resume: "FAIL");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("Could not make the queue receive again", result.Error, StringComparison.Ordinal);
         Assert.DoesNotContain(DeployWeb, Calls());
     }
 
