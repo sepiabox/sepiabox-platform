@@ -2,7 +2,7 @@ using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Faces;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Models;
+using Sepiabox.Search.Models;
 
 namespace Sepiabox.Ingest.Tests;
 

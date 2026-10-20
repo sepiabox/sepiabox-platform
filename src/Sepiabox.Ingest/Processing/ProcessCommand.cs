@@ -6,9 +6,9 @@ using Sepiabox.Pipeline.Faces;
 using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
-using Sepiabox.Pipeline.Models;
 using Sepiabox.Pipeline.Processing;
 using Sepiabox.Pipeline.Video;
+using Sepiabox.Search.Models;
 
 namespace Sepiabox.Ingest.Processing;
 

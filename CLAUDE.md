@@ -32,6 +32,7 @@ Before pushing, the build must have zero warnings (warnings are errors) and the 
 ```
 src/
   Sepiabox.Pipeline/   processing stages, shared by the CLI and the cloud worker
+  Sepiabox.Search/     pinned models and CLIP text encoder (ONNX Runtime only), used by the web and the pipeline
   Sepiabox.Ingest/     sepiabox-ingest console app (scan, process, upload)
   Sepiabox.Catalog/    EF Core catalog: CatalogDbContext, entities and migrations
   Sepiabox.Worker/     sepiabox-worker: migrate, import manifests into the catalog

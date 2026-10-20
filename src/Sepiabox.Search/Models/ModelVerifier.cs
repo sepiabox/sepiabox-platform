@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 
-namespace Sepiabox.Pipeline.Models;
+namespace Sepiabox.Search.Models;
 
 /// <summary>
 /// Checks a downloaded model against its pinned SHA-256 (D-016, D-044). Hashing 350 MB on every run would cost

@@ -50,7 +50,21 @@ public static class SearchEndpoints
             return Invalid(error);
         }
 
-        var page = await library.SearchAsync(query, http.RequestAborted);
+        SearchPage page;
+        try
+        {
+            page = await library.SearchAsync(query, http.RequestAborted);
+        }
+        catch (VisualSearchUnavailableException)
+        {
+            // The text model is missing or failed to load (S-016, D-070): the rest of the search still works.
+            http.Response.Headers.RetryAfter = "3600";
+            return Results.Problem(
+                title: "Search by description is unavailable",
+                detail: "The CLIP text model is not loaded on this server, so filters.visual cannot be used; search without it.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
         return Results.Ok(new Response(
             [.. page.Items.Select(i => new Item(i.Id, i.Kind, i.CapturedAt, i.DurationSeconds, i.HasThumbnail))], page.HasMore));
     }

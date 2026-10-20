@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 using ImageMagick;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Faces;
-using Sepiabox.Pipeline.Models;
+using Sepiabox.Search.Models;
 using Xunit.Abstractions;
 
 namespace Sepiabox.Pipeline.Tests;

@@ -51,6 +51,29 @@ public sealed class SearchLinksTests
         Assert.Equal(new FilterFields(2019, 12, "video", "Lisbon", null), SearchLinks.ToFields(opened));
     }
 
+    [Theory]
+    [InlineData("  beach at sunset ", "beach at sunset")]
+    [InlineData("snow\u0000", "snow")]
+    [InlineData("   ", null)]
+    [InlineData(null, null)]
+    public void Turns_the_description_box_into_a_visual_filter_when_it_has_text(string? typed, string? expected)
+    {
+        var query = SearchLinks.FromFields(null, null, null, null, null, typed);
+
+        Assert.Equal(expected, query.Filters.Visual?.Text);
+        Assert.Equal(expected, SearchLinks.ToFields(query).Text);
+        Assert.Null(SearchQueryJson.Validate(query));
+    }
+
+    [Fact]
+    public void Cuts_a_description_longer_than_the_dsl_allows()
+    {
+        var query = SearchLinks.FromFields(null, null, null, null, null, new string('a', 1000));
+
+        Assert.Equal(SearchQueryJson.MaxTextLength, query.Filters.Visual!.Text.Length);
+        Assert.Null(SearchQueryJson.Validate(query));
+    }
+
     [Fact]
     public void Shows_only_single_values_in_the_bar_when_the_query_has_several()
     {

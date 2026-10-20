@@ -337,6 +337,113 @@ public sealed class SearchServiceTests(CatalogFixture catalog)
         Assert.Equal(System.Net.HttpStatusCode.OK, apiLastDay.StatusCode);
     }
 
+    [Fact]
+    public async Task Puts_the_asset_closest_to_the_description_first()
+    {
+        await using var db = await CatalogWithEmbeddingsAsync();
+        // Close to asset 2 (axis 1) and a little towards asset 3's second axis.
+        var embedder = new FakeQueryEmbedder(embed: _ => FakeQueryEmbedder.Axis(1, 1, 2, 0.1f));
+
+        var result = await new SearchService(db, s_clock, embedder: embedder).ExecuteAsync(Visual("snow"));
+
+        // Similarities about 0.99 (asset 2), 0.95 (asset 5) and 0.86 (asset 3); asset 1 is orthogonal, below 0.2.
+        Assert.Equal([Ids.Of(2), Ids.Of(5), Ids.Of(3)], result.Hits.Select(h => h.Id));
+        Assert.Equal(["snow"], embedder.Texts);
+        Assert.InRange(result.Hits[0].Score!.Value, 0.99, 1.0);
+        Assert.True(result.Hits[0].Score > result.Hits[1].Score && result.Hits[1].Score > result.Hits[2].Score);
+    }
+
+    [Fact]
+    public async Task Combines_a_description_with_years_and_keeps_the_similarity_order()
+    {
+        await using var db = await CatalogWithEmbeddingsAsync();
+        var embedder = new FakeQueryEmbedder(embed: _ => FakeQueryEmbedder.Axis(1, 1, 2, 0.1f));
+        var query = Visual("snow") with { Filters = new SearchFilters { Visual = new VisualFilter { Text = "snow" }, Years = [2019] } };
+
+        var result = await new SearchService(db, s_clock, embedder: embedder).ExecuteAsync(query);
+
+        // Asset 5 is as similar but from 2018; asset 1 is from 2019 but unrelated.
+        Assert.Equal([Ids.Of(2), Ids.Of(3)], result.Hits.Select(h => h.Id));
+        Assert.All(result.Hits, h => Assert.Equal(2019, h.CapturedAt!.Value.Year));
+    }
+
+    [Fact]
+    public async Task Leaves_out_assets_below_the_threshold_or_without_an_embedding()
+    {
+        await using var db = await CatalogWithEmbeddingsAsync();
+        var embedder = new FakeQueryEmbedder(embed: _ => FakeQueryEmbedder.Axis(1));
+        var service = new SearchService(db, s_clock, embedder: embedder);
+
+        var loose = await service.ExecuteAsync(Visual("snow", minScore: 0));
+        var strict = await service.ExecuteAsync(Visual("snow", minScore: 0.9));
+
+        // Asset 1 is orthogonal (similarity 0, kept only at 0); asset 4 has no embedding at all.
+        Assert.Equal([Ids.Of(1), Ids.Of(2), Ids.Of(3), Ids.Of(5)], loose.Hits.Select(h => h.Id).Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(Ids.Of(4), loose.Hits.Select(h => h.Id));
+        Assert.Equal([Ids.Of(2), Ids.Of(5)], strict.Hits.Select(h => h.Id).Order(StringComparer.Ordinal));
+        // pgvector's cosine distance operator, which the HNSW index (vector_cosine_ops) serves.
+        Assert.Contains("<=>", PgvectorSimilarity.Rank(db, db.Assets, FakeQueryEmbedder.Axis(1), 0.2).ToQueryString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Refuses_a_search_by_description_without_a_text_model_but_runs_the_others()
+    {
+        await using var db = await CatalogWithEmbeddingsAsync();
+        var service = new SearchService(db, s_clock, embedder: new FakeQueryEmbedder(available: false));
+
+        await Assert.ThrowsAsync<VisualSearchUnavailableException>(() => service.ExecuteAsync(Visual("snow")));
+        await Assert.ThrowsAsync<VisualSearchUnavailableException>(() => new SearchService(db, s_clock).ExecuteAsync(Visual("snow")));
+        Assert.Equal(5, (await service.ExecuteAsync(new SearchQuery())).Hits.Count);
+    }
+
+    [Fact]
+    public async Task The_api_and_the_page_rank_a_real_catalog_by_description()
+    {
+        string connection;
+        await using (var db = await CatalogWithEmbeddingsAsync())
+        {
+            connection = catalog.ConnectionStringFor(db);
+        }
+
+        await using var web = new WebFactory(connection) { QueryEmbedder = new FakeQueryEmbedder(embed: _ => FakeQueryEmbedder.Axis(1, 1, 2, 0.1f)) };
+        using var http = web.CreateSignedInClient();
+
+        using var api = await http.PostAsync(
+            new Uri("/api/search", UriKind.Relative),
+            new StringContent("""{"filters": {"visual": {"text": "snow"}, "years": [2019]}}""", System.Text.Encoding.UTF8, "application/json"));
+        var html = await http.GetStringAsync(new Uri("/?filter=1&text=snow", UriKind.Relative));
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, api.StatusCode);
+        using var body = System.Text.Json.JsonDocument.Parse(await api.Content.ReadAsStringAsync());
+        Assert.Equal([Ids.Of(2), Ids.Of(3)], body.RootElement.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetString()));
+        Assert.True(html.IndexOf($"photos/{Ids.Of(2)}", StringComparison.Ordinal) < html.IndexOf($"photos/{Ids.Of(3)}", StringComparison.Ordinal));
+        Assert.Contains("Closest to the description", html, StringComparison.Ordinal);
+        Assert.Contains("name=\"text\"", html, StringComparison.Ordinal);
+    }
+
+    private static SearchQuery Visual(string text, double? minScore = null) =>
+        new() { Filters = new SearchFilters { Visual = new VisualFilter { Text = text, MinScore = minScore } } };
+
+    // Five photos: 1 (2019) on axis 0, 2 (2019) on axis 1, 3 (2019) mostly axis 1, 4 (2019) without an embedding,
+    // 5 (2018) on axis 1 with a little of axis 3.
+    private async Task<CatalogDbContext> CatalogWithEmbeddingsAsync()
+    {
+        var db = await CatalogWithAsync(
+            Asset(1, new DateTime(2019, 1, 1)), Asset(2, new DateTime(2019, 2, 1)), Asset(3, new DateTime(2019, 3, 1)),
+            Asset(4, new DateTime(2019, 4, 1)), Asset(5, new DateTime(2018, 5, 1)));
+        db.AssetEmbeddings.AddRange(
+            Embedding(1, FakeQueryEmbedder.Axis(0)),
+            Embedding(2, FakeQueryEmbedder.Axis(1)),
+            Embedding(3, FakeQueryEmbedder.Axis(1, 0.8f, 2, 0.6f)),
+            Embedding(5, FakeQueryEmbedder.Axis(1, 0.95f, 3, 0.31f)));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        return db;
+    }
+
+    private static AssetEmbedding Embedding(int n, float[] vector) =>
+        new() { AssetId = Ids.Of(n), Model = PgvectorSimilarity.ModelKey, Embedding = new Pgvector.Vector(vector) };
+
     private async Task<CatalogDbContext> CatalogWithAsync(params Asset[] assets)
     {
         var db = await catalog.CreateMigratedDatabaseAsync();

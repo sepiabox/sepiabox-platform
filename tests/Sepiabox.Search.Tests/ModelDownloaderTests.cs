@@ -1,8 +1,8 @@
 using System.Net;
 using System.Security.Cryptography;
-using Sepiabox.Pipeline.Models;
+using Sepiabox.Search.Models;
 
-namespace Sepiabox.Pipeline.Tests;
+namespace Sepiabox.Search.Tests;
 
 public sealed class ModelDownloaderTests : IDisposable
 {

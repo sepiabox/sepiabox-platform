@@ -1,5 +1,6 @@
 using Npgsql;
 using Sepiabox.Catalog;
+using Sepiabox.Catalog.Search;
 using Sepiabox.Web;
 using Sepiabox.Web.Auth;
 using Sepiabox.Web.Components;
@@ -24,6 +25,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ISasUrlFactory, SasUrlFactory>();
 builder.Services.AddSingleton(SearchSetup.Options(builder.Configuration));
 builder.Services.AddSingleton<FilterOptionsCache>();
+builder.Services.AddSingleton<IQueryEmbedder>(services => new ClipQueryEmbedder(
+    SearchSetup.ModelFolder(services.GetRequiredService<IConfiguration>()), services.GetRequiredService<ILogger<ClipQueryEmbedder>>()));
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 
 builder.AddSepiaboxAuth();

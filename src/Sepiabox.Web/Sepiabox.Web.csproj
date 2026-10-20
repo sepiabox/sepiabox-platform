@@ -29,6 +29,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sepiabox.Catalog\Sepiabox.Catalog.csproj" />
+    <!-- CLIP text model and tokenizer (S-016, D-055): ONNX Runtime only, never Sepiabox.Pipeline (D-038). -->
+    <ProjectReference Include="..\Sepiabox.Search\Sepiabox.Search.csproj" />
     <ProjectReference Include="..\Sepiabox.ServiceDefaults\Sepiabox.ServiceDefaults.csproj" />
   </ItemGroup>
 

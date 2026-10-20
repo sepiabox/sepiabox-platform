@@ -33,6 +33,7 @@ Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsof
 
 | Project | Runs on | Responsibility |
 |---|---|---|
+| `Sepiabox.Search` | library | The pinned models (`models.json`, verification, ONNX sessions) and CLIP's text side: tokenizer and text encoder for search by description. ONNX Runtime only, so the web can use it (D-055, D-070). |
 | `Sepiabox.Pipeline` | library | Processing stages: classification, hashing, metadata, thumbnails, video, embeddings, faces. Does not know where a file comes from. |
 | `Sepiabox.Ingest` (`sepiabox-ingest`) | user's PC | `scan`, `process`, `upload`, `report` (unique assets in a work folder, S-062), `models download`. Processes the drive locally and uploads only what is new. |
 | `Sepiabox.Catalog` | library | EF Core + Npgsql: schema, migrations, queries. |

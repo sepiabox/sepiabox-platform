@@ -58,6 +58,12 @@ public sealed class SearchQueryTests
     public static TheoryData<string, string> InvalidQueries => new()
     {
         { """{"filter": {}}""", "filter" },
+        { """{"filters": {"visual": {}}}""", "visual.text" },
+        { """{"filters": {"visual": {"text": " "}}}""", "visual.text" },
+        { """{"filters": {"visual": {"text": "snow", "minScore": 1.5}}}""", "minScore" },
+        { """{"filters": {"visual": {"text": "snow", "minScore": -0.1}}}""", "minScore" },
+        { """{"filters": {"visual": {"text": "snow", "model": "clip"}}}""", "model" },
+        { """{"filters": {"visual": "snow"}}""", "visual" },
         { """{"filters": {"people": ["Ana"]}}""", "people" },
         { """{"filters": {"places": {"region": "Porto"}}}""", "region" },
         { """{"filters": {"onThisDay": {"days": 1}}}""", "days" },
@@ -120,6 +126,27 @@ public sealed class SearchQueryTests
     }
 
     [Fact]
+    public void Parses_a_search_by_description_with_the_default_threshold_when_none_is_given()
+    {
+        Assert.True(SearchQueryJson.TryParse("""{"filters": {"visual": {"text": "snow"}, "years": [2019]}}""", out var query, out var error), error);
+
+        Assert.Equal("snow", query.Filters.Visual!.Text);
+        Assert.Null(query.Filters.Visual.MinScore);
+        Assert.Equal(VisualFilter.DefaultMinScore, query.Filters.Visual.EffectiveMinScore);
+        Assert.True(SearchQueryJson.TryParse("""{"filters": {"visual": {"text": "snow", "minScore": 0.3}}}""", out var strict, out _));
+        Assert.Equal(0.3, strict.Filters.Visual!.EffectiveMinScore);
+    }
+
+    [Fact]
+    public void Refuses_a_description_longer_than_the_limit()
+    {
+        var json = "{\"filters\": {\"visual\": {\"text\": \"" + new string('a', SearchQueryJson.MaxTextLength + 1) + "\"}}}";
+
+        Assert.False(SearchQueryJson.TryParse(json, out _, out var error));
+        Assert.Contains("visual.text", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Survives_the_url_unchanged_when_encoded_and_decoded()
     {
         Assert.True(SearchQueryJson.TryParse(StoryExample, out var query, out _));
@@ -157,6 +184,10 @@ public sealed class SearchQueryTests
         "{}",
         """{"filters": {"undatedOnly": true, "kinds": ["video"]}, "sort": "capturedAtAsc", "limit": 1}""",
         """{"filters": {"onThisDay": {}}}""",
+        """{"filters": {"visual": {"text": "beach at sunset", "minScore": 0.25}, "years": [2019]}}""",
+        """{"filters": {"visual": {}}}""",
+        """{"filters": {"visual": {"text": "snow", "minScore": 1.5}}}""",
+        """{"filters": {"visual": {"text": "snow", "model": "clip"}}}""",
         """{"filter": {}}""",
         """{"filters": {"people": ["Ana"]}}""",
         """{"filters": {"places": {"region": "Porto"}}}""",

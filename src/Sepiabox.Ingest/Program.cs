@@ -3,7 +3,7 @@ using Sepiabox.Ingest.Models;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Ingest.Uploading;
-using Sepiabox.Pipeline.Models;
+using Sepiabox.Search.Models;
 
 const string Usage = """
     Usage: sepiabox-ingest <command> [options]

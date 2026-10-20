@@ -73,6 +73,21 @@
           "maxItems": 50,
           "items": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
         },
+        "visual": {
+          "description": "A description in English matched against the photos' CLIP embeddings (S-016, D-070); results are ordered by similarity, most similar first, and sort is not used.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text"],
+          "properties": {
+            "text": { "type": "string", "minLength": 1, "maxLength": 300, "pattern": "\\S" },
+            "minScore": {
+              "description": "The least cosine similarity between the text and a photo; 0.2 when absent.",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
         "undatedOnly": {
           "description": "Only assets without a capture date; not together with dateFrom, dateTo, years, months or onThisDay.",
           "type": "boolean"

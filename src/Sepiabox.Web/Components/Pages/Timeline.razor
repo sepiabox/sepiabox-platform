@@ -3,6 +3,7 @@
 @using Sepiabox.Catalog.Search
 @inject ILibraryQueries Library
 @inject NavigationManager Navigation
+@inject IQueryEmbedder Describer
 @* Static server rendering (no @rendermode): the page is plain HTML with links and a GET form, nothing interactive. *@
 
 <PageTitle>Sepiabox</PageTitle>
@@ -11,12 +12,16 @@
 
 @if (_options is { } options && (_filtered || _invalid || _page is { Items.Count: > 0 } || _page is { Page: > 1 }))
 {
-    <FilterBar Options="options" Fields="SearchLinks.ToFields(_query)" Filtered="@(_filtered || _invalid)" OnThisDayActive="@(_query == SearchLinks.OnThisDay)" />
+    <FilterBar Options="options" Fields="SearchLinks.ToFields(_query)" Filtered="@(_filtered || _invalid)" OnThisDayActive="@(_query == SearchLinks.OnThisDay)" DescribeAvailable="Describer.IsAvailable" />
 }
 
 @if (_invalid)
 {
     <p class="empty" role="alert">@Text["Search_Invalid"] <a href="./">@Text["Filter_Clear"]</a></p>
+}
+else if (_describeUnavailable)
+{
+    <p class="empty" role="alert">@Text["Search_DescribeUnavailable"] <a href="./">@Text["Filter_Clear"]</a></p>
 }
 else if (_filtered)
 {
@@ -27,6 +32,23 @@ else if (_filtered)
     else if (_results.Items.Count == 0)
     {
         <p class="empty">@Text["Search_NoResults"] <a href="./">@Text["Filter_Clear"]</a></p>
+    }
+    else if (_query?.Filters.Visual is not null)
+    {
+        @* Most similar first (S-016): grouping by month would hide that order. *@
+        <section class="month">
+            <h2>@Text["Search_MostSimilar"]</h2>
+            <ul class="grid">
+                @foreach (var item in _results.Items)
+                {
+                    <li><MediaCard Item="item" Href="@DetailLink(item)" /></li>
+                }
+            </ul>
+        </section>
+        @if (_results.HasMore)
+        {
+            <p class="more muted">@Text["Search_FirstResults", _results.Items.Count]</p>
+        }
     }
     else
     {
@@ -93,23 +115,27 @@ else
     [SupplyParameterFromQuery(Name = "source")]
     public string? Source { get; set; }
 
+    [SupplyParameterFromQuery(Name = "text")]
+    public string? Description { get; set; }
+
     private TimelinePage? _page;
     private SearchPage? _results;
     private FilterOptions? _options;
     private SearchQuery? _query;
     private bool _filtered;
     private bool _invalid;
+    private bool _describeUnavailable;
 
     protected override async Task OnParametersSetAsync()
     {
         if (FilterSubmitted is not null)
         {
             // One address per set of filters, so the URL can be copied and opened again.
-            Navigation.NavigateTo(SearchLinks.Timeline(SearchLinks.FromFields(Year, Month, Kind, City, Source)));
+            Navigation.NavigateTo(SearchLinks.Timeline(SearchLinks.FromFields(Year, Month, Kind, City, Source, Description)));
             return;
         }
 
-        (_page, _results, _query, _filtered, _invalid) = (null, null, null, false, false);
+        (_page, _results, _query, _filtered, _invalid, _describeUnavailable) = (null, null, null, false, false, false);
         if (!string.IsNullOrEmpty(SearchQueryParameter))
         {
             if (SearchQueryJson.TryDecode(SearchQueryParameter, out var query, out _))
@@ -126,7 +152,15 @@ else
         _options = await Library.GetFilterOptionsAsync();
         if (_filtered)
         {
-            _results = await Library.SearchAsync(_query!);
+            try
+            {
+                _results = await Library.SearchAsync(_query!);
+            }
+            catch (VisualSearchUnavailableException)
+            {
+                // The text model is missing or failed to load: say so, and keep the bar's other filters usable.
+                _describeUnavailable = true;
+            }
         }
         else if (!_invalid)
         {

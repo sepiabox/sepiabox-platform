@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
-using Sepiabox.Pipeline.Models;
+using Sepiabox.Search.Models;
 
-namespace Sepiabox.Pipeline.Tests;
+namespace Sepiabox.Search.Tests;
 
 public sealed class ModelCatalogTests
 {

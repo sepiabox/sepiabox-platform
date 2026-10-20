@@ -55,6 +55,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>The app's clock, so a test can assert link expiry times exactly.</summary>
     public TimeProvider? Time { get; init; }
 
+    /// <summary>The CLIP text encoder; unset, the real one, pointed at a folder with no model in it.</summary>
+    public Sepiabox.Catalog.Search.IQueryEmbedder? QueryEmbedder { get; init; }
+
     /// <summary>Answers the Google handler's server-to-server calls (token and user info) instead of Google.</summary>
     public HttpMessageHandler? GoogleBackchannel { get; init; }
 
@@ -64,7 +67,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             .UseEnvironment(Environment)
             .UseSetting("ConnectionStrings:catalog", _catalogConnectionString)
             .UseSetting("ConnectionStrings:blobs", "UseDevelopmentStorage=true")
-            .UseSetting("Access:Emails", AccessEmails);
+            .UseSetting("Access:Emails", AccessEmails)
+            // Never the developer's or CI's downloaded models: a test chooses with QueryEmbedder.
+            .UseSetting("Search:ModelFolder", Path.Combine(Path.GetTempPath(), "sepiabox-tests-no-models"));
         foreach (var (key, value) in Settings)
         {
             builder.UseSetting(key, value);
@@ -91,6 +96,11 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
 
                     options.Registrations.Add(new HealthCheckRegistration("fake", new AlwaysHealthy(), null, null));
                 });
+            }
+
+            if (QueryEmbedder is not null)
+            {
+                services.AddSingleton(QueryEmbedder);
             }
 
             if (Time is not null)
