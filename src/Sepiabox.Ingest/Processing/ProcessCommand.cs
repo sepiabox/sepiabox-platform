@@ -129,44 +129,65 @@ public static class ProcessCommand
         int processed = 0, skipped = 0, pending = 0, embedded = 0, handled = 0, facesChecked = 0, facesFound = 0;
         var leftOut = new List<LeftOutFile>();
         // By asset, so the same photo in two folders counts once.
-        var withoutDerivative = new HashSet<string>(StringComparer.Ordinal);
+        var withoutPreviewForEmbedding = new HashSet<string>(StringComparer.Ordinal);
+        var withoutPreviewForFaces = new HashSet<string>(StringComparer.Ordinal);
         var withoutManifest = new HashSet<string>(StringComparer.Ordinal);
 
         // An embedding or faces never decide a file's status: whatever goes wrong is a warning for that file, and the
         // next run tries again from the work folder.
         // Added is counted by the caller once the manifest is written.
+        const string EmbeddingFailed = "Could not compute the embedding";
+        const string FacesFailed = "Could not detect faces";
+
         EmbeddingOutcome? AddEmbedding(string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
-            AddOptional(sourcePath, assetId, embeddingProblems, "Could not compute the embedding", add);
+            Record(sourcePath, assetId, Try(sourcePath, embeddingProblems, EmbeddingFailed, add), embeddingProblems, withoutPreviewForEmbedding);
 
         EmbeddingOutcome? AddFaces(string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
-            AddOptional(sourcePath, assetId, faceProblems, "Could not detect faces", add);
+            Record(sourcePath, assetId, Try(sourcePath, faceProblems, FacesFailed, add), faceProblems, withoutPreviewForFaces);
 
-        EmbeddingOutcome? AddOptional(
-            string sourcePath, string assetId, List<EmbeddingProblem> optionalProblems, string what, Func<EmbeddingOutcome> add)
+        // An unchanged file: its manifest is read once, both are added in memory and it is written once.
+        void AddToUnchanged(string sourcePath, string assetId)
+        {
+            var path = ManifestPath(manifestFolder, assetId);
+            var outcome = Try(
+                sourcePath, embedder is not null ? embeddingProblems : faceProblems, embedder is not null ? EmbeddingFailed : FacesFailed,
+                () => WorkFolderManifest.TryAdd(path, output, embedder, faces));
+            Record(sourcePath, assetId, outcome?.Embedding, embeddingProblems, withoutPreviewForEmbedding);
+            embedded += outcome?.Embedding?.Status == EmbeddingStatus.Added ? 1 : 0;
+            CountFaces(Record(sourcePath, assetId, outcome?.Faces, faceProblems, withoutPreviewForFaces));
+        }
+
+        T? Try<T>(string sourcePath, List<EmbeddingProblem> optionalProblems, string what, Func<T> add)
+            where T : class
         {
             try
             {
-                var outcome = add();
-                switch (outcome.Status)
-                {
-                    case EmbeddingStatus.NoDerivative:
-                        withoutDerivative.Add(assetId);
-                        break;
-                    case EmbeddingStatus.ManifestMissing:
-                        withoutManifest.Add(assetId);
-                        break;
-                    case EmbeddingStatus.Failed:
-                        optionalProblems.Add(new EmbeddingProblem(sourcePath, outcome.Category!, outcome.Problem!));
-                        break;
-                }
-
-                return outcome;
+                return add();
             }
             catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
             {
                 optionalProblems.Add(new EmbeddingProblem(sourcePath, $"{what} ({ex.GetType().Name})", $"{what}: {ex.Message}"));
                 return null;
             }
+        }
+
+        EmbeddingOutcome? Record(
+            string sourcePath, string assetId, EmbeddingOutcome? outcome, List<EmbeddingProblem> optionalProblems, HashSet<string> withoutPreview)
+        {
+            switch (outcome?.Status)
+            {
+                case EmbeddingStatus.NoDerivative:
+                    withoutPreview.Add(assetId);
+                    break;
+                case EmbeddingStatus.ManifestMissing:
+                    withoutManifest.Add(assetId);
+                    break;
+                case EmbeddingStatus.Failed:
+                    optionalProblems.Add(new EmbeddingProblem(sourcePath, outcome.Category!, outcome.Problem!));
+                    break;
+            }
+
+            return outcome;
         }
 
         void CountFaces(EmbeddingOutcome? outcome)
@@ -208,18 +229,11 @@ public static class ProcessCommand
                 && previous.Sha256 is { } doneSha256 && File.Exists(ManifestPath(manifestFolder, doneSha256)))
             {
                 skipped++;
-                // The model may have been downloaded after this file was processed: the embedding comes from
-                // the thumbnails in the work folder, so the drive is not read again.
-                if (embedder is not null)
+                // The model may have been downloaded, or --faces given, after this file was processed: both come
+                // from the thumbnails in the work folder, so the drive is not read again.
+                if (embedder is not null || faces is not null)
                 {
-                    var outcome = AddEmbedding(file.Path, doneSha256, () => ManifestEmbeddings.TryAddToFile(ManifestPath(manifestFolder, doneSha256), output, embedder));
-                    embedded += outcome?.Status == EmbeddingStatus.Added ? 1 : 0;
-                }
-
-                // Likewise for faces, when --faces is added on a later run.
-                if (faces is not null)
-                {
-                    CountFaces(AddFaces(file.Path, doneSha256, () => ManifestFaces.TryAddToFile(ManifestPath(manifestFolder, doneSha256), output, faces)));
+                    AddToUnchanged(file.Path, doneSha256);
                 }
 
                 return;
@@ -334,16 +348,17 @@ public static class ProcessCommand
         }
 
         // One line each for all of them: a work folder whose files were deleted would otherwise list every file.
-        if (withoutDerivative.Count > 0)
+        var withoutPreview = withoutPreviewForEmbedding.Union(withoutPreviewForFaces).Count();
+        if (withoutPreview > 0)
         {
-            var missing = (embedder, faces) switch
+            var missing = (withoutPreviewForEmbedding.Count > 0, withoutPreviewForFaces.Count > 0) switch
             {
-                (not null, not null) => "have no embedding and were not checked for faces",
-                (null, not null) => "were not checked for faces",
+                (true, true) => "have no embedding or were not checked for faces",
+                (false, true) => "were not checked for faces",
                 _ => "have no embedding",
             };
             warnings.Add(
-                $"{withoutDerivative.Count:N0} photos and videos have no preview or poster in the work folder, so they {missing}. "
+                $"{withoutPreview:N0} photos and videos have no preview or poster in the work folder, so they {missing}. "
                 + "Keep the work folder until they are processed.");
         }
 

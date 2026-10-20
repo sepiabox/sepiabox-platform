@@ -35,46 +35,13 @@ public static class ManifestFaces
 
         try
         {
-            var faces = detector.Detect(path).Select(ToManifest).ToList();
+            // A vector that is not finite or has no length cannot be compared, so that face is left out (as D-043).
+            var faces = detector.Detect(path).Where(HasDirection).Select(ToManifest).ToList();
             return new EmbeddingOutcome(EmbeddingStatus.Added, manifest with { FacesProcessed = true, Faces = faces });
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
         {
             return Failed(manifest, "Could not detect faces", ex);
-        }
-    }
-
-    /// <summary>The same for a manifest file in the work folder, which is rewritten only when faces were added.</summary>
-    public static EmbeddingOutcome TryAddToFile(string manifestPath, string workFolder, IFaceDetector detector)
-    {
-        Manifest manifest;
-        try
-        {
-            manifest = ManifestJson.Deserialize(File.ReadAllText(manifestPath));
-        }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-        {
-            return new EmbeddingOutcome(EmbeddingStatus.ManifestMissing, null);
-        }
-        catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
-        {
-            return Failed(null, "Could not read its manifest", ex);
-        }
-
-        var outcome = TryAdd(manifest, workFolder, detector);
-        if (outcome.Status != EmbeddingStatus.Added)
-        {
-            return outcome;
-        }
-
-        try
-        {
-            ManifestJson.WriteFile(manifestPath, outcome.Manifest!);
-            return outcome;
-        }
-        catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
-        {
-            return Failed(manifest, "Could not write its manifest", ex);
         }
     }
 
@@ -87,11 +54,17 @@ public static class ManifestFaces
 
         // Normalized here too, so a detector that skips its own check cannot store a vector grouping cannot use.
         var embedding = EmbeddingCodec.Normalized(face.Embedding);
+        var left = Round(face.X);
+        var top = Round(face.Y);
+        // Clamped after rounding, so the box never reaches past the right or bottom edge.
         return new ManifestFace(
-            [Round(face.X), Round(face.Y), Round(face.Width), Round(face.Height)],
+            [left, top, Math.Min(Round(face.Width), Math.Round(1 - left, Decimals)), Math.Min(Round(face.Height), Math.Round(1 - top, Decimals))],
             Round(face.Score),
             EmbeddingCodec.Encode(embedding));
     }
+
+    private static bool HasDirection(DetectedFace face) =>
+        face.Embedding.Length != FaceDetector.Dimensions || EmbeddingCodec.TryNormalize(face.Embedding.ToArray());
 
     private static double Round(double value) => double.IsFinite(value)
         ? Math.Round(Math.Clamp(value, 0, 1), Decimals, MidpointRounding.AwayFromZero)

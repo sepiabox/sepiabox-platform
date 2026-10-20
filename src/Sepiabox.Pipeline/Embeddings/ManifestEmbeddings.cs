@@ -91,38 +91,8 @@ public static class ManifestEmbeddings
     }
 
     /// <summary>The same for a manifest file in the work folder, which is rewritten only when an embedding was added.</summary>
-    public static EmbeddingOutcome TryAddToFile(string manifestPath, string workFolder, IImageEmbedder embedder)
-    {
-        Manifest manifest;
-        try
-        {
-            manifest = ManifestJson.Deserialize(File.ReadAllText(manifestPath));
-        }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-        {
-            return new EmbeddingOutcome(EmbeddingStatus.ManifestMissing, null);
-        }
-        catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
-        {
-            return Failed(null, "Could not read its manifest", ex);
-        }
-
-        var outcome = TryAdd(manifest, workFolder, embedder);
-        if (outcome.Status != EmbeddingStatus.Added)
-        {
-            return outcome;
-        }
-
-        try
-        {
-            ManifestJson.WriteFile(manifestPath, outcome.Manifest!);
-            return outcome;
-        }
-        catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
-        {
-            return Failed(manifest, "Could not write its manifest", ex);
-        }
-    }
+    public static EmbeddingOutcome TryAddToFile(string manifestPath, string workFolder, IImageEmbedder embedder) =>
+        WorkFolderManifest.TryAdd(manifestPath, workFolder, embedder, faces: null).Embedding!;
 
     // The exception's type, unlike its message, never names the file, so it groups failures of the same kind.
     private static EmbeddingOutcome Failed(Manifest? manifest, string what, Exception ex) =>

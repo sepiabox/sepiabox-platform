@@ -1,3 +1,4 @@
+using ImageMagick;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Faces;
@@ -47,6 +48,28 @@ public sealed class FaceProcessingTests : IDisposable
         var manifest = Assert.Single(ReadManifests());
         Assert.False(manifest.FacesProcessed);
         Assert.Empty(manifest.Faces);
+    }
+
+    [FacesFact]
+    public void Finds_the_face_of_a_portrait_stored_sideways_with_an_exif_orientation()
+    {
+        // Stored rotated a quarter turn anticlockwise, with Orientation 6 (rotate clockwise to display), as phones do.
+        using (var image = new MagickImage(Path.Combine("TestData", "face-portrait.jpg")))
+        {
+            image.Rotate(-90);
+            var exif = new ExifProfile();
+            exif.SetValue(ExifTag.Orientation, (ushort)6);
+            image.SetProfile(exif);
+            image.Orientation = Orientation.RightTop;
+            _drive.Write("2019/deitado.jpg", image.ToByteArray(MagickFormat.Jpeg));
+        }
+
+        ProcessCommand.Run(Options(faces: true));
+
+        var face = Assert.Single(Assert.Single(ReadManifests()).Faces);
+        // Upright: the face is in the upper middle of the preview, as in the portrait itself.
+        Assert.InRange(face.Box[0] + (face.Box[2] / 2), 0.3, 0.5);
+        Assert.InRange(face.Box[1] + (face.Box[3] / 2), 0.1, 0.4);
     }
 
     private ProcessOptions Options(bool faces) =>

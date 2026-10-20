@@ -131,32 +131,34 @@ public sealed class ManifestFacesTests : IDisposable
 
         var face = ManifestFaces.ToManifest(new DetectedFace(-0.00001, 0.123456, 0.5, 1.2, 0.987654, embedding));
 
-        Assert.Equal([0, 0.1235, 0.5, 1], face.Box);
+        Assert.Equal([0, 0.1235, 0.5, 0.8765], face.Box);
         Assert.Equal(0.9877, face.Score);
         var stored = EmbeddingCodec.Decode(face.Embedding);
         Assert.Equal((0.6f, 0.8f), (stored[0], stored[1]));
     }
 
     [Fact]
-    public void Writes_the_faces_into_the_manifest_file()
+    public void Keeps_a_box_inside_the_image_after_rounding()
     {
-        var path = Path.Combine(_work.Path, "manifest.json");
-        ManifestJson.WriteFile(path, WithDerivativeFiles(Photo()));
+        var face = ManifestFaces.ToManifest(FakeFaceDetector.CentreFace() with { X = 0.33335, Width = 0.66666, Y = 0.99996, Height = 0.00004 });
 
-        var outcome = ManifestFaces.TryAddToFile(path, _work.Path, new FakeFaceDetector());
-
-        Assert.Equal(EmbeddingStatus.Added, outcome.Status);
-        var written = ManifestJson.Deserialize(File.ReadAllText(path));
-        Assert.True(written.FacesProcessed);
-        Assert.Single(written.Faces);
+        Assert.True(face.Box[0] + face.Box[2] <= 1, string.Join(", ", face.Box));
+        Assert.True(face.Box[1] + face.Box[3] <= 1, string.Join(", ", face.Box));
     }
 
-    [Fact]
-    public void Reports_a_missing_manifest_file()
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(0f)]
+    public void Leaves_out_a_face_whose_embedding_has_no_direction(float value)
     {
-        var outcome = ManifestFaces.TryAddToFile(Path.Combine(_work.Path, "gone.json"), _work.Path, new FakeFaceDetector());
+        var broken = FakeFaceDetector.CentreFace() with { Embedding = Enumerable.Repeat(value, FaceDetector.Dimensions).ToArray() };
+        var detector = new FakeFaceDetector { Faces = [broken, FakeFaceDetector.CentreFace(0.9)] };
 
-        Assert.Equal(EmbeddingStatus.ManifestMissing, outcome.Status);
+        var outcome = ManifestFaces.TryAdd(WithDerivativeFiles(Photo()), _work.Path, detector);
+
+        Assert.Equal(EmbeddingStatus.Added, outcome.Status);
+        Assert.Equal(0.9, Assert.Single(outcome.Manifest!.Faces).Score);
     }
 
     private static Manifest Photo() => TestManifests.Photo(TestManifests.Source("HD da Ana", "2019/praia.jpg"));

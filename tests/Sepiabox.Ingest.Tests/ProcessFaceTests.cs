@@ -147,6 +147,59 @@ public sealed class ProcessFaceTests : IDisposable
     }
 
     [Fact]
+    public void Missing_previews_name_both_embeddings_and_faces_when_both_are_missing()
+    {
+        _drive.Write("2019/a.jpg", TestPhotos.Porto());
+        Run(new FakeFaceDetector(), faces: false);
+        Directory.Delete(Path.Combine(_work.Path, "derivatives"), recursive: true);
+
+        var result = ProcessCommand.Run(Options(faces: true), new FakeEmbedder(), null, faces: new FakeFaceDetector());
+
+        Assert.Contains("1 photos and videos have no preview or poster in the work folder, so they have no embedding or were not checked for faces", result.Warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Missing_previews_name_only_the_embedding_when_the_faces_were_already_found()
+    {
+        _drive.Write("2019/a.jpg", TestPhotos.Porto());
+        Run(new FakeFaceDetector());
+        Directory.Delete(Path.Combine(_work.Path, "derivatives"), recursive: true);
+
+        var result = ProcessCommand.Run(Options(faces: true), new FakeEmbedder(), null, faces: new FakeFaceDetector());
+
+        Assert.Contains("so they have no embedding.", result.Warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("faces", result.Warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_unchanged_file_gets_its_embedding_and_faces_in_one_rewrite_of_its_manifest()
+    {
+        _drive.Write("2019/a.jpg", TestPhotos.Porto());
+        Run(new FakeFaceDetector(), faces: false);
+
+        var result = ProcessCommand.Run(Options(faces: true), new FakeEmbedder(), null, faces: new FakeFaceDetector());
+
+        Assert.Equal((1, 1, 1), (result.Skipped, result.Embedded, result.FacesChecked));
+        var manifest = Assert.Single(ReadManifests());
+        Assert.True(manifest.Embeddings.ContainsKey(ClipImageEmbedder.ModelKey));
+        Assert.True(manifest.FacesProcessed);
+        Assert.Empty(Directory.GetFiles(Path.Combine(_work.Path, "manifests"), "*.tmp"));
+    }
+
+    [Fact]
+    public void A_corrupt_manifest_of_an_unchanged_file_is_one_face_warning_without_an_embedder()
+    {
+        _drive.Write("2019/a.jpg", TestPhotos.Porto());
+        Run(new FakeFaceDetector(), faces: false);
+        File.WriteAllText(Assert.Single(Directory.GetFiles(Path.Combine(_work.Path, "manifests"), "*.json")), "{ not json");
+
+        var result = Run(new FakeFaceDetector());
+
+        Assert.Empty(result.EmbeddingProblems);
+        Assert.Contains("Could not read its manifest", Assert.Single(result.FaceProblems).Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Face_models_are_not_opened_without_faces()
     {
         // A stale marker would be replaced if process verified the model, which it must not do without --faces.
