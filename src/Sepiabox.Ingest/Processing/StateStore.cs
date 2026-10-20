@@ -9,6 +9,9 @@ public enum FileStatus
 
     /// <summary>A video described without its poster and 720p version because FFmpeg was not available.</summary>
     Pending,
+
+    /// <summary>A file with a video extension that holds no video stream, such as a tracker-music <c>.mod</c>.</summary>
+    NotVideo,
 }
 
 /// <summary>What <c>process</c> last saw of a source file. <c>ModifiedTicks</c> is the last write time in UTC ticks.</summary>

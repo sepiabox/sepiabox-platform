@@ -136,6 +136,81 @@ public class VideoProcessingTests
         Assert.Equal(new VideoProbe(1280, 720, null), new VideoProcessor(s_tools).Probe(proxy) with { DurationSeconds = null });
     }
 
+    [Theory]
+    [InlineData("short.mts", 0.5, 50, 0.5)]
+    [InlineData("one-keyframe.mts", 2, 50, 2)]
+    [InlineData("long-audio.mp4", 0.2, 50, 3)]
+    public void Takes_the_poster_from_the_first_frame_when_the_seek_finds_none(string name, double videoSeconds, int gop, double audioSeconds)
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, name);
+        var seconds = videoSeconds.ToString(CultureInfo.InvariantCulture);
+        Run(s_tools.Ffmpeg,
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", $"testsrc=duration={seconds}:size=640x360:rate=25",
+            "-f", "lavfi", "-i", $"sine=frequency=440:duration={audioSeconds.ToString(CultureInfo.InvariantCulture)}",
+            "-c:v", "libx264", "-g", gop.ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv420p", "-c:a", "aac",
+            clip,
+        ]);
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal(["poster", "thumb-256", "proxy-720p"], manifest.Derivatives.Select(d => d.Name));
+        Assert.Equal((640, 360), Size(manifest, "poster"));
+    }
+
+    [Fact]
+    public void Keeps_the_manifest_and_reports_a_problem_when_ffmpeg_writes_no_poster_frame()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        MakeVideo(Path.Combine(drive.Path, "clip.mp4"), 640, 360, seconds: 1);
+        // Stand-ins that succeed without writing anything, as FFmpeg does when a seek decodes no frame.
+        FakeTool(tools, "ffprobe", """echo '{ "streams": [ { "width": 640, "height": 360 } ], "format": { "duration": "1.0" } }'""");
+        FakeTool(tools, "ffmpeg", "exit 0");
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Contains("no poster frame", problem.Reason, StringComparison.Ordinal);
+        Assert.Empty(Assert.Single(ReadManifests(work)).Derivatives);
+    }
+
+    [Fact]
+    public void Ignores_a_file_with_a_video_extension_but_no_video_stream()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        // A tracker-music .mod, or a camcorder file holding only sound: nothing to show, nothing to catalogue.
+        Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "mp2", "-f", "mpeg", Path.Combine(drive.Path, "song.mod")]);
+        MakeVideo(Path.Combine(drive.Path, "party.mp4"), 640, 360, seconds: 1);
+
+        var first = Process(drive, work);
+        var second = Process(drive, work);
+
+        Assert.Empty(first.Problems);
+        Assert.Equal((1, 1), (first.Processed, first.NotVideo));
+        Assert.Single(ReadManifests(work));
+        Assert.Empty(second.Problems);
+        Assert.Equal((0, 1, 1), (second.Processed, second.Skipped, second.NotVideo));
+    }
+
+    private static void FakeTool(TempFolder folder, string name, string script)
+    {
+        var path = Path.Combine(folder.Path, name);
+        File.WriteAllText(path, "#!/bin/sh\n" + script + "\n");
+        // Integration tests run on Linux only; the guard keeps the Windows build free of platform warnings.
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
         ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", ModelFolder: TestModels.None));
 

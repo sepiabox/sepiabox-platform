@@ -21,7 +21,7 @@ public enum VideoEncoder
 /// </summary>
 public sealed record VideoProbe(int Width, int Height, double? DurationSeconds);
 
-public sealed class VideoProcessingException : Exception
+public class VideoProcessingException : Exception
 {
     public VideoProcessingException()
     {
@@ -33,6 +33,25 @@ public sealed class VideoProcessingException : Exception
     }
 
     public VideoProcessingException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+/// <summary>The file opens but holds no video, such as a tracker-music <c>.mod</c> or a sound-only recording.</summary>
+public sealed class NoVideoStreamException : VideoProcessingException
+{
+    public NoVideoStreamException()
+        : base("No video stream found.")
+    {
+    }
+
+    public NoVideoStreamException(string message)
+        : base(message)
+    {
+    }
+
+    public NoVideoStreamException(string message, Exception innerException)
         : base(message, innerException)
     {
     }
@@ -93,10 +112,22 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
 
         var frame = Path.Combine(folder, "poster-frame.tmp.png");
         var posterAt = (probe.DurationSeconds ?? 0) * 0.1;
-        Run(tools.Ffmpeg, FfmpegArguments.Frame(sourcePath, posterAt, probe.Width, probe.Height, frame), cancellationToken);
         IReadOnlyList<ManifestDerivative> posters;
         try
         {
+            Run(tools.Ffmpeg, FfmpegArguments.Frame(sourcePath, posterAt, probe.Width, probe.Height, frame), cancellationToken);
+            // FFmpeg succeeds without writing anything when the seek decodes no frame: a transport stream with
+            // a single keyframe, or a video shorter than its sound. The first frame is always there.
+            if (!File.Exists(frame) && posterAt > 0)
+            {
+                Run(tools.Ffmpeg, FfmpegArguments.Frame(sourcePath, 0, probe.Width, probe.Height, frame), cancellationToken);
+            }
+
+            if (!File.Exists(frame))
+            {
+                throw new VideoProcessingException("FFmpeg wrote no poster frame.");
+            }
+
             posters = ThumbnailGenerator.Generate(frame, workFolder, relativeFolder, PosterSizes);
         }
         finally
@@ -233,7 +264,7 @@ public static class FfmpegArguments
         var root = document.RootElement;
         if (!root.TryGetProperty("streams", out var streams) || streams.GetArrayLength() == 0)
         {
-            throw new VideoProcessingException("No video stream found.");
+            throw new NoVideoStreamException();
         }
 
         var stream = streams[0];

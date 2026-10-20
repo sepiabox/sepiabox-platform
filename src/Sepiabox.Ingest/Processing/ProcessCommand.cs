@@ -26,7 +26,8 @@ public sealed record ProcessResult(
     int VideosPending = 0,
     string? Warning = null,
     int Embedded = 0,
-    IReadOnlyList<EmbeddingProblem>? EmbeddingProblems = null)
+    IReadOnlyList<EmbeddingProblem>? EmbeddingProblems = null,
+    int NotVideo = 0)
 {
     public IReadOnlyList<EmbeddingProblem> EmbeddingProblems { get; init; } = EmbeddingProblems ?? [];
 }
@@ -93,7 +94,7 @@ public static class ProcessCommand
         var stopwatch = Stopwatch.StartNew();
         var problems = new List<ScanProblem>();
         var embeddingProblems = new List<EmbeddingProblem>();
-        int processed = 0, skipped = 0, pending = 0, embedded = 0, handled = 0;
+        int processed = 0, skipped = 0, pending = 0, embedded = 0, handled = 0, notVideo = 0;
         // By asset, so the same photo in two folders counts once.
         var withoutDerivative = new HashSet<string>(StringComparer.Ordinal);
         var withoutManifest = new HashSet<string>(StringComparer.Ordinal);
@@ -170,6 +171,13 @@ public static class ProcessCommand
                 return;
             }
 
+            // Nothing about an unchanged file can make a video stream appear.
+            if (unchanged && previous!.Status == FileStatus.NotVideo)
+            {
+                notVideo++;
+                return;
+            }
+
             // Still no FFmpeg: re-reading a large unchanged video would change nothing.
             if (unchanged && previous!.Status == FileStatus.Pending && video is null)
             {
@@ -193,6 +201,14 @@ public static class ProcessCommand
 
                 var described = Describe(manifestFolder, sha256, kind, file, source);
                 var (manifest, status, derivativeProblem) = AddDerivatives(output, file, described, video, cancellationToken);
+                if (status == FileStatus.NotVideo)
+                {
+                    // Not catalogued: no manifest, and the state keeps the next run from probing it again.
+                    notVideo++;
+                    state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, status));
+                    return;
+                }
+
                 var embeddingAdded = false;
                 if (embedder is not null && status == FileStatus.Done)
                 {
@@ -236,6 +252,11 @@ public static class ProcessCommand
                 + $"{pending:N0} videos are described but have no poster or 720p version yet; run process again once FFmpeg is installed.");
         }
 
+        if (notVideo > 0)
+        {
+            warnings.Add($"{notVideo:N0} files with a video extension hold no video (such as tracker-music .mod files) and were left out.");
+        }
+
         if (embedder is null && embedderWarning is not null)
         {
             warnings.Add(embedderWarning);
@@ -257,7 +278,7 @@ public static class ProcessCommand
 
         var warning = warnings.Count == 0 ? null : string.Join(Environment.NewLine, warnings);
         return new ProcessResult(
-            root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems);
+            root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems, notVideo);
     }
 
     /// <summary>
@@ -343,6 +364,10 @@ public static class ProcessCommand
                 DurationSeconds = probe.DurationSeconds ?? manifest.DurationSeconds,
                 Derivatives = derivatives,
             }, FileStatus.Done, null);
+        }
+        catch (NoVideoStreamException)
+        {
+            return (manifest, FileStatus.NotVideo, null);
         }
         catch (Exception ex) when (ex is MagickException or VideoProcessingException)
         {

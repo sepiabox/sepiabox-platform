@@ -108,7 +108,7 @@ public class VideoProcessorTests
     [Fact]
     public void Rejects_a_file_without_a_video_stream()
     {
-        Assert.Throws<VideoProcessingException>(() => FfmpegArguments.ParseProbe("""{ "streams": [], "format": {} }"""));
+        Assert.Throws<NoVideoStreamException>(() => FfmpegArguments.ParseProbe("""{ "streams": [], "format": {} }"""));
     }
 
     [Fact]
