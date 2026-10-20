@@ -46,6 +46,9 @@ public sealed class TimelineGroupsTests
     [InlineData("2019/IMG_0001.HEIC", "image/heic", "IMG_0001.HEIC")]
     [InlineData(null, "image/jpeg", "abc.jpg")]
     [InlineData(null, "video/mp4", "abc.mp4")]
+    [InlineData(null, "video/mpeg", "abc.mpg")]
+    [InlineData(null, "video/mp2t", "abc.mts")]
+    [InlineData(null, "video/dv", "abc.dv")]
     [InlineData(null, "application/x-unknown", "abc")]
     [InlineData("2019/", "image/png", "abc.png")]
     public void A_download_is_named_after_its_source_or_its_id_and_type(string? path, string contentType, string expected)

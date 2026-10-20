@@ -239,7 +239,7 @@ public static class FfmpegArguments
         var stream = streams[0];
         var width = stream.GetProperty("width").GetInt32();
         var height = stream.GetProperty("height").GetInt32();
-        width = DisplayWidth(width, stream);
+        width = ApplyPixelAspectRatio(width, stream);
         if (Math.Abs(Rotation(stream)) % 180 == 90)
         {
             (width, height) = (height, width);
@@ -257,7 +257,7 @@ public static class FfmpegArguments
 
     // The pixel aspect ratio applies to stored pixels, before rotation. "0:1" means unknown; a ratio far
     // outside what any camera records is treated as a broken header rather than squashing the picture.
-    private static int DisplayWidth(int width, JsonElement stream)
+    private static int ApplyPixelAspectRatio(int width, JsonElement stream)
     {
         if (!stream.TryGetProperty("sample_aspect_ratio", out var value) || value.ValueKind != JsonValueKind.String)
         {

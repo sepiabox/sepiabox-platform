@@ -59,7 +59,9 @@ public class VideoProcessorTests
     [Fact]
     public void Asks_ffprobe_for_the_pixel_aspect_ratio()
     {
-        Assert.Contains("sample_aspect_ratio", FfmpegArguments.Probe("clip.mod")[5]);
+        AssertSequence(
+            FfmpegArguments.Probe("clip.mod"),
+            "-show_entries", "stream=width,height,sample_aspect_ratio:stream_tags=rotate:stream_side_data=rotation:format=duration");
     }
 
     [Theory]

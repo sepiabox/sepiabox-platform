@@ -23,13 +23,27 @@ public class MediaTypesTests
     [InlineData("00001.MTS", "video/mp2t")]
     [InlineData("HDV_0001.m2t", "video/mp2t")]
     [InlineData("VTS_01_1.VOB", "video/mpeg")]
-    [InlineData("tape.dv", "video/x-dv")]
+    [InlineData("tape.dv", "video/dv")]
     [InlineData("MVI_0001.MPG", "video/mpeg")]
     public void Classifies_camcorder_and_dvd_files_as_video_when_the_extension_is_known(string fileName, string contentType)
     {
         Assert.Equal(MediaKind.Video, MediaTypes.Classify(Path.Combine("folder", fileName)));
         Assert.Equal(contentType, MediaTypes.ContentType(fileName));
     }
+
+    [Theory]
+    [InlineData("VIDEO_TS/VIDEO_TS.VOB")]
+    [InlineData("VIDEO_TS/VTS_01_0.VOB")]
+    [InlineData("dvd/vts_02_0.vob")]
+    public void Classifies_dvd_menus_as_other_when_the_vob_is_not_a_title_part(string path) =>
+        Assert.Equal(MediaKind.Other, MediaTypes.Classify(path));
+
+    [Theory]
+    [InlineData("VIDEO_TS/VTS_01_1.VOB")]
+    [InlineData("VIDEO_TS/VTS_12_9.VOB")]
+    [InlineData("holiday.vob")]
+    public void Classifies_dvd_title_parts_as_video_when_the_vob_is_not_a_menu(string path) =>
+        Assert.Equal(MediaKind.Video, MediaTypes.Classify(path));
 
     [Fact]
     public void Classifies_canon_raw_files_as_photos_when_the_extension_is_cr2() =>

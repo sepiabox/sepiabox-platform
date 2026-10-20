@@ -75,6 +75,7 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
         ["video/x-matroska"] = ".mkv",
         ["video/mpeg"] = ".mpg",
         ["video/mp2t"] = ".mts",
+        ["video/dv"] = ".dv",
     };
 
     /// <summary>

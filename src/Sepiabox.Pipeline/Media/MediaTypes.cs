@@ -1,6 +1,8 @@
+using System.Text.RegularExpressions;
+
 namespace Sepiabox.Pipeline.Media;
 
-public static class MediaTypes
+public static partial class MediaTypes
 {
     private static readonly HashSet<string> PhotoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -51,12 +53,15 @@ public static class MediaTypes
         [".tod"] = "video/mp2t",
         [".m2t"] = "video/mp2t",
         [".vob"] = "video/mpeg",
-        [".dv"] = "video/x-dv",
+        [".dv"] = "video/dv",
     };
 
     /// <summary>MIME type from the extension; generic binary for anything that is not a photo or video.</summary>
     public static string ContentType(string path) =>
         ContentTypes.GetValueOrDefault(Path.GetExtension(path), "application/octet-stream");
+
+    [GeneratedRegex(@"^(VIDEO_TS|VTS_\d{2}_0)\.VOB$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex DvdMenu();
 
     public static MediaKind Classify(string path)
     {
@@ -76,6 +81,12 @@ public static class MediaTypes
 
         if (VideoExtensions.Contains(extension))
         {
+            // A DVD's menus (VIDEO_TS.VOB, VTS_nn_0.VOB) are not footage; only title parts (VTS_nn_1.VOB on) are.
+            if (DvdMenu().IsMatch(name))
+            {
+                return MediaKind.Other;
+            }
+
             return MediaKind.Video;
         }
 
