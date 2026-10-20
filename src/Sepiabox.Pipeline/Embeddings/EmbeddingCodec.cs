@@ -63,6 +63,32 @@ public static class EmbeddingCodec
         }
     }
 
+    /// <summary>
+    /// Like <see cref="Normalize"/>, but false instead of an exception for a vector that cannot be normalized, which is
+    /// then left unchanged.
+    /// </summary>
+    public static bool TryNormalize(Span<float> values)
+    {
+        double sum = 0;
+        foreach (var value in values)
+        {
+            if (!float.IsFinite(value))
+            {
+                return false;
+            }
+
+            sum += (double)value * value;
+        }
+
+        if (sum == 0 || !double.IsFinite(sum))
+        {
+            return false;
+        }
+
+        Normalize(values);
+        return true;
+    }
+
     /// <summary>A normalized copy of <paramref name="values"/>; see <see cref="Normalize"/>.</summary>
     public static float[] Normalized(ReadOnlySpan<float> values)
     {

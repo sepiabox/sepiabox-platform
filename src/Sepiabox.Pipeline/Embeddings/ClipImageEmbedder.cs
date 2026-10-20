@@ -45,7 +45,7 @@ public sealed class ClipImageEmbedder : IImageEmbedder, IDisposable
             "Run `sepiabox-ingest models download` and process again: embeddings are added from the work folder "
             + "without reading the drive again.";
         var session = ModelSession.TryOpen(
-            modelFolder, model, "The CLIP model", "so no embeddings were computed", Download, [OutputName], out warning);
+            modelFolder, model, "The CLIP model", "so no embeddings were computed", Download, [], [OutputName], out warning);
         return session is null ? null : new ClipImageEmbedder(session);
     }
 

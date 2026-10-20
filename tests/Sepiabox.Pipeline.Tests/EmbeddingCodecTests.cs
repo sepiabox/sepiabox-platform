@@ -72,4 +72,25 @@ public sealed class EmbeddingCodecTests
         Assert.Equal(1, EmbeddingCodec.Cosine(a, a), 6);
         Assert.Equal(-1, EmbeddingCodec.Cosine(a, opposite), 6);
     }
+
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(float.NaN)]
+    [InlineData(float.NegativeInfinity)]
+    public void Try_normalize_refuses_without_throwing_and_leaves_the_vector_unchanged(float value)
+    {
+        float[] values = [value, value];
+
+        Assert.False(EmbeddingCodec.TryNormalize(values));
+        Assert.Equal([value, value], values);
+    }
+
+    [Fact]
+    public void Try_normalize_scales_a_usable_vector_to_length_one()
+    {
+        float[] values = [3f, 4f];
+
+        Assert.True(EmbeddingCodec.TryNormalize(values));
+        Assert.Equal([0.6f, 0.8f], values);
+    }
 }

@@ -53,6 +53,37 @@ public sealed class YuNetTests
     }
 
     [Fact]
+    public void Leaves_out_a_cell_whose_score_is_not_a_number()
+    {
+        var outputs = Empty();
+        outputs[0].Class[5] = float.NaN;
+        outputs[0].Objectness[5] = 1f;
+
+        Assert.Empty(YuNet.Decode(outputs, 0.8));
+    }
+
+    [Theory]
+    [InlineData("box", float.NaN)]
+    [InlineData("box", float.PositiveInfinity)]
+    [InlineData("landmarks", float.NaN)]
+    public void Leaves_out_a_cell_whose_box_or_landmarks_are_not_finite(string what, float value)
+    {
+        var outputs = Empty();
+        outputs[2].Class[3] = 1f;
+        outputs[2].Objectness[3] = 1f;
+        if (what == "box")
+        {
+            outputs[2].Box[(3 * 4) + 2] = value;
+        }
+        else
+        {
+            outputs[2].Landmarks[(3 * 10) + 7] = value;
+        }
+
+        Assert.Empty(YuNet.Decode(outputs, 0.8));
+    }
+
+    [Fact]
     public void Keeps_only_the_best_of_overlapping_boxes()
     {
         var best = Candidate(100, 100, 50, 0.95);

@@ -1,6 +1,8 @@
+using System.Text.Json.Nodes;
 using ImageMagick;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Faces;
+using Sepiabox.Pipeline.Models;
 using Xunit.Abstractions;
 
 namespace Sepiabox.Pipeline.Tests;
@@ -89,6 +91,61 @@ public sealed class FaceDetectorTests(ITestOutputHelper output) : IDisposable
         }
 
         Assert.Empty(detector.Detect(tiny));
+    }
+
+    // The reference is OpenCV 4.10's own FaceDetectorYN + FaceRecognizerSF (alignCrop, feature) on the same file,
+    // produced by TestData/face-portrait.reference.py.
+    [FacesFact]
+    public void Matches_opencv_on_the_portrait()
+    {
+        using var detector = CreateDetector();
+        var reference = JsonNode.Parse(File.ReadAllText(Path.Combine("TestData", "face-portrait.reference.json")))!;
+        var embedding = EmbeddingCodec.Decode((string)reference["embedding"]!);
+        var box = reference["box"]!.AsArray().Select(v => (double)v! / 400).ToArray();
+
+        var face = Assert.Single(detector.Detect(s_portrait));
+
+        var cosine = EmbeddingCodec.Cosine(face.Embedding, embedding);
+        output.WriteLine($"cosine with OpenCV {cosine:F4}");
+        Assert.True(cosine >= 0.98, $"cosine with OpenCV was {cosine}");
+        double[] ours = [face.X, face.Y, face.Width, face.Height];
+        for (var i = 0; i < 4; i++)
+        {
+            Assert.InRange(ours[i], box[i] - 0.02, box[i] + 0.02);
+        }
+    }
+
+    [FacesFact]
+    public void Gives_the_landmarks_in_the_order_of_the_arcface_reference()
+    {
+        using var detector = CreateDetector();
+
+        var landmarks = Assert.Single(detector.Detect(s_portrait)).Landmarks!;
+
+        // The eye on the left of the picture first, as the reference points: a swap would mirror every aligned face.
+        Assert.True(landmarks[0].X < landmarks[1].X, $"eyes at {landmarks[0]} and {landmarks[1]}");
+        Assert.True(landmarks[3].X < landmarks[4].X, $"mouth corners at {landmarks[3]} and {landmarks[4]}");
+        Assert.True(landmarks[0].Y < landmarks[2].Y && landmarks[2].Y < landmarks[3].Y, "eyes, then nose, then mouth");
+    }
+
+    [FacesFact]
+    public void Refuses_a_model_without_the_input_the_caller_feeds()
+    {
+        var yunet = ModelCatalog.Get(ModelCatalog.YuNet);
+
+        using var named = ModelSession.TryOpen(
+            TestModels.Folder, yunet, "YuNet", "so nothing", "Download it.", [new ModelInput("data")], [], out var nameWarning);
+        using var shaped = ModelSession.TryOpen(
+            TestModels.Folder, yunet, "YuNet", "so nothing", "Download it.", [new ModelInput("input", [1, 3, 320, 320])], [], out var shapeWarning);
+        using var right = ModelSession.TryOpen(
+            TestModels.Folder, yunet, "YuNet", "so nothing", "Download it.", [new ModelInput("input", [1, 3, 640, 640])], YuNet.OutputNames, out var none);
+
+        Assert.Null(named);
+        Assert.Contains("has no input data", nameWarning, StringComparison.Ordinal);
+        Assert.Null(shaped);
+        Assert.Contains("has no input input [1×3×320×320] (it has input [1×3×640×640])", shapeWarning, StringComparison.Ordinal);
+        Assert.NotNull(right);
+        Assert.Null(none);
     }
 
     private static FaceDetector CreateDetector() =>

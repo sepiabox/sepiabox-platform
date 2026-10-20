@@ -6,15 +6,19 @@ using Sepiabox.Pipeline.Models;
 
 namespace Sepiabox.Pipeline.Faces;
 
-/// <summary>A face in an image: its box relative to the image size (0–1), the detector's score and its SFace embedding.</summary>
-public sealed record DetectedFace(double X, double Y, double Width, double Height, double Score, float[] Embedding);
+/// <summary>
+/// A face in an image: its box relative to the image size (0–1), the detector's score, its SFace embedding and,
+/// when the detector gives them, its five landmarks, relative to the image size too.
+/// </summary>
+public sealed record DetectedFace(
+    double X, double Y, double Width, double Height, double Score, float[] Embedding, IReadOnlyList<FacePoint>? Landmarks = null);
 
 /// <summary>Finds the faces in an image and describes each one by a vector that is close for the same person.</summary>
 public interface IFaceDetector
 {
     /// <summary>
     /// The faces in the image at <paramref name="path"/>, best first. Throws <see cref="EmbeddingException"/> when
-    /// a model gives no usable output.
+    /// a model gives output of the wrong size.
     /// </summary>
     IReadOnlyList<DetectedFace> Detect(string path);
 }
@@ -37,6 +41,9 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
     private const string RecognizerInput = "data";
     private const string RecognizerOutput = "fc1";
 
+    private static readonly ModelInput[] s_detectorInputs = [new(DetectorInput, [1, 3, YuNet.InputSize, YuNet.InputSize])];
+    private static readonly ModelInput[] s_recognizerInputs = [new(RecognizerInput)];
+
     private readonly InferenceSession _detector;
     private readonly InferenceSession _recognizer;
 
@@ -58,27 +65,36 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
             + "without reading the drive again.";
         var detector = ModelSession.TryOpen(
             modelFolder, ModelCatalog.Get(ModelCatalog.YuNet), "The YuNet face detection model", Consequence, Download,
-            [.. YuNet.OutputNames], out warning);
+            s_detectorInputs, YuNet.OutputNames, out warning);
         if (detector is null)
         {
             return null;
         }
 
-        var recognizer = ModelSession.TryOpen(
-            modelFolder, ModelCatalog.Get(ModelCatalog.SFace), "The SFace face recognition model", Consequence, Download,
-            [RecognizerOutput], out warning);
-        if (recognizer is null)
+        try
+        {
+            var recognizer = ModelSession.TryOpen(
+                modelFolder, ModelCatalog.Get(ModelCatalog.SFace), "The SFace face recognition model", Consequence, Download,
+                s_recognizerInputs, [RecognizerOutput], out warning);
+            if (recognizer is null)
+            {
+                detector.Dispose();
+                return null;
+            }
+
+            return new FaceDetector(detector, recognizer);
+        }
+        catch
         {
             detector.Dispose();
-            return null;
+            throw;
         }
-
-        return new FaceDetector(detector, recognizer);
     }
 
     public IReadOnlyList<DetectedFace> Detect(string path)
     {
         using var image = new MagickImage(path);
+        // Previews are already upright, but a poster or a later derivative may still carry an orientation tag.
         image.AutoOrient();
         image.BackgroundColor = MagickColors.White;
         image.Alpha(AlphaAction.Remove);
@@ -96,19 +112,29 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
             }
 
             var crop = FaceAlignment.Crop(rgb, width, height, FaceAlignment.TransformFor(candidate.Landmarks));
+            // A blank or broken crop has no direction to compare, so the face is left out rather than stored.
+            if (Embed(crop) is not { } embedding)
+            {
+                continue;
+            }
+
             var left = Math.Clamp(candidate.X, 0, width);
             var top = Math.Clamp(candidate.Y, 0, height);
             var right = Math.Clamp(candidate.X + candidate.Width, 0, width);
             var bottom = Math.Clamp(candidate.Y + candidate.Height, 0, height);
             faces.Add(new DetectedFace(
-                left / width, top / height, (right - left) / width, (bottom - top) / height, candidate.Score, Embed(crop)));
+                left / width, top / height, (right - left) / width, (bottom - top) / height, candidate.Score, embedding,
+                [.. candidate.Landmarks.Select(p => new FacePoint(p.X / width, p.Y / height))]));
         }
 
         return faces;
     }
 
-    /// <summary>The SFace embedding of an aligned 112×112 RGB crop, L2-normalized.</summary>
-    public float[] Embed(byte[] alignedRgb)
+    /// <summary>
+    /// The SFace embedding of an aligned 112×112 RGB crop, L2-normalized; null when it has a value that is not finite
+    /// or no length, which cannot be compared with anything.
+    /// </summary>
+    public float[]? Embed(byte[] alignedRgb)
     {
         const int Plane = FaceAlignment.Size * FaceAlignment.Size;
         if (alignedRgb.Length != Plane * 3)
@@ -118,11 +144,12 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
 
         // OpenCV feeds SFace RGB values 0–255 with no mean or scale (blobFromImage with swapRB).
         var tensor = new DenseTensor<float>([1, 3, FaceAlignment.Size, FaceAlignment.Size]);
+        var buffer = tensor.Buffer.Span;
         for (var pixel = 0; pixel < Plane; pixel++)
         {
             for (var channel = 0; channel < 3; channel++)
             {
-                tensor.Buffer.Span[(channel * Plane) + pixel] = alignedRgb[(pixel * 3) + channel];
+                buffer[(channel * Plane) + pixel] = alignedRgb[(pixel * 3) + channel];
             }
         }
 
@@ -133,8 +160,7 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
             throw new EmbeddingException($"The SFace model returned {embedding.Length} values instead of {Dimensions}.");
         }
 
-        EmbeddingCodec.Normalize(embedding);
-        return embedding;
+        return EmbeddingCodec.TryNormalize(embedding) ? embedding : null;
     }
 
     public void Dispose()
@@ -176,8 +202,7 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
             }
         }
 
-        var names = YuNet.OutputNames.ToList();
-        using var results = _detector.Run([NamedOnnxValue.CreateFromTensor(DetectorInput, tensor)], names);
+        using var results = _detector.Run([NamedOnnxValue.CreateFromTensor(DetectorInput, tensor)], YuNet.OutputNames);
         var byName = results.ToDictionary(r => r.Name, r => r.AsEnumerable<float>().ToArray(), StringComparer.Ordinal);
         var outputs = YuNet.Strides
             .Select(stride => new YuNet.StrideOutput(

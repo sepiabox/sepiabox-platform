@@ -37,8 +37,8 @@ public static class YuNet
     /// <summary>The outputs of one stride: <c>cls_8</c>, <c>obj_8</c>, <c>bbox_8</c> (4 per cell) and <c>kps_8</c> (10 per cell).</summary>
     public sealed record StrideOutput(int Stride, float[] Class, float[] Objectness, float[] Box, float[] Landmarks);
 
-    public static IEnumerable<string> OutputNames =>
-        Strides.SelectMany(stride => new[] { $"cls_{stride}", $"obj_{stride}", $"bbox_{stride}", $"kps_{stride}" });
+    public static readonly IReadOnlyList<string> OutputNames =
+        [.. Strides.SelectMany(stride => new[] { $"cls_{stride}", $"obj_{stride}", $"bbox_{stride}", $"kps_{stride}" })];
 
     /// <summary>Faces with a score of at least <paramref name="minimumScore"/>, best first, in input pixels.</summary>
     public static List<FaceCandidate> Decode(IReadOnlyList<StrideOutput> outputs, double minimumScore)
@@ -57,7 +57,8 @@ public static class YuNet
             for (var cell = 0; cell < cells; cell++)
             {
                 var score = Math.Sqrt(Math.Clamp(output.Class[cell], 0f, 1f) * Math.Clamp(output.Objectness[cell], 0f, 1f));
-                if (score < minimumScore)
+                // Written so that a NaN score, which fails every comparison, is left out too.
+                if (!(score >= minimumScore))
                 {
                     continue;
                 }
@@ -75,6 +76,13 @@ public static class YuNet
                     landmarks[n] = new FacePoint(
                         (output.Landmarks[(cell * 10) + (2 * n)] + column) * stride,
                         (output.Landmarks[(cell * 10) + (2 * n) + 1] + row) * stride);
+                }
+
+                // A cell with a box or landmark that is not finite has nothing to crop or compare.
+                if (!double.IsFinite(centreX) || !double.IsFinite(centreY) || !double.IsFinite(width) || !double.IsFinite(height)
+                    || landmarks.Any(p => !double.IsFinite(p.X) || !double.IsFinite(p.Y)))
+                {
+                    continue;
                 }
 
                 candidates.Add(new FaceCandidate(centreX - (width / 2), centreY - (height / 2), width, height, score, landmarks));

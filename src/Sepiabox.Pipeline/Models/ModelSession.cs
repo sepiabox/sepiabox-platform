@@ -2,9 +2,12 @@ using Microsoft.ML.OnnxRuntime;
 
 namespace Sepiabox.Pipeline.Models;
 
+/// <summary>An input the caller feeds, with its exact shape when the caller depends on one.</summary>
+public sealed record ModelInput(string Name, IReadOnlyList<int>? Shape = null);
+
 /// <summary>
 /// Opens a pinned model with ONNX Runtime (D-044): the file must exist, match its SHA-256 and have the outputs the
-/// caller reads. Anything else is a warning, never an exception, so a run goes on without what the model computes.
+/// caller reads and the inputs it feeds. Anything else is a warning, never an exception, so a run goes on without what the model computes.
 /// </summary>
 public static class ModelSession
 {
@@ -15,6 +18,7 @@ public static class ModelSession
     /// <param name="what">How the warning names the model, such as "The CLIP model".</param>
     /// <param name="consequence">What the run goes without, such as "so no embeddings were computed".</param>
     /// <param name="remedy">What the user should do, which names <c>sepiabox-ingest models download</c>.</param>
+    /// <param name="inputs">Inputs the caller feeds; a model without one of them, or with another shape, is refused.</param>
     /// <param name="outputs">Outputs the caller reads; a model without one of them is refused.</param>
     /// <param name="warning">Why no session was opened.</param>
     public static InferenceSession? TryOpen(
@@ -23,6 +27,7 @@ public static class ModelSession
         string what,
         string consequence,
         string remedy,
+        IReadOnlyCollection<ModelInput> inputs,
         IReadOnlyCollection<string> outputs,
         out string? warning)
     {
@@ -55,11 +60,29 @@ public static class ModelSession
             using var options = new SessionOptions { LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR };
             session = new InferenceSession(path, options);
         }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException or BadImageFormatException)
+        {
+            // ONNX Runtime's native library is missing or broken on this computer: the model itself may be fine.
+            warning = $"ONNX Runtime could not start ({ex.Message}), {consequence}. Reinstall sepiabox-ingest; the model files are kept.";
+            return null;
+        }
         catch (OnnxRuntimeException ex)
         {
             // Matching the pin but unusable: whatever the marker said, the next run checks the file again.
             ModelVerifier.Forget(path);
             warning = $"ONNX Runtime could not load {path} ({ex.Message}), {consequence}. {Forgotten} {remedy}";
+            return null;
+        }
+
+        var badInput = inputs.FirstOrDefault(input => !session.InputMetadata.TryGetValue(input.Name, out var metadata)
+            || (input.Shape is { } shape && !metadata.Dimensions.SequenceEqual(shape)));
+        if (badInput is not null)
+        {
+            var found = string.Join(", ", session.InputMetadata.Select(i => $"{i.Key} [{string.Join("×", i.Value.Dimensions)}]"));
+            var expected = badInput.Shape is null ? badInput.Name : $"{badInput.Name} [{string.Join("×", badInput.Shape)}]";
+            session.Dispose();
+            ModelVerifier.Forget(path);
+            warning = $"{path} has no input {expected} (it has {found}), {consequence}. {Forgotten} {remedy}";
             return null;
         }
 
