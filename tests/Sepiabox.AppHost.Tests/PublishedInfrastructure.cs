@@ -16,8 +16,14 @@ public sealed class PublishedInfrastructure : IAsyncLifetime
     /// <summary>The Aspire manifest (<c>aspire-manifest.json</c>) azd reads.</summary>
     public JsonObject Manifest { get; private set; } = null!;
 
-    /// <summary>Every generated Bicep module, by file name.</summary>
+    /// <summary>
+    /// Every Bicep module the manifest names, by file name: those Aspire generates into the output folder
+    /// and the AppHost's own (<c>Bicep/access.bicep</c>), which the manifest references where it is.
+    /// </summary>
     public IReadOnlyDictionary<string, string> Modules { get; private set; } = null!;
+
+    /// <summary>The parameters the manifest gives each module, by file name (<c>{web-identity.outputs.principalId}</c>).</summary>
+    public IReadOnlyDictionary<string, JsonObject> ModuleParameters { get; private set; } = null!;
 
     public async Task InitializeAsync()
     {
@@ -29,12 +35,24 @@ public sealed class PublishedInfrastructure : IAsyncLifetime
 
         Manifest = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(OutputPath, "aspire-manifest.json"), cts.Token))!
             .AsObject();
-        // Bicep is written with the platform's line endings; the block parsing below expects "\n".
-        Modules = Directory.GetFiles(OutputPath, "*.bicep")
-            .ToDictionary(
-                path => Path.GetFileName(path),
-                path => File.ReadAllText(path).ReplaceLineEndings("\n"),
-                StringComparer.Ordinal);
+        var modules = new Dictionary<string, string>(StringComparer.Ordinal);
+        var parameters = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        foreach (var (_, resource) in Manifest["resources"]!.AsObject())
+        {
+            var module = resource?["type"]?.GetValue<string>() == "azure.bicep.v0" ? resource : resource?["deployment"];
+            if (module?["path"]?.GetValue<string>() is not { } path)
+            {
+                continue;
+            }
+
+            var file = Path.GetFileName(path);
+            // Bicep is written with the platform's line endings; the block parsing below expects "\n".
+            modules[file] = (await File.ReadAllTextAsync(Path.GetFullPath(path, OutputPath), cts.Token)).ReplaceLineEndings("\n");
+            parameters[file] = module["params"]?.AsObject() ?? [];
+        }
+
+        Modules = modules;
+        ModuleParameters = parameters;
     }
 
     public Task DisposeAsync()
@@ -65,10 +83,10 @@ public sealed class PublishedInfrastructure : IAsyncLifetime
 }
 
 /// <summary>
-/// One <c>resource</c> declaration of a generated module: Aspire writes each one from a line
-/// <c>resource name 'Type@version' = {</c> to a closing brace at the start of a line.
+/// One <c>resource</c> declaration of a module: each runs from a line <c>resource name 'Type@version' = {</c>
+/// (or <c>= [</c> for a loop) to the closing brace (or bracket) at the start of a line.
 /// </summary>
-public sealed partial record BicepResource(string Identifier, string Type, string ApiVersion, bool IsExisting, string Body)
+public sealed partial record BicepResource(string Identifier, string Type, string ApiVersion, bool IsExisting, bool IsLoop, string Body)
 {
     public static IEnumerable<BicepResource> Parse(string module)
     {
@@ -79,6 +97,7 @@ public sealed partial record BicepResource(string Identifier, string Type, strin
                 match.Groups["type"].Value,
                 match.Groups["version"].Value,
                 match.Groups["existing"].Success,
+                match.Groups["open"].Value == "[",
                 match.Groups["body"].Value);
         }
     }
@@ -109,7 +128,7 @@ public sealed partial record BicepResource(string Identifier, string Type, strin
     }
 
     [GeneratedRegex(
-        @"^resource (?<id>\w+) '(?<type>[^@']+)@(?<version>[^']+)' (?<existing>existing )?= \{\r?\n(?<body>.*?)^\}",
+        @"^resource (?<id>\w+) '(?<type>[^@']+)@(?<version>[^']+)' (?<existing>existing )?= (?<open>[\{\[])\r?\n(?<body>.*?)^[\}\]]",
         RegexOptions.Multiline | RegexOptions.Singleline)]
     private static partial Regex Declaration();
 }

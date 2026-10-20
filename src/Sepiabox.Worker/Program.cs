@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
@@ -65,8 +66,17 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
 
     if (command.Action == WorkerAction.Migrate || command.MigrateFirst)
     {
-        await services.GetRequiredService<CatalogDbContext>().Database.MigrateAsync(cancellationToken);
+        var db = services.GetRequiredService<CatalogDbContext>();
+        await db.Database.MigrateAsync(cancellationToken);
         Log.MigrationsApplied(logger);
+
+        // After the migrations, so the role is granted every table they created.
+        if (AppRoleSettings.FromConfiguration(services.GetRequiredService<IConfiguration>()) is { } appRole)
+        {
+            await CatalogAppRole.EnsureAsync(
+                (NpgsqlConnection)db.Database.GetDbConnection(), appRole.Name, appRole.Password, cancellationToken);
+            Log.AppRoleEnsured(logger, appRole.Name);
+        }
     }
 
     if (command.Action != WorkerAction.ImportOnce)

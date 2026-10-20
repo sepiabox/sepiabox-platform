@@ -193,18 +193,20 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
     }
 
     [Fact]
-    public void Apps_read_the_catalog_connection_only_as_a_key_vault_reference_when_published()
+    public void Apps_get_their_catalog_connections_as_secrets_never_as_plain_values_when_published()
     {
-        var apps = published.Declarations(ContainerApp).Concat(published.Declarations(ContainerAppJob)).ToList();
+        var web = WebApp();
+        var job = published.The(ContainerAppJob);
 
-        Assert.Equal(2, apps.Count);
-        Assert.All(apps, app =>
-        {
-            Assert.Matches(@"name: 'ConnectionStrings__catalog'\s+secretRef: 'connectionstrings--catalog'", app.Body);
-            Assert.Matches(@"name: 'connectionstrings--catalog'\s+identity: \w+\s+keyVaultUrl: ", app.Body);
-            // The password parameter must not be written into the app as a value of its own.
-            Assert.DoesNotContain("pg_password_value", app.Body, StringComparison.Ordinal);
-        });
+        // The job, as the administrator, reads its connection from the database vault (D-062).
+        Assert.Matches(@"name: 'ConnectionStrings__catalog'\s+secretRef: 'connectionstrings--catalog'", job.Body);
+        Assert.Matches(@"name: 'connectionstrings--catalog'\s+identity: \w+\s+keyVaultUrl: database_vault_", job.Body);
+        // The web connects as the application role, from a Container Apps secret built from a secure parameter.
+        Assert.Matches(@"name: 'ConnectionStrings__catalog'\s+secretRef: 'connectionstrings--catalog'", web.Body);
+        Assert.Contains("@secure()\nparam pg_app_password_value string", published.Modules["web-containerapp.module.bicep"], StringComparison.Ordinal);
+        Assert.All(new[] { web, job }, app =>
+            // The administrator's password parameter is never written into an app.
+            Assert.DoesNotContain("pg_password_value", app.Body, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -235,7 +237,8 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
         Assert.Contains("name: 'Basic'", registry.Block("sku"), StringComparison.Ordinal);
         Assert.Single(published.Declarations("Microsoft.App/managedEnvironments"));
         Assert.Empty(published.Declarations("Microsoft.App/managedEnvironments/dotNetComponents"));
-        Assert.Single(published.Declarations("Microsoft.KeyVault/vaults"));
+        // The owner's secrets, and the database connections only the migrate job reads (D-062).
+        Assert.Equal(2, published.Declarations("Microsoft.KeyVault/vaults").Count);
     }
 
     private JsonObject Generate(string parameter) =>

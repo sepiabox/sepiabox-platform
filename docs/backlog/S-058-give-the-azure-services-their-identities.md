@@ -21,11 +21,11 @@ S-032 creates the resources. The web and the worker jobs then need managed ident
 - The custom domain (S-035).
 
 ### Acceptance criteria
-- [ ] Given the generated Bicep, then the web identity has exactly the roles in Scope (Reader on the account, Contributor on `dataprotection` only, Key Vault Secrets User, Crypto User on the key), the worker identity exactly its roles, and each id in `uploaderPrincipalIds` has *Storage Blob Data Contributor* on the account.
-- [ ] Given the generated infrastructure, when it is inspected, then `Auth:Google:ClientId`, `Auth:Google:ClientSecret`, `Auth:Microsoft:ClientId`, `Auth:Microsoft:ClientSecret`, `Access:Emails` and `Anthropic:ApiKey` reach the web as Key Vault references or Aspire secret parameters, never as plain values.
-- [ ] Given the web in the `Production` environment, when it starts, then its data protection keys are persisted to Blob Storage and protected with a Key Vault key, so a restart, a new revision or a second replica keeps everyone signed in (verified by a test of the web's service registration).
-- [ ] Given the generated infrastructure and the migrations, then the web's connection string names the application role, not the server administrator, and that role cannot change the schema (verified by an integration test against PostgreSQL).
-- [ ] Given the generated Bicep, then exactly one data protection mechanism is configured for the web (either the Blob Storage key ring or Container Apps' `autoConfigureDataProtection`, not both).
+- [x] Given the generated Bicep, then the web identity has exactly the roles in Scope (Reader on the account, Contributor on `dataprotection` only, Key Vault Secrets User, Crypto User on the key), the worker identity exactly its roles, and each id in `uploaderPrincipalIds` has *Storage Blob Data Contributor* on the account.
+- [x] Given the generated infrastructure, when it is inspected, then `Auth:Google:ClientId`, `Auth:Google:ClientSecret`, `Auth:Microsoft:ClientId`, `Auth:Microsoft:ClientSecret`, `Access:Emails` and `Anthropic:ApiKey` reach the web as Key Vault references or Aspire secret parameters, never as plain values.
+- [x] Given the web in the `Production` environment, when it starts, then its data protection keys are persisted to Blob Storage and protected with a Key Vault key, so a restart, a new revision or a second replica keeps everyone signed in (verified by a test of the web's service registration).
+- [x] Given the generated infrastructure and the migrations, then the web's connection string names the application role, not the server administrator, and that role cannot change the schema (verified by an integration test against PostgreSQL).
+- [x] Given the generated Bicep, then exactly one data protection mechanism is configured for the web (either the Blob Storage key ring or Container Apps' `autoConfigureDataProtection`, not both).
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), after adding the Container Apps default host's `/signin-google` and `/signin-microsoft` redirect URIs to the OAuth clients, when I sign in with Google on `https://<default host>`, restart the web revision and reload the page, then I am still signed in; and an account not on `Access:Emails` lands on the no-access page. (S-035 repeats this on `app.sepiabox.com`.)
 
 ### Technical notes

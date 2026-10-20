@@ -16,6 +16,9 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Information, Message = "Catalog migrations applied.")]
     public static partial void MigrationsApplied(ILogger logger);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Application role {Role} has its login and the catalog's rows.")]
+    public static partial void AppRoleEnsured(ILogger logger, string role);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Imported {Imported} manifests, {Unchanged} unchanged, {Invalid} with problems, {Warnings} without an embedding.")]
     public static partial void ImportFinished(ILogger logger, int imported, int unchanged, int invalid, int warnings);
 

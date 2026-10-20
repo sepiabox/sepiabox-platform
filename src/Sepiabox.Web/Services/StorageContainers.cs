@@ -8,4 +8,7 @@ public static class StorageContainers
 {
     public const string Originals = "originals";
     public const string Derivatives = "derivatives";
+
+    /// <summary>The web's data protection key ring in Azure (S-058); created by the deploy, not by upload.</summary>
+    public const string DataProtection = "dataprotection";
 }
