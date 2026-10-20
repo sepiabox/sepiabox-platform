@@ -1,6 +1,6 @@
 ## S-012 — Name places with GeoNames
 **Epic:** Cloud catalog
-**Depends on:** S-008, S-032
+**Depends on:** S-008
 **Priority:** High
 **Size:** M
 
@@ -14,18 +14,16 @@
 - `sepiabox-worker places refresh`: resolves assets without a place.
 - Photo detail shows "Matosinhos, Porto, Portugal".
 - CC BY 4.0 attribution in the README.
-- In Azure: a manual-trigger Container Apps job `sepiabox-geonames` (worker image) that downloads `cities500.zip`, `admin1CodesASCII.txt` and `countryInfo.txt` from GeoNames, runs `geonames load` and then `places refresh`; started with `az containerapp job start` and documented in `docs/operations.md` (when to run it: once after the first deploy, and again after a large upload of old photos only if places are missing).
 
 ### Out of scope
 - Personal places (S-014).
+- Loading GeoNames in Azure (S-059).
 
 ### Acceptance criteria
 - [ ] Given a test file with 5 cities, when I load it twice, then the table has 5 rows.
 - [ ] Given an asset at 41.18, −8.69, when it is imported, then the place is "Matosinhos".
 - [ ] Given an asset 300 km from the nearest city, then it has no place.
 - [ ] Given `places refresh`, then older assets without a place get resolved.
-- [ ] Given the generated Bicep, then it has the `sepiabox-geonames` job with a manual trigger, the worker image and the catalog connection, and no schedule.
-- [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), when the job has run and a photo taken in Lisbon is imported, then its detail page shows "Lisbon".
 
 ### Technical notes
 - Query: `ORDER BY location <-> @point LIMIT 1` with `ST_DWithin(location, @point, 50000)`.
