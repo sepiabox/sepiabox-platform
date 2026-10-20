@@ -57,18 +57,37 @@ public sealed class SasUrlFactoryTests
     }
 
     [Fact]
-    public async Task A_user_delegation_key_outlives_the_video_links_signed_with_it()
+    public async Task Reuses_a_delegation_key_only_while_it_outlives_a_video_link_signed_now()
     {
         var service = new DelegationOnlyService();
-        using var links = new SasUrlFactory(service, new FixedTime(s_now));
+        var clock = new MovableTime(s_now);
+        using var links = new SasUrlFactory(service, clock);
 
-        var video = await links.ForVideoAsync($"{Ids.Of(5)}/proxy-720p.mp4");
-        var thumbnail = await links.ForDerivativeAsync($"{Ids.Of(5)}/thumb-256.webp");
-
+        var first = await links.ForVideoAsync($"{Ids.Of(5)}/proxy-720p.mp4");
+        clock.Now = s_now + TimeSpan.FromHours(1) + TimeSpan.FromMinutes(54);
+        var reused = await links.ForVideoAsync($"{Ids.Of(5)}/proxy-720p.mp4");
         Assert.Equal(1, service.KeyRequests);
-        var keyExpiry = DateTimeOffset.Parse(HttpUtility.ParseQueryString(video.Query)["ske"]!, CultureInfo.InvariantCulture);
-        Assert.True(keyExpiry >= Expiry(video), $"The key expires at {keyExpiry:O}, before the link ({Expiry(video):O}).");
+
+        clock.Now = s_now + TimeSpan.FromHours(1) + TimeSpan.FromMinutes(56);
+        var renewed = await links.ForVideoAsync($"{Ids.Of(5)}/proxy-720p.mp4");
+
+        Assert.Equal(2, service.KeyRequests);
+        foreach (var url in new[] { first, reused, renewed })
+        {
+            Assert.True(KeyExpiry(url) >= Expiry(url), $"The key expires at {KeyExpiry(url):O}, before the link ({Expiry(url):O}).");
+        }
+    }
+
+    [Fact]
+    public async Task Delegation_signed_links_are_https_only_when_storage_is_https()
+    {
+        using var links = new SasUrlFactory(new DelegationOnlyService(), new FixedTime(s_now));
+
+        var thumbnail = await links.ForDerivativeAsync($"{Ids.Of(6)}/thumb-256.webp");
+        var video = await links.ForVideoAsync($"{Ids.Of(6)}/proxy-720p.mp4");
+
         Assert.Equal("https", HttpUtility.ParseQueryString(thumbnail.Query)["spr"]);
+        Assert.Equal("https", HttpUtility.ParseQueryString(video.Query)["spr"]);
     }
 
     [Fact]
@@ -108,8 +127,8 @@ public sealed class SasUrlFactoryTests
     [Fact]
     public void A_cached_redirect_expires_at_least_a_minute_before_its_link()
     {
-        Assert.Equal(TimeSpan.FromSeconds(540), SasUrlFactory.DerivativeCacheDuration);
-        Assert.True(SasUrlFactory.DerivativeCacheDuration + TimeSpan.FromMinutes(1)
+        Assert.Equal(TimeSpan.FromSeconds(540), SasUrlFactory.RedirectCacheDuration);
+        Assert.True(SasUrlFactory.RedirectCacheDuration + TimeSpan.FromMinutes(1)
             <= SasUrlFactory.DerivativeLifetime - SasUrlFactory.DerivativeWindow);
     }
 
@@ -122,6 +141,9 @@ public sealed class SasUrlFactoryTests
 
     private static DateTimeOffset Expiry(Uri url) =>
         DateTimeOffset.Parse(HttpUtility.ParseQueryString(url.Query)["se"]!, CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset KeyExpiry(Uri url) =>
+        DateTimeOffset.Parse(HttpUtility.ParseQueryString(url.Query)["ske"]!, CultureInfo.InvariantCulture);
 
     /// <summary>Signs in with a token (like a managed identity), so only user delegation SAS is possible.</summary>
     private sealed class DelegationOnlyService()

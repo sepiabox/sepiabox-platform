@@ -108,7 +108,7 @@ public sealed class LibraryQueriesTests(CatalogFixture catalog)
         var queries = Queries(db);
 
         Assert.Equal($"{Ids.Of(11)}/thumb-256.webp", await queries.GetDerivativeBlobPathAsync(Ids.Of(11), "thumb-256"));
-        Assert.Null(await queries.GetDerivativeBlobPathAsync(Ids.Of(11), "poster"));
+        Assert.Null(await queries.GetDerivativeBlobPathAsync(Ids.Of(11), DerivativeNames.Poster));
         Assert.Equal(new OriginalFile($"Praia {Ids.Of(11)[^4..]}.jpg", "image/jpeg"), await queries.GetOriginalAsync(Ids.Of(11)));
         Assert.Null(await queries.GetOriginalAsync(Ids.Of(12)));
     }

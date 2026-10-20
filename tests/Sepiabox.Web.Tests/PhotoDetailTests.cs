@@ -32,6 +32,7 @@ public sealed class PhotoDetailTests : BunitContext
         var video = page.Find("figure.preview video");
         Assert.Equal($"fotos/{Ids.Of(2)}/proxy-720p", video.GetAttribute("src"));
         Assert.Equal($"fotos/{Ids.Of(2)}/poster", video.GetAttribute("poster"));
+        Assert.Equal("Vídeo de 9 de agosto de 2020, 18:05", video.GetAttribute("aria-label"));
         Assert.Contains("Vídeo", page.Find("dl").TextContent, StringComparison.Ordinal);
         Assert.Contains("0:03", page.Find("dl").TextContent, StringComparison.Ordinal);
         Assert.Equal($"fotos/{Ids.Of(2)}/original", page.Find("a.button").GetAttribute("href"));

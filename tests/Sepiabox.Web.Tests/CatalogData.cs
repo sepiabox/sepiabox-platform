@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Sepiabox.Catalog;
+using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
 
@@ -39,26 +40,26 @@ internal static class CatalogData
             : [],
     };
 
-    /// <summary>A 3-second camcorder video with its thumbnail and poster, and its 720p version unless <paramref name="withProxy"/> is false.</summary>
+    /// <summary>A 3-second HD camcorder video with its thumbnail and poster, and its 720p version unless <paramref name="withProxy"/> is false.</summary>
     public static Asset Video(string id, DateTime? capturedAt, bool withProxy = true) => new()
     {
         Id = id,
-        Kind = "video",
+        Kind = AssetKinds.Video,
         ContentType = "video/mpeg",
         SizeBytes = 1000,
         CapturedAt = capturedAt,
-        Width = 1024,
-        Height = 576,
+        Width = 1920,
+        Height = 1080,
         DurationSeconds = 3,
         ImportedAt = DateTimeOffset.UnixEpoch,
         UpdatedAt = DateTimeOffset.UnixEpoch,
         Sources = [new AssetSource { AssetId = id, Type = "local", Name = "HD Ana", Path = $"2020/MOV{id[^4..]}.MOD" }],
         Derivatives =
         [
-            new Derivative { AssetId = id, Name = "thumb-256", BlobPath = $"{id}/thumb-256.webp", Width = 256, Height = 144, ContentType = "image/webp" },
-            new Derivative { AssetId = id, Name = "poster", BlobPath = $"{id}/poster.webp", Width = 1024, Height = 576, ContentType = "image/webp" },
+            new Derivative { AssetId = id, Name = DerivativeNames.Thumbnail, BlobPath = $"{id}/thumb-256.webp", Width = 256, Height = 144, ContentType = "image/webp" },
+            new Derivative { AssetId = id, Name = DerivativeNames.Poster, BlobPath = $"{id}/poster.webp", Width = 1920, Height = 1080, ContentType = "image/webp" },
             .. withProxy
-                ? new[] { new Derivative { AssetId = id, Name = "proxy-720p", BlobPath = $"{id}/proxy-720p.mp4", Width = 1024, Height = 576, ContentType = "video/mp4" } }
+                ? new[] { new Derivative { AssetId = id, Name = DerivativeNames.Proxy, BlobPath = $"{id}/proxy-720p.mp4", Width = 1280, Height = 720, ContentType = "video/mp4" } }
                 : [],
         ],
     };

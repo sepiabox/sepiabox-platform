@@ -39,31 +39,35 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
     public static readonly TimeSpan DerivativeWindow = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// How long a browser may cache a redirect to a derivative: a minute less than the shortest link's
-    /// life, so a cached redirect never points at a link that has just expired (clock skew, slow loads).
+    /// How long a browser may cache a redirect to a derivative or video: a minute less than the shortest
+    /// link's life, so a cached redirect never points at a link that has just expired (clock skew, slow loads).
     /// </summary>
-    public static readonly TimeSpan DerivativeCacheDuration = DerivativeLifetime - DerivativeWindow - TimeSpan.FromMinutes(1);
+    public static readonly TimeSpan RedirectCacheDuration = DerivativeLifetime - DerivativeWindow - TimeSpan.FromMinutes(1);
 
     /// <summary>
-    /// Video links expire at the end of the 5-minute window they were signed in plus this (3 h 55 to 4 h
-    /// left), so a long camcorder tape, or one paused for a while, still plays to the end (D-049).
+    /// Video links expire at the start of the 5-minute window they were signed in plus this, so 3 h 55 to
+    /// 4 h after signing: a long camcorder tape, or one paused for a while, still plays to the end (D-049).
     /// </summary>
     public static readonly TimeSpan VideoLifetime = TimeSpan.FromHours(4);
 
     public static readonly TimeSpan OriginalLifetime = TimeSpan.FromMinutes(5);
 
-    // Longer than the longest link, so a key can be reused for a while before it is too close to expiry.
-    private static readonly TimeSpan s_delegationKeyLifetime = TimeSpan.FromHours(6);
+    // Declared after the lifetimes it reads: static fields are initialised in order.
+    private static readonly TimeSpan s_longestLink = new[] { DerivativeLifetime, VideoLifetime, OriginalLifetime }.Max();
     private static readonly TimeSpan s_clockSkew = TimeSpan.FromMinutes(5);
+
+    // A user delegation SAS stops working when its key expires, so a key is reused only while it outlives the
+    // longest link by the clock skew; the margin lets one key serve about two hours of signing.
+    private static readonly TimeSpan s_delegationKeyLifetime = s_longestLink + TimeSpan.FromHours(2);
 
     private readonly SemaphoreSlim _keyLock = new(1, 1);
     private volatile UserDelegationKey? _delegationKey;
 
     public Task<Uri> ForDerivativeAsync(string blobPath, CancellationToken cancellationToken = default) =>
-        CreateAsync(StorageContainers.Derivatives, blobPath, WindowStart() + DerivativeLifetime, configure: null, cancellationToken);
+        CreateAsync(StorageContainers.Derivatives, blobPath, SigningWindowStart() + DerivativeLifetime, configure: null, cancellationToken);
 
     public Task<Uri> ForVideoAsync(string blobPath, CancellationToken cancellationToken = default) =>
-        CreateAsync(StorageContainers.Derivatives, blobPath, WindowStart() + VideoLifetime, configure: null, cancellationToken);
+        CreateAsync(StorageContainers.Derivatives, blobPath, SigningWindowStart() + VideoLifetime, configure: null, cancellationToken);
 
     public Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default) =>
         CreateAsync(StorageContainers.Originals, assetId, time.GetUtcNow() + OriginalLifetime, sas =>
@@ -76,7 +80,7 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
     public void Dispose() => _keyLock.Dispose();
 
     // Links signed in the same window are identical, so the browser cache can reuse them.
-    private DateTimeOffset WindowStart()
+    private DateTimeOffset SigningWindowStart()
     {
         var now = time.GetUtcNow();
         return new DateTimeOffset(now.UtcTicks - (now.UtcTicks % DerivativeWindow.Ticks), TimeSpan.Zero);
@@ -130,7 +134,6 @@ public sealed class SasUrlFactory(BlobServiceClient service, TimeProvider time) 
         }
     }
 
-    // A key must outlive every link signed with it: a user delegation SAS stops working when its key expires.
     private bool IsStillGood(UserDelegationKey key) =>
-        key.SignedExpiresOn - time.GetUtcNow() >= VideoLifetime + s_clockSkew;
+        key.SignedExpiresOn - time.GetUtcNow() >= s_longestLink + s_clockSkew;
 }

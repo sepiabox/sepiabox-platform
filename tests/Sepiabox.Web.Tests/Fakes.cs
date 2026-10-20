@@ -10,6 +10,14 @@ internal sealed class FixedTime(DateTimeOffset now) : TimeProvider
     public override DateTimeOffset GetUtcNow() => now;
 }
 
+/// <summary>A clock a test moves forward by hand.</summary>
+internal sealed class MovableTime(DateTimeOffset start) : TimeProvider
+{
+    public DateTimeOffset Now { get; set; } = start;
+
+    public override DateTimeOffset GetUtcNow() => Now;
+}
+
 /// <summary>
 /// An in-memory library. Items are split into pages of <see cref="PageSize"/>; the last requested page
 /// is recorded so tests can see how a page number from the URL was clamped.
@@ -67,7 +75,7 @@ internal static class Details
 {
     public static AssetDetail Photo(string id, DateTime? capturedAt = null, string? previewName = DerivativeNames.Preview) =>
         new(id, AssetKinds.Photo, capturedAt, "Apple", "iPhone 15", 4000, 3000, previewName,
-            [new AssetSourceDetail("local", "HD Ana", "2019/praia.jpg")]);
+            [new AssetSourceDetail("local", "HD Ana", "2019/praia.jpg")], DurationSeconds: null, HasProxy: false);
 
     /// <summary>A 3-second video; by default it has its poster and its 720p version.</summary>
     public static AssetDetail Video(string id, bool hasProxy = true, string? posterName = DerivativeNames.Poster) =>

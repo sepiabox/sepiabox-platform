@@ -11,9 +11,13 @@
     }
     @if (AssetKinds.IsVideo(Item.Kind))
     {
-        <span class="play" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="20" height="20" focusable="false"><path d="M8 5v14l11-7z" /></svg>
-        </span>
+        @* Over the poster only: on the grey placeholder it would cover the text. *@
+        @if (Item.HasThumbnail)
+        {
+            <span class="play" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" focusable="false"><path d="M8 5v14l11-7z" /></svg>
+            </span>
+        }
         @* A video of unknown length still says it is a video. *@
         <span class="badge">@(Duration ?? AssetKinds.Label(Item.Kind))</span>
     }
@@ -34,7 +38,7 @@
         string.Join(", ", new[]
         {
             AssetKinds.Label(Item.Kind),
-            Duration,
+            Duration is { } duration ? $"duração {duration}" : null,
             Item.CapturedAt is { } at ? PortugueseDates.DateAndTime(at) : TimelineGroups.NoDateTitle,
         }.Where(part => part is not null));
 }

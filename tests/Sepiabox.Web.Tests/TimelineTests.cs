@@ -11,9 +11,9 @@ public sealed class TimelineTests : BunitContext
     public void Assets_from_three_months_show_three_month_groups_newest_first()
     {
         Use(new FakeLibrary(
-            new TimelineItem(Ids.Of(1), AssetKinds.Photo, new DateTime(2026, 8, 3, 10, 0, 0), true),
-            new TimelineItem(Ids.Of(2), AssetKinds.Photo, new DateTime(2026, 10, 1, 9, 0, 0), true),
-            new TimelineItem(Ids.Of(3), AssetKinds.Video, new DateTime(2025, 12, 24, 20, 0, 0), true)));
+            new TimelineItem(Ids.Of(1), AssetKinds.Photo, new DateTime(2026, 8, 3, 10, 0, 0), true, DurationSeconds: null),
+            new TimelineItem(Ids.Of(2), AssetKinds.Photo, new DateTime(2026, 10, 1, 9, 0, 0), true, DurationSeconds: null),
+            new TimelineItem(Ids.Of(3), AssetKinds.Video, new DateTime(2025, 12, 24, 20, 0, 0), true, DurationSeconds: null)));
 
         var page = Render<Timeline>();
 
@@ -27,7 +27,7 @@ public sealed class TimelineTests : BunitContext
     {
         Use(new FakeLibrary(
             new TimelineItem(Ids.Of(15), AssetKinds.Video, new DateTime(2020, 8, 9, 18, 5, 0), true, DurationSeconds: 3),
-            new TimelineItem(Ids.Of(16), AssetKinds.Photo, new DateTime(2020, 8, 8), true)));
+            new TimelineItem(Ids.Of(16), AssetKinds.Photo, new DateTime(2020, 8, 8), true, DurationSeconds: null)));
 
         var page = Render<Timeline>();
 
@@ -42,8 +42,8 @@ public sealed class TimelineTests : BunitContext
     public void An_asset_without_a_date_appears_last_under_sem_data()
     {
         Use(new FakeLibrary(
-            new TimelineItem(Ids.Of(4), AssetKinds.Photo, null, true),
-            new TimelineItem(Ids.Of(5), AssetKinds.Photo, new DateTime(2019, 7, 14, 10, 32, 0), true)));
+            new TimelineItem(Ids.Of(4), AssetKinds.Photo, null, true, DurationSeconds: null),
+            new TimelineItem(Ids.Of(5), AssetKinds.Photo, new DateTime(2019, 7, 14, 10, 32, 0), true, DurationSeconds: null)));
 
         var page = Render<Timeline>();
 
@@ -56,7 +56,7 @@ public sealed class TimelineTests : BunitContext
     [Fact]
     public void Thumbnails_point_at_the_signing_endpoint_and_the_page_holds_no_storage_links()
     {
-        Use(new FakeLibrary(new TimelineItem(Ids.Of(6), AssetKinds.Photo, new DateTime(2026, 10, 2), true)));
+        Use(new FakeLibrary(new TimelineItem(Ids.Of(6), AssetKinds.Photo, new DateTime(2026, 10, 2), true, DurationSeconds: null)));
 
         var page = Render<Timeline>();
 
@@ -68,8 +68,8 @@ public sealed class TimelineTests : BunitContext
     public void A_full_page_links_to_the_older_page()
     {
         Use(new FakeLibrary(
-            new TimelineItem(Ids.Of(7), AssetKinds.Photo, new DateTime(2026, 1, 2), false),
-            new TimelineItem(Ids.Of(8), AssetKinds.Photo, new DateTime(2026, 1, 1), false))
+            new TimelineItem(Ids.Of(7), AssetKinds.Photo, new DateTime(2026, 1, 2), false, DurationSeconds: null),
+            new TimelineItem(Ids.Of(8), AssetKinds.Photo, new DateTime(2026, 1, 1), false, DurationSeconds: null))
         { PageSize = 1 });
 
         var page = Render<Timeline>();
@@ -91,7 +91,7 @@ public sealed class TimelineTests : BunitContext
     [Fact]
     public void A_page_beyond_the_end_says_there_are_no_more_photos()
     {
-        Use(new FakeLibrary(new TimelineItem(Ids.Of(9), AssetKinds.Photo, new DateTime(2026, 1, 1), true)));
+        Use(new FakeLibrary(new TimelineItem(Ids.Of(9), AssetKinds.Photo, new DateTime(2026, 1, 1), true, DurationSeconds: null)));
 
         var page = RenderPage(5);
 
@@ -121,8 +121,8 @@ public sealed class TimelineTests : BunitContext
     public void Photos_on_later_pages_link_back_to_their_page()
     {
         Use(new FakeLibrary(
-            new TimelineItem(Ids.Of(10), AssetKinds.Photo, new DateTime(2026, 1, 2), true),
-            new TimelineItem(Ids.Of(11), AssetKinds.Photo, new DateTime(2026, 1, 1), true))
+            new TimelineItem(Ids.Of(10), AssetKinds.Photo, new DateTime(2026, 1, 2), true, DurationSeconds: null),
+            new TimelineItem(Ids.Of(11), AssetKinds.Photo, new DateTime(2026, 1, 1), true, DurationSeconds: null))
         { PageSize = 1 });
 
         var page = RenderPage(2);
@@ -134,9 +134,9 @@ public sealed class TimelineTests : BunitContext
     public void Paging_links_are_relative_and_keep_other_query_parameters()
     {
         Use(new FakeLibrary(
-            new TimelineItem(Ids.Of(12), AssetKinds.Photo, new DateTime(2026, 1, 3), true),
-            new TimelineItem(Ids.Of(13), AssetKinds.Photo, new DateTime(2026, 1, 2), true),
-            new TimelineItem(Ids.Of(14), AssetKinds.Photo, new DateTime(2026, 1, 1), true))
+            new TimelineItem(Ids.Of(12), AssetKinds.Photo, new DateTime(2026, 1, 3), true, DurationSeconds: null),
+            new TimelineItem(Ids.Of(13), AssetKinds.Photo, new DateTime(2026, 1, 2), true, DurationSeconds: null),
+            new TimelineItem(Ids.Of(14), AssetKinds.Photo, new DateTime(2026, 1, 1), true, DurationSeconds: null))
         { PageSize = 1 });
         Services.GetRequiredService<NavigationManager>().NavigateTo("/?pagina=2&vista=grelha");
 

@@ -1,24 +1,34 @@
 @* A video on the detail page. The sources are the web's own media addresses, which redirect to a freshly
-   signed storage link (D-039, D-049), so the page never holds a link that could expire while it is open. *@
+   signed storage link (D-039, D-049), so the page never holds a link that could expire while it is open.
+   wwwroot/video.js retries a failed video once with a fresh link and then reveals the error message. *@
 
 @if (HasProxy)
 {
-    <video controls preload="metadata" playsinline src="fotos/@AssetId/@DerivativeNames.Proxy" poster="@PosterUrl">
-        <p>Este navegador não consegue reproduzir o vídeo.</p>
-    </video>
+    <div class="player">
+        <video data-player controls preload="metadata" playsinline aria-label="@Label"
+               src="fotos/@AssetId/@DerivativeNames.Proxy" poster="@PosterUrl"></video>
+        <p class="player-error" role="alert" hidden>@ErrorMessage</p>
+    </div>
 }
 else
 {
     @if (PosterUrl is { } poster)
     {
-        <img src="@poster" alt="@AssetKinds.Label(AssetKinds.Video)" />
+        <img src="@poster" alt="@Label" />
     }
-    <p class="processing" role="status">Vídeo ainda em processamento</p>
+    <p class="processing">Vídeo ainda em processamento</p>
 }
 
 @code {
+    /// <summary>Shown when the video still fails after one retry with a fresh link.</summary>
+    public const string ErrorMessage = "Não foi possível reproduzir o vídeo. Descarregue o original.";
+
     [Parameter, EditorRequired]
     public string AssetId { get; set; } = string.Empty;
+
+    /// <summary>What the video is, for screen readers: the player has no visible title of its own.</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
 
     /// <summary>The poster derivative, or null when the video has none yet.</summary>
     [Parameter]

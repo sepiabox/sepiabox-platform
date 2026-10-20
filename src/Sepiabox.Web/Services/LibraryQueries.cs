@@ -4,7 +4,7 @@ using Sepiabox.Catalog;
 namespace Sepiabox.Web.Services;
 
 /// <summary>One thumbnail on the timeline; <c>DurationSeconds</c> is null for photos and videos of unknown length.</summary>
-public sealed record TimelineItem(string Id, string Kind, DateTime? CapturedAt, bool HasThumbnail, double? DurationSeconds = null);
+public sealed record TimelineItem(string Id, string Kind, DateTime? CapturedAt, bool HasThumbnail, double? DurationSeconds);
 
 /// <summary>A page of the timeline; <see cref="HasMore"/> says whether an older page exists.</summary>
 public sealed record TimelinePage(int Page, IReadOnlyList<TimelineItem> Items, bool HasMore);
@@ -25,8 +25,8 @@ public sealed record AssetDetail(
     int? Height,
     string? PreviewName,
     IReadOnlyList<AssetSourceDetail> Sources,
-    double? DurationSeconds = null,
-    bool HasProxy = false);
+    double? DurationSeconds,
+    bool HasProxy);
 
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
 public sealed record OriginalFile(string FileName, string ContentType);
