@@ -16,6 +16,12 @@ public sealed class DeployScriptTests : IDisposable
     private const string JobStop =
         $"az containerapp job stop --name sepiabox-migrate --resource-group {ShutdownRunbook.ResourceGroup} --job-execution-name sepiabox-migrate-run1";
     private const string DeployWeb = "azd deploy web --no-prompt";
+    private const string DeployImport = "azd deploy import --no-prompt";
+    private const string DeployImportAll = "azd deploy import-all --no-prompt";
+    private const string PauseQueue =
+        $"az servicebus queue update --resource-group {ShutdownRunbook.ResourceGroup} --namespace-name {ShutdownRunbook.ServiceBusNamespace} --name {ShutdownRunbook.Queue} --status ReceiveDisabled --output none";
+    private const string ResumeQueue =
+        $"az servicebus queue update --resource-group {ShutdownRunbook.ResourceGroup} --namespace-name {ShutdownRunbook.ServiceBusNamespace} --name {ShutdownRunbook.Queue} --status Active --output none";
 
     private readonly string _stubs = Path.Combine(Path.GetTempPath(), "sepiabox-deploy-" + Guid.NewGuid().ToString("N"));
     private readonly string _calls;
@@ -28,6 +34,10 @@ public sealed class DeployScriptTests : IDisposable
             echo "azd $*" >> "$CALLS"
             if [ "$1" = "deploy" ]; then
               echo "$SEPIABOX_DEPLOY_SCRIPT" >> "$CALLS.guard"
+              if [ "$2" = "$STUB_FAILING_DEPLOY" ]; then
+                echo "deploy of $2 failed" >&2
+                exit 1
+              fi
             fi
             if [ "$1 $2" = "env get-value" ]; then
               case "$3" in
@@ -60,6 +70,8 @@ public sealed class DeployScriptTests : IDisposable
                 fi
                 if [ "$STUB_PG_STATE" != "MISSING" ]; then echo "$STUB_PG_STATE"; fi ;;
               "containerapp job start"*) echo "$STUB_EXECUTION" ;;
+              "servicebus queue update"*"--status Active"*)
+                if [ "$STUB_RESUME" = "FAIL" ]; then exit 1; fi ;;
               "containerapp job stop"*)
                 if [ "$STUB_STOP" = "FAIL" ]; then exit 1; fi ;;
               "containerapp job execution show"*)
@@ -84,12 +96,23 @@ public sealed class DeployScriptTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Equal(
-            ["azd provision --no-prompt", "azd deploy migrate --no-prompt", JobStart, JobStatus, DeployWeb],
+            [
+                "azd provision --no-prompt",
+                // Nothing receives from the queue until the import jobs run the new image (D-063).
+                PauseQueue,
+                "azd deploy migrate --no-prompt",
+                JobStart,
+                JobStatus,
+                DeployImport,
+                DeployImportAll,
+                ResumeQueue,
+                DeployWeb,
+            ],
             Calls().Where(call => !call.StartsWith("azd env", StringComparison.Ordinal)
                 && !call.StartsWith("az group", StringComparison.Ordinal)
                 && !call.StartsWith("az postgres", StringComparison.Ordinal)));
         // What azure.yaml's predeploy hook checks, so that only this script deploys.
-        Assert.Equal(["1", "1"], File.ReadAllLines(_calls + ".guard"));
+        Assert.Equal(["1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
         Assert.Contains("Migrations applied.", result.Output, StringComparison.Ordinal);
     }
 
@@ -118,8 +141,12 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("azd deploy migrate --no-prompt", Calls());
         Assert.DoesNotContain(DeployWeb, Calls());
+        Assert.DoesNotContain(DeployImport, Calls());
+        Assert.DoesNotContain(DeployImportAll, Calls());
         Assert.Contains(
             $"ended as {statuses.Split(' ')[^1]}; the web was not deployed.", result.Error, StringComparison.Ordinal);
+        // The old import image still expects the old schema, which a failed migration leaves.
+        Assert.Equal(ResumeQueue, Calls()[^1]);
     }
 
     [UnixTheory]
@@ -134,9 +161,68 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Equal(1, result.ExitCode);
         Assert.Contains(JobStop, Calls());
         Assert.DoesNotContain(DeployWeb, Calls());
+        Assert.DoesNotContain(DeployImport, Calls());
+        Assert.DoesNotContain(DeployImportAll, Calls());
         Assert.Contains("did not finish in 1s", result.Error, StringComparison.Ordinal);
         Assert.Contains(message, result.Error, StringComparison.Ordinal);
         Assert.Contains("may be partly applied", result.Error, StringComparison.Ordinal);
+        Assert.Equal(ResumeQueue, Calls()[^1]);
+    }
+
+    [UnixFact]
+    public async Task Deploy_keeps_the_queue_paused_when_the_migration_succeeded_but_the_import_jobs_were_not_updated()
+    {
+        var result = await RunDeployAsync("Succeeded", failingDeploy: "import");
+
+        Assert.NotEqual(0, result.ExitCode);
+        // The old import image must not receive against the new schema.
+        Assert.Equal([PauseQueue], Calls().Where(call => call.StartsWith("az servicebus", StringComparison.Ordinal)));
+        Assert.Contains(
+            "The import jobs were not updated, so the queue manifests is still paused. Run this script again, or resume it once the import jobs run the new image: az servicebus queue update --resource-group rg-sepiabox --namespace-name sepiabox-sb --name manifests --status Active",
+            result.Error,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(DeployWeb, Calls());
+    }
+
+    [UnixFact]
+    public async Task Deploy_resumes_the_queue_when_the_migration_fails()
+    {
+        // A failed migration leaves the old schema, which the old import image expects.
+        var result = await RunDeployAsync("Failed");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Equal([PauseQueue, ResumeQueue], Calls().Where(call => call.StartsWith("az servicebus", StringComparison.Ordinal)));
+    }
+
+    [UnixFact]
+    public async Task Deploy_fails_when_it_cannot_resume_the_queue_after_updating_the_import_jobs()
+    {
+        var result = await RunDeployAsync("Succeeded", resume: "FAIL");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("Could not make the queue receive again", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(DeployWeb, Calls());
+    }
+
+    [UnixFact]
+    public async Task Deploy_says_how_to_resume_the_queue_when_it_cannot()
+    {
+        var result = await RunDeployAsync("Failed", resume: "FAIL");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(
+            "Could not make the queue receive again; run: az servicebus queue update --resource-group rg-sepiabox --namespace-name sepiabox-sb --name manifests --status Active",
+            result.Error,
+            StringComparison.Ordinal);
+    }
+
+    [UnixFact]
+    public async Task Deploy_never_touches_the_queue_when_it_refuses_to_start()
+    {
+        var result = await RunDeployAsync("Succeeded", postgresState: "Stopped");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("az servicebus", StringComparison.Ordinal));
     }
 
     [UnixFact]
@@ -146,8 +232,11 @@ public sealed class DeployScriptTests : IDisposable
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("returned no execution name", result.Error, StringComparison.Ordinal);
+        Assert.Equal(ResumeQueue, Calls()[^1]);
         Assert.DoesNotContain(Calls(), call => call.StartsWith("az containerapp job execution", StringComparison.Ordinal));
         Assert.DoesNotContain(DeployWeb, Calls());
+        Assert.DoesNotContain(DeployImport, Calls());
+        Assert.DoesNotContain(DeployImportAll, Calls());
     }
 
     [UnixFact]
@@ -233,7 +322,9 @@ public sealed class DeployScriptTests : IDisposable
         string postgresState = "Ready",
         int timeoutSeconds = 30,
         string execution = "sepiabox-migrate-run1",
-        string stop = "") =>
+        string stop = "",
+        string failingDeploy = "",
+        string resume = "") =>
         RunAsync("bash", [Path.Combine(Repository.Root, "scripts", "deploy.sh")], new()
         {
             ["PATH"] = _stubs + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
@@ -245,6 +336,8 @@ public sealed class DeployScriptTests : IDisposable
             ["STUB_PG_STATE"] = postgresState,
             ["STUB_EXECUTION"] = execution,
             ["STUB_STOP"] = stop,
+            ["STUB_FAILING_DEPLOY"] = failingDeploy,
+            ["STUB_RESUME"] = resume,
             ["SEPIABOX_MIGRATE_TIMEOUT_SECONDS"] = timeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["SEPIABOX_MIGRATE_POLL_SECONDS"] = "0.1",
         });

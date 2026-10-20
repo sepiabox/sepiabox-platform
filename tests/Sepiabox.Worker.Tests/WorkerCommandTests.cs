@@ -19,11 +19,21 @@ public sealed class WorkerCommandTests
         Assert.Equal(new WorkerCommand(WorkerAction.ImportOnce, migrateFirst), command);
     }
 
+    [Fact]
+    public void Parses_import_from_queue_which_never_migrates()
+    {
+        Assert.True(WorkerCommand.TryParse(["import", "--from-queue"], out var command, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.ImportFromQueue, false), command);
+    }
+
     public static TheoryData<string[]> InvalidArguments => new()
     {
         Array.Empty<string>(),
         new[] { "import" },
         new[] { "import", "--watch" },
+        new[] { "import", "--from-queue", "--migrate" },
+        new[] { "import", "--from-queue", "--once" },
+        new[] { "import", "--once", "--from-queue" },
         new[] { "migrate", "--once" },
         new[] { "export" },
     };

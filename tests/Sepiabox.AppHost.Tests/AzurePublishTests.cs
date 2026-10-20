@@ -168,7 +168,7 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
     [Fact]
     public void Migrations_run_as_a_manual_job_of_the_worker_when_published()
     {
-        var job = published.The(ContainerAppJob);
+        var job = published.Named(ContainerAppJob, "sepiabox-migrate");
         var migrate = published.Resource("migrate");
 
         Assert.Equal("'sepiabox-migrate'", job.Property("name"));
@@ -196,7 +196,7 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
     public void Apps_get_their_catalog_connections_as_secrets_never_as_plain_values_when_published()
     {
         var web = WebApp();
-        var job = published.The(ContainerAppJob);
+        var job = published.Named(ContainerAppJob, "sepiabox-migrate");
 
         // The job, as the administrator, reads its connection from the database vault (D-062).
         Assert.Matches(@"name: 'ConnectionStrings__catalog'\s+secretRef: 'connectionstrings--catalog'", job.Body);

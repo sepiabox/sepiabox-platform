@@ -22,6 +22,27 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Information, Message = "Imported {Imported} manifests, {Unchanged} unchanged, {Invalid} with problems, {Warnings} without an embedding.")]
     public static partial void ImportFinished(ILogger logger, int imported, int unchanged, int invalid, int warnings);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Ignored message {MessageId}: not a manifest created in the manifests container (container: {Container}).")]
+    public static partial void EventIgnored(ILogger logger, string messageId, string? container);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "The queue is empty: imported {Imported} manifests, ignored {Ignored} messages.")]
+    public static partial void QueueDrained(ILogger logger, int imported, int ignored);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not settle message {MessageId}; it returns when its lock expires.")]
+    public static partial void SettleFailed(ILogger logger, string messageId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Importing {BlobName} failed on delivery {DeliveryCount}; message {MessageId} returns when its lock expires.")]
+    public static partial void LeftToExpire(ILogger logger, string messageId, string blobName, int deliveryCount);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Importing {BlobName} failed on its last delivery ({DeliveryCount}); message {MessageId} was dead-lettered.")]
+    public static partial void DeadLettered(ILogger logger, string messageId, string blobName, int deliveryCount);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not renew the lock of message {MessageId}.")]
+    public static partial void RenewFailed(ILogger logger, string messageId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Message {MessageId} was imported but its lock had expired; its redelivery imports the manifest again, changing nothing.")]
+    public static partial void LockLost(ILogger logger, string messageId);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Stopped before finishing; running the same command again continues.")]
     public static partial void Cancelled(ILogger logger);
 

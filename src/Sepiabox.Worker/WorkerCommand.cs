@@ -6,6 +6,7 @@ public enum WorkerAction
 {
     Migrate,
     ImportOnce,
+    ImportFromQueue,
 }
 
 /// <param name="Action">What to run.</param>
@@ -19,6 +20,9 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst)
           migrate                    Apply the catalog's database migrations.
           import --once [--migrate]  Import manifests that are new or changed since the last import,
                                      then exit. --migrate applies migrations first.
+          import --from-queue        Import the manifests named by the storage events waiting in the
+                                     queue (ServiceBus:Namespace, ServiceBus:Queue), then exit when
+                                     it is empty. Never migrates (D-063).
         """;
 
     public static bool TryParse(string[] args, [NotNullWhen(true)] out WorkerCommand? command, out string error)
@@ -31,11 +35,13 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst)
             case ["migrate"]:
                 command = new WorkerCommand(WorkerAction.Migrate, false);
                 return true;
+            case ["import", "--from-queue"]:
+                command = new WorkerCommand(WorkerAction.ImportFromQueue, false);
+                return true;
             case ["import", .. var options] when options.All(o => o is "--once" or "--migrate"):
                 if (!options.Contains("--once"))
                 {
-                    // Continuous, event-driven import comes with S-033.
-                    error = "import needs --once.";
+                    error = "import needs --once or --from-queue.";
                     return false;
                 }
 

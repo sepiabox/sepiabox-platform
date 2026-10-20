@@ -1,3 +1,4 @@
+using System.Globalization;
 using Aspire.Hosting.Azure;
 using Azure.Provisioning.KeyVault;
 using Azure.Provisioning.Storage;
@@ -87,13 +88,23 @@ else
     // Declared rather than left to Aspire so they too are pinned to the region.
     var webIdentity = builder.AddAzureUserAssignedIdentity("web-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    // One identity per kind of worker job (D-063): migrate reads only the database vault; the import jobs
+    // read storage and the queue and never see the administrator's password.
     var migrateIdentity = builder.AddAzureUserAssignedIdentity("migrate-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    var importIdentity = builder.AddAzureUserAssignedIdentity("import-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
 
-    // Runs `sepiabox-worker migrate` once per deploy, before the new web revision (scripts/deploy.sh).
-    // It connects as the administrator, applies the migrations and then creates or updates the web's
-    // application role (S-058). Read access to storage is for the import and GeoNames jobs that share its
-    // identity later (S-033, S-059). Of the vaults it reads only the database one, so never the Anthropic key.
+    // The application role's connection, for the web and the import jobs: they read and write rows, never
+    // the schema. The server's fixed host name rather than a reference to it: a reference would also grant
+    // them the database vault, which holds the administrator's password.
+    var appRoleConnection = ReferenceExpression.Create(
+        $"Host={AzureInfrastructure.PostgresHostName};Username={AzureInfrastructure.AppRoleName};Password={appRolePassword};Database=catalog");
+
+    // Runs `sepiabox-worker migrate` once per deploy, before the new web revision and import jobs
+    // (scripts/deploy.sh). It connects as the administrator, applies the migrations and then creates or
+    // updates the application role (S-058). Of the vaults it reads only the database one, so never the
+    // Anthropic key, and it needs no storage.
     builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.MigrateResourceName)
         .WithArgs("migrate")
         .WithReferenceEnvironment(ConnectionStringsOnly)
@@ -101,9 +112,45 @@ else
         .WithEnvironment("Catalog__AppRole__Name", AzureInfrastructure.AppRoleName)
         .WithEnvironment("Catalog__AppRole__Password", appRolePassword)
         .WithAzureUserAssignedIdentity(migrateIdentity)
-        .WithRoleAssignments(storage, StorageBuiltInRole.StorageBlobDataReader)
         .WithRoleAssignments(databaseVault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureMigrateJob);
+
+    // Manifests imported when they arrive (S-033, D-063): Event Grid sends the manifests container's
+    // BlobCreated events to a Basic Service Bus queue, and an event-driven job imports them. Neither import
+    // job ever migrates; both connect as the application role.
+    var serviceBus = builder.AddAzureServiceBus("servicebus")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureServiceBus);
+    serviceBus.AddServiceBusQueue("manifests-queue", AzureInfrastructure.ManifestsQueueName);
+    builder.AddBicepTemplate("events", "Bicep/events.bicep")
+        .WithParameter("storageName", storage.GetOutput("name"))
+        .WithParameter("serviceBusName", serviceBus.GetOutput("name"))
+        .WithParameter("queueName", AzureInfrastructure.ManifestsQueueName)
+        .WithParameter("importPrincipalId", importIdentity.Resource.PrincipalId);
+
+    // The namespace by host name rather than a reference, which would grant Aspire's default roles on the
+    // whole namespace; the import identity's role on the queue alone is in events.bicep.
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.ImportResourceName)
+        .WithArgs("import", "--from-queue")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(blobs)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithEnvironment("ServiceBus__Namespace", AzureInfrastructure.ServiceBusHostName)
+        .WithEnvironment("ServiceBus__Queue", AzureInfrastructure.ManifestsQueueName)
+        .WithEnvironment("ServiceBus__MaxDeliveryCount", AzureInfrastructure.ManifestsMaxDeliveryCount.ToString(CultureInfo.InvariantCulture))
+        .WithAzureUserAssignedIdentity(importIdentity)
+        // The import identity's role on storage, declared once here for both import jobs.
+        .WithRoleAssignments(storage, StorageBuiltInRole.StorageBlobDataReader)
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureImportJob(importIdentity.Resource.Id));
+
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.ImportAllResourceName)
+        .WithArgs("import", "--once")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(blobs)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithAzureUserAssignedIdentity(importIdentity)
+        // The same identity as the import job, whose role on storage is declared there.
+        .WithRoleAssignments(storage, [])
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureImportAllJob);
 
     // What the role helpers cannot scope: the key ring's container and key, and the uploaders (D-062).
     var uploaders = builder.AddParameter(AzureInfrastructure.UploaderPrincipalIdsParameter, "", publishValueAsDefault: true);
@@ -120,10 +167,7 @@ else
         // The owner's secrets: sign-in, the access list and the Anthropic key, read as configuration.
         .WithReference(vault)
         .WithRoleAssignments(vault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
-        .WithEnvironment("ConnectionStrings__catalog", ReferenceExpression.Create(
-            // The server's fixed host name rather than a reference to it: a reference would also grant the web
-            // the database vault, which holds the administrator's password.
-            $"Host={AzureInfrastructure.PostgresHostName};Username={AzureInfrastructure.AppRoleName};Password={appRolePassword};Database=catalog"))
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
         .WithEnvironment("DataProtection__KeyUri", access.GetOutput("dataProtectionKeyUri"))
         // Only the Container Apps default host reaches the app (D-048); S-035 adds the custom domain.
         .WithEnvironment("AllowedHosts", ReferenceExpression.Create(

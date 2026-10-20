@@ -73,6 +73,14 @@ public sealed class PublishedInfrastructure : IAsyncLifetime
     public IReadOnlyList<BicepResource> Declarations(string type) =>
         [.. Modules.Values.SelectMany(BicepResource.Parse).Where(r => !r.IsExisting && r.Type == type)];
 
+    /// <summary>The one declaration of a type with this <c>name</c>, failing when there is none or several.</summary>
+    public BicepResource Named(string type, string name)
+    {
+        var declarations = Declarations(type).Where(r => r.Property("name") == "'" + name + "'").ToList();
+        Assert.True(declarations.Count == 1, $"Expected one '{type}' named '{name}', found {declarations.Count}.");
+        return declarations[0];
+    }
+
     /// <summary>The one declaration of a type, failing when there is none or several.</summary>
     public BicepResource The(string type)
     {

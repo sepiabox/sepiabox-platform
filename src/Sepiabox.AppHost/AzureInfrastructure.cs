@@ -8,6 +8,7 @@ using Azure.Provisioning.Expressions;
 using Azure.Provisioning.KeyVault;
 using Azure.Provisioning.PostgreSql;
 using Azure.Provisioning.Roles;
+using Azure.Provisioning.ServiceBus;
 using Azure.Provisioning.Storage;
 
 namespace Sepiabox.AppHost;
@@ -35,6 +36,30 @@ public static class AzureInfrastructure
 
     /// <summary>The AppHost resource behind <see cref="MigrateJobName"/>, the name azd deploys it by.</summary>
     public const string MigrateResourceName = "migrate";
+
+    /// <summary>The event-driven job that imports the manifests named by the queue (S-033).</summary>
+    public const string ImportJobName = "sepiabox-import";
+
+    /// <summary>The AppHost resource behind <see cref="ImportJobName"/>.</summary>
+    public const string ImportResourceName = "import";
+
+    /// <summary>The manual job that imports every new or changed manifest: backfill and reconcile (S-033).</summary>
+    public const string ImportAllJobName = "sepiabox-import-all";
+
+    /// <summary>The AppHost resource behind <see cref="ImportAllJobName"/>.</summary>
+    public const string ImportAllResourceName = "import-all";
+
+    /// <summary>The Service Bus namespace; the shutdown runbook disables its queue (S-030).</summary>
+    public const string ServiceBusName = "sepiabox-sb";
+
+    /// <summary>The namespace's host name, which the import job connects to.</summary>
+    public const string ServiceBusHostName = ServiceBusName + ".servicebus.windows.net";
+
+    /// <summary>The queue Event Grid sends manifest events to; the shutdown runbook disables it (S-030).</summary>
+    public const string ManifestsQueueName = "manifests";
+
+    /// <summary>A message that fails this many times goes to the dead-letter queue (docs/operations.md).</summary>
+    public const int ManifestsMaxDeliveryCount = 5;
 
     /// <summary>Created by sepiabox-infra (S-031) with the daily cap; Application Insights writes to it.</summary>
     public const string LogAnalyticsWorkspaceName = "sepiabox-logs";
@@ -86,6 +111,13 @@ public static class AzureInfrastructure
     };
 
     private const string AutoConfigureDataProtectionProperty = "AutoConfigureDataProtection";
+
+    // An import of the whole drive's backlog by import-all, or a long queue, fits in half an hour; a stuck
+    // run is stopped then, and its messages come back.
+    private const int ImportTimeoutSeconds = 1800;
+
+    // KEDA checks the queue this often; a manifest waits at most about this long before the job starts.
+    private const int ImportPollingSeconds = 30;
 
     // The migrations of a catalog this size take seconds; ten minutes is plenty and bounds a stuck run.
     private const int MigrateTimeoutSeconds = 600;
@@ -230,6 +262,90 @@ public static class AzureInfrastructure
         // Aspire adds the setting as a property of its own (runtime.dotnet.autoConfigureDataProtection), with no
         // typed accessor.
         app.Configuration.ProvisionableProperties[AutoConfigureDataProtectionProperty].Assign(new BicepValue<bool>(false));
+    }
+
+    public static void ConfigureServiceBus(AzureResourceInfrastructure infrastructure)
+    {
+        var serviceBus = infrastructure.GetProvisionableResources().OfType<ServiceBusNamespace>().Single();
+        serviceBus.Name = ServiceBusName;
+        serviceBus.Location = Region;
+        // Basic has queues and dead-lettering, which is all the import needs, at a few cents a month (D-008).
+        serviceBus.Sku = new ServiceBusSku { Name = ServiceBusSkuName.Basic, Tier = ServiceBusSkuTier.Basic };
+
+        var queue = infrastructure.GetProvisionableResources().OfType<ServiceBusQueue>().Single();
+        queue.MaxDeliveryCount = ManifestsMaxDeliveryCount;
+        // The longest a message is locked while its manifest is imported, the most Service Bus allows.
+        queue.LockDuration = TimeSpan.FromMinutes(5);
+        queue.DeadLetteringOnMessageExpiration = true;
+    }
+
+    /// <summary>
+    /// The event-driven import (S-033): KEDA starts one execution when the queue has a message, with the import
+    /// identity, and the execution imports until the queue is empty. One at a time, so two imports never
+    /// race on the same asset.
+    /// </summary>
+    public static Action<AzureResourceInfrastructure, ContainerAppJob> ConfigureImportJob(BicepOutputReference importIdentityId) =>
+        (infrastructure, job) =>
+        {
+            ArgumentNullException.ThrowIfNull(job);
+            job.Name = ImportJobName;
+            ConfigureImportJobCommon(job);
+
+            var configuration = job.Configuration;
+            configuration.TriggerType = ContainerAppJobTriggerType.Event;
+            configuration.EventTriggerConfig = new EventTriggerConfiguration
+            {
+                Parallelism = 1,
+                ReplicaCompletionCount = 1,
+                Scale = new ContainerAppJobScale
+                {
+                    MinExecutions = 0,
+                    MaxExecutions = 1,
+                    PollingIntervalInSeconds = ImportPollingSeconds,
+                    Rules =
+                    {
+                        new ContainerAppJobScaleRule
+                        {
+                            Name = "manifests-queue",
+                            JobScaleRuleType = "azure-servicebus",
+                            Metadata = new ObjectExpression(
+                                new PropertyExpression("namespace", new StringLiteralExpression(ServiceBusName)),
+                                new PropertyExpression("queueName", new StringLiteralExpression(ManifestsQueueName)),
+                                new PropertyExpression("messageCount", new StringLiteralExpression("1"))),
+                            // KEDA reads the queue's length as the import identity, with no keys to leak; reading
+                            // it needs the Manage claim, hence Data Owner on the queue (D-063).
+                            Identity = importIdentityId.AsProvisioningParameter(infrastructure, "import_identity_id"),
+                        },
+                    },
+                },
+            };
+        };
+
+    /// <summary>The manual backfill and reconcile job (S-033): <c>import --once</c> over the whole container.</summary>
+    public static void ConfigureImportAllJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        job.Name = ImportAllJobName;
+        ConfigureImportJobCommon(job);
+        job.Configuration.TriggerType = ContainerAppJobTriggerType.Manual;
+        job.Configuration.ManualTriggerConfig = new JobConfigurationManualTriggerConfig
+        {
+            Parallelism = 1,
+            ReplicaCompletionCount = 1,
+        };
+    }
+
+    private static void ConfigureImportJobCommon(ContainerAppJob job)
+    {
+        job.Location = Region;
+        job.Configuration.ReplicaTimeout = ImportTimeoutSeconds;
+        // A failed run is not repeated at once: its messages come back by themselves, and the next event or
+        // import-all picks up what it left.
+        job.Configuration.ReplicaRetryLimit = 0;
+        // Decoding embeddings and writing a few thousand rows; billed only while it runs.
+        var container = job.Template.Containers.Single().Value
+            ?? throw new InvalidOperationException("The import job has no container.");
+        container.Resources = new AppContainerResources { Cpu = 1.0, Memory = "2Gi" };
     }
 
     public static void ConfigureMigrateJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)

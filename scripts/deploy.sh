@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploys Sepiabox to Azure (S-032) in the only safe order: the infrastructure, the migrate job's new
 # image, one run of `sepiabox-worker migrate` against the cloud database, and only when it succeeded the
-# web's new revision. A failed or stuck migration stops here and the running web is left as it was.
+# import jobs (S-033), which expect the new schema and never migrate (D-063), and the web's new revision.
+# A failed or stuck migration stops here and the running jobs and web are left as they were.
 #
 # Needs azd, the Azure CLI with the containerapp extension, the .NET SDK and Docker, signed in to both
 # CLIs, and the azd environment `sepiabox` in francecentral (docs/operations.md).
@@ -12,6 +13,8 @@ readonly location="francecentral"
 readonly resource_group="rg-sepiabox"
 readonly postgres_server="sepiabox-pg"
 readonly migrate_job="sepiabox-migrate"
+readonly service_bus="sepiabox-sb"
+readonly queue="manifests"
 # The job's replica timeout is 10 minutes; the default leaves time for a cold start of the environment.
 # Both can be overridden, which the tests use to avoid waiting.
 readonly migrate_timeout_seconds="${SEPIABOX_MIGRATE_TIMEOUT_SECONDS:-900}"
@@ -57,6 +60,46 @@ fi
 export SEPIABOX_DEPLOY_SCRIPT=1
 
 azd provision --no-prompt
+
+# From here until the import jobs run the new image, the queue keeps every upload's events but nothing
+# receives them, so no import runs old code against a new schema or the reverse (D-063). Provisioning
+# comes first because it creates the queue and would set it active again. On the way out the queue is
+# made active again unless the migration succeeded and the import jobs were not updated: a failed
+# migration leaves the old schema, which the old import image expects, but after a successful one the
+# old image must not receive.
+resume_command="az servicebus queue update --resource-group $resource_group --namespace-name $service_bus --name $queue --status Active"
+queue_paused=false
+migrated=false
+imports_deployed=false
+resume_queue() {
+  if [[ "$queue_paused" != true ]]; then
+    return 0
+  fi
+  if az servicebus queue update --resource-group "$resource_group" --namespace-name "$service_bus" \
+    --name "$queue" --status Active --output none; then
+    queue_paused=false
+    echo "Queue $queue receives again."
+    return 0
+  fi
+  echo "Could not make the queue receive again; run: $resume_command" >&2
+  return 1
+}
+on_exit() {
+  if [[ "$queue_paused" != true ]]; then
+    return
+  fi
+  if [[ "$migrated" == true && "$imports_deployed" != true ]]; then
+    echo "The import jobs were not updated, so the queue $queue is still paused. Run this script again, or resume it once the import jobs run the new image: $resume_command" >&2
+    return
+  fi
+  resume_queue || true
+}
+trap on_exit EXIT
+# Set first: making an active queue active again is harmless, a paused one left paused is not.
+queue_paused=true
+az servicebus queue update --resource-group "$resource_group" --namespace-name "$service_bus" \
+  --name "$queue" --status ReceiveDisabled --output none
+
 azd deploy migrate --no-prompt
 
 execution=$(az containerapp job start --name "$migrate_job" --resource-group "$resource_group" --query name --output tsv)
@@ -95,5 +138,12 @@ while true; do
   sleep "$poll_seconds"
 done
 echo "Migrations applied."
+migrated=true
+
+azd deploy import --no-prompt
+azd deploy import-all --no-prompt
+imports_deployed=true
+# Never exit 0 with the queue paused.
+resume_queue || exit 1
 
 azd deploy web --no-prompt
