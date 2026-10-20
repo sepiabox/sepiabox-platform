@@ -137,7 +137,9 @@ public static class SearchQueryJson
         }
         catch (JsonException ex)
         {
-            error = "The search is not valid JSON for search DSL v1: " + Describe(ex);
+            // A fixed message and the JSON path: the serializer's own text names internal .NET types.
+            error = $"The search is not valid search DSL v1 JSON at {ex.Path ?? "$"}: an unknown or repeated field, a null, "
+                + "a value of the wrong type, or malformed JSON.";
             return false;
         }
 
@@ -214,8 +216,11 @@ public static class SearchQueryJson
                 : null);
     }
 
+    // Control characters, NUL among them, are never part of a name, and PostgreSQL refuses NUL in text.
     private static string? Name(string name) =>
-        string.IsNullOrWhiteSpace(name) || name.Length > MaxNameLength ? $"must be a name of 1 to {MaxNameLength} characters" : null;
+        string.IsNullOrWhiteSpace(name) || name.Length > MaxNameLength || name.Any(char.IsControl)
+            ? $"must be a name of 1 to {MaxNameLength} characters without control characters"
+            : null;
 
     private static string? List<T>(string field, IReadOnlyList<T>? values, Func<T, string?> check)
     {
@@ -244,8 +249,4 @@ public static class SearchQueryJson
 
         return null;
     }
-
-    // The serializer's message names the path and position; never the whole input.
-    private static string Describe(JsonException ex) =>
-        ex.Path is { Length: > 0 } path ? $"{ex.Message.Split(" Path:", 2)[0]} (at {path})" : ex.Message.Split(" Path:", 2)[0];
 }

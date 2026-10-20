@@ -23,6 +23,7 @@ builder.Services.AddDbContextFactory<CatalogDbContext>((services, options) =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ISasUrlFactory, SasUrlFactory>();
 builder.Services.AddSingleton(SearchSetup.Options(builder.Configuration));
+builder.Services.AddSingleton<FilterOptionsCache>();
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 
 builder.AddSepiaboxAuth();

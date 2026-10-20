@@ -66,16 +66,46 @@ public sealed class SearchEndpointTests
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
     }
 
-    [Fact]
-    public async Task Refuses_a_body_larger_than_the_limit()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Refuses_a_body_larger_than_the_limit_whether_or_not_it_announces_its_length(bool announced)
     {
         await using var web = new WebFactory(new FakeLibrary());
         using var http = web.CreateSignedInClient();
-        var huge = "{\"filters\": {\"sources\": [\"" + new string('a', SearchEndpoints.MaxBodyBytes) + "\"]}}";
+        // Valid JSON padded with white space, so only the size can be what is refused.
+        var huge = Encoding.UTF8.GetBytes("{" + new string(' ', SearchEndpoints.MaxBodyBytes) + "}");
+        HttpContent content = announced ? new ByteArrayContent(huge) : new StreamContent(new UnknownLengthStream(huge));
+        content.Headers.ContentType = new("application/json");
 
-        using var response = await http.PostAsync(new Uri("/api/search", UriKind.Relative), Json(huge));
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("/api/search", UriKind.Relative)) { Content = content };
+        // Sent in chunks with no Content-Length, so only the streamed count can stop it.
+        request.Headers.TransferEncodingChunked = !announced;
+
+        using var response = await http.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal($"The search is larger than {SearchEndpoints.MaxBodyBytes} bytes.", problem.GetProperty("detail").GetString());
+    }
+
+    [Theory]
+    [InlineData("""{"filters": {"dateTo": "9999-12-31"}}""", HttpStatusCode.OK)]
+    [InlineData("""{"filters": {"places": {"cities": ["Lis\u0000bon"]}}}""", HttpStatusCode.BadRequest)]
+    public async Task Answers_every_validated_query_and_refuses_control_characters(string json, HttpStatusCode expected)
+    {
+        await using var web = new WebFactory(new FakeLibrary());
+        using var http = web.CreateSignedInClient();
+
+        using var response = await http.PostAsync(new Uri("/api/search", UriKind.Relative), Json(json));
+
+        Assert.Equal(expected, response.StatusCode);
+    }
+
+    /// <summary>A body with no length the client can announce, so it goes chunked.</summary>
+    private sealed class UnknownLengthStream(byte[] content) : MemoryStream(content)
+    {
+        public override bool CanSeek => false;
     }
 
     [Fact]

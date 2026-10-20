@@ -192,6 +192,7 @@ else
         .WithRoleAssignments(vault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
         .WithEnvironment("DataProtection__KeyUri", access.GetOutput("dataProtectionKeyUri"))
+        .WithEnvironment("Search__TimeZone", AzureInfrastructure.SearchTimeZone)
         // Only the Container Apps default host and the custom domain, if any, reach the app (D-048, D-065);
         // an empty custom domain leaves an empty entry, which host filtering ignores.
         .WithEnvironment("AllowedHosts", ReferenceExpression.Create(

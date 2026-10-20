@@ -75,6 +75,8 @@ public sealed class SearchQueryTests
         { """{"filters": {"places": {"cities": [" "]}}}""", "cities" },
         { """{"filters": {"places": {"cities": [null]}}}""", "cities" },
         { """{"filters": {"sources": ["HD", ""]}}""", "sources" },
+        { """{"filters": {"places": {"cities": ["Lis\u0000bon"]}}}""", "cities" },
+        { """{"filters": {"sources": ["HD\nda Ana"]}}""", "sources" },
         { """{"filters": {"undatedOnly": true, "years": [2019]}}""", "undatedOnly" },
         { """{"filters": null}""", "filters" },
         { """{"sort": "random"}""", "sort" },
@@ -93,6 +95,28 @@ public sealed class SearchQueryTests
         Assert.False(SearchQueryJson.TryParse(json, out _, out var error));
 
         Assert.Contains(mentioned, error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("""{"filters": {"people": ["Ana"]}}""")]
+    [InlineData("""{"filters": {"years": ["2019"]}}""")]
+    [InlineData("""{"filters": null}""")]
+    [InlineData("[]")]
+    public void Names_the_json_path_but_no_internal_type_when_the_json_does_not_fit(string json)
+    {
+        Assert.False(SearchQueryJson.TryParse(json, out _, out var error));
+
+        Assert.Contains(" at $", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sepiabox.", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"filters": {"dateTo": "9999-12-31"}}""")]
+    [InlineData("""{"filters": {"dateFrom": "0001-01-01", "dateTo": "9999-12-31"}}""")]
+    public void Accepts_the_first_and_last_days_there_are(string json)
+    {
+        Assert.True(SearchQueryJson.TryParse(json, out _, out var error), error);
     }
 
     [Fact]

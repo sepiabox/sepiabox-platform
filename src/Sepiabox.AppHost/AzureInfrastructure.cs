@@ -88,6 +88,11 @@ public static class AzureInfrastructure
     /// </summary>
     public const string UploaderPrincipalIdsParameter = "uploaderPrincipalIds";
 
+    /// <summary>
+    /// Where "today" is for the search's "on this day" (S-013, D-069): the family's time zone, not the container's UTC.
+    /// </summary>
+    public const string SearchTimeZone = "Europe/Lisbon";
+
     /// <summary>The azd parameter with the web's custom domain, empty for none (S-035).</summary>
     public const string CustomDomainParameter = "customDomain";
 

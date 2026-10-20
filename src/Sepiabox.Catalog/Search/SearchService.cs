@@ -23,11 +23,20 @@ public sealed record SearchResult(IReadOnlyList<SearchHit> Hits, bool HasMore);
 /// </summary>
 public sealed class SearchService(CatalogDbContext db, TimeProvider clock, SearchOptions? options = null)
 {
-    /// <summary>The assets the query matches, sorted (undated last, then by id), without its limit.</summary>
-    public IQueryable<Asset> Query(SearchQuery query)
+    /// <summary>
+    /// The assets the query's filters match, in no particular order and without its limit: for a caller that orders
+    /// by something else, such as visual similarity (S-016).
+    /// </summary>
+    public IQueryable<Asset> Filtered(SearchQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var assets = Filter(db.Assets.AsNoTracking(), query.Filters);
+        return Filter(db.Assets.AsNoTracking(), query.Filters);
+    }
+
+    /// <summary>The assets the query matches, sorted by capture date (undated last, then by id), without its limit.</summary>
+    public IQueryable<Asset> Query(SearchQuery query)
+    {
+        var assets = Filtered(query);
         // Undated last in both directions; the id makes the order total, so pages never overlap.
         return query.Sort == SearchSort.CapturedAtAsc
             ? assets.OrderBy(a => a.CapturedAt == null).ThenBy(a => a.CapturedAt).ThenBy(a => a.Id)
@@ -61,7 +70,8 @@ public sealed class SearchService(CatalogDbContext db, TimeProvider clock, Searc
             assets = assets.Where(a => a.CapturedAt >= start);
         }
 
-        if (filters.DateTo is { } to)
+        // The last day there is has no day after it to stop before: nothing is later.
+        if (filters.DateTo is { } to && to < DateOnly.MaxValue)
         {
             var end = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
             assets = assets.Where(a => a.CapturedAt < end);
@@ -113,20 +123,24 @@ public sealed class SearchService(CatalogDbContext db, TimeProvider clock, Searc
         var today = Today();
         if (filter.YearsAgo is { } yearsAgo)
         {
-            // 29 February a year later is 28 February, as DateOnly.AddYears does.
+            // From 29 February, N years ago in a common year is the 28th (DateOnly.AddYears); from 28 February of a
+            // common year, a leap year N years ago adds its 29th, as the shortcut without yearsAgo does.
             var day = today.AddYears(-yearsAgo);
+            var days = IsLeapDayStandIn(today) && DateTime.IsLeapYear(day.Year) ? 2 : 1;
             var start = day.ToDateTime(TimeOnly.MinValue);
-            var end = day.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            var end = day.AddDays(days).ToDateTime(TimeOnly.MinValue);
             return assets.Where(a => a.CapturedAt >= start && a.CapturedAt < end);
         }
 
         var (month, dayOfMonth, year) = (today.Month, today.Day, today.Year);
         // On 28 February of a year without a 29th, the 29ths of leap years are shown too.
-        var leapDay = month == 2 && dayOfMonth == 28 && !DateTime.IsLeapYear(year);
+        var leapDay = IsLeapDayStandIn(today);
         return assets.Where(a => a.CapturedAt != null && a.CapturedAt.Value.Year < year
             && a.CapturedAt.Value.Month == month
             && (a.CapturedAt.Value.Day == dayOfMonth || (leapDay && a.CapturedAt.Value.Day == 29)));
     }
+
+    private static bool IsLeapDayStandIn(DateOnly today) => today is { Month: 2, Day: 28 } && !DateTime.IsLeapYear(today.Year);
 
     private IQueryable<Asset> InCities(IQueryable<Asset> assets, IReadOnlyList<string> cities)
     {

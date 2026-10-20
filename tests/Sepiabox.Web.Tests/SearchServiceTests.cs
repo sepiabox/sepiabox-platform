@@ -218,6 +218,84 @@ public sealed class SearchServiceTests(CatalogFixture catalog)
         Assert.Equal(["HD", "HD da Ana", "HD do Jonathas"], options.Sources);
     }
 
+    public static TheoryData<string, int?, int[]> LeapDays => new()
+    {
+        // 28 February of a common year: the 28ths of earlier years and the 29ths of leap years.
+        { "2027-02-28", null, [1, 2, 4] },
+        // 29 February: only the 29ths of earlier leap years.
+        { "2028-02-29", null, [1] },
+        // From 29 February, a common year N years ago gives its 28th...
+        { "2028-02-29", 1, [3] },
+        // ...and a leap year N years ago its 29th.
+        { "2028-02-29", 4, [1] },
+        // From 28 February of a common year, a leap year N years ago gives its 28th and its 29th.
+        { "2027-02-28", 3, [1, 2] },
+        // And a common year N years ago only its 28th.
+        { "2027-02-28", 2, [4] },
+    };
+
+    [Theory]
+    [MemberData(nameof(LeapDays))]
+    public async Task Handles_29_february_on_this_day(string today, int? yearsAgo, int[] expected)
+    {
+        var clock = new FixedTime(new DateTimeOffset(DateTime.Parse(today, System.Globalization.CultureInfo.InvariantCulture).AddHours(12), TimeSpan.Zero));
+        await using var db = await CatalogWithAsync(
+            Asset(1, new DateTime(2024, 2, 29, 10, 0, 0)),
+            Asset(2, new DateTime(2024, 2, 28, 10, 0, 0)),
+            Asset(3, new DateTime(2027, 2, 28, 10, 0, 0)),
+            Asset(4, new DateTime(2025, 2, 28, 10, 0, 0)),
+            Asset(5, new DateTime(2024, 3, 1, 10, 0, 0)));
+        var query = new SearchQuery { Filters = new SearchFilters { OnThisDay = new OnThisDayFilter { YearsAgo = yearsAgo } } };
+
+        var found = await new SearchService(db, clock).ExecuteAsync(query);
+
+        Assert.Equal(expected.Order(), found.Hits.Select(h => int.Parse(h.Id[^8..], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture)).Order());
+    }
+
+    [Fact]
+    public async Task Answers_a_date_range_that_ends_on_the_last_day_there_is()
+    {
+        await using var db = await CatalogWithAsync(Asset(1, new DateTime(2019, 1, 1)), Asset(2, new DateTime(2020, 1, 1)), Asset(3, null));
+
+        Assert.Equal([2], await IdsAsync(db, new SearchFilters { DateFrom = new DateOnly(2019, 6, 1), DateTo = DateOnly.MaxValue }));
+        Assert.Equal([2, 1], await IdsAsync(db, new SearchFilters { DateFrom = DateOnly.MinValue, DateTo = DateOnly.MaxValue }));
+    }
+
+    [Fact]
+    public async Task Matches_cities_through_the_lower_case_name_indexes()
+    {
+        await using var db = await CatalogWithAsync();
+        var service = new SearchService(db, s_clock);
+        var query = new SearchQuery { Filters = new SearchFilters { Places = new PlaceFilter { Cities = ["Lisbon"] } } };
+
+        // The expressions EF writes are the ones the migration indexes...
+        var sql = service.Filtered(query).ToQueryString();
+        Assert.Contains("lower(g.ascii_name)", sql, StringComparison.Ordinal);
+        Assert.Contains("lower(g.name)", sql, StringComparison.Ordinal);
+
+        // ...and the planner can use those indexes for them (forced here: a test table is too small to prefer them).
+        await using var connection = new Npgsql.NpgsqlConnection(catalog.ConnectionStringFor(db));
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SET enable_seqscan = off;
+            EXPLAIN SELECT g.name FROM geonames AS g
+            WHERE lower(g.ascii_name) = ANY (ARRAY['lisbon']) OR lower(g.name) = ANY (ARRAY['lisbon']);
+            """;
+        var plan = new List<string>();
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                plan.Add(reader.GetString(0));
+            }
+        }
+
+        var text = string.Join('\n', plan);
+        Assert.Contains("ix_geonames_lower_ascii_name", text, StringComparison.Ordinal);
+        Assert.Contains("ix_geonames_lower_name", text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task The_filter_bar_s_address_and_the_api_show_only_matching_assets_from_a_real_catalog()
     {
@@ -247,6 +325,16 @@ public sealed class SearchServiceTests(CatalogFixture catalog)
         Assert.Equal(System.Net.HttpStatusCode.OK, api.StatusCode);
         Assert.Contains(Ids.Of(1), json, StringComparison.Ordinal);
         Assert.DoesNotContain(Ids.Of(3), json, StringComparison.Ordinal);
+
+        // The last day there is, through the address and the API: an answer, never an error page.
+        var lastDay = new SearchQuery { Filters = new SearchFilters { DateTo = DateOnly.MaxValue } };
+        using var page = await http.GetAsync(new Uri("/?q=" + SearchQueryJson.Encode(lastDay), UriKind.Relative));
+        using var apiLastDay = await http.PostAsync(
+            new Uri("/api/search", UriKind.Relative),
+            new StringContent("""{"filters": {"dateTo": "9999-12-31"}}""", System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(System.Net.HttpStatusCode.OK, page.StatusCode);
+        Assert.Contains($"photos/{Ids.Of(1)}", await page.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(System.Net.HttpStatusCode.OK, apiLastDay.StatusCode);
     }
 
     private async Task<CatalogDbContext> CatalogWithAsync(params Asset[] assets)

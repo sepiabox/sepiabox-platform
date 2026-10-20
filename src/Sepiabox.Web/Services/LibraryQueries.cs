@@ -61,7 +61,10 @@ public interface ILibraryQueries
 }
 
 public sealed class LibraryQueries(
-    IDbContextFactory<CatalogDbContext> contexts, TimeProvider? clock = null, SearchOptions? searchOptions = null) : ILibraryQueries
+    IDbContextFactory<CatalogDbContext> contexts,
+    TimeProvider? clock = null,
+    SearchOptions? searchOptions = null,
+    FilterOptionsCache? filterOptions = null) : ILibraryQueries
 {
     public const int PageSize = 200;
 
@@ -208,15 +211,22 @@ public sealed class LibraryQueries(
 
     public async Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default)
     {
+        // Loaded unsorted and shared; sorted per request, in the reader's culture.
+        var options = await (filterOptions?.GetAsync(() => LoadFilterOptionsAsync(CancellationToken.None))
+            ?? LoadFilterOptionsAsync(cancellationToken));
+        var byName = StringComparer.Create(System.Globalization.CultureInfo.CurrentCulture, ignoreCase: true);
+        return new FilterOptions(options.Years, [.. options.Cities.Order(byName)], [.. options.Sources.Order(byName)]);
+    }
+
+    private async Task<FilterOptions> LoadFilterOptionsAsync(CancellationToken cancellationToken)
+    {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var years = await db.Assets.Where(a => a.CapturedAt != null).Select(a => a.CapturedAt!.Value.Year)
             .Distinct().OrderByDescending(y => y).ToListAsync(cancellationToken);
         var cities = await db.Assets.Where(a => a.PlaceCity != null).Select(a => a.PlaceCity!)
             .Distinct().ToListAsync(cancellationToken);
         var sources = await db.AssetSources.Select(s => s.Name).Distinct().ToListAsync(cancellationToken);
-        // Sorted here, in the reader's culture, rather than by the database's collation.
-        var byName = StringComparer.Create(System.Globalization.CultureInfo.CurrentCulture, ignoreCase: true);
-        return new FilterOptions(years, [.. cities.Order(byName)], [.. sources.Order(byName)]);
+        return new FilterOptions(years, cities, sources);
     }
 
     private static IEnumerable<AssetSource> OrderSources(IEnumerable<AssetSource> sources) =>
