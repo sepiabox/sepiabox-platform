@@ -28,6 +28,23 @@ public sealed class PhotoDetailTests : LocalizedContext
     }
 
     [Fact]
+    public void A_photo_with_a_place_shows_its_city_region_and_country()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Place = "Matosinhos, Porto, Portugal" });
+
+        Assert.Equal("Place", page.Find("dl dt").TextContent);
+        Assert.Equal("Matosinhos, Porto, Portugal", page.Find("dl dd").TextContent);
+    }
+
+    [Fact]
+    public void A_photo_without_a_place_shows_no_place()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(1)));
+
+        Assert.DoesNotContain("Place", page.Find("dl").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_video_with_its_720p_version_is_played_with_its_poster()
     {
         var page = RenderDetail(Details.Video(Ids.Of(2)));

@@ -36,6 +36,9 @@ public sealed class CatalogAppRoleTests(CatalogFixture fixture)
                     $"{_role} lacks {privilege} on {table}.");
             }
         }
+
+        // The import jobs name places with the GeoNames cities (S-012), which only the administrator loads (D-066).
+        Assert.True((bool)(await ScalarAsync(app, "SELECT has_table_privilege('geonames', 'SELECT')"))!);
     }
 
     [Fact]
@@ -76,6 +79,10 @@ public sealed class CatalogAppRoleTests(CatalogFixture fixture)
     [InlineData("INSERT INTO \"__EFMigrationsHistory\" VALUES ('intruder', '0')")]
     [InlineData("UPDATE spatial_ref_sys SET srtext = '' WHERE srid = 4326")]
     [InlineData("DELETE FROM spatial_ref_sys")]
+    [InlineData("INSERT INTO geonames (geoname_id, name, ascii_name, country_code, population, location) VALUES (1, 'x', 'x', 'PT', 0, 'POINT(0 0)')")]
+    [InlineData("UPDATE geonames SET name = 'x'")]
+    [InlineData("DELETE FROM geonames")]
+    [InlineData("TRUNCATE geonames")]
     public async Task App_role_cannot_change_the_schema_or_the_migration_history(string statement)
     {
         await using var catalog = await MigratedAsync();

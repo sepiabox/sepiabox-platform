@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Sepiabox.Catalog;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Manifests;
@@ -29,7 +30,7 @@ public sealed class UploadThenImportTests(CatalogFixture fixture)
         await using var db = await fixture.CreateMigratedDatabaseAsync();
 
         // upload writes to the fixed manifests container, which other tests may also use; only this asset matters.
-        var result = await new ManifestImporter(db, new ManifestValidator(), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
+        var result = await new ManifestImporter(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
             .ImportOnceAsync(fixture.Blobs.GetBlobContainerClient(BlobLayout.ManifestsContainer), CancellationToken.None);
 
         Assert.DoesNotContain(result.Problems, p => p.BlobName == BlobLayout.ManifestBlobName(id));

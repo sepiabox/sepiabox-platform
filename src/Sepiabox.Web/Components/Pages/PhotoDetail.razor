@@ -28,6 +28,11 @@
         <section class="facts">
             <h1>@Title</h1>
             <dl>
+                @if (_asset.Place is { } place)
+                {
+                    <dt>@Text["Detail_Place"]</dt>
+                    <dd>@place</dd>
+                }
                 @if (Camera is { } camera)
                 {
                     <dt>@Text["Detail_Camera"]</dt>

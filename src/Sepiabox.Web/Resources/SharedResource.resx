@@ -183,6 +183,9 @@
   <data name="Detail_NoPreview" xml:space="preserve">
     <value>No preview</value>
   </data>
+  <data name="Detail_Place" xml:space="preserve">
+    <value>Place</value>
+  </data>
   <data name="Detail_Camera" xml:space="preserve">
     <value>Camera</value>
   </data>

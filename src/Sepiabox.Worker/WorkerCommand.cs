@@ -7,11 +7,17 @@ public enum WorkerAction
     Migrate,
     ImportOnce,
     ImportFromQueue,
+    GeoNamesLoad,
+    PlacesRefresh,
 }
+
+/// <summary>The three GeoNames dump files that <c>geonames load</c> reads (S-012).</summary>
+public sealed record GeoNamesSource(string Cities, string Admin1, string Countries);
 
 /// <param name="Action">What to run.</param>
 /// <param name="MigrateFirst">Apply pending migrations before importing (D-013).</param>
-public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst)
+/// <param name="GeoNames">The files to load, for <see cref="WorkerAction.GeoNamesLoad"/> only.</param>
+public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNamesSource? GeoNames = null)
 {
     public const string Usage = """
         Usage: sepiabox-worker <command>
@@ -23,6 +29,10 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst)
           import --from-queue        Import the manifests named by the storage events waiting in the
                                      queue (ServiceBus:Namespace, ServiceBus:Queue), then exit when
                                      it is empty. Never migrates (D-063).
+          geonames load <cities500.zip|txt> --admin1 <admin1CodesASCII.txt> --countries <countryInfo.txt>
+                                     Replace the GeoNames cities with these dump files
+                                     (https://download.geonames.org/export/dump/, CC BY 4.0).
+          places refresh             Name the place of assets that have a location but no place yet.
         """;
 
     public static bool TryParse(string[] args, [NotNullWhen(true)] out WorkerCommand? command, out string error)
@@ -47,6 +57,11 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst)
 
                 command = new WorkerCommand(WorkerAction.ImportOnce, options.Contains("--migrate"));
                 return true;
+            case ["geonames", "load", var cities, .. var options] when !cities.StartsWith("--", StringComparison.Ordinal):
+                return TryParseGeoNamesLoad(cities, options, out command, out error);
+            case ["places", "refresh"]:
+                command = new WorkerCommand(WorkerAction.PlacesRefresh, false);
+                return true;
             case [_, ..]:
                 error = $"Unknown command or option in '{string.Join(' ', args)}'.";
                 return false;
@@ -54,5 +69,44 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst)
                 error = "Missing command.";
                 return false;
         }
+    }
+
+    private static bool TryParseGeoNamesLoad(
+        string cities, string[] options, [NotNullWhen(true)] out WorkerCommand? command, out string error)
+    {
+        command = null;
+        error = string.Empty;
+        string? admin1 = null;
+        string? countries = null;
+        for (var i = 0; i < options.Length; i += 2)
+        {
+            if (i + 1 >= options.Length || options[i + 1].StartsWith("--", StringComparison.Ordinal))
+            {
+                error = $"{options[i]} needs a file.";
+                return false;
+            }
+
+            switch (options[i])
+            {
+                case "--admin1" when admin1 is null:
+                    admin1 = options[i + 1];
+                    break;
+                case "--countries" when countries is null:
+                    countries = options[i + 1];
+                    break;
+                default:
+                    error = $"Unknown or repeated option '{options[i]}' for geonames load.";
+                    return false;
+            }
+        }
+
+        if (admin1 is null || countries is null)
+        {
+            error = "geonames load needs --admin1 and --countries.";
+            return false;
+        }
+
+        command = new WorkerCommand(WorkerAction.GeoNamesLoad, false, new GeoNamesSource(cities, admin1, countries));
+        return true;
     }
 }
