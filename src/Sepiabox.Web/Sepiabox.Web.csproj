@@ -8,6 +8,9 @@
     <!-- The default aspnet image has ICU; a chiseled one would need its -extra variant (D-058). Named here so
          the image azd builds cannot drift to one without it. -->
     <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
+    <!-- In a deploy, the same image plus the CLIP text model in /models (S-056, D-071): scripts/deploy.sh sets
+         SEPIABOX_WEB_BASE_IMAGE to the sepiabox-web-models image scripts/web-models.sh built on it. -->
+    <ContainerBaseImage Condition="'$(SEPIABOX_WEB_BASE_IMAGE.Trim())' != ''">$(SEPIABOX_WEB_BASE_IMAGE.Trim())</ContainerBaseImage>
     <!-- OAuth clients and the access list come from user secrets locally (docs/operations.md). -->
     <UserSecretsId>sepiabox-web-553a6207-0978-4b84-ab9b-8648b5110515</UserSecretsId>
   </PropertyGroup>

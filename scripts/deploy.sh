@@ -23,6 +23,25 @@ readonly poll_seconds="${SEPIABOX_MIGRATE_POLL_SECONDS:-10}"
 
 cd "$(dirname "$0")/.."
 
+# web-models.sh would push the web's base image there instead of the environment's registry, which the web's
+# revision could not pull from.
+if [[ -n "${SEPIABOX_REGISTRY:-}" ]]; then
+  echo "SEPIABOX_REGISTRY is set (it is only for tests of scripts/web-models.sh); unset it and run again." >&2
+  exit 1
+fi
+
+# azd takes these AppHost parameters from the environment's infra.parameters (D-072). An AZURE_<NAME> value
+# would win over it in provision (from the azd environment's .env or this shell) but not in the web's deploy
+# (only from this shell), so the two would disagree: refuse one rather than guess.
+for name in AZURE_CUSTOM_DOMAIN AZURE_CUSTOM_DOMAIN_BINDING AZURE_UPLOADER_PRINCIPAL_IDS; do
+  dotenv_value=$(azd env get-value "$name" 2>/dev/null) || dotenv_value=""
+  if [[ -n "$dotenv_value" || -n "${!name+set}" ]]; then
+    echo "$name is set (in the azd environment or this shell); azd would use it instead of infra.parameters." >&2
+    echo "Remove it (azd env unset $name, or unset $name) and use azd env config set infra.parameters.<name> (docs/operations.md)." >&2
+    exit 1
+  fi
+done
+
 # azd names the resource group rg-<environment> and creates it in the environment's region.
 if [[ "$(azd env get-value AZURE_ENV_NAME)" != "$environment_name" ]]; then
   echo "Select the azd environment '$environment_name' first: azd env select $environment_name" >&2
@@ -39,17 +58,7 @@ if [[ -n "$azd_group" && "$azd_group" != "$resource_group" ]]; then
   exit 1
 fi
 
-# azd takes these AppHost parameters from the environment's infra.parameters (D-072). An AZURE_<NAME> value
-# would win over it in provision (from the azd environment's .env or this shell) but not in the web's deploy
-# (only from this shell), so the two would disagree: refuse one rather than guess.
-for name in AZURE_CUSTOM_DOMAIN AZURE_CUSTOM_DOMAIN_BINDING AZURE_UPLOADER_PRINCIPAL_IDS; do
-  dotenv_value=$(azd env get-value "$name" 2>/dev/null) || dotenv_value=""
-  if [[ -n "$dotenv_value" || -n "${!name+set}" ]]; then
-    echo "$name is set (in the azd environment or this shell); azd would use it instead of infra.parameters." >&2
-    echo "Remove it (azd env unset $name, or unset $name) and use azd env config set infra.parameters.<name> (docs/operations.md)." >&2
-    exit 1
-  fi
-done
+# The AppHost parameters (D-072), which azd takes from the environment's infra.parameters.
 # One never set would stop `azd provision --no-prompt` and `azd deploy web`, so it gets its "none" value. Set
 # values are left alone.
 ensure_parameter() {
@@ -101,6 +110,13 @@ fi
 export SEPIABOX_DEPLOY_SCRIPT=1
 
 azd provision --no-prompt
+
+# The web's base image with the CLIP text model (S-056): built only when models.json or the ASP.NET Core image
+# changed, and the web's publish builds on it (src/Sepiabox.Web/Sepiabox.Web.csproj, ContainerBaseImage). Before
+# the queue is paused and the database migrated, so a Docker or download failure stops the deploy while the
+# running web, jobs and schema still match.
+SEPIABOX_WEB_BASE_IMAGE=$(scripts/web-models.sh)
+export SEPIABOX_WEB_BASE_IMAGE
 
 # From here until the import jobs run the new image, the queue keeps every upload's events but nothing
 # receives them, so no import runs old code against a new schema or the reverse (D-063). Provisioning

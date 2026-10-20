@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Extensions.Localization;
 using Sepiabox.Catalog.Search;
 
 namespace Sepiabox.Web.Services;
@@ -23,8 +24,9 @@ public static class SearchEndpoints
         return endpoints;
     }
 
-    public static async Task<IResult> SearchAsync(HttpContext http, ILibraryQueries library)
+    public static async Task<IResult> SearchAsync(HttpContext http, ILibraryQueries library, IStringLocalizer<SharedResource> text)
     {
+        ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(library);
         if (!http.Request.HasJsonContentType())
@@ -59,10 +61,11 @@ public static class SearchEndpoints
         {
             // The text model is missing or failed to load (S-016, D-070): the rest of the search still works.
             http.Response.Headers.RetryAfter = "3600";
+            // In the visitor's language (S-056), like the page; the field names what to leave out.
             return Results.Problem(
-                title: "Search by description is unavailable",
-                detail: "The CLIP text model is not loaded on this server, so filters.visual cannot be used; search without it.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+                detail: text["Search_DescribeUnavailable"],
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                extensions: new Dictionary<string, object?> { ["field"] = "filters.visual" });
         }
 
         return Results.Ok(new Response(

@@ -55,6 +55,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>The app's clock, so a test can assert link expiry times exactly.</summary>
     public TimeProvider? Time { get; init; }
 
+    /// <summary>Receives the app's logs as well, so a test can check what it reported.</summary>
+    public ILoggerProvider? Logs { get; init; }
+
     /// <summary>The CLIP text encoder; unset, the real one, pointed at a folder with no model in it.</summary>
     public Sepiabox.Catalog.Search.IQueryEmbedder? QueryEmbedder { get; init; }
 
@@ -96,6 +99,11 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
 
                     options.Registrations.Add(new HealthCheckRegistration("fake", new AlwaysHealthy(), null, null));
                 });
+            }
+
+            if (Logs is not null)
+            {
+                services.AddSingleton(Logs);
             }
 
             if (QueryEmbedder is not null)
