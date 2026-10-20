@@ -112,7 +112,7 @@
       "type": "boolean"
     },
     "faces": {
-      "description": "Faces found in the preview or poster (S-018), best first. Box: left, top, width and height relative to the image (0..1). Embedding: base64 of 128 float32 little-endian values (SFace), L2-normalized.",
+      "description": "Faces found in the preview or poster (S-018), best first. Box: left, top, width and height relative to the upright derivative (0..1); map it with a derivative's width and height, never the manifest's, which describe the original as stored. Embedding: base64 of 128 float32 little-endian values (SFace), L2-normalized.",
       "type": "array",
       "items": {
         "type": "object",

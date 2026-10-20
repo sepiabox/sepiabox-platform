@@ -24,7 +24,7 @@
 ### Technical notes
 - Fixture: a public-domain portrait (e.g. an official US government portrait on Wikimedia Commons), with source and license in `tests/.../TestData/README.md`.
 - Alignment with Magick.NET (affine `Distort`) or a custom matrix.
-- Extend `ManifestMerge` (D-036): `faces` come from the side with `facesProcessed: true`, the incoming one if both are, so uploading from a work folder with face detection off never erases detected faces.
+- Extend `ManifestMerge` (D-036): `faces` come from the side with `facesProcessed: true`, so uploading from a work folder with face detection off never erases detected faces; when both are, the choice is order-independent (more faces, then the larger serialized list, D-047), so uploads from two computers never flip the blob.
 - Decisions: D-016, D-036.
 
 ### Expected tests
