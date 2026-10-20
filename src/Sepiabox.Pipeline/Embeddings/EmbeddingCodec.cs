@@ -63,6 +63,14 @@ public static class EmbeddingCodec
         }
     }
 
+    /// <summary>A normalized copy of <paramref name="values"/>; see <see cref="Normalize"/>.</summary>
+    public static float[] Normalized(ReadOnlySpan<float> values)
+    {
+        var copy = values.ToArray();
+        Normalize(copy);
+        return copy;
+    }
+
     public static double Cosine(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
     {
         if (a.Length != b.Length)

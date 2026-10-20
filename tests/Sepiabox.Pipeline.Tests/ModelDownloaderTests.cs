@@ -98,17 +98,42 @@ public sealed class ModelDownloaderTests : IDisposable
     }
 
     [Fact]
-    public async Task Deletes_temporary_files_of_abandoned_downloads_when_starting()
+    public async Task Deletes_temporary_files_of_abandoned_downloads_when_they_are_over_an_hour_old()
     {
         var model = Model(s_contentSha256);
         var abandoned = _folder.Write(model.File + ".0123.download", [1, 2, 3]);
-        File.SetLastWriteTimeUtc(abandoned, DateTime.UtcNow.AddHours(-1));
-        var running = _folder.Write(model.File + ".4567.download", [4, 5, 6]);
+        File.SetLastWriteTimeUtc(abandoned, DateTime.UtcNow.AddHours(-2));
+        var recent = _folder.Write(model.File + ".4567.download", [4, 5, 6]);
+        File.SetLastWriteTimeUtc(recent, DateTime.UtcNow.AddMinutes(-30));
 
         await new ModelDownloader(new HttpClient(new ServeBytes(s_content))).EnsureAsync(model, _folder.Path);
 
         Assert.False(File.Exists(abandoned));
-        Assert.True(File.Exists(running));
+        Assert.True(File.Exists(recent));
+    }
+
+    [Fact]
+    public async Task Keeps_temporary_files_when_the_inactivity_timeout_is_infinite()
+    {
+        var model = Model(s_contentSha256);
+        var old = _folder.Write(model.File + ".0123.download", [1, 2, 3]);
+        File.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddDays(-2));
+
+        await new ModelDownloader(new HttpClient(new ServeBytes(s_content)), Timeout.InfiniteTimeSpan).EnsureAsync(model, _folder.Path);
+
+        Assert.True(File.Exists(old));
+    }
+
+    [Fact]
+    public async Task Does_not_report_a_stall_when_progress_reporting_is_slower_than_the_timeout()
+    {
+        var model = Model(s_contentSha256);
+        var slowProgress = new SlowProgress(TimeSpan.FromMilliseconds(400));
+
+        var outcome = await new ModelDownloader(new HttpClient(new ServeBytes(s_content)), TimeSpan.FromMilliseconds(100))
+            .EnsureAsync(model, _folder.Path, slowProgress);
+
+        Assert.Equal(ModelDownloader.Outcome.Downloaded, outcome);
     }
 
     [Fact]
@@ -211,6 +236,11 @@ public sealed class ModelDownloaderTests : IDisposable
             Requests++;
             return Task.FromResult(new HttpResponseMessage(status) { Content = new ByteArrayContent(content) });
         }
+    }
+
+    private sealed class SlowProgress(TimeSpan delay) : IProgress<long>
+    {
+        public void Report(long value) => Thread.Sleep(delay);
     }
 
     private sealed class ServeStream(Func<Stream> body) : HttpMessageHandler

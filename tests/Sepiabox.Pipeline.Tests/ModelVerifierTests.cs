@@ -93,14 +93,10 @@ public sealed class ModelVerifierTests : IDisposable
     }
 
     [Fact]
-    public void Removes_the_marker_when_a_model_accepted_by_its_marker_cannot_be_loaded()
+    public void Removes_the_marker_when_a_model_that_matches_its_pin_cannot_be_loaded()
     {
         var model = Model(Sha256(s_garbage));
         var path = _folder.Write(model.File, s_garbage);
-        using (ClipImageEmbedder.TryCreate(_folder.Path, model, out _))
-        {
-            Assert.True(File.Exists(ModelVerifier.MarkerPath(path)));
-        }
 
         using var embedder = ClipImageEmbedder.TryCreate(_folder.Path, model, out var warning);
 

@@ -28,8 +28,9 @@ public enum EmbeddingStatus
 
 /// <param name="Status">What happened.</param>
 /// <param name="Manifest">The manifest, with the embedding when it was added; null when it could not be read.</param>
-/// <param name="Problem">Why it failed, when <paramref name="Status"/> is <see cref="EmbeddingStatus.Failed"/>.</param>
-public sealed record EmbeddingOutcome(EmbeddingStatus Status, Manifest? Manifest, string? Problem = null);
+/// <param name="Problem">Why it failed, when <paramref name="Status"/> is <see cref="EmbeddingStatus.Failed"/>, with the details of this file.</param>
+/// <param name="Category">The kind of failure without the details of this file, so many files can be reported as one.</param>
+public sealed record EmbeddingOutcome(EmbeddingStatus Status, Manifest? Manifest, string? Problem = null, string? Category = null);
 
 /// <summary>
 /// Adds a missing embedding to a manifest from the derivative the web shows: the 1280 px preview of a photo
@@ -70,8 +71,8 @@ public static class ManifestEmbeddings
                 throw new EmbeddingException($"The model returned {vector.Length} values instead of {embedder.Dimensions}.");
             }
 
-            // Checked here too, so an embedder that skips its own check cannot store a vector search cannot use.
-            EmbeddingCodec.Normalize(vector);
+            // Normalized here too, so an embedder that skips its own check cannot store a vector search cannot use.
+            var stored = EmbeddingCodec.Normalized(vector);
 
             var embeddings = new SortedDictionary<string, JsonNode>(StringComparer.Ordinal);
             foreach (var (key, value) in manifest.Embeddings)
@@ -79,13 +80,13 @@ public static class ManifestEmbeddings
                 embeddings[key] = value.DeepClone();
             }
 
-            embeddings[embedder.ModelKey] = JsonValue.Create(EmbeddingCodec.Encode(vector));
+            embeddings[embedder.ModelKey] = JsonValue.Create(EmbeddingCodec.Encode(stored));
             return new EmbeddingOutcome(EmbeddingStatus.Added, manifest with { Embeddings = embeddings });
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
         {
             // Whatever the embedder throws, the asset is still described; only its embedding is missing.
-            return new EmbeddingOutcome(EmbeddingStatus.Failed, manifest, $"Could not compute the {embedder.ModelKey} embedding: {ex.Message}");
+            return Failed(manifest, $"Could not compute the {embedder.ModelKey} embedding", ex);
         }
     }
 
@@ -101,9 +102,9 @@ public static class ManifestEmbeddings
         {
             return new EmbeddingOutcome(EmbeddingStatus.ManifestMissing, null);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
         {
-            return new EmbeddingOutcome(EmbeddingStatus.Failed, null, $"Could not read its manifest: {ex.Message}");
+            return Failed(null, "Could not read its manifest", ex);
         }
 
         var outcome = TryAdd(manifest, workFolder, embedder);
@@ -117,9 +118,13 @@ public static class ManifestEmbeddings
             ManifestJson.WriteFile(manifestPath, outcome.Manifest!);
             return outcome;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
         {
-            return new EmbeddingOutcome(EmbeddingStatus.Failed, manifest, $"Could not write its manifest: {ex.Message}");
+            return Failed(manifest, "Could not write its manifest", ex);
         }
     }
+
+    // The exception's type, unlike its message, never names the file, so it groups failures of the same kind.
+    private static EmbeddingOutcome Failed(Manifest? manifest, string what, Exception ex) =>
+        new(EmbeddingStatus.Failed, manifest, $"{what}: {ex.Message}", $"{what} ({ex.GetType().Name})");
 }

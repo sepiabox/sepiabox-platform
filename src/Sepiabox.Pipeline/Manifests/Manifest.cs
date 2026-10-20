@@ -98,9 +98,22 @@ public static class ManifestJson
 
             File.Move(temporary, path, overwrite: true);
         }
-        finally
+        catch
         {
-            File.Delete(temporary);
+            TryDelete(temporary);
+            throw;
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Left for the next process run, which removes old temporary files from the manifests folder.
         }
     }
 

@@ -67,15 +67,27 @@ public sealed class ModelDownloader(HttpClient http, TimeSpan? inactivityTimeout
     }
 
     /// <summary>
-    /// Removes temporary files left by a download that was killed, once they are older than the inactivity
-    /// timeout, so a download still running in another process keeps its file.
+    /// Removes temporary files left by a download that was killed. Only files untouched for ten inactivity
+    /// timeouts, and at least an hour, go: a download still running in another process writes far more often.
+    /// With no timeout there is no way to tell a slow download from an abandoned one, so nothing is removed.
     /// </summary>
     private void DeleteAbandonedDownloads(string target)
     {
+        if (_inactivityTimeout <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        var age = TimeSpan.FromHours(1);
+        if (_inactivityTimeout > age / 10)
+        {
+            age = _inactivityTimeout < TimeSpan.MaxValue / 10 ? _inactivityTimeout * 10 : TimeSpan.MaxValue;
+        }
+
         var folder = Path.GetDirectoryName(target)!;
         foreach (var file in Directory.EnumerateFiles(folder, Path.GetFileName(target) + ".*.download"))
         {
-            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) <= _inactivityTimeout)
+            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) <= age)
             {
                 continue;
             }
@@ -94,24 +106,19 @@ public sealed class ModelDownloader(HttpClient http, TimeSpan? inactivityTimeout
     /// <summary>Writes the response to <paramref name="path"/> and returns its SHA-256.</summary>
     private async Task<string> DownloadAsync(ModelInfo model, string path, IProgress<long>? bytesRead, CancellationToken cancellationToken)
     {
-        // Restarted before every read: a stalled connection fails after a minute without capping a slow download.
-        using var stalled = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         try
         {
-            stalled.CancelAfter(_inactivityTimeout);
-            using var response = await http.GetAsync(model.Url, HttpCompletionOption.ResponseHeadersRead, stalled.Token);
+            using var response = await WaitAsync(
+                token => http.GetAsync(model.Url, HttpCompletionOption.ResponseHeadersRead, token), cancellationToken);
             response.EnsureSuccessStatusCode();
-            await using var body = await response.Content.ReadAsStreamAsync(stalled.Token);
+            await using var body = await WaitAsync(response.Content.ReadAsStreamAsync, cancellationToken);
             await using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = new byte[1 << 20];
             long total = 0;
             while (true)
             {
-                stalled.CancelAfter(_inactivityTimeout);
-                var read = await body.ReadAsync(buffer, stalled.Token);
-                // Only the wait for data counts: a slow disk or progress display is not a stalled connection.
-                stalled.CancelAfter(Timeout.InfiniteTimeSpan);
+                var read = await WaitAsync(token => body.ReadAsync(buffer, token).AsTask(), cancellationToken);
                 if (read == 0)
                 {
                     break;
@@ -125,11 +132,22 @@ public sealed class ModelDownloader(HttpClient http, TimeSpan? inactivityTimeout
 
             return Convert.ToHexStringLower(hash.GetHashAndReset());
         }
-        catch (OperationCanceledException) when (stalled.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             throw new TimeoutException(
                 $"{model.Url} sent no data for {_inactivityTimeout.TotalSeconds:N0} seconds, so the download of {model.Name} was abandoned. "
                 + "Run models download again to retry.");
         }
+    }
+
+    /// <summary>
+    /// Waits for the server with its own timer: only the wait for data counts, so a slow progress display or disk
+    /// can never look like a stalled connection, and a slow download is never capped as a whole.
+    /// </summary>
+    private async Task<T> WaitAsync<T>(Func<CancellationToken, Task<T>> wait, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_inactivityTimeout);
+        return await wait(timeout.Token);
     }
 }

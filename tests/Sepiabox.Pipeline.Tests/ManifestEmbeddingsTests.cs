@@ -90,6 +90,37 @@ public sealed class ManifestEmbeddingsTests : IDisposable
     }
 
     [Fact]
+    public void Gives_a_category_without_the_file_details_when_embedding_fails()
+    {
+        var embedder = new FakeEmbedder { Failure = path => new UnauthorizedAccessException($"Access to {path} is denied.") };
+
+        var outcome = ManifestEmbeddings.TryAdd(WithDerivativeFiles(TestManifests.Photo(Source())), _work.Path, embedder);
+
+        Assert.Equal("Could not compute the clip-vit-b32 embedding (UnauthorizedAccessException)", outcome.Category);
+        Assert.Contains("is denied", outcome.Problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Gives_a_category_without_the_file_details_when_a_manifest_is_corrupt()
+    {
+        var path = _work.Write("manifests/corrupt.json", "{ not json"u8.ToArray());
+
+        var outcome = ManifestEmbeddings.TryAddToFile(path, _work.Path, new FakeEmbedder());
+
+        Assert.Equal("Could not read its manifest (JsonException)", outcome.Category);
+    }
+
+    [Fact]
+    public void Lets_out_of_memory_through_when_the_embedder_runs_out()
+    {
+        // InsufficientMemoryException is an OutOfMemoryException that code may throw itself.
+        var embedder = new FakeEmbedder { Failure = _ => new InsufficientMemoryException() };
+
+        Assert.Throws<InsufficientMemoryException>(
+            () => ManifestEmbeddings.TryAdd(WithDerivativeFiles(TestManifests.Photo(Source())), _work.Path, embedder));
+    }
+
+    [Fact]
     public void Lets_cancellation_through_when_the_embedder_is_cancelled()
     {
         var embedder = new FakeEmbedder { Failure = _ => new OperationCanceledException() };
@@ -212,6 +243,27 @@ public sealed class ManifestEmbeddingsTests : IDisposable
         var outcome = ManifestEmbeddings.TryAddToFile(Path.Combine(_work.Path, "nowhere", "gone.json"), _work.Path, new FakeEmbedder());
 
         Assert.Equal(EmbeddingStatus.ManifestMissing, outcome.Status);
+    }
+
+    [Fact]
+    public void Leaves_only_the_manifest_when_writing_succeeds()
+    {
+        var path = WriteManifest(TestManifests.Photo(Source()));
+
+        Assert.Equal([path], Directory.GetFiles(Path.GetDirectoryName(path)!));
+    }
+
+    [Fact]
+    public void Leaves_no_temporary_file_when_writing_fails()
+    {
+        var folder = Path.Combine(_work.Path, "manifests");
+        var path = Path.Combine(folder, "taken.json");
+        Directory.CreateDirectory(path);
+
+        // IOException on Linux, UnauthorizedAccessException on Windows: either way the write fails.
+        Assert.NotNull(Record.Exception(() => ManifestJson.WriteFile(path, TestManifests.Photo(Source()))));
+
+        Assert.Empty(Directory.GetFiles(folder));
     }
 
     private static ManifestSource Source() => TestManifests.Source("HD da Ana", "2019/praia.jpg");
