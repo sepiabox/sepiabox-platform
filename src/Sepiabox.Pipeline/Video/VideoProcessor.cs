@@ -19,9 +19,13 @@ public enum VideoEncoder
 /// Size as shown on screen: after the rotation phones record instead of rotating pixels, and after the
 /// pixel aspect ratio of anamorphic camcorder and DVD video (720x576 stored, 1024x576 shown for 16:9).
 /// </summary>
-public sealed record VideoProbe(int Width, int Height, double? DurationSeconds);
+public sealed record VideoProbe(int Width, int Height, double? DurationSeconds)
+{
+    /// <summary>Which video stream holds the footage, counting video streams only; cover art is skipped.</summary>
+    public int VideoStream { get; init; }
+}
 
-public class VideoProcessingException : Exception
+public sealed class VideoProcessingException : Exception
 {
     public VideoProcessingException()
     {
@@ -38,8 +42,11 @@ public class VideoProcessingException : Exception
     }
 }
 
-/// <summary>The file opens but holds no video, such as a tracker-music <c>.mod</c> or a sound-only recording.</summary>
-public sealed class NoVideoStreamException : VideoProcessingException
+/// <summary>
+/// The file holds no video, such as a tracker-music <c>.mod</c>, a sound-only recording or audio with cover art.
+/// Not a <see cref="VideoProcessingException"/>: it is not a failure, so no handler of those may swallow it.
+/// </summary>
+public sealed class NoVideoStreamException : Exception
 {
     public NoVideoStreamException()
         : base("No video stream found.")
@@ -112,18 +119,38 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
 
         var frame = Path.Combine(folder, "poster-frame.tmp.png");
         var posterAt = (probe.DurationSeconds ?? 0) * 0.1;
+
+        // A frame left by a killed run must not pass for this one.
+        bool TakeFrame(double atSeconds)
+        {
+            File.Delete(frame);
+            Run(tools.Ffmpeg, FfmpegArguments.Frame(sourcePath, atSeconds, probe.Width, probe.Height, frame, probe.VideoStream), cancellationToken);
+            var written = new FileInfo(frame);
+            return written.Exists && written.Length > 0;
+        }
+
         IReadOnlyList<ManifestDerivative> posters;
         try
         {
-            Run(tools.Ffmpeg, FfmpegArguments.Frame(sourcePath, posterAt, probe.Width, probe.Height, frame), cancellationToken);
-            // FFmpeg succeeds without writing anything when the seek decodes no frame: a transport stream with
-            // a single keyframe, or a video shorter than its sound. The first frame is always there.
-            if (!File.Exists(frame) && posterAt > 0)
+            // When the seek decodes no frame (a transport stream with a single keyframe, a video shorter than
+            // its sound), FFmpeg writes nothing and, depending on the build, succeeds or fails. The first frame
+            // is always there; only its failure is reported.
+            bool taken;
+            try
             {
-                Run(tools.Ffmpeg, FfmpegArguments.Frame(sourcePath, 0, probe.Width, probe.Height, frame), cancellationToken);
+                taken = TakeFrame(posterAt);
+            }
+            catch (VideoProcessingException) when (posterAt > 0)
+            {
+                taken = false;
             }
 
-            if (!File.Exists(frame))
+            if (!taken && posterAt > 0)
+            {
+                taken = TakeFrame(0);
+            }
+
+            if (!taken)
             {
                 throw new VideoProcessingException("FFmpeg wrote no poster frame.");
             }
@@ -139,7 +166,7 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
         var proxyPath = $"{relativeFolder}/{ProxyName}.mp4";
         var proxy = Path.Combine(workFolder, proxyPath);
         var temporary = proxy + ".tmp";
-        Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, temporary), cancellationToken);
+        Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, temporary, probe.VideoStream), cancellationToken);
         File.Move(temporary, proxy, overwrite: true);
 
         return [.. posters, new ManifestDerivative(ProxyName, proxyPath, width, height, ProxyContentType)];
@@ -209,8 +236,8 @@ public static class FfmpegArguments
     public static IReadOnlyList<string> Probe(string input) =>
     [
         "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height,sample_aspect_ratio:stream_tags=rotate:stream_side_data=rotation:format=duration",
+        "-select_streams", "v",
+        "-show_entries", "stream=width,height,sample_aspect_ratio:stream_disposition=attached_pic:stream_tags=rotate:stream_side_data=rotation:format=duration",
         "-of", "json",
         input,
     ];
@@ -222,24 +249,25 @@ public static class FfmpegArguments
     /// </summary>
     public static string Filter(int width, int height) => $"yadif=deint=interlaced,scale={width}:{height},setsar=1";
 
-    public static IReadOnlyList<string> Frame(string input, double atSeconds, int width, int height, string output) =>
+    public static IReadOnlyList<string> Frame(string input, double atSeconds, int width, int height, string output, int videoStream = 0) =>
     [
         "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
         "-ss", atSeconds.ToString("0.###", CultureInfo.InvariantCulture),
         "-i", input,
+        "-map", $"0:v:{videoStream}",
         "-vf", Filter(width, height),
         "-frames:v", "1",
         "-f", "image2", "-c:v", "png",
         output,
     ];
 
-    public static IReadOnlyList<string> Proxy(string input, int width, int height, VideoEncoder encoder, string output)
+    public static IReadOnlyList<string> Proxy(string input, int width, int height, VideoEncoder encoder, string output, int videoStream = 0)
     {
         List<string> arguments =
         [
             "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
             "-i", input,
-            "-map", "0:v:0", "-map", "0:a:0?",
+            "-map", $"0:v:{videoStream}", "-map", "0:a:0?",
             // Drops metadata such as the GPS position phones write into videos.
             "-map_metadata", "-1",
             "-vf", Filter(width, height),
@@ -260,16 +288,36 @@ public static class FfmpegArguments
 
     public static VideoProbe ParseProbe(string json)
     {
+        try
+        {
+            return ParseProbeDocument(json);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            // Output of an unexpected shape is one file's problem, never a reason to stop the run.
+            throw new VideoProcessingException($"ffprobe's output could not be read: {ex.Message}", ex);
+        }
+    }
+
+    private static VideoProbe ParseProbeDocument(string json)
+    {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
-        if (!root.TryGetProperty("streams", out var streams) || streams.GetArrayLength() == 0)
+        // Cover art in a music file or a video container shows up as a one-picture video stream.
+        var footage = root.TryGetProperty("streams", out var streams)
+            ? streams.EnumerateArray().Select((stream, index) => (Stream: stream, Index: index)).Where(s => !IsAttachedPicture(s.Stream)).ToList()
+            : [];
+        if (footage.Count == 0)
         {
             throw new NoVideoStreamException();
         }
 
-        var stream = streams[0];
-        var width = stream.GetProperty("width").GetInt32();
-        var height = stream.GetProperty("height").GetInt32();
+        var (stream, videoStream) = footage[0];
+        if (!TryGetSize(stream, "width", out var width) || !TryGetSize(stream, "height", out var height))
+        {
+            throw new VideoProcessingException("ffprobe reported no picture size.");
+        }
+
         width = ApplyPixelAspectRatio(width, stream);
         if (Math.Abs(Rotation(stream)) % 180 == 90)
         {
@@ -278,12 +326,29 @@ public static class FfmpegArguments
 
         double? duration = root.TryGetProperty("format", out var format)
             && format.TryGetProperty("duration", out var value)
+            && value.ValueKind == JsonValueKind.String
             && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)
             && seconds > 0
                 ? Math.Round(seconds, 3)
                 : null;
 
-        return new VideoProbe(width, height, duration);
+        return new VideoProbe(width, height, duration) { VideoStream = videoStream };
+    }
+
+    private static bool IsAttachedPicture(JsonElement stream) =>
+        stream.TryGetProperty("disposition", out var disposition)
+        && disposition.TryGetProperty("attached_pic", out var attached)
+        && attached.ValueKind == JsonValueKind.Number
+        && attached.TryGetInt32(out var flag)
+        && flag == 1;
+
+    private static bool TryGetSize(JsonElement stream, string name, out int value)
+    {
+        value = 0;
+        return stream.TryGetProperty(name, out var element)
+            && element.ValueKind == JsonValueKind.Number
+            && element.TryGetInt32(out value)
+            && value > 0;
     }
 
     // The pixel aspect ratio applies to stored pixels, before rotation. "0:1" means unknown; a ratio far
@@ -317,7 +382,7 @@ public static class FfmpegArguments
         {
             foreach (var item in sideData.EnumerateArray())
             {
-                if (item.TryGetProperty("rotation", out var rotation) && rotation.TryGetInt32(out var degrees))
+                if (item.TryGetProperty("rotation", out var rotation) && rotation.ValueKind == JsonValueKind.Number && rotation.TryGetInt32(out var degrees))
                 {
                     return degrees;
                 }
@@ -326,6 +391,7 @@ public static class FfmpegArguments
 
         return stream.TryGetProperty("tags", out var tags)
             && tags.TryGetProperty("rotate", out var rotate)
+            && rotate.ValueKind == JsonValueKind.String
             && int.TryParse(rotate.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var tagged)
                 ? tagged
                 : 0;

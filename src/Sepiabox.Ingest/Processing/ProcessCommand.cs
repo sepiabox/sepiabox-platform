@@ -203,23 +203,26 @@ public static class ProcessCommand
                 var (manifest, status, derivativeProblem) = AddDerivatives(output, file, described, video, cancellationToken);
                 if (status == FileStatus.NotVideo)
                 {
-                    // Not catalogued: no manifest, and the state keeps the next run from probing it again.
-                    notVideo++;
-                    state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, status));
-                    return;
+                    // Not catalogued. A run without FFmpeg may have written a manifest for it already: this path
+                    // leaves it, and with the last path the manifest and derivatives go too.
+                    RemoveSource(output, sha256, source);
                 }
-
-                var embeddingAdded = false;
-                if (embedder is not null && status == FileStatus.Done)
+                else
                 {
-                    var withDerivatives = manifest;
-                    var outcome = AddEmbedding(file.Path, sha256, () => ManifestEmbeddings.TryAdd(withDerivatives, output, embedder));
-                    embeddingAdded = outcome?.Status == EmbeddingStatus.Added;
-                    manifest = outcome?.Manifest ?? manifest;
+                    var embeddingAdded = false;
+                    if (embedder is not null && status == FileStatus.Done)
+                    {
+                        var withDerivatives = manifest;
+                        var outcome = AddEmbedding(file.Path, sha256, () => ManifestEmbeddings.TryAdd(withDerivatives, output, embedder));
+                        embeddingAdded = outcome?.Status == EmbeddingStatus.Added;
+                        manifest = outcome?.Manifest ?? manifest;
+                    }
+
+                    ManifestJson.WriteFile(ManifestPath(manifestFolder, sha256), manifest);
+                    embedded += embeddingAdded ? 1 : 0;
                 }
 
-                ManifestJson.WriteFile(ManifestPath(manifestFolder, sha256), manifest);
-                embedded += embeddingAdded ? 1 : 0;
+                // NotVideo is remembered too, so an unchanged file is not read again.
                 state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, status));
 
                 switch (status)
@@ -229,6 +232,9 @@ public static class ProcessCommand
                         break;
                     case FileStatus.Pending:
                         pending++;
+                        break;
+                    case FileStatus.NotVideo:
+                        notVideo++;
                         break;
                     default:
                         // The manifest is kept so the file is still catalogued; the next run tries the derivatives again.
@@ -254,7 +260,9 @@ public static class ProcessCommand
 
         if (notVideo > 0)
         {
-            warnings.Add($"{notVideo:N0} files with a video extension hold no video (such as tracker-music .mod files) and were left out.");
+            warnings.Add(notVideo == 1
+                ? "1 file with a video extension holds no video (such as a tracker-music .mod) and was left out."
+                : $"{notVideo:N0} files with a video extension hold no video (such as tracker-music .mod files) and were left out.");
         }
 
         if (embedder is null && embedderWarning is not null)
@@ -348,6 +356,12 @@ public static class ProcessCommand
             {
                 var thumbnails = ThumbnailGenerator.Generate(file.Path, output, folder, ThumbnailGenerator.PhotoSizes);
                 return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null);
+            }
+
+            // Checked without FFmpeg, whose module support depends on how it was built.
+            if (string.Equals(Path.GetExtension(file.Path), ".mod", StringComparison.OrdinalIgnoreCase) && TrackerModule.IsMatch(file.Path))
+            {
+                return (manifest, FileStatus.NotVideo, null);
             }
 
             if (video is null)

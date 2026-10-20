@@ -109,7 +109,7 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
     var result = ProcessCommand.Run(options, progress, cancellationToken);
     Console.Error.WriteLine();
 
-    Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, embeddings added {result.Embedded:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
+    Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, left out {result.NotVideo:N0}, embeddings added {result.Embedded:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
     // Warnings, not failures: the files are processed and the next run computes their embeddings again.
     EmbeddingWarnings.Write(result.EmbeddingProblems, Console.Error);
 

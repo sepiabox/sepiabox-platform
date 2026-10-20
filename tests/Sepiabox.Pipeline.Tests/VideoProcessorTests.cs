@@ -61,7 +61,8 @@ public class VideoProcessorTests
     {
         AssertSequence(
             FfmpegArguments.Probe("clip.mod"),
-            "-show_entries", "stream=width,height,sample_aspect_ratio:stream_tags=rotate:stream_side_data=rotation:format=duration");
+            "-select_streams", "v",
+            "-show_entries", "stream=width,height,sample_aspect_ratio:stream_disposition=attached_pic:stream_tags=rotate:stream_side_data=rotation:format=duration");
     }
 
     [Theory]
@@ -103,6 +104,49 @@ public class VideoProcessorTests
     public void Swaps_width_and_height_for_a_phone_video_recorded_upright(string json)
     {
         Assert.Equal(new VideoProbe(1080, 1920, null), FfmpegArguments.ParseProbe(json));
+    }
+
+    [Fact]
+    public void Maps_the_video_stream_that_holds_the_footage_when_a_cover_comes_first()
+    {
+        AssertSequence(FfmpegArguments.Frame("in.mkv", 1, 640, 360, "frame.png", videoStream: 1), "-map", "0:v:1");
+        AssertSequence(FfmpegArguments.Proxy("in.mkv", 640, 360, VideoEncoder.Software, "out.mp4", videoStream: 1), "-map", "0:v:1", "-map", "0:a:0?");
+    }
+
+    [Fact]
+    public void Skips_cover_art_when_choosing_the_video_stream()
+    {
+        const string Json = """
+            { "streams": [
+                { "width": 600, "height": 600, "disposition": { "attached_pic": 1 } },
+                { "width": 1920, "height": 1080, "disposition": { "attached_pic": 0 } } ],
+              "format": {} }
+            """;
+
+        var probe = FfmpegArguments.ParseProbe(Json);
+
+        Assert.Equal(new VideoProbe(1920, 1080, null) { VideoStream = 1 }, probe);
+    }
+
+    [Fact]
+    public void Finds_no_video_when_the_only_picture_is_cover_art()
+    {
+        const string Json = """{ "streams": [ { "width": 600, "height": 600, "disposition": { "attached_pic": 1 } } ], "format": { "duration": "180.0" } }""";
+
+        Assert.Throws<NoVideoStreamException>(() => FfmpegArguments.ParseProbe(Json));
+    }
+
+    [Theory]
+    [InlineData("""{ "streams": [ { "height": 1080 } ], "format": {} }""")]
+    [InlineData("""{ "streams": [ { "width": 1920 } ], "format": {} }""")]
+    [InlineData("""{ "streams": [ { "width": 0, "height": 0 } ], "format": {} }""")]
+    [InlineData("""{ "streams": [ { "width": "N/A", "height": 1080 } ], "format": {} }""")]
+    [InlineData("""{ "streams": [ 7 ], "format": {} }""")]
+    [InlineData("""{ "streams": [ { "width": 1920, "height": 1080, "side_data_list": 3 } ], "format": {} }""")]
+    [InlineData("not json")]
+    public void Rejects_a_video_stream_without_a_picture_size(string json)
+    {
+        Assert.Throws<VideoProcessingException>(() => FfmpegArguments.ParseProbe(json));
     }
 
     [Fact]
