@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using ImageMagick;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
@@ -39,6 +40,9 @@ public class VideoProcessingTests
         Assert.Equal((1280, 720), (probe.Width, probe.Height));
         Assert.InRange(probe.DurationSeconds!.Value, 2.9, 3.2);
         Assert.True(File.Exists(Path.Combine(work.Path, manifest.Derivatives[0].Path)));
+        // Progressive footage passes the deinterlacer untouched: only the scaling and encoding change it.
+        Assert.InRange(InterlacedShare(Path.Combine(work.Path, proxy.Path)), 0, 0.1);
+        Assert.True(Similarity(Path.Combine(work.Path, proxy.Path), Path.Combine(drive.Path, "party.mp4"), 1280, 720) > 0.98);
     }
 
     [Fact]
@@ -94,9 +98,9 @@ public class VideoProcessingTests
         using var work = new TempFolder();
         // What SD camcorders record: MPEG-2 program stream, PAL 720x576 interlaced, flagged 16:9 (SAR 64:45).
         var clip = Path.Combine(drive.Path, "MOV001.MOD");
-        Run(s_tools.Ffmpeg, [.. Interlaced(720, 576, seconds: 2), "-c:v", "mpeg2video", "-b:v", "5M", "-flags", "+ilme+ildct", "-top", "1", "-aspect", "16:9", "-c:a", "mp2", "-shortest", "-f", "vob", clip]);
+        Run(s_tools.Ffmpeg, [.. Interlaced(720, 576, seconds: 2), "-c:v", "mpeg2video", "-pix_fmt", "yuv420p", "-b:v", "5M", "-flags", "+ilme+ildct", "-top", "1", "-aspect", "16:9", "-c:a", "mp2", "-shortest", "-f", "vob", clip]);
         Assert.Equal(("mpeg2video", "64:45", "tt"), StreamInfo(clip));
-        Assert.True(Combed(clip), "The generated clip should look interlaced.");
+        Assert.InRange(InterlacedShare(clip), 0.9, 1);
 
         var result = Process(drive, work);
 
@@ -111,7 +115,7 @@ public class VideoProcessingTests
         Assert.Equal((1024, 576), (proxy.Width, proxy.Height));
         var proxyPath = Path.Combine(work.Path, proxy.Path);
         Assert.Equal(("h264", "1:1", "progressive"), StreamInfo(proxyPath));
-        Assert.False(Combed(proxyPath), "The 720p version should be deinterlaced.");
+        Assert.InRange(InterlacedShare(proxyPath), 0, 0.1);
         Assert.InRange(new VideoProcessor(s_tools).Probe(proxyPath).DurationSeconds!.Value, 1.9, 2.2);
     }
 
@@ -124,6 +128,7 @@ public class VideoProcessingTests
         var clip = Path.Combine(drive.Path, "00001.MTS");
         Run(s_tools.Ffmpeg, [.. Interlaced(1440, 1080, seconds: 2), "-c:v", "libx264", "-preset", "ultrafast", "-g", "12", "-flags", "+ilme+ildct", "-x264-params", "tff=1", "-aspect", "16:9", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "-f", "mpegts", clip]);
         Assert.Equal(("h264", "4:3", "tt"), StreamInfo(clip));
+        Assert.InRange(InterlacedShare(clip), 0.9, 1);
 
         var result = Process(drive, work);
 
@@ -134,6 +139,44 @@ public class VideoProcessingTests
         var proxy = Path.Combine(work.Path, Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p").Path);
         Assert.Equal(("h264", "1:1", "progressive"), StreamInfo(proxy));
         Assert.Equal(new VideoProbe(1280, 720, null), new VideoProcessor(s_tools).Probe(proxy) with { DurationSeconds = null });
+    }
+
+    [Fact]
+    public void Turns_a_phone_video_recorded_upright_into_portrait_derivatives()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var scratch = new TempFolder();
+        // Stored landscape, red with a blue top-left corner, and tagged to turn 90 degrees clockwise on
+        // playback, as phones do: shown upright, the blue corner is at the top right.
+        var stored = Path.Combine(scratch.Path, "stored.mp4");
+        Run(s_tools.Ffmpeg,
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "color=c=red:size=1920x1080:duration=1:rate=25,drawbox=x=0:y=0:w=480:h=270:color=blue:t=fill",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", stored,
+        ]);
+        var upright = Path.Combine(drive.Path, "upright.mp4");
+        Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-display_rotation:v:0", "-90", "-i", stored, "-c", "copy", upright]);
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal((1080, 1920), (manifest.Width, manifest.Height));
+        Assert.Equal((720, 1280), Size(manifest, "poster"));
+        Assert.Equal((144, 256), Size(manifest, "thumb-256"));
+        var proxy = Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p");
+        Assert.Equal((720, 1280), (proxy.Width, proxy.Height));
+        // The proxy's pixels are turned and it carries no rotation, so players show it as it is.
+        var proxyProbe = new VideoProcessor(s_tools).Probe(Path.Combine(work.Path, proxy.Path));
+        Assert.Equal((720, 1280), (proxyProbe.Width, proxyProbe.Height));
+
+        var poster = Assert.Single(manifest.Derivatives, d => d.Name == "poster");
+        AssertBlueCornerAtTopRight(Path.Combine(work.Path, poster.Path));
+        var proxyFrame = Path.Combine(scratch.Path, "proxy-frame.png");
+        Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", Path.Combine(work.Path, proxy.Path), "-frames:v", "1", proxyFrame]);
+        AssertBlueCornerAtTopRight(proxyFrame);
     }
 
     [Theory]
@@ -200,6 +243,17 @@ public class VideoProcessingTests
         Assert.Equal((0, 1, 1), (second.Processed, second.Skipped, second.NotVideo));
     }
 
+    private static void AssertBlueCornerAtTopRight(string imagePath)
+    {
+        using var image = new MagickImage(imagePath);
+        Assert.Equal((720u, 1280u), (image.Width, image.Height));
+        using var pixels = image.GetPixels();
+        var topRight = pixels.GetPixel(700, 20).ToColor()!;
+        var topLeft = pixels.GetPixel(20, 20).ToColor()!;
+        Assert.True(topRight.B > 200 && topRight.R < 60, $"Expected blue at the top right, got {topRight}.");
+        Assert.True(topLeft.R > 200 && topLeft.B < 60, $"Expected red at the top left, got {topLeft}.");
+    }
+
     private static void FakeTool(TempFolder folder, string name, string script)
     {
         var path = Path.Combine(folder.Path, name);
@@ -236,11 +290,12 @@ public class VideoProcessingTests
         Assert.Equal(MediaKind.Video, MediaTypes.Classify(path));
     }
 
-    // Weaving fields from successive moving frames gives the combing a real interlaced camera records.
+    // An interlaced camera records 50 fields a second, each from its own moment. Weaving the fields of a
+    // 50 fps scrolling picture into 25 frames gives the combing it records on anything that moves.
     private static string[] Interlaced(int width, int height, int seconds) =>
     [
         "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
-        "-f", "lavfi", "-i", $"testsrc2=duration={seconds}:size={width}x{height}:rate=25",
+        "-f", "lavfi", "-i", $"testsrc2=duration={seconds}:size={width}x{height}:rate=50,scroll=h=0.005",
         "-f", "lavfi", "-i", $"sine=frequency=440:duration={seconds}",
         "-vf", "tinterlace=interleave_top,fieldorder=tff",
     ];
@@ -258,13 +313,32 @@ public class VideoProcessingTests
         return (stream.GetProperty("codec_name").GetString()!, stream.GetProperty("sample_aspect_ratio").GetString()!, stream.GetProperty("field_order").GetString()!);
     }
 
-    // FFmpeg's idet filter classifies each frame by looking for combing between lines.
-    private static bool Combed(string path)
+    // FFmpeg's idet filter classifies each frame by looking for combing between lines. The share of frames
+    // it calls interlaced, among those it could classify. Only the brightness plane is checked: combing shows
+    // there, and the colour planes are blurred by chroma subsampling either way.
+    private static double InterlacedShare(string path)
     {
-        var errors = Run(s_tools.Ffmpeg, ["-hide_banner", "-nostats", "-nostdin", "-i", path, "-an", "-vf", "idet", "-f", "null", "-"]).Errors;
-        var summary = errors.Split('\n').Last(line => line.Contains("Multi frame detection", StringComparison.Ordinal));
+        var errors = Run(s_tools.Ffmpeg, ["-hide_banner", "-nostats", "-nostdin", "-i", path, "-an", "-vf", "extractplanes=y,idet", "-f", "null", "-"]).Errors;
+        var summary = errors.Split('\n').LastOrDefault(line => line.Contains("Multi frame detection", StringComparison.Ordinal));
+        Assert.True(summary is not null, $"idet printed no summary for {Path.GetFileName(path)}:\n{errors}");
         var counts = Regex.Matches(summary, @"(\w+):\s+(\d+)").ToDictionary(m => m.Groups[1].Value, m => int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture));
-        return counts["TFF"] + counts["BFF"] > counts["Progressive"];
+        var interlaced = counts["TFF"] + counts["BFF"];
+        var classified = interlaced + counts["Progressive"];
+        Assert.True(classified > 0, $"idet classified no frames of {Path.GetFileName(path)}:\n{errors}");
+        return (double)interlaced / classified;
+    }
+
+    // Structural similarity of a video's frames to the reference's, scaled to the same size; 1 is identical.
+    private static double Similarity(string video, string reference, int width, int height)
+    {
+        var errors = Run(s_tools.Ffmpeg,
+        [
+            "-hide_banner", "-nostats", "-nostdin", "-i", video, "-i", reference,
+            "-lavfi", $"[1:v]scale={width}:{height},setsar=1[reference];[0:v][reference]ssim", "-f", "null", "-",
+        ]).Errors;
+        var match = Regex.Match(errors, @"All:(\d+(\.\d+)?)");
+        Assert.True(match.Success, $"ssim printed no score:\n{errors}");
+        return double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
     }
 
     private static (string Output, string Errors) Run(string tool, IEnumerable<string> arguments)
