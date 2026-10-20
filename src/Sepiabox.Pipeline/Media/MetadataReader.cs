@@ -14,7 +14,10 @@ public sealed record CameraInfo(string? Make, string? Model);
 /// The capture date as the file writes it, unfiltered: a camera with a reset clock gives 1980-01-01. Never record
 /// it as is; resolve it with <see cref="CaptureDate.Resolve"/>, which also falls back to the file's path (D-046).
 /// </param>
-/// <param name="Location">Where it was taken, from GPS.</param>
+/// <param name="Location">
+/// Where it was taken: EXIF GPS for a photo, the QuickTime ISO 6709 position for a phone video. Videos whose position
+/// MetadataExtractor does not expose get it from ffprobe when <c>process</c> probes them (<see cref="Video.VideoProbe"/>).
+/// </param>
 /// <param name="Camera">Make and model.</param>
 /// <param name="Width">Width in pixels.</param>
 /// <param name="Height">Height in pixels.</param>
@@ -39,14 +42,17 @@ public static class MetadataReader
     public static MediaMetadata Read(string path)
     {
         IReadOnlyList<MetadataExtractor.Directory> directories;
-        try
+        // Opened outside the try, so a path that cannot be opened is reported, never read as a file without metadata.
+        using (var stream = MediaFile.OpenRead(path))
         {
-            using var stream = MediaFile.OpenRead(path);
-            directories = ImageMetadataReader.ReadMetadata(stream);
-        }
-        catch (ImageProcessingException)
-        {
-            return MediaMetadata.Empty;
+            try
+            {
+                directories = ImageMetadataReader.ReadMetadata(stream);
+            }
+            catch (Exception ex) when (IsMalformed(ex))
+            {
+                return MediaMetadata.Empty;
+            }
         }
 
         var (width, height) = ReadDimensions(directories);
@@ -59,15 +65,24 @@ public static class MetadataReader
             ReadDuration(directories));
     }
 
+    // MetadataExtractor reports most damage as ImageProcessingException, but a malformed atom or segment can also
+    // overflow a size, index outside a buffer or end early (a truncated file). Those are the file's content, so it is
+    // processed without metadata; IOException and UnauthorizedAccessException are failures to read and still throw.
+    private static bool IsMalformed(Exception ex) =>
+        ex is ImageProcessingException or OverflowException or ArgumentException or IndexOutOfRangeException or EndOfStreamException;
+
     private static GeoPoint? ReadLocation(IReadOnlyList<MetadataExtractor.Directory> directories)
     {
         var gps = directories.OfType<GpsDirectory>().FirstOrDefault();
-        if (gps is null || !gps.TryGetGeoLocation(out var location) || location.IsZero)
+        if (gps is not null && gps.TryGetGeoLocation(out var location) && !location.IsZero)
         {
-            return null;
+            return new GeoPoint(Math.Round(location.Latitude, 6), Math.Round(location.Longitude, 6));
         }
 
-        return new GeoPoint(Math.Round(location.Latitude, 6), Math.Round(location.Longitude, 6));
+        // Both the user-data ©xyz atom and the com.apple.quicktime.location.ISO6709 key land in this tag.
+        return directories.OfType<QuickTimeMetadataHeaderDirectory>()
+            .Select(quickTime => Iso6709.Parse(quickTime.GetString(QuickTimeMetadataHeaderDirectory.TagGpsLocation)))
+            .FirstOrDefault(point => point is not null);
     }
 
     private static CameraInfo? ReadCamera(IReadOnlyList<MetadataExtractor.Directory> directories)

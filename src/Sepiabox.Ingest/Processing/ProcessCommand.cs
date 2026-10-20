@@ -474,6 +474,8 @@ public static class ProcessCommand
                 Width = probe.Width,
                 Height = probe.Height,
                 DurationSeconds = probe.DurationSeconds ?? manifest.DurationSeconds,
+                // MetadataExtractor misses some containers' positions (an MP4's loci box), which ffprobe reads.
+                Location = manifest.Location ?? probe.Location,
                 Derivatives = derivatives,
             }, FileStatus.Done, null, null);
         }

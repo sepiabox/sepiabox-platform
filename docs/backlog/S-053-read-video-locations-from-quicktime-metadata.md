@@ -17,9 +17,9 @@
 - Re-reading locations for work folders processed before this story (S-060).
 
 ### Acceptance criteria
-- [ ] Given `+38.7223-009.1393+010.000/`, then the parser returns 38.7223, −9.1393; given `+00.0000+000.0000/` or `+95.0000+000.0000/`, then no location.
-- [ ] Given a generated MP4 with a `location` tag (FFmpeg `-metadata location=...`) and a MOV with `com.apple.quicktime.location.ISO6709`, when `process` runs, then each manifest has that `location`.
-- [ ] Given a photo with EXIF GPS, then its location is unchanged.
+- [x] Given `+38.7223-009.1393+010.000/`, then the parser returns 38.7223, −9.1393; given `+00.0000+000.0000/` or `+95.0000+000.0000/`, then no location.
+- [x] Given a generated MP4 with a `location` tag (FFmpeg `-metadata location=...`) and a MOV with `com.apple.quicktime.location.ISO6709`, when `process` runs, then each manifest has that `location`.
+- [x] Given a photo with EXIF GPS, then its location is unchanged.
 
 ### Technical notes
 - Test media is generated in the test with FFmpeg (Integration), never committed.

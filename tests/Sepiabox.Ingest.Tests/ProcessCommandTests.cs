@@ -97,6 +97,19 @@ public class ProcessCommandTests
     }
 
     [Fact]
+    public void Records_the_quicktime_location_of_a_phone_video_while_ffmpeg_is_missing()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        drive.Write("IMG_0001.MOV", TestQuickTime.Movie(appleKey: "+38.7223-009.1393+010.000/"));
+
+        var result = Process(drive, work);
+
+        Assert.Equal(1, result.VideosPending);
+        Assert.Equal(new GeoPoint(38.7223, -9.1393), Assert.Single(ReadManifests(work)).Location);
+    }
+
+    [Fact]
     public void Reprocesses_a_file_whose_content_changed_and_drops_the_old_description()
     {
         using var drive = new TempFolder();

@@ -133,6 +133,30 @@ public sealed class ManifestMergeTests
     }
 
     [Fact]
+    public void Keeps_a_video_location_in_either_order_when_the_other_manifest_has_none()
+    {
+        var located = Done(Video(Source("HD da Ana", "v.mp4"))) with { Location = new GeoPoint(38.7223, -9.1393) };
+        // Processed before video locations were read (D-060): complete, but without a location.
+        var older = Done(Video(Source("HD do Jonathas", "v.mp4")));
+
+        var later = ManifestMerge.Merge(located, older);
+        var earlier = ManifestMerge.Merge(older, located);
+
+        Assert.Equal(new GeoPoint(38.7223, -9.1393), later.Location);
+        Assert.Equal(ManifestJson.Serialize(later), ManifestJson.Serialize(earlier));
+    }
+
+    [Fact]
+    public void Keeps_a_location_found_by_a_pending_run_when_the_complete_description_has_none()
+    {
+        var pending = Video(Source("HD da Ana", "v.mp4")) with { Location = new GeoPoint(38.7223, -9.1393), Derivatives = [] };
+        var done = Done(Video(Source("HD do Jonathas", "v.mp4")));
+
+        Assert.Equal(new GeoPoint(38.7223, -9.1393), ManifestMerge.Merge(pending, done).Location);
+        Assert.Equal(new GeoPoint(38.7223, -9.1393), ManifestMerge.Merge(done, pending).Location);
+    }
+
+    [Fact]
     public void A_photo_without_thumbnails_does_not_replace_a_described_one()
     {
         var described = Photo(Source("HD da Ana", "a.jpg"));
@@ -496,6 +520,14 @@ public sealed class ManifestMergeTests
         Height = 3024,
         Sources = sources,
         Derivatives = [Derivative("thumb-256", 256), Derivative("preview-1280", 1280)],
+    };
+
+    private static Manifest Done(Manifest video) => video with
+    {
+        Width = 1920,
+        Height = 1080,
+        DurationSeconds = 3,
+        Derivatives = [Derivative("poster", 1280), Derivative("proxy-720p", 1280)],
     };
 
     private static Manifest Video(ManifestSource source) => new()

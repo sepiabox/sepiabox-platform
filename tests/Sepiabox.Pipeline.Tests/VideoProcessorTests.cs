@@ -58,12 +58,38 @@ public class VideoProcessorTests
     }
 
     [Fact]
-    public void Asks_ffprobe_for_the_pixel_aspect_ratio()
+    public void Asks_ffprobe_for_the_pixel_aspect_ratio_and_the_location_tags()
     {
         AssertSequence(
             FfmpegArguments.Probe("clip.mod"),
             "-select_streams", "v",
-            "-show_entries", "stream=width,height,sample_aspect_ratio:stream_disposition=attached_pic:stream_tags=rotate:stream_side_data=rotation:format=duration");
+            "-show_entries", "stream=width,height,sample_aspect_ratio:stream_disposition=attached_pic:stream_tags=rotate:stream_side_data=rotation:format=duration:format_tags=com.apple.quicktime.location.ISO6709,location");
+    }
+
+    [Theory]
+    [InlineData("""{ "location": "+38.7223-009.1393+10.000000/" }""", 38.7223, -9.1393)]
+    [InlineData("""{ "com.apple.quicktime.location.ISO6709": "+38.7223-009.1393+010.000/" }""", 38.7223, -9.1393)]
+    [InlineData("""{ "location": "+41.1800-008.6900/", "com.apple.quicktime.location.ISO6709": "+38.7223-009.1393+010.000/" }""", 38.7223, -9.1393)]
+    [InlineData("""{ "location": "+41.1800-008.6900/", "com.apple.quicktime.location.ISO6709": "+00.0000+000.0000/" }""", 41.18, -8.69)]
+    public void Reads_the_location_from_the_format_tags(string tags, double latitude, double longitude)
+    {
+        var json = $$"""{ "streams": [ { "width": 1920, "height": 1080 } ], "format": { "tags": {{tags}} } }""";
+
+        Assert.Equal(new GeoPoint(latitude, longitude), FfmpegArguments.ParseProbe(json).Location);
+    }
+
+    [Theory]
+    [InlineData("""{}""")]
+    [InlineData("""{ "tags": { "location": "+00.0000+000.0000/" } }""")]
+    [InlineData("""{ "tags": { "location": "somewhere" } }""")]
+    [InlineData("""{ "tags": { "location": "+\u0663\u0668.7223-009.1393/" } }""")]
+    [InlineData("""{ "tags": { "location": 38 } }""")]
+    [InlineData("""{ "tags": [] }""")]
+    public void Has_no_location_when_the_format_tags_hold_none(string format)
+    {
+        var json = $$"""{ "streams": [ { "width": 1920, "height": 1080 } ], "format": {{format}} }""";
+
+        Assert.Null(FfmpegArguments.ParseProbe(json).Location);
     }
 
     [Theory]

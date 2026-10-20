@@ -28,6 +28,8 @@ public static class ManifestMerge
         {
             // Ranked by source, so the date does not depend on which drive uploads first (D-046).
             Captured = CaptureDate.Stronger(description.Captured, other.Captured),
+            // A manifest written before video locations were read (D-060) has none; it must not erase one found since.
+            Location = description.Location ?? other.Location,
             Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
             Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
             Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),
