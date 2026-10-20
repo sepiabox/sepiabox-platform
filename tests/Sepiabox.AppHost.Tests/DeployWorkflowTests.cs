@@ -108,6 +108,15 @@ public sealed partial class DeployWorkflowTests
     }
 
     [Fact]
+    public void Workflow_pins_the_azd_version_whose_parameter_handling_was_checked()
+    {
+        var azd = Steps().Single(step => Uses(step).StartsWith("Azure/setup-azd@", StringComparison.Ordinal));
+
+        // A newer azd may resolve the AppHost's parameters differently (D-072): upgrade on purpose.
+        Assert.Equal("1.36.0", Text(Map(azd, "with")["version"]));
+    }
+
+    [Fact]
     public void Workflow_signs_in_with_oidc_from_the_repository_variables()
     {
         var login = Steps().Single(step => Uses(step).StartsWith("azure/login@", StringComparison.Ordinal));

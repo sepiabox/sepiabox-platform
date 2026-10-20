@@ -93,8 +93,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # Pinned: how azd resolves the AppHost's parameters was read in this version (D-072).
       - uses: Azure/setup-azd@v2
         if: steps.newest.outputs.deploy == 'true'
+        with:
+          version: 1.36.0
 
       # OIDC: the Entra ID app has a federated credential for this repository's production environment.
       - uses: azure/login@v2

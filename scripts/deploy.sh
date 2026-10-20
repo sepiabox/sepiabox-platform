@@ -39,8 +39,19 @@ if [[ -n "$azd_group" && "$azd_group" != "$resource_group" ]]; then
   exit 1
 fi
 
-# azd takes these AppHost parameters from the environment's infra.parameters (D-072); one never set would stop
-# `azd provision --no-prompt` and `azd deploy web`, so it gets its "none" value. Set values are left alone.
+# azd takes these AppHost parameters from the environment's infra.parameters (D-072). An AZURE_<NAME> value
+# would win over it in provision (from the azd environment's .env or this shell) but not in the web's deploy
+# (only from this shell), so the two would disagree: refuse one rather than guess.
+for name in AZURE_CUSTOM_DOMAIN AZURE_CUSTOM_DOMAIN_BINDING AZURE_UPLOADER_PRINCIPAL_IDS; do
+  dotenv_value=$(azd env get-value "$name" 2>/dev/null) || dotenv_value=""
+  if [[ -n "$dotenv_value" || -n "${!name+set}" ]]; then
+    echo "$name is set (in the azd environment or this shell); azd would use it instead of infra.parameters." >&2
+    echo "Remove it (azd env unset $name, or unset $name) and use azd env config set infra.parameters.<name> (docs/operations.md)." >&2
+    exit 1
+  fi
+done
+# One never set would stop `azd provision --no-prompt` and `azd deploy web`, so it gets its "none" value. Set
+# values are left alone.
 ensure_parameter() {
   if ! azd env config get "infra.parameters.$1" >/dev/null 2>&1; then
     azd env config set "infra.parameters.$1" "$2"
@@ -49,6 +60,24 @@ ensure_parameter() {
 ensure_parameter customDomain ""
 ensure_parameter customDomainBinding Disabled
 ensure_parameter uploaderPrincipalIds ""
+# azd prints the value as JSON: a string in quotes.
+parameter_value() {
+  azd env config get "infra.parameters.$1" | sed -e 's/^"//' -e 's/"$//'
+}
+# Provisioning creates the managed certificate before the web's deploy adds the host name, and Azure refuses a
+# certificate for a host name the app does not have: the host name must come first, with the binding Disabled.
+web_app="sepiabox-web"
+custom_domain=$(parameter_value customDomain)
+if [[ -n "$custom_domain" && "$(parameter_value customDomainBinding)" == "SniEnabled" ]]; then
+  # No group or no web yet, or a failed query: not on the app, which only costs a deploy with Disabled.
+  hostnames=$(az containerapp hostname list --name "$web_app" --resource-group "$resource_group" \
+    --query "[].name" --output tsv 2>/dev/null) || hostnames=""
+  if ! grep -qixF -- "$custom_domain" <<<"$hostnames"; then
+    echo "customDomainBinding is SniEnabled but $custom_domain is not on $web_app yet, so the certificate would be refused." >&2
+    echo "Set customDomainBinding to Disabled (and CUSTOM_DOMAIN_BINDING in GitHub), deploy, then set SniEnabled and deploy again (docs/operations.md, Custom domain)." >&2
+    exit 1
+  fi
+fi
 
 # After the €45 shutdown (S-030) the server is stopped and provisioning would fail half-way. Before the
 # first deploy neither the group nor the server exists; any other failure of these queries (no login, no

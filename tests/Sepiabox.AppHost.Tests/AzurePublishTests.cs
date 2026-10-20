@@ -250,11 +250,17 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
         // azd resolves a parameter with a published default.value from AZURE_<NAME> or the default alone, and
         // never from the environment's infra.parameters, where the owner and the Deploy workflow set them (D-072).
         // Generated defaults (the PostgreSQL passwords) are read from infra.parameters and are fine.
-        var withValue = published.Manifest["resources"]!.AsObject()
+        var parameters = published.Manifest["resources"]!.AsObject()
             .Where(r => r.Value!["type"]?.GetValue<string>() == "parameter.v0")
+            .ToList();
+        var withValue = parameters
             .Where(r => r.Value!["inputs"]?["value"]?["default"]?["value"] is not null)
             .Select(r => r.Key);
 
+        // Guards the check itself: a manifest read wrongly would find no parameters and pass.
+        Assert.Equal(
+            ["customDomain", "customDomainBinding", "pg-app-password", "pg-password", "pg-username", "uploaderPrincipalIds"],
+            parameters.Select(r => r.Key).Order(StringComparer.Ordinal));
         Assert.Empty(withValue);
     }
 
