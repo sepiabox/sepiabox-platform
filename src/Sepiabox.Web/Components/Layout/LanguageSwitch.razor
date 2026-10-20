@@ -1,9 +1,10 @@
 @using System.Globalization
+@using Microsoft.AspNetCore.Diagnostics
 @inject NavigationManager Navigation
 @* A form post with an antiforgery token, like sign-out. It stores the choice in the culture cookie and comes back
    to this page with a full load (no enhanced form post), so every part of the page, and any circuit started
-   from it, is in the new language (D-050). *@
-<form class="language" method="post" action="language" data-enhance="false" aria-label="@Text["Language_Label"]">
+   from it, is in the new language (D-050, D-058). *@
+<form class="language" method="post" action="@Action" data-enhance="false" aria-label="@Text["Language_Label"]">
     <AntiforgeryToken />
     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
     @foreach (var (culture, name) in Choices)
@@ -13,15 +14,42 @@
 </form>
 
 @code {
+    // Relative to the page's <base>, like every other link, so it stays under the app's path base.
+    private static readonly string Action = WebLocalization.SwitchPath.TrimStart('/');
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     private IEnumerable<(string Culture, string Name)> Choices =>
     [
         (WebLocalization.English, Text["Language_English"]),
         (WebLocalization.BrazilianPortuguese, Text["Language_BrazilianPortuguese"]),
     ];
 
-    // The page as the browser asked for it (with the app's base path and the query), also when a not-found page
-    // or the error page is rendered in its place.
-    private string ReturnUrl => new Uri(Navigation.Uri).PathAndQuery;
+    /// <summary>
+    /// The page the browser asked for, with the app's path base and the query, escaped as in a URL. When the
+    /// not-found or error page is rendered in its place (status code pages and the exception handler run the
+    /// request again under another path), the original page, so switching there does not land on /not-found.
+    /// </summary>
+    private string ReturnUrl
+    {
+        get
+        {
+            if (HttpContext?.Features.Get<IStatusCodeReExecuteFeature>() is { } statusCode)
+            {
+                return new PathString(statusCode.OriginalPathBase).Add(statusCode.OriginalPath).ToUriComponent()
+                    + statusCode.OriginalQueryString;
+            }
+
+            if (HttpContext?.Features.Get<IExceptionHandlerPathFeature>() is { } error)
+            {
+                // The exception handler only changes the path: the path base and the query are the original ones.
+                return HttpContext.Request.PathBase.Add(error.Path).ToUriComponent() + HttpContext.Request.QueryString;
+            }
+
+            return new Uri(Navigation.Uri).PathAndQuery;
+        }
+    }
 
     private static bool IsCurrent(string culture) =>
         string.Equals(CultureInfo.CurrentUICulture.Name, culture, StringComparison.OrdinalIgnoreCase);

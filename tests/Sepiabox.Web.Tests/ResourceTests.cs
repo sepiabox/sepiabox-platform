@@ -12,12 +12,17 @@ public sealed partial class ResourceTests
     // European Portuguese words and constructions with a different Brazilian form: descarregar (baixar),
     // ecrã (tela), ficheiro (arquivo), logótipo (logotipo), ligação (conexão), câmara (câmera),
     // utilizador (usuário), telemóvel (celular), registo (registro), palavra-passe (senha),
-    // "a carregar" and the like (carregando), "correu mal" (deu errado).
+    // partilhar (compartilhar), definições (configurações), gerir (gerenciar), equipa (equipe),
+    // contacto (contato), "correu mal" (deu errado), and the continuous "a" + infinitive (carregando).
+    // The continuous form is matched only at the start of a text or after a form of "estar", so a Brazilian
+    // "a" + infinitive ("começar a enviar", "para a enviar") is not flagged.
     private static readonly string[] EuropeanPortuguese =
     [
         @"descarreg\w*", @"ecr[ãa]s?", @"ficheiros?", @"log[óo]tipos?", @"liga[çc][ãa]o", @"liga[çc][õo]es",
         @"c[âa]maras?", @"utilizador\w*", @"telem[óo]ve(l|is)", @"registos?", @"palavra-passe",
-        @"(a|A) (carregar|restabelecer|processar|reproduzir|enviar)", @"correu mal",
+        @"partilh\w*", @"defini[çc][õo]es", @"gerir", @"equipas?", @"contactos?", @"correu mal",
+        @"(est[áa]|est[ãa]o|estou|estar|estamos)\s+a\s+\w+(ar|er|ir)",
+        @"^A\s+\w+(ar|er|ir)\b(?=.*(…|\.\.\.)$)",
     ];
 
     [Fact]
@@ -48,7 +53,7 @@ public sealed partial class ResourceTests
     [Fact]
     public void No_brazilian_portuguese_text_uses_european_portuguese_wording()
     {
-        var pattern = new Regex(@"\b(" + string.Join('|', EuropeanPortuguese) + @")\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var pattern = Pattern();
 
         var found = Read("SharedResource.pt-BR.resx")
             .Where(entry => pattern.IsMatch(entry.Value))
@@ -65,12 +70,34 @@ public sealed partial class ResourceTests
     [InlineData("o ficheiro")]
     [InlineData("A restabelecer a ligação…")]
     [InlineData("Câmara")]
+    [InlineData("A carregar…")]
+    [InlineData("O vídeo está a carregar")]
+    [InlineData("Estão a processar as fotos")]
+    [InlineData("Partilhar o álbum")]
+    [InlineData("Definições")]
+    [InlineData("Peça a quem gere a biblioteca para gerir o acesso")]
+    [InlineData("A equipa")]
+    [InlineData("Os contactos")]
     public void The_european_portuguese_check_catches_the_known_words(string text)
     {
-        var pattern = new Regex(@"\b(" + string.Join('|', EuropeanPortuguese) + @")\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var pattern = Pattern();
 
         Assert.Matches(pattern, text);
     }
+
+    [Theory]
+    [InlineData("Ainda não há fotos. Use sepiabox-ingest para enviar as do HD externo.")]
+    [InlineData("Comece a enviar as fotos.")]
+    [InlineData("A entrada ainda não está configurada.")]
+    [InlineData("A sessão foi pausada pelo servidor.")]
+    [InlineData("Compartilhar com a equipe os contatos")]
+    public void The_european_portuguese_check_leaves_brazilian_text_alone(string text)
+    {
+        Assert.DoesNotMatch(Pattern(), text);
+    }
+
+    private static Regex Pattern() =>
+        new(@"\b(" + string.Join('|', EuropeanPortuguese) + @")\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static IEnumerable<string> Placeholders(string text) =>
         Placeholder().Matches(text).Select(m => m.Value).Order(StringComparer.Ordinal);

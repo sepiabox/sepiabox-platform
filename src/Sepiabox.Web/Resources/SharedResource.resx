@@ -196,7 +196,7 @@
     <value>Type</value>
   </data>
   <data name="Detail_Sources" xml:space="preserve">
-    <value>Where it is</value>
+    <value>Stored on</value>
     <comment>Heading of the list of drives and folders that hold the file.</comment>
   </data>
   <data name="Detail_DownloadOriginal" xml:space="preserve">

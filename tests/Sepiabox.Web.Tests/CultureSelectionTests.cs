@@ -42,10 +42,32 @@ public sealed class CultureSelectionTests
     [InlineData("pt-BR", "c=en|uic=en", "en")]
     [InlineData("en-US", "c=pt-BR|uic=pt-BR", "pt-BR")]
     [InlineData("pt-BR", "c=de-DE|uic=de-DE", "pt-BR")]
+    [InlineData("pt-BR", "nonsense", "pt-BR")]
     [InlineData("en-US", "nonsense", "en")]
+    // Equal quality keeps the browser's order.
+    [InlineData("pt-BR;q=0.5,en;q=0.5", null, "pt-BR")]
+    [InlineData("en;q=0.5,pt-BR;q=0.5", null, "en")]
+    // Malformed headers, pinned as they behave: an extra parameter drops the whole header, and a language with
+    // an out-of-range quality is dropped while the others count.
+    [InlineData("pt-BR;q=0.9;foo=bar", null, "en")]
+    [InlineData("en;q=1.5, pt", null, "pt-BR")]
     public async Task Chooses_the_cookie_then_the_browser_language_then_english(string? acceptLanguage, string? cookie, string expected)
     {
         var chosen = await CultureForAsync(acceptLanguage, cookie);
+
+        Assert.Equal(expected, chosen.UICulture.Name);
+        Assert.Equal(expected, chosen.Culture.Name);
+    }
+
+    [Theory]
+    [InlineData("c=en|uic=pt-BR", "pt-BR")]
+    [InlineData("c=pt-BR|uic=en", "en")]
+    // The standard format needs both parts; a cookie without uic is ignored like any malformed one.
+    [InlineData("c=pt-BR", "en")]
+    public async Task Uses_one_culture_when_a_cookie_names_two(string cookie, string expected)
+    {
+        // Only a hand-made cookie names two; the text decides, so the month names match the date patterns.
+        var chosen = await CultureForAsync("de-DE", cookie);
 
         Assert.Equal(expected, chosen.UICulture.Name);
         Assert.Equal(expected, chosen.Culture.Name);

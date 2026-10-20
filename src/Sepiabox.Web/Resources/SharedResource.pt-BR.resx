@@ -118,16 +118,16 @@
     <value>Não foi possível entrar. Tente novamente.</value>
   </data>
   <data name="SignIn_WithGoogle" xml:space="preserve">
-    <value>Entrar com Google</value>
+    <value>Entrar com o Google</value>
   </data>
   <data name="SignIn_WithMicrosoft" xml:space="preserve">
-    <value>Entrar com Microsoft</value>
+    <value>Entrar com a Microsoft</value>
   </data>
   <data name="SignIn_DevEmail" xml:space="preserve">
     <value>E-mail (só em desenvolvimento)</value>
   </data>
   <data name="SignIn_NotConfigured" xml:space="preserve">
-    <value>O login ainda não está configurado.</value>
+    <value>A entrada ainda não está configurada.</value>
   </data>
   <data name="Timeline_Heading" xml:space="preserve">
     <value>Fotos e vídeos</value>

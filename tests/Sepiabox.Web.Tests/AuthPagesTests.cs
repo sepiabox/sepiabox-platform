@@ -23,7 +23,7 @@ public sealed class AuthPagesTests : LocalizedContext
 
     [Theory]
     [InlineData(Cultures.English, "Sign in", "Sign in with Google", "Sign in with Microsoft", "Sepiabox is private.")]
-    [InlineData(Cultures.BrazilianPortuguese, "Entrar", "Entrar com Google", "Entrar com Microsoft", "O Sepiabox é privado.")]
+    [InlineData(Cultures.BrazilianPortuguese, "Entrar", "Entrar com o Google", "Entrar com a Microsoft", "O Sepiabox é privado.")]
     public void The_sign_in_page_has_a_button_per_provider_in_the_culture(string culture, string heading, string google, string microsoft, string intro)
     {
         using var scope = Cultures.Use(culture);
@@ -63,7 +63,7 @@ public sealed class AuthPagesTests : LocalizedContext
 
     [Theory]
     [InlineData(Cultures.English, "Sign-in isn't set up yet.")]
-    [InlineData(Cultures.BrazilianPortuguese, "O login ainda não está configurado.")]
+    [InlineData(Cultures.BrazilianPortuguese, "A entrada ainda não está configurada.")]
     public void Says_sign_in_is_not_set_up_in_the_culture(string culture, string expected)
     {
         using var scope = Cultures.Use(culture);

@@ -36,7 +36,7 @@ public static class WebLocalization
             // Not the default query string provider: a link must not change the language.
             options.RequestCultureProviders =
             [
-                new CookieRequestCultureProvider(),
+                new OneCultureCookieProvider(),
                 new BrowserLanguageProvider(),
             ];
             options.ApplyCurrentCultureToResponseHeaders = true;
@@ -48,7 +48,7 @@ public static class WebLocalization
     {
         endpoints.MapPost(SwitchPath, SwitchAsync)
             .AllowAnonymous()
-            // Checked by hand below, as for sign-out, so a bad token is a 400 and never a page.
+            // Checked by hand below, as for sign-out, so a bad token is an empty 400 and never a page.
             .DisableAntiforgery();
         return endpoints;
     }
@@ -75,13 +75,13 @@ public static class WebLocalization
     {
         if (!http.Request.HasFormContentType || !await antiforgery.IsRequestValidAsync(http))
         {
-            return Results.BadRequest();
+            return AuthSetup.BareStatus(http, StatusCodes.Status400BadRequest);
         }
 
         var form = await http.Request.ReadFormAsync(http.RequestAborted);
         if (Supported(form["culture"]) is not { } culture)
         {
-            return Results.BadRequest();
+            return AuthSetup.BareStatus(http, StatusCodes.Status400BadRequest);
         }
 
         http.Response.Cookies.Append(
@@ -89,7 +89,7 @@ public static class WebLocalization
             CookieRequestCultureProvider.MakeCookieValue(new RequestCulture(culture)),
             new CookieOptions
             {
-                Path = AuthSetup.AppPath(http.Request, "/"),
+                Path = http.Request.PathBase.HasValue ? http.Request.PathBase.Value : "/",
                 MaxAge = CookieLifetime,
                 HttpOnly = true,
                 Secure = http.Request.IsHttps,
@@ -99,6 +99,18 @@ public static class WebLocalization
             });
         return Results.Redirect(AuthSetup.LocalUrl(http.Request, form["returnUrl"]));
     }
+}
+
+/// <summary>
+/// The standard culture cookie, read as one culture: a hand-made <c>c=en|uic=pt-BR</c> gives <c>pt-BR</c> for
+/// both, since the UI culture picks the text and the culture would pick the month names.
+/// </summary>
+internal sealed class OneCultureCookieProvider : CookieRequestCultureProvider
+{
+    public override async Task<ProviderCultureResult?> DetermineProviderCultureResult(HttpContext httpContext) =>
+        await base.DetermineProviderCultureResult(httpContext) is { UICultures: [var uiCulture, ..] }
+            ? new ProviderCultureResult(uiCulture)
+            : null;
 }
 
 /// <summary>

@@ -6,7 +6,8 @@ namespace Sepiabox.Web.Localization;
 
 /// <summary>
 /// UI text that is more than one resource: dates, asset kinds and the "no date" fallback, all in the
-/// current culture (D-050).
+/// current culture (D-050). The culture and the UI culture are always the same (<see cref="OneCultureCookieProvider"/>),
+/// so a date's pattern (a resource) and its month names (the culture) come from one language.
 /// </summary>
 public static class UiText
 {

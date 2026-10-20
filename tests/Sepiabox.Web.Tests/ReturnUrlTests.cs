@@ -23,8 +23,22 @@ public sealed class ReturnUrlTests
     [InlineData("/entrarx", "/entrarx")]
     [InlineData("/%65ntrar", "/")]
     [InlineData("/sem%2Dacesso?x=1", "/")]
+    // Not escaped, so it could not go into a Location header; the app's own links are always escaped.
+    [InlineData("/fotos/é", "/")]
+    [InlineData("/fotos/%C3%A9", "/fotos/%C3%A9")]
     public void Keeps_return_urls_on_this_site(string? requested, string expected) =>
         Assert.Equal(expected, AuthSetup.LocalReturnUrl(new DefaultHttpContext().Request, requested));
+
+    [Theory]
+    [InlineData("/entrar?ReturnUrl=%2F", "/entrar?ReturnUrl=%2F")]
+    [InlineData("/sem-acesso", "/sem-acesso")]
+    [InlineData("/fotos/abc?pagina=2", "/fotos/abc?pagina=2")]
+    [InlineData("//evil.example/", "/")]
+    [InlineData("/\\evil.example/", "/")]
+    [InlineData("/fotos/é", "/")]
+    [InlineData(null, "/")]
+    public void Keeps_any_local_url_for_the_language_switch_sign_in_pages_included(string? requested, string expected) =>
+        Assert.Equal(expected, AuthSetup.LocalUrl(new DefaultHttpContext().Request, requested));
 
     [Fact]
     public void Falls_back_to_the_home_of_an_app_under_a_path_base()

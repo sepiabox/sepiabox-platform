@@ -32,7 +32,8 @@ The AppHost describes the infrastructure; `azd` provisions it in France Central 
 - Sign-in (S-010, D-048): the web already reads `X-Forwarded-For` and `X-Forwarded-Proto` outside Development (never `X-Forwarded-Host`: the ingress keeps the browser's Host); set `AllowedHosts` to the Container Apps default host so no other Host reaches the app (S-035 adds `app.sepiabox.com`).
 - Portability (D-051): storage keeps its current registration; existing storage code moves behind `IBlobStore` after the MVP (S-050). No Foundry or Cognitive Services resource is created (D-052).
 - Videos (S-011, D-049): if a Content Security Policy is added, it must allow the blob endpoint in `media-src` as well as `img-src`, since the browser follows the web's redirect to storage for videos as for images.
-- Decisions: D-002, D-003, D-004, D-022, D-034, D-048, D-049, D-051, D-052.
+- Localization (S-044, D-058): the web formats dates with ICU culture data (`InvariantGlobalization` is off for it), so its image must keep ICU: the default `aspnet` image has it; a chiseled image needs the `-extra` variant, and an Alpine one the ICU packages.
+- Decisions: D-002, D-003, D-004, D-022, D-034, D-048, D-049, D-051, D-052, D-058.
 
 ### Expected tests
 - A test that generates the infrastructure and checks the properties in the Bicep. Manual smoke test after deploy.

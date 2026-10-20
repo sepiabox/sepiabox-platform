@@ -135,7 +135,7 @@ public sealed partial class LocalizationWebTests
         Assert.Equal(signIn, response.Headers.Location!.OriginalString);
         var html = await GetPageAsync(http, signIn);
         Assert.Equal("pt-BR", HtmlLang(html));
-        Assert.Contains("Entrar com Google", html, StringComparison.Ordinal);
+        Assert.Contains("Entrar com o Google", html, StringComparison.Ordinal);
         Assert.Contains("href=\"entrar/google?returnUrl=%2Ffotos%2Fabc\"", html, StringComparison.Ordinal);
     }
 
@@ -182,6 +182,7 @@ public sealed partial class LocalizationWebTests
         using var response = await SwitchAsync(http, "/entrar", culture, "/entrar");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(await response.Content.ReadAsStringAsync());
         Assert.False(response.Headers.Contains("Set-Cookie") && response.Headers.GetValues("Set-Cookie")
             .Any(c => c.StartsWith(CookieRequestCultureProvider.DefaultCookieName + "=", StringComparison.Ordinal)));
     }
@@ -199,6 +200,69 @@ public sealed partial class LocalizationWebTests
         }));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // Bare: status code pages do not turn it into a page.
+        Assert.Empty(await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Returns_home_when_the_return_url_is_not_escaped()
+    {
+        await using var web = Create();
+        using var http = web.CreateAnonymousClient();
+
+        using var response = await SwitchAsync(http, "/entrar", "pt-BR", "/fotos/é");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/", response.Headers.Location!.OriginalString);
+    }
+
+    [Fact]
+    public async Task Marks_the_culture_cookie_secure_over_https()
+    {
+        await using var web = Create();
+        using var http = web.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false,
+        });
+
+        using var response = await SwitchAsync(http, "/entrar", "pt-BR", "/entrar");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var cookie = Assert.Single(SetCookieHeaderValue.ParseList(response.Headers.GetValues("Set-Cookie").ToList()),
+            c => c.Name == CookieRequestCultureProvider.DefaultCookieName);
+        Assert.True(cookie.Secure);
+    }
+
+    [Fact]
+    public async Task Offers_to_switch_back_to_the_page_that_was_not_found_not_to_the_not_found_page()
+    {
+        await using var web = Create();
+        using var http = web.CreateSignedInClient();
+
+        using var response = await http.GetAsync(Url("/no-such-page?x=1"));
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("/no-such-page?x=1", SwitchReturnUrl(html));
+    }
+
+    [Theory]
+    [InlineData("en-US", "Something went wrong.")]
+    [InlineData("pt-BR", "Algo deu errado.")]
+    public async Task Offers_to_switch_back_to_the_page_that_failed_not_to_the_error_page(string acceptLanguage, string heading)
+    {
+        var library = new FakeLibrary { TimelineFailure = new InvalidOperationException("The catalog is down.") };
+        await using var web = new WebFactory(library) { Environment = "Production" };
+        using var http = web.CreateSignedInClient();
+        http.DefaultRequestHeaders.Add("Accept-Language", acceptLanguage);
+
+        using var response = await http.GetAsync(Url("/?pagina=2"));
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Contains($"<h1>{heading}</h1>", WebUtility.HtmlDecode(html), StringComparison.Ordinal);
+        Assert.Equal("/?pagina=2", SwitchReturnUrl(html));
     }
 
     [Theory]
@@ -262,6 +326,12 @@ public sealed partial class LocalizationWebTests
             ["returnUrl"] = returnUrl,
         }));
     }
+
+    private static string? SwitchReturnUrl(string html) =>
+        SwitchReturnUrlInput().Match(html) is { Success: true } match ? WebUtility.HtmlDecode(match.Groups["url"].Value) : null;
+
+    [GeneratedRegex("<form class=\"language\"[^>]*>.*?name=\"returnUrl\" value=\"(?<url>[^\"]*)\"", RegexOptions.Singleline)]
+    private static partial Regex SwitchReturnUrlInput();
 
     private static string CultureCookie(string culture) =>
         $"{CookieRequestCultureProvider.DefaultCookieName}={Uri.EscapeDataString(CookieRequestCultureProvider.MakeCookieValue(new RequestCulture(culture)))}";
