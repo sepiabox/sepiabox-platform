@@ -106,16 +106,16 @@ public sealed class ManifestValidatorTests
     }
 
     [Theory]
-    [InlineData(null, null)]
+    [InlineData(null, CaptureDateSource.Metadata)]
     [InlineData("metadata", CaptureDateSource.Metadata)]
     [InlineData("fileName", CaptureDateSource.FileName)]
     [InlineData("folder", CaptureDateSource.Folder)]
-    public void Accepts_a_capture_date_source_when_it_is_known_or_absent(string? value, CaptureDateSource? expected)
+    public void Accepts_a_capture_date_source_when_it_is_known_or_absent(string? value, CaptureDateSource expected)
     {
-        // Absent: a manifest written before S-043.
+        // Absent: a manifest written before S-043, whose date came from metadata.
         var json = ValidJson(node =>
         {
-            Assert.False(node.ContainsKey("capturedAtSource"));
+            node.Remove("capturedAtSource");
             if (value is not null)
             {
                 node["capturedAtSource"] = value;

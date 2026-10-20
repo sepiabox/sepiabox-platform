@@ -67,11 +67,18 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
         // Manifests written before S-043 have no capturedAtSource; the catalog does not store it yet (D-046).
         await using var db = await fixture.CreateMigratedDatabaseAsync();
         var container = await fixture.CreateContainerAsync();
-        await PutAsync(container, Photo(Source("HD da Ana", "2005-07-14/praia.jpg")) with
+        var manifest = Photo(Source("HD da Ana", "2005-07-14/praia.jpg")) with
         {
-            CapturedAt = new DateTime(2005, 7, 14),
-            CapturedAtSource = source,
-        });
+            Captured = new(new DateTime(2005, 7, 14), source ?? CaptureDateSource.Metadata),
+        };
+        var json = JsonNode.Parse(ManifestJson.Serialize(manifest))!.AsObject();
+        if (source is null)
+        {
+            json.Remove("capturedAtSource");
+        }
+
+        await container.GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id))
+            .UploadAsync(BinaryData.FromString(json.ToJsonString()), overwrite: true);
 
         var result = await ImportAsync(db, container);
 
@@ -145,7 +152,7 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
         await PutAsync(container, Photo(Source("HD da Ana", "2019/praia.jpg", hour: 20)) with
         {
             Width = 3024,
-            CapturedAt = new DateTime(2019, 7, 15, 9, 0, 0),
+            Captured = new(new DateTime(2019, 7, 15, 9, 0, 0), CaptureDateSource.Metadata),
             Derivatives = [Derivative("thumb-256", 192, 256), Derivative("square-512", 512, 512)],
         });
         await ImportAsync(db, container);

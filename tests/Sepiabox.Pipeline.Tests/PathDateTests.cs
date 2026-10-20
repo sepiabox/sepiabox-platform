@@ -12,6 +12,8 @@ public class PathDateTests
         { "20120304_101112.mp4", new DateTime(2012, 3, 4, 10, 11, 12), CaptureDateSource.FileName },
         { "PXL_20230115_143022123.jpg", new DateTime(2023, 1, 15, 14, 30, 22), CaptureDateSource.FileName },
         { "Screenshot_20120304-101112.png", new DateTime(2012, 3, 4, 10, 11, 12), CaptureDateSource.FileName },
+        { "IMG20120304_101112.jpg", new DateTime(2012, 3, 4, 10, 11, 12), CaptureDateSource.FileName },
+        { "VID20120304_101112.mp4", new DateTime(2012, 3, 4, 10, 11, 12), CaptureDateSource.FileName },
         { "Ferias 20120304_101112.jpg", new DateTime(2012, 3, 4, 10, 11, 12), CaptureDateSource.FileName },
         { "/media/hd/Fotos/IMG_20120304_101112.jpg", new DateTime(2012, 3, 4, 10, 11, 12), CaptureDateSource.FileName },
         // The file name's date wins over the folder's.
@@ -45,8 +47,7 @@ public class PathDateTests
     [InlineData("IMG_20120230_101112.jpg")]
     [InlineData("IMG_20120304_256100.jpg")]
     [InlineData("IMG_120120304_101112.jpg")]
-    [InlineData("a20120304_101112.jpg")]
-    [InlineData("IMGX20120304_101112.jpg")]
+    [InlineData("1220120304_101112.jpg")]
     [InlineData("IMG-20120304-WA0001.jpg")]
     [InlineData("MNU_110425_d8b2.MTS")]
     [InlineData("Fotos/MNU_110425_d8b2.MTS")]
@@ -67,14 +68,20 @@ public class PathDateTests
     public void Lists_every_date_in_order_of_precedence_when_the_path_has_several() =>
         Assert.Equal(
             [
-                new CaptureDate(new DateTime(2012, 3, 4, 10, 11, 12), CaptureDateSource.FileName),
-                new CaptureDate(new DateTime(2011, 9, 25), CaptureDateSource.Folder),
+                new PathDateCandidate(new CaptureDate(new DateTime(2012, 3, 4, 10, 11, 12), CaptureDateSource.FileName), DayFromFolder: false),
+                new PathDateCandidate(new CaptureDate(new DateTime(2011, 9, 25), CaptureDateSource.Folder), DayFromFolder: true),
             ],
             PathDate.Candidates("2011-09-25/IMG_20120304_101112.jpg"));
+
+    [Fact]
+    public void Says_the_day_comes_from_the_folder_when_a_camcorder_clip_has_only_a_time() =>
+        Assert.Equal(
+            new PathDateCandidate(new CaptureDate(new DateTime(1985, 5, 1, 10, 10, 10), CaptureDateSource.FileName), DayFromFolder: true),
+            PathDate.Candidates("1985-05-01/MNU_101010.mod").First());
 
     [Fact]
     public void Throws_before_enumerating_when_the_path_is_null() =>
         Assert.Throws<ArgumentNullException>(() => PathDate.Candidates(null!));
 
-    private static CaptureDate? First(string path) => PathDate.Candidates(path).FirstOrDefault();
+    private static CaptureDate? First(string path) => PathDate.Candidates(path).FirstOrDefault()?.Date;
 }

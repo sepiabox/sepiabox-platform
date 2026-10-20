@@ -147,8 +147,8 @@ public sealed class ManifestMergeTests
     [Fact]
     public void Keeps_the_metadata_date_when_the_incoming_date_comes_from_a_path()
     {
-        var existing = Photo(Source("HD da Ana", "a.jpg")) with { CapturedAt = Taken, CapturedAtSource = CaptureDateSource.Metadata };
-        var incoming = Photo(Source("HD do Jonathas", "2005-07-14/a.jpg")) with { CapturedAt = new DateTime(2005, 7, 14), CapturedAtSource = CaptureDateSource.Folder };
+        var existing = Photo(Source("HD da Ana", "a.jpg")) with { Captured = new(Taken, CaptureDateSource.Metadata) };
+        var incoming = Photo(Source("HD do Jonathas", "2005-07-14/a.jpg")) with { Captured = new(new DateTime(2005, 7, 14), CaptureDateSource.Folder) };
 
         var merged = ManifestMerge.Merge(existing, incoming);
 
@@ -158,8 +158,8 @@ public sealed class ManifestMergeTests
     [Fact]
     public void Takes_the_metadata_date_when_the_stored_date_comes_from_a_path()
     {
-        var existing = Photo(Source("HD da Ana", "2005-07-14/a.jpg")) with { CapturedAt = new DateTime(2005, 7, 14), CapturedAtSource = CaptureDateSource.Folder };
-        var incoming = Photo(Source("HD do Jonathas", "a.jpg")) with { CapturedAt = Taken, CapturedAtSource = CaptureDateSource.Metadata };
+        var existing = Photo(Source("HD da Ana", "2005-07-14/a.jpg")) with { Captured = new(new DateTime(2005, 7, 14), CaptureDateSource.Folder) };
+        var incoming = Photo(Source("HD do Jonathas", "a.jpg")) with { Captured = new(Taken, CaptureDateSource.Metadata) };
 
         var merged = ManifestMerge.Merge(existing, incoming);
 
@@ -167,38 +167,39 @@ public sealed class ManifestMergeTests
     }
 
     [Fact]
-    public void Treats_a_date_without_a_source_as_metadata_when_the_manifest_predates_the_field()
+    public void Merges_to_the_same_json_in_either_order_when_one_metadata_date_predates_the_source_field()
     {
-        var old = Photo(Source("HD da Ana", "a.jpg")) with { CapturedAt = Taken, CapturedAtSource = null };
-        var incoming = Photo(Source("HD do Jonathas", "IMG_20120304_101112.jpg")) with
-        {
-            CapturedAt = new DateTime(2012, 3, 4, 10, 11, 12),
-            CapturedAtSource = CaptureDateSource.FileName,
-        };
+        // Read from JSON, as an upload reads a stored manifest written before S-043.
+        var old = ReadWithoutSource(Photo(Source("HD da Ana", "a.jpg")) with { Captured = new(Taken, CaptureDateSource.Metadata) });
+        var incoming = Photo(Source("HD do Jonathas", "a.jpg")) with { Captured = new(Taken, CaptureDateSource.Metadata) };
 
         var expected = new CaptureDate(Taken, CaptureDateSource.Metadata);
-        Assert.Equal(expected, ManifestMerge.Merge(old, incoming).GetCaptureDate());
-        Assert.Equal(expected, ManifestMerge.Merge(incoming, old).GetCaptureDate());
+        Assert.Equal(expected, old.Captured);
+        Assert.Equal(expected, ManifestMerge.Merge(old, incoming).Captured);
+        Assert.Equal(ManifestJson.Serialize(ManifestMerge.Merge(old, incoming)), ManifestJson.Serialize(ManifestMerge.Merge(incoming, old)));
+        Assert.Equal("metadata", (string?)JsonNode.Parse(ManifestJson.Serialize(ManifestMerge.Merge(old, incoming)))!["capturedAtSource"]);
     }
 
     [Fact]
-    public void Leaves_a_date_without_a_source_as_it_is_when_both_manifests_predate_the_field()
+    public void Keeps_a_date_without_a_source_over_a_file_name_date_when_the_manifest_predates_the_field()
     {
-        var old = Photo(Source("HD da Ana", "a.jpg")) with { CapturedAt = Taken };
+        var old = ReadWithoutSource(Photo(Source("HD da Ana", "a.jpg")) with { Captured = new(Taken, CaptureDateSource.Metadata) });
+        var incoming = Photo(Source("HD do Jonathas", "IMG_20120304_101112.jpg")) with
+        {
+            Captured = new(new DateTime(2012, 3, 4, 10, 11, 12), CaptureDateSource.FileName),
+        };
 
-        var merged = ManifestMerge.Merge(old, old with { Sources = [Source("HD do Jonathas", "a.jpg")] });
-
-        Assert.Equal((Taken, (CaptureDateSource?)null), DateOf(merged));
+        Assert.Equal(new CaptureDate(Taken, CaptureDateSource.Metadata), ManifestMerge.Merge(old, incoming).Captured);
+        Assert.Equal(new CaptureDate(Taken, CaptureDateSource.Metadata), ManifestMerge.Merge(incoming, old).Captured);
     }
 
     [Fact]
     public void Takes_the_file_name_date_over_the_folder_date_in_either_order()
     {
-        var folder = Video(Source("HD da Ana", "2011-09-26/clip.MTS")) with { CapturedAt = new DateTime(2011, 9, 26), CapturedAtSource = CaptureDateSource.Folder };
+        var folder = Video(Source("HD da Ana", "2011-09-26/clip.MTS")) with { Captured = new(new DateTime(2011, 9, 26), CaptureDateSource.Folder) };
         var fileName = Video(Source("HD do Jonathas", "2011-09-25/MNU_110425_a.MTS")) with
         {
-            CapturedAt = new DateTime(2011, 9, 25, 11, 4, 25),
-            CapturedAtSource = CaptureDateSource.FileName,
+            Captured = new(new DateTime(2011, 9, 25, 11, 4, 25), CaptureDateSource.FileName),
         };
 
         Assert.Equal((new DateTime(2011, 9, 25, 11, 4, 25), CaptureDateSource.FileName), DateOf(ManifestMerge.Merge(folder, fileName)));
@@ -208,8 +209,8 @@ public sealed class ManifestMergeTests
     [Fact]
     public void Takes_the_earlier_date_in_either_order_when_both_come_from_folders()
     {
-        var first = Video(Source("HD da Ana", "2008-12-24/clip.mod")) with { CapturedAt = new DateTime(2008, 12, 24), CapturedAtSource = CaptureDateSource.Folder };
-        var second = Video(Source("HD do Jonathas", "2008-12-25/clip.mod")) with { CapturedAt = new DateTime(2008, 12, 25), CapturedAtSource = CaptureDateSource.Folder };
+        var first = Video(Source("HD da Ana", "2008-12-24/clip.mod")) with { Captured = new(new DateTime(2008, 12, 24), CaptureDateSource.Folder) };
+        var second = Video(Source("HD do Jonathas", "2008-12-25/clip.mod")) with { Captured = new(new DateTime(2008, 12, 25), CaptureDateSource.Folder) };
 
         var merged = ManifestMerge.Merge(first, second);
 
@@ -223,7 +224,7 @@ public sealed class ManifestMergeTests
     [Fact]
     public void Keeps_a_path_date_when_the_incoming_manifest_has_no_date()
     {
-        var existing = Video(Source("HD da Ana", "2008-12-24/clip.mod")) with { CapturedAt = new DateTime(2008, 12, 24), CapturedAtSource = CaptureDateSource.Folder };
+        var existing = Video(Source("HD da Ana", "2008-12-24/clip.mod")) with { Captured = new(new DateTime(2008, 12, 24), CaptureDateSource.Folder) };
         var incoming = Video(Source("HD do Jonathas", "backup/clip.mod"));
 
         Assert.Equal((new DateTime(2008, 12, 24), CaptureDateSource.Folder), DateOf(ManifestMerge.Merge(existing, incoming)));
@@ -233,11 +234,10 @@ public sealed class ManifestMergeTests
     [Fact]
     public void Takes_the_date_of_the_complete_description_when_both_come_from_metadata()
     {
-        var pending = Video(Source("HD da Ana", "v.mp4")) with { CapturedAt = Taken, CapturedAtSource = CaptureDateSource.Metadata };
+        var pending = Video(Source("HD da Ana", "v.mp4")) with { Captured = new(Taken, CaptureDateSource.Metadata) };
         var done = Video(Source("HD do Jonathas", "v.mp4")) with
         {
-            CapturedAt = Taken.AddHours(1),
-            CapturedAtSource = CaptureDateSource.Metadata,
+            Captured = new(Taken.AddHours(1), CaptureDateSource.Metadata),
             Derivatives = [Derivative("poster", 1280)],
         };
 
@@ -254,6 +254,13 @@ public sealed class ManifestMergeTests
     }
 
     private static (DateTime?, CaptureDateSource?) DateOf(Manifest manifest) => (manifest.CapturedAt, manifest.CapturedAtSource);
+
+    private static Manifest ReadWithoutSource(Manifest manifest)
+    {
+        var json = JsonNode.Parse(ManifestJson.Serialize(manifest))!.AsObject();
+        json.Remove("capturedAtSource");
+        return ManifestJson.Deserialize(json.ToJsonString());
+    }
 
     private static ManifestSource Source(string name, string path, int hour = 17) =>
         new("local", name, path, new DateTimeOffset(2019, 7, 14, hour, 0, 0, TimeSpan.Zero));

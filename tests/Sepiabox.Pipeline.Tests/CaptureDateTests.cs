@@ -94,6 +94,21 @@ public class CaptureDateTests
     }
 
     [Fact]
+    public void Ranks_metadata_over_file_name_over_folder_when_comparing_sources()
+    {
+        Assert.Equal(
+            [CaptureDateSource.Folder, CaptureDateSource.FileName, CaptureDateSource.Metadata],
+            Enum.GetValues<CaptureDateSource>().OrderBy(CaptureDate.Rank));
+        Assert.Equal(3, Enum.GetValues<CaptureDateSource>().Select(CaptureDate.Rank).Distinct().Count());
+    }
+
+    [Fact]
+    public void Dates_a_camcorder_clip_before_1990_when_its_day_comes_from_the_folder() =>
+        Assert.Equal(
+            new CaptureDate(new DateTime(1985, 5, 1, 10, 10, 10), CaptureDateSource.FileName),
+            CaptureDate.Resolve(null, "1985-05-01/MNU_101010.mod", s_clock));
+
+    [Fact]
     public void Keeps_the_preferred_date_when_both_come_from_metadata() =>
         Assert.Equal(Metadata(2019, 7, 15), CaptureDate.Stronger(Metadata(2019, 7, 15), Metadata(2019, 7, 14)));
 

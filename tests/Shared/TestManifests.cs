@@ -19,7 +19,7 @@ internal static class TestManifests
         Kind = MediaKind.Photo,
         SizeBytes = 2_345_678,
         ContentType = "image/jpeg",
-        CapturedAt = new DateTime(2019, 7, 14, 16, 30, 0),
+        Captured = new(new DateTime(2019, 7, 14, 16, 30, 0), CaptureDateSource.Metadata),
         Location = new GeoPoint(41.1579, -8.6291),
         Camera = new CameraInfo("Apple", "iPhone 8"),
         Width = 4032,

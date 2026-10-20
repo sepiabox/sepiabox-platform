@@ -18,15 +18,14 @@ public static class ManifestMerge
 
         // A manifest without derivatives comes from a run that could not finish the file: a video
         // waiting for FFmpeg (D-029) or a photo that did not decode (D-028). Its description is weaker.
-        var description = incoming.Derivatives.Count == 0 && existing.Derivatives.Count > 0 ? existing : incoming;
-        // Ranked by source, so the date does not depend on which drive uploads first (D-046).
-        var other = ReferenceEquals(description, existing) ? incoming : existing;
-        var captured = CaptureDate.Stronger(description.GetCaptureDate(), other.GetCaptureDate());
-        // Unchanged, a manifest written before S-043 keeps its date without a source, so it is not rewritten.
-        var dated = captured == description.GetCaptureDate() ? description : description.WithCaptureDate(captured);
+        var (description, other) = incoming.Derivatives.Count == 0 && existing.Derivatives.Count > 0
+            ? (existing, incoming)
+            : (incoming, existing);
 
-        return dated with
+        return description with
         {
+            // Ranked by source, so the date does not depend on which drive uploads first (D-046).
+            Captured = CaptureDate.Stronger(description.Captured, other.Captured),
             Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
             Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
             Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),

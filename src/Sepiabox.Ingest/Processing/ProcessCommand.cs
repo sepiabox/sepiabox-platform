@@ -295,26 +295,25 @@ public static class ProcessCommand
         var path = ManifestPath(manifestFolder, sha256);
         if (File.Exists(path))
         {
-            // A copy of the same bytes: the description is unchanged and the list of sources grows. The stored date
-            // stays unless this path gives a stronger one (D-046); the bytes' metadata is already in the manifest.
+            // A copy of the same bytes: the description is unchanged and the list of sources grows. Keep the stored
+            // date unless this path gives a stronger one (D-046); the bytes' metadata is already in the manifest.
             var existing = ManifestJson.Deserialize(File.ReadAllText(path));
-            var stored = existing.GetCaptureDate();
-            var kept = CaptureDate.Stronger(stored, CaptureDate.Resolve(null, file.Path, clock));
-            var dated = kept == stored ? existing : existing.WithCaptureDate(kept);
-            return dated with { Sources = WithSource(existing.Sources, source) };
+            return existing with
+            {
+                Captured = CaptureDate.Stronger(existing.Captured, CaptureDate.Resolve(null, file.Path, clock)),
+                Sources = WithSource(existing.Sources, source),
+            };
         }
 
         var metadata = MetadataReader.Read(file.Path);
-        // The file's own date when plausible, otherwise one from its path (D-046).
-        var captured = CaptureDate.Resolve(metadata.RawCapturedAt, file.Path, clock);
         return new Manifest
         {
             Id = sha256,
             Kind = kind,
             SizeBytes = file.Size,
             ContentType = MediaTypes.ContentType(file.Path),
-            CapturedAt = captured?.Value,
-            CapturedAtSource = captured?.Source,
+            // The file's own date when plausible, otherwise one from its path (D-046).
+            Captured = CaptureDate.Resolve(metadata.RawCapturedAt, file.Path, clock),
             Location = metadata.Location,
             Camera = metadata.Camera,
             Width = metadata.Width,

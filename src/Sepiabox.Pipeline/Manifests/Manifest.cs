@@ -14,6 +14,15 @@ public sealed record Manifest
 {
     public const int CurrentSchemaVersion = 1;
 
+    public Manifest()
+    {
+    }
+
+    // For System.Text.Json, which passes both capture fields together whatever their order in the file.
+    [JsonConstructor]
+    private Manifest(DateTime? capturedAt, CaptureDateSource? capturedAtSource) =>
+        Captured = capturedAt is { } value ? new CaptureDate(value, capturedAtSource ?? CaptureDateSource.Metadata) : null;
+
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
 
     /// <summary>SHA-256 of the content, lowercase hex.</summary>
@@ -25,22 +34,22 @@ public sealed record Manifest
 
     public required string ContentType { get; init; }
 
+    /// <summary>
+    /// When the asset was taken and how that is known (D-046): one value, so a source can never sit next to a missing
+    /// date. Written as <c>capturedAt</c> and <c>capturedAtSource</c>.
+    /// </summary>
+    [JsonIgnore]
+    public CaptureDate? Captured { get; init; }
+
     /// <summary>Wall-clock capture time (D-037); see <see cref="CapturedAtSource"/>.</summary>
-    public DateTime? CapturedAt { get; init; }
+    public DateTime? CapturedAt => Captured?.Value;
 
     /// <summary>
-    /// Where <see cref="CapturedAt"/> came from (D-046). Every writer sets it whenever it sets a date; it reads as
-    /// null whenever <see cref="CapturedAt"/> is null, so a source never sits next to a missing date. Manifests written
-    /// before S-043 never have it, and their dates all came from metadata (<see cref="GetCaptureDate"/>).
+    /// Where <see cref="CapturedAt"/> came from; omitted when there is no date. Manifests written before S-043 never
+    /// have it, and their dates all came from metadata, so they read as <see cref="CaptureDateSource.Metadata"/>.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public CaptureDateSource? CapturedAtSource
-    {
-        get => CapturedAt is null ? null : _capturedAtSource;
-        init => _capturedAtSource = value;
-    }
-
-    private readonly CaptureDateSource? _capturedAtSource;
+    public CaptureDateSource? CapturedAtSource => Captured?.Source;
 
     public GeoPoint? Location { get; init; }
 
@@ -61,14 +70,6 @@ public sealed record Manifest
     public bool FacesProcessed { get; init; }
 
     public IReadOnlyList<JsonObject> Faces { get; init; } = [];
-
-    /// <summary>The capture date with its source; a date without a source comes from metadata (written before S-043).</summary>
-    public CaptureDate? GetCaptureDate() =>
-        CapturedAt is { } value ? new CaptureDate(value, CapturedAtSource ?? CaptureDateSource.Metadata) : null;
-
-    /// <summary>This manifest with <paramref name="captured"/> as its date and source, or with neither.</summary>
-    public Manifest WithCaptureDate(CaptureDate? captured) =>
-        this with { CapturedAt = captured?.Value, CapturedAtSource = captured?.Source };
 }
 
 /// <summary>One place where the asset's bytes were found.</summary>

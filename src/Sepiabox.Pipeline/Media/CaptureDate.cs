@@ -1,8 +1,8 @@
 namespace Sepiabox.Pipeline.Media;
 
 /// <summary>
-/// Where <see cref="CaptureDate.Value"/> came from, written to the manifest as <c>capturedAtSource</c>. Declared
-/// from the weakest to the strongest, which is how <see cref="CaptureDate.Stronger"/> ranks them.
+/// Where <see cref="CaptureDate.Value"/> came from, written to the manifest as <c>capturedAtSource</c>. How they rank
+/// is decided in <see cref="CaptureDate.Stronger"/>, not by their order here.
 /// </summary>
 public enum CaptureDateSource
 {
@@ -45,17 +45,25 @@ public sealed record CaptureDate(DateTime Value, CaptureDateSource Source)
             return new CaptureDate(metadata, CaptureDateSource.Metadata);
         }
 
-        return PathDate.Candidates(path).FirstOrDefault(candidate => IsPlausible(candidate.Value, candidate.Source, clock));
+        return PathDate.Candidates(path)
+            .FirstOrDefault(candidate => IsPlausible(
+                candidate.Date.Value, candidate.DayFromFolder ? EarliestPlausibleFolder : EarliestPlausible, clock))
+            ?.Date;
     }
 
     /// <summary>
-    /// Not before <see cref="EarliestPlausible"/> (<see cref="EarliestPlausibleFolder"/> for a folder date) and not
+    /// Not before <see cref="EarliestPlausible"/> (<see cref="EarliestPlausibleFolder"/> for a folder date, and in
+    /// <see cref="Resolve"/> for any date whose day comes from a folder, such as a camcorder clip's) and not
     /// more than a day after now. The extra day covers a camera set to a time zone ahead of the computer's.
     /// </summary>
     public static bool IsPlausible(DateTime value, CaptureDateSource source, TimeProvider clock)
     {
+        return IsPlausible(value, source == CaptureDateSource.Folder ? EarliestPlausibleFolder : EarliestPlausible, clock);
+    }
+
+    private static bool IsPlausible(DateTime value, DateTime earliest, TimeProvider clock)
+    {
         ArgumentNullException.ThrowIfNull(clock);
-        var earliest = source == CaptureDateSource.Folder ? EarliestPlausibleFolder : EarliestPlausible;
         return value >= earliest && value <= clock.GetLocalNow().DateTime.AddDays(1);
     }
 
@@ -74,7 +82,7 @@ public sealed record CaptureDate(DateTime Value, CaptureDateSource Source)
 
         if (preferred.Source != other.Source)
         {
-            return preferred.Source > other.Source ? preferred : other;
+            return Rank(preferred.Source) > Rank(other.Source) ? preferred : other;
         }
 
         if (preferred.Source == CaptureDateSource.Metadata)
@@ -84,4 +92,13 @@ public sealed record CaptureDate(DateTime Value, CaptureDateSource Source)
 
         return other.Value < preferred.Value ? other : preferred;
     }
+
+    /// <summary>Metadata is written by the device at capture; a time in a file name says more than a folder's day.</summary>
+    public static int Rank(CaptureDateSource source) => source switch
+    {
+        CaptureDateSource.Folder => 1,
+        CaptureDateSource.FileName => 2,
+        CaptureDateSource.Metadata => 3,
+        _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Unknown capture date source."),
+    };
 }
