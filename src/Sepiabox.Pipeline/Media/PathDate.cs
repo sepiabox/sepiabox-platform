@@ -13,20 +13,21 @@ public static partial class PathDate
     private const string FolderFormat = "yyyy-MM-dd";
 
     /// <summary>
-    /// The first date the path gives, in order of precedence: the file name, the folder with a time from the file
-    /// name, then the folder alone. Null when nothing in the path is a valid date and time.
-    /// </summary>
-    public static CaptureDate? TryParse(string path) => Candidates(path).FirstOrDefault();
-
-    /// <summary>
-    /// Every date the path gives, in order of precedence, so a caller that rejects one (an implausible date) can
-    /// fall back to the next. Only the parent folder counts: a dated folder higher up says less about the file.
+    /// Every date the path gives, in order of precedence: the file name, the folder with a time from the file name,
+    /// then the folder alone. Empty when nothing in the path is a valid date and time. All of them, so a caller that
+    /// rejects one (an implausible date) can fall back to the next. Only the parent folder counts: a dated folder
+    /// higher up says less about the file.
     /// </summary>
     public static IEnumerable<CaptureDate> Candidates(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
+        return Parse(path);
+    }
 
-        // Both separators on every OS: paths in manifests use '/', paths typed on Windows use '\'.
+    private static IEnumerable<CaptureDate> Parse(string path)
+    {
+        // Both separators on every OS: paths in manifests use '/', paths typed on Windows use ''. On Linux '' is a
+        // legal file name character, but a name containing one is far rarer than a Windows path given on Linux.
         var segments = path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length == 0)
         {
@@ -60,9 +61,10 @@ public static partial class PathDate
     private static bool TryParseExact(string value, string format, out DateTime result) =>
         DateTime.TryParseExact(value, format, CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
 
-    // ASCII digits only. The date must not end a longer number (120120304_101112), but the time may go on:
-    // Pixel phones add milliseconds (PXL_20230115_143022123.jpg).
-    [GeneratedRegex(@"(?<![0-9])(?<date>[0-9]{8})[_-](?<time>[0-9]{6})", RegexOptions.CultureInvariant)]
+    // ASCII digits only. The date must start the name or follow a separator such as '_', not a letter or a digit
+    // (a20120304_101112, 120120304_101112), but the time may go on: Pixel phones add milliseconds
+    // (PXL_20230115_143022123.jpg).
+    [GeneratedRegex(@"(?<![0-9A-Za-z])(?<date>[0-9]{8})[_-](?<time>[0-9]{6})")]
     private static partial Regex FileNameDateTime();
 
     // Some camcorders name their clips MNU_<HHMMSS>_..., leaving the day to the folder they are copied into.
