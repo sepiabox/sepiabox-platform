@@ -75,62 +75,177 @@ public class ThumbnailGeneratorTests
     }
 
     [Fact]
-    public void Uses_the_camera_preview_when_the_photo_is_a_canon_raw()
+    public void Uses_the_full_size_camera_jpeg_when_the_photo_is_a_canon_raw()
     {
         using var temp = new TempFolder();
-        var raw = temp.Write("IMG_0001.CR2", CanonRaw(600, 400, orientation: 6));
+        var raw = temp.Write("IMG_0001.CR2", CanonRaw.Build(1536, 1024, orientation: 6));
 
-        var thumb = ThumbnailGenerator.Generate(raw, temp.Path, Folder, ThumbnailGenerator.PhotoSizes)[0];
+        var derivatives = ThumbnailGenerator.Generate(raw, temp.Path, Folder, ThumbnailGenerator.PhotoSizes);
 
-        Assert.Equal((171, 256), (thumb.Width, thumb.Height));
-        using var written = new MagickImage(Path.Combine(temp.Path, thumb.Path));
-        var pixel = written.GetPixels().GetPixel(85, 128).ToColor()!;
-        Assert.True(pixel.R > 230 && pixel.G is > 140 and < 190 && pixel.B < 40, $"Expected orange, got {pixel}.");
+        // From the 1536x1024 JPEG in IFD0, turned upright; not the 160x120 thumbnail in IFD1 nor the small RGB image in IFD2.
+        Assert.Equal([("thumb-256", 171, 256), ("preview-1280", 853, 1280)], derivatives.Select(d => (d.Name, d.Width, d.Height)));
+        using var preview = new MagickImage(Path.Combine(temp.Path, derivatives[1].Path));
+        var pixel = preview.GetPixels().GetPixel(426, 640).ToColor()!;
+        Assert.True(pixel.R > 230 && pixel.G is > 140 and < 190 && pixel.B < 40, $"Expected the orange of IFD0, got {pixel}.");
+    }
+}
+
+/// <summary>
+/// A file laid out like a Canon CR2 (TIFF-based, version 2): IFD0 holds the camera's full-size JPEG as strips
+/// with old-style JPEG compression, BitsPerSample 8,8,8, Make, Model and an Exif IFD; IFD1 a 160x120 JPEG
+/// thumbnail referenced by JPEGInterchangeFormat; IFD2 a small uncompressed RGB image; IFD3 the sensor data
+/// (lossless JPEG in a real file, filler here), whose offset is also in the CR2 header. Each image has its own
+/// colour so a test can tell which one was decoded.
+/// </summary>
+internal static class CanonRaw
+{
+    private const ushort Short = 3;
+    private const ushort Long = 4;
+    private const ushort Ascii = 2;
+    private const ushort Rational = 5;
+
+    public static byte[] Build(int width, int height, int orientation)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write("II*\0"u8);
+        writer.Write(0u); // IFD0, patched below
+        writer.Write("CR"u8);
+        writer.Write((byte)2);
+        writer.Write((byte)0);
+        writer.Write(0u); // IFD3, the raw data, patched below
+
+        var preview = Blob(writer, Jpeg(MagickColors.Orange, width, height));
+        var thumbnail = Blob(writer, Jpeg(MagickColors.Green, 160, 120));
+        var rgb = Blob(writer, [.. Enumerable.Repeat<byte[]>([0, 0, 255], 64 * 42).SelectMany(p => p)]);
+        var sensor = Blob(writer, [0xFF, 0xD8, 0xFF, 0xC3, .. new byte[4096]]);
+
+        var exif = Ifd(writer, [(36867, Ascii, AsciiBytes("2008:05:01 10:20:30"))]);
+        var ifd0 = Ifd(writer,
+        [
+            (256, Short, Shorts(width)),
+            (257, Short, Shorts(height)),
+            (258, Short, Shorts(8, 8, 8)),
+            (259, Short, Shorts(6)),
+            (271, Ascii, AsciiBytes("Canon")),
+            (272, Ascii, AsciiBytes("Canon EOS 350D DIGITAL")),
+            (273, Long, Longs(preview.Offset)),
+            (274, Short, Shorts(orientation)),
+            (277, Short, Shorts(3)),
+            (279, Long, Longs(preview.Length)),
+            (282, Rational, Longs(72, 1)),
+            (283, Rational, Longs(72, 1)),
+            (296, Short, Shorts(2)),
+            (306, Ascii, AsciiBytes("2008:05:01 10:20:30")),
+            (34665, Long, Longs(exif.Offset)),
+        ]);
+        var ifd1 = Ifd(writer,
+        [
+            (259, Short, Shorts(6)),
+            (513, Long, Longs(thumbnail.Offset)),
+            (514, Long, Longs(thumbnail.Length)),
+        ]);
+        var ifd2 = Ifd(writer,
+        [
+            (256, Short, Shorts(64)),
+            (257, Short, Shorts(42)),
+            (258, Short, Shorts(8, 8, 8)),
+            (259, Short, Shorts(1)),
+            (262, Short, Shorts(2)),
+            (273, Long, Longs(rgb.Offset)),
+            (277, Short, Shorts(3)),
+            (278, Short, Shorts(42)),
+            (279, Long, Longs(rgb.Length)),
+            (284, Short, Shorts(1)),
+        ]);
+        var ifd3 = Ifd(writer,
+        [
+            (259, Short, Shorts(6)),
+            (273, Long, Longs(sensor.Offset)),
+            (279, Long, Longs(sensor.Length)),
+            (50752, Short, Shorts(1, 768, 768)),
+        ]);
+
+        Patch(writer, 4, ifd0.Offset);
+        Patch(writer, ifd0.Next, ifd1.Offset);
+        Patch(writer, ifd1.Next, ifd2.Offset);
+        Patch(writer, ifd2.Next, ifd3.Offset);
+        Patch(writer, 12, ifd3.Offset);
+        writer.Flush();
+        return stream.ToArray();
     }
 
-    // A CR2 is a TIFF whose first IFD holds the camera's full-size JPEG with old-style JPEG compression (6);
-    // the raw sensor data sits in a later IFD. Reading from a stream, ImageMagick sees a TIFF and decodes
-    // that JPEG, so this builds just the header and first IFD around a generated JPEG.
-    private static byte[] CanonRaw(int width, int height, int orientation)
+    private static byte[] Jpeg(MagickColor colour, int width, int height)
     {
-        byte[] jpeg;
-        using (var preview = new MagickImage(MagickColors.Orange, (uint)width, (uint)height))
-        {
-            preview.Format = MagickFormat.Jpeg;
-            jpeg = preview.ToByteArray();
-        }
+        using var image = new MagickImage(colour, (uint)width, (uint)height);
+        image.Format = MagickFormat.Jpeg;
+        return image.ToByteArray();
+    }
 
-        const int DataOffset = 256;
-        (ushort Tag, ushort Type, int Value)[] entries =
-        [
-            (256, 3, width),
-            (257, 3, height),
-            (259, 3, 6),
-            (273, 4, DataOffset),
-            (274, 3, orientation),
-            (279, 4, jpeg.Length),
-            (513, 4, DataOffset),
-            (514, 4, jpeg.Length),
-        ];
+    private static (int Offset, int Length) Blob(BinaryWriter writer, byte[] data)
+    {
+        Align(writer);
+        var offset = (int)writer.BaseStream.Position;
+        writer.Write(data);
+        return (offset, data.Length);
+    }
 
-        var bytes = new byte[DataOffset + jpeg.Length];
-        using var writer = new BinaryWriter(new MemoryStream(bytes));
-        writer.Write("II*\0"u8);
-        writer.Write(16);
-        writer.Write("CR"u8);
-        writer.Write((ushort)2);
-        writer.Write(0);
+    // Values longer than four bytes go before the IFD; Next is where its link to the following IFD is written.
+    private static (int Offset, int Next) Ifd(BinaryWriter writer, (ushort Tag, ushort Type, byte[] Value)[] entries)
+    {
+        var outOfLine = entries.Select(e => e.Value.Length > 4 ? Blob(writer, e.Value).Offset : -1).ToArray();
+        Align(writer);
+        var offset = (int)writer.BaseStream.Position;
         writer.Write((ushort)entries.Length);
-        foreach (var (tag, type, value) in entries)
+        for (var i = 0; i < entries.Length; i++)
         {
+            var (tag, type, value) = entries[i];
             writer.Write(tag);
             writer.Write(type);
-            writer.Write(1);
-            writer.Write(value);
+            writer.Write((uint)(value.Length / Size(type)));
+            if (outOfLine[i] >= 0)
+            {
+                writer.Write((uint)outOfLine[i]);
+            }
+            else
+            {
+                writer.Write(value);
+                writer.Write(new byte[4 - value.Length]);
+            }
         }
 
-        writer.Write(0);
-        jpeg.CopyTo(bytes, DataOffset);
-        return bytes;
+        var next = (int)writer.BaseStream.Position;
+        writer.Write(0u);
+        return (offset, next);
     }
+
+    private static void Patch(BinaryWriter writer, int position, int value)
+    {
+        var end = writer.BaseStream.Position;
+        writer.Seek(position, SeekOrigin.Begin);
+        writer.Write((uint)value);
+        writer.BaseStream.Position = end;
+    }
+
+    private static void Align(BinaryWriter writer)
+    {
+        if (writer.BaseStream.Position % 2 == 1)
+        {
+            writer.Write((byte)0);
+        }
+    }
+
+    private static int Size(ushort type) => type switch
+    {
+        Short => 2,
+        Long => 4,
+        Rational => 8,
+        _ => 1,
+    };
+
+    private static byte[] Shorts(params int[] values) => [.. values.SelectMany(v => BitConverter.GetBytes((ushort)v))];
+
+    private static byte[] Longs(params int[] values) => [.. values.SelectMany(v => BitConverter.GetBytes((uint)v))];
+
+    private static byte[] AsciiBytes(string value) => [.. System.Text.Encoding.ASCII.GetBytes(value), 0];
 }
