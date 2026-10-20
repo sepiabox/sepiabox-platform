@@ -19,7 +19,7 @@ public class VideoProcessorTests
     [Fact]
     public void Builds_a_software_proxy_command_that_strips_metadata()
     {
-        var arguments = FfmpegArguments.Proxy("in put.mov", 1280, 720, VideoEncoder.Software, "out.mp4");
+        var arguments = FfmpegArguments.Proxy("in put.mov", 1280, 720, VideoEncoder.Software, 0, "out.mp4");
 
         AssertSequence(arguments, "-i", "in put.mov");
         AssertSequence(arguments, "-vf", "yadif=deint=interlaced,scale=1280:720,setsar=1");
@@ -33,7 +33,7 @@ public class VideoProcessorTests
     [Fact]
     public void Uses_h264_nvenc_when_asked()
     {
-        var arguments = FfmpegArguments.Proxy("in.mov", 1280, 720, VideoEncoder.Nvenc, "out.mp4");
+        var arguments = FfmpegArguments.Proxy("in.mov", 1280, 720, VideoEncoder.Nvenc, 0, "out.mp4");
 
         AssertSequence(arguments, "-c:v", "h264_nvenc");
         Assert.DoesNotContain("libx264", arguments);
@@ -42,7 +42,7 @@ public class VideoProcessorTests
     [Fact]
     public void Takes_the_poster_frame_at_the_given_second_with_invariant_formatting()
     {
-        var arguments = FfmpegArguments.Frame("in.mov", 0.3, 1024, 576, "frame.png");
+        var arguments = FfmpegArguments.Frame("in.mov", 0.3, 1024, 576, 0, "frame.png");
 
         AssertSequence(arguments, "-ss", "0.3", "-i", "in.mov");
         AssertSequence(arguments, "-frames:v", "1");
@@ -51,7 +51,7 @@ public class VideoProcessorTests
     [Fact]
     public void Deinterlaces_and_resamples_the_poster_frame_to_square_pixels_at_the_display_size()
     {
-        var arguments = FfmpegArguments.Frame("clip.mod", 1, 1024, 576, "frame.png");
+        var arguments = FfmpegArguments.Frame("clip.mod", 1, 1024, 576, 0, "frame.png");
 
         AssertSequence(arguments, "-vf", "yadif=deint=interlaced,scale=1024:576,setsar=1");
     }
@@ -109,8 +109,8 @@ public class VideoProcessorTests
     [Fact]
     public void Maps_the_video_stream_that_holds_the_footage_when_a_cover_comes_first()
     {
-        AssertSequence(FfmpegArguments.Frame("in.mkv", 1, 640, 360, "frame.png", videoStream: 1), "-map", "0:v:1");
-        AssertSequence(FfmpegArguments.Proxy("in.mkv", 640, 360, VideoEncoder.Software, "out.mp4", videoStream: 1), "-map", "0:v:1", "-map", "0:a:0?");
+        AssertSequence(FfmpegArguments.Frame("in.mkv", 1, 640, 360, videoStream: 1, "frame.png"), "-map", "0:v:1");
+        AssertSequence(FfmpegArguments.Proxy("in.mkv", 640, 360, VideoEncoder.Software, videoStream: 1, "out.mp4"), "-map", "0:v:1", "-map", "0:a:0?");
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public class VideoProcessorTests
 
         var probe = FfmpegArguments.ParseProbe(Json);
 
-        Assert.Equal(new VideoProbe(1920, 1080, null) { VideoStream = 1 }, probe);
+        Assert.Equal(new VideoProbe(1920, 1080, null, VideoStream: 1), probe);
     }
 
     [Fact]
@@ -133,7 +133,16 @@ public class VideoProcessorTests
     {
         const string Json = """{ "streams": [ { "width": 600, "height": 600, "disposition": { "attached_pic": 1 } } ], "format": { "duration": "180.0" } }""";
 
-        Assert.Throws<NoVideoStreamException>(() => FfmpegArguments.ParseProbe(Json));
+        Assert.Equal(NoVideoStreamException.CoverArtOnly, Assert.Throws<NoVideoStreamException>(() => FfmpegArguments.ParseProbe(Json)).Message);
+    }
+
+    [Fact]
+    public void Reads_a_larger_part_of_the_file_when_asked_for_a_thorough_probe()
+    {
+        var arguments = FfmpegArguments.Probe("clip.mod", thorough: true);
+
+        AssertSequence(arguments, "-probesize", "100M", "-analyzeduration", "100M");
+        Assert.DoesNotContain("-probesize", FfmpegArguments.Probe("clip.mod"));
     }
 
     [Theory]

@@ -119,6 +119,12 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
         Console.Error.WriteLine($"Warning: {result.Warning}");
     }
 
+    // Not failures, but never catalogued: listed so each one can be checked (operations.md says how to retry).
+    foreach (var file in result.LeftOut)
+    {
+        Console.Error.WriteLine($"  Left out {file.Path}: {file.Reason}");
+    }
+
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");

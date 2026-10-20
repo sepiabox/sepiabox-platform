@@ -27,9 +27,14 @@ public sealed record ProcessResult(
     string? Warning = null,
     int Embedded = 0,
     IReadOnlyList<EmbeddingProblem>? EmbeddingProblems = null,
-    int NotVideo = 0)
+    IReadOnlyList<ScanProblem>? LeftOut = null)
 {
     public IReadOnlyList<EmbeddingProblem> EmbeddingProblems { get; init; } = EmbeddingProblems ?? [];
+
+    /// <summary>Files with a video extension that hold no video, each with the reason; they are not catalogued.</summary>
+    public IReadOnlyList<ScanProblem> LeftOut { get; init; } = LeftOut ?? [];
+
+    public int NotVideo => LeftOut.Count;
 }
 
 /// <summary>
@@ -94,7 +99,8 @@ public static class ProcessCommand
         var stopwatch = Stopwatch.StartNew();
         var problems = new List<ScanProblem>();
         var embeddingProblems = new List<EmbeddingProblem>();
-        int processed = 0, skipped = 0, pending = 0, embedded = 0, handled = 0, notVideo = 0;
+        int processed = 0, skipped = 0, pending = 0, embedded = 0, handled = 0;
+        var leftOut = new List<ScanProblem>();
         // By asset, so the same photo in two folders counts once.
         var withoutDerivative = new HashSet<string>(StringComparer.Ordinal);
         var withoutManifest = new HashSet<string>(StringComparer.Ordinal);
@@ -174,7 +180,7 @@ public static class ProcessCommand
             // Nothing about an unchanged file can make a video stream appear.
             if (unchanged && previous!.Status == FileStatus.NotVideo)
             {
-                notVideo++;
+                leftOut.Add(new ScanProblem(file.Path, "Left out by an earlier run and unchanged since."));
                 return;
             }
 
@@ -234,7 +240,7 @@ public static class ProcessCommand
                         pending++;
                         break;
                     case FileStatus.NotVideo:
-                        notVideo++;
+                        leftOut.Add(new ScanProblem(file.Path, derivativeProblem!));
                         break;
                     default:
                         // The manifest is kept so the file is still catalogued; the next run tries the derivatives again.
@@ -258,11 +264,11 @@ public static class ProcessCommand
                 + $"{pending:N0} videos are described but have no poster or 720p version yet; run process again once FFmpeg is installed.");
         }
 
-        if (notVideo > 0)
+        if (leftOut.Count > 0)
         {
-            warnings.Add(notVideo == 1
-                ? "1 file with a video extension holds no video (such as a tracker-music .mod) and was left out."
-                : $"{notVideo:N0} files with a video extension hold no video (such as tracker-music .mod files) and were left out.");
+            warnings.Add(leftOut.Count == 1
+                ? "1 file with a video extension holds no video (such as a tracker-music .mod) and was left out; it is listed below."
+                : $"{leftOut.Count:N0} files with a video extension hold no video (such as tracker-music .mod files) and were left out; they are listed below.");
         }
 
         if (embedder is null && embedderWarning is not null)
@@ -286,7 +292,7 @@ public static class ProcessCommand
 
         var warning = warnings.Count == 0 ? null : string.Join(Environment.NewLine, warnings);
         return new ProcessResult(
-            root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems, notVideo);
+            root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems, leftOut);
     }
 
     /// <summary>
@@ -340,7 +346,10 @@ public static class ProcessCommand
         };
     }
 
-    /// <summary>Generates the derivatives the manifest is still missing. Problem is set when the status is Failed.</summary>
+    /// <summary>
+    /// Generates the derivatives the manifest is still missing. Problem is set when the status is Failed, and says
+    /// why when it is NotVideo.
+    /// </summary>
     private static (Manifest Manifest, FileStatus Status, string? Problem) AddDerivatives(
         string output, FoundFile file, Manifest manifest, VideoProcessor? video, CancellationToken cancellationToken)
     {
@@ -359,9 +368,9 @@ public static class ProcessCommand
             }
 
             // Checked without FFmpeg, whose module support depends on how it was built.
-            if (string.Equals(Path.GetExtension(file.Path), ".mod", StringComparison.OrdinalIgnoreCase) && TrackerModule.IsMatch(file.Path))
+            if (TrackerModule.IsTrackerModule(file.Path))
             {
-                return (manifest, FileStatus.NotVideo, null);
+                return (manifest, FileStatus.NotVideo, TrackerModule.Reason);
             }
 
             if (video is null)
@@ -379,9 +388,9 @@ public static class ProcessCommand
                 Derivatives = derivatives,
             }, FileStatus.Done, null);
         }
-        catch (NoVideoStreamException)
+        catch (NoVideoStreamException ex)
         {
-            return (manifest, FileStatus.NotVideo, null);
+            return (manifest, FileStatus.NotVideo, ex.Message);
         }
         catch (Exception ex) when (ex is MagickException or VideoProcessingException)
         {

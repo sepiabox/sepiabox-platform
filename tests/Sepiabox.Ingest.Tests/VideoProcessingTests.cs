@@ -17,6 +17,9 @@ public class VideoProcessingTests
     private static readonly FfmpegTools s_tools = FfmpegTools.Find(null)
         ?? throw new InvalidOperationException("Integration tests need ffmpeg and ffprobe on the PATH.");
 
+    // Every run that should find FFmpeg is given this folder, so no test depends on how PATH is searched.
+    private static readonly string s_ffmpegFolder = Path.GetDirectoryName(s_tools.Ffmpeg)!;
+
     [Fact]
     public void Makes_a_720p_version_and_a_poster_of_a_1080p_video()
     {
@@ -42,6 +45,8 @@ public class VideoProcessingTests
         Assert.True(File.Exists(Path.Combine(work.Path, manifest.Derivatives[0].Path)));
         // Progressive footage passes the deinterlacer untouched: only the scaling and encoding change it.
         Assert.InRange(InterlacedShare(Path.Combine(work.Path, proxy.Path)), 0, 0.1);
+        // Loose on purpose: it catches a damaged or wrongly scaled picture, while idet above is what tells whether a
+        // deinterlacer touched it, which encoder noise would hide from SSIM.
         Assert.True(Similarity(Path.Combine(work.Path, proxy.Path), Path.Combine(drive.Path, "party.mp4"), 1280, 720) > 0.95);
     }
 
@@ -180,6 +185,8 @@ public class VideoProcessingTests
     }
 
     [Theory]
+    // With FFmpeg 6.1 (CI's version), seeking into a transport stream past its only keyframe decodes nothing;
+    // the stand-in tests below cover the same fallback whatever the FFmpeg version.
     [InlineData("one-keyframe.mts", 2, 50, 2)]
     [InlineData("long-audio.mp4", 0.2, 50, 3)]
     public void Takes_the_poster_from_the_first_frame_when_the_seek_finds_none(string name, double videoSeconds, int gop, double audioSeconds)
@@ -209,16 +216,23 @@ public class VideoProcessingTests
         using var work = new TempFolder();
         using var tools = new TempFolder();
         MakeRedThenBlue(Path.Combine(drive.Path, "clip.mp4"), seconds: 2, gop: 12, audioSeconds: 2);
-        // The real tools, except that ffmpeg misbehaves when asked for a frame anywhere but the start.
+        var marker = Path.Combine(tools.Path, "seek-misbehaved");
+        // The real tools, except that ffmpeg misbehaves when asked for a frame anywhere but the start, and
+        // leaves a marker to show it did.
         FakeTool(tools, "ffprobe", $"exec '{s_tools.Ffprobe}' \"$@\"");
         FakeTool(tools, "ffmpeg", $$"""
-            for last; do :; done
-            if [ "$6" = "-ss" ] && [ "$7" != "0" ]; then {{atTheSeek}}; fi
+            seek=""; previous=""
+            for last; do
+              if [ "$previous" = "-ss" ]; then seek="$last"; fi
+              previous="$last"
+            done
+            if [ -n "$seek" ] && [ "$seek" != "0" ]; then touch '{{marker}}'; {{atTheSeek}}; fi
             exec '{{s_tools.Ffmpeg}}' "$@"
             """);
 
         var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
 
+        Assert.True(File.Exists(marker), "The stand-in was never asked for a frame after the start.");
         Assert.Empty(result.Problems);
         AssertPosterColour(work, Assert.Single(ReadManifests(work)), red: true);
     }
@@ -273,21 +287,76 @@ public class VideoProcessingTests
     }
 
     [Fact]
-    public void Removes_the_manifest_of_a_pending_file_once_ffmpeg_finds_no_video_in_it()
+    public void Removes_the_manifest_and_derivatives_once_ffmpeg_finds_no_video_in_any_copy()
     {
         using var drive = new TempFolder();
         using var work = new TempFolder();
         MakeSoundOnly(Path.Combine(drive.Path, "sound.mod"));
+        Directory.CreateDirectory(Path.Combine(drive.Path, "copy"));
+        File.Copy(Path.Combine(drive.Path, "sound.mod"), Path.Combine(drive.Path, "copy", "sound.mod"));
         var withoutFfmpeg = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
-        Assert.Equal(1, withoutFfmpeg.VideosPending);
-        Assert.Single(ReadManifests(work));
+        var pending = Assert.Single(ReadManifests(work));
+        Assert.Equal((2, 2), (withoutFfmpeg.VideosPending, pending.Sources.Count));
+        // As if an earlier build had made derivatives for it.
+        var derivatives = Path.Combine(work.Path, "derivatives", pending.Id);
+        Directory.CreateDirectory(derivatives);
+        File.WriteAllBytes(Path.Combine(derivatives, "poster.webp"), [1, 2, 3]);
 
         var withFfmpeg = Process(drive, work);
 
         Assert.Empty(withFfmpeg.Problems);
-        Assert.Equal((0, 0, 1), (withFfmpeg.Processed, withFfmpeg.VideosPending, withFfmpeg.NotVideo));
+        Assert.Equal((0, 0, 2), (withFfmpeg.Processed, withFfmpeg.VideosPending, withFfmpeg.NotVideo));
+        Assert.All(withFfmpeg.LeftOut, file => Assert.Equal(NoVideoStreamException.NoStream, file.Reason));
         Assert.Empty(ReadManifests(work));
-        Assert.False(Directory.Exists(Path.Combine(work.Path, "derivatives")) && Directory.EnumerateFileSystemEntries(Path.Combine(work.Path, "derivatives")).Any());
+        Assert.False(Directory.Exists(derivatives));
+    }
+
+    [UnixFact]
+    public void Probes_again_with_a_larger_window_before_leaving_a_file_out()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        MakeVideo(Path.Combine(drive.Path, "late.mp4"), 640, 360, seconds: 1);
+        // An ffprobe that, like FFmpeg on an MPEG file that declares its video late, sees no video at first.
+        FakeTool(tools, "ffprobe", $$"""
+            for argument; do
+              if [ "$argument" = "-probesize" ]; then exec '{{s_tools.Ffprobe}}' "$@"; fi
+            done
+            echo '{ "streams": [], "format": {} }'
+            """);
+        FakeTool(tools, "ffmpeg", $"exec '{s_tools.Ffmpeg}' \"$@\"");
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Empty(result.Problems);
+        Assert.Equal((1, 0), (result.Processed, result.NotVideo));
+        Assert.Equal(3, Assert.Single(ReadManifests(work)).Derivatives.Count);
+    }
+
+    [Fact]
+    public void Keeps_the_manifest_for_the_other_copy_when_only_one_copy_is_left_out()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var elsewhere = new TempFolder();
+        MakeSoundOnly(Path.Combine(drive.Path, "sound.mod"));
+        Directory.CreateDirectory(Path.Combine(drive.Path, "copy"));
+        File.Copy(Path.Combine(drive.Path, "sound.mod"), Path.Combine(drive.Path, "copy", "sound.mod"));
+        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
+        var id = Assert.Single(ReadManifests(work)).Id;
+        var derivatives = Path.Combine(work.Path, "derivatives", id);
+        Directory.CreateDirectory(derivatives);
+        // The copy is away during the next run, so only the first path is found to hold no video.
+        File.Move(Path.Combine(drive.Path, "copy", "sound.mod"), Path.Combine(elsewhere.Path, "sound.mod"));
+
+        var withFfmpeg = Process(drive, work);
+
+        Assert.Equal(1, withFfmpeg.NotVideo);
+        var remaining = Assert.Single(ReadManifests(work));
+        Assert.Equal(id, remaining.Id);
+        Assert.Equal("copy/sound.mod", Assert.Single(remaining.Sources).Path);
+        Assert.True(Directory.Exists(derivatives));
     }
 
     [Theory]
@@ -300,11 +369,26 @@ public class VideoProcessingTests
         drive.Write("music/song.mod", TestTrackerModules.Module());
 
         var result = ProcessCommand.Run(new ProcessOptions(
-            drive.Path, work.Path, "HD", FfmpegFolder: withFfmpeg ? null : TestFfmpeg.None, ModelFolder: TestModels.None));
+            drive.Path, work.Path, "HD", FfmpegFolder: withFfmpeg ? s_ffmpegFolder : TestFfmpeg.None, ModelFolder: TestModels.None));
 
         Assert.Empty(result.Problems);
-        Assert.Equal((0, 0, 1), (result.Processed, result.VideosPending, result.NotVideo));
+        Assert.Equal((0, 0), (result.Processed, result.VideosPending));
+        Assert.Equal(TrackerModule.Reason, Assert.Single(result.LeftOut).Reason);
         Assert.Empty(ReadManifests(work));
+    }
+
+    [Fact]
+    public void Lists_a_file_left_out_by_an_earlier_run_again_without_reading_it()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        drive.Write("song.mod", TestTrackerModules.Module());
+        Process(drive, work);
+
+        var second = Process(drive, work);
+
+        Assert.Equal((0, 0), (second.Processed, second.Skipped));
+        Assert.Equal(Path.Combine(drive.Path, "song.mod"), Assert.Single(second.LeftOut).Path);
     }
 
     [Fact]
@@ -312,9 +396,9 @@ public class VideoProcessingTests
     {
         using var drive = new TempFolder();
         using var work = new TempFolder();
-        var damaged = new byte[64 * 1024];
-        new Random(3).NextBytes(damaged);
-        drive.Write("MOV001.MOD", damaged);
+        // An MPEG program stream pack header, then nothing an MPEG demuxer can use: ffprobe fails on it.
+        byte[] packHeader = [0x00, 0x00, 0x01, 0xBA, 0x44, 0x00, 0x04, 0x00, 0x04, 0x01, 0x01, 0x89, 0xC3, 0xF8];
+        drive.Write("MOV001.MOD", [.. packHeader, .. new byte[64 * 1024]]);
 
         var result = Process(drive, work);
 
@@ -372,7 +456,7 @@ public class VideoProcessingTests
     }
 
     private static ProcessResult Process(TempFolder drive, TempFolder work) =>
-        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", ModelFolder: TestModels.None));
+        ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: s_ffmpegFolder, ModelFolder: TestModels.None));
 
     private static List<Manifest> ReadManifests(TempFolder work) =>
         [.. Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json").Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];

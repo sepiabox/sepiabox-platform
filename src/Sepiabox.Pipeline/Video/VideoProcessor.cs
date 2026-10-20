@@ -18,12 +18,9 @@ public enum VideoEncoder
 /// <summary>
 /// Size as shown on screen: after the rotation phones record instead of rotating pixels, and after the
 /// pixel aspect ratio of anamorphic camcorder and DVD video (720x576 stored, 1024x576 shown for 16:9).
+/// <c>VideoStream</c> is which video stream holds the footage, counting video streams only, so cover art is skipped.
 /// </summary>
-public sealed record VideoProbe(int Width, int Height, double? DurationSeconds)
-{
-    /// <summary>Which video stream holds the footage, counting video streams only; cover art is skipped.</summary>
-    public int VideoStream { get; init; }
-}
+public sealed record VideoProbe(int Width, int Height, double? DurationSeconds, int VideoStream = 0);
 
 public sealed class VideoProcessingException : Exception
 {
@@ -48,8 +45,11 @@ public sealed class VideoProcessingException : Exception
 /// </summary>
 public sealed class NoVideoStreamException : Exception
 {
+    public const string NoStream = "No video stream, even with a longer probe.";
+    public const string CoverArtOnly = "Only cover art, no video stream.";
+
     public NoVideoStreamException()
-        : base("No video stream found.")
+        : base(NoStream)
     {
     }
 
@@ -104,10 +104,20 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
         new("thumb-256", 256),
     ];
 
+    /// <summary>
+    /// Throws <see cref="NoVideoStreamException"/> only when a second, longer probe also finds no video: a file
+    /// that is left out is never catalogued, and some MPEG files declare their video stream late.
+    /// </summary>
     public VideoProbe Probe(string path, CancellationToken cancellationToken = default)
     {
-        var json = Run(tools.Ffprobe, FfmpegArguments.Probe(path), cancellationToken);
-        return FfmpegArguments.ParseProbe(json);
+        try
+        {
+            return FfmpegArguments.ParseProbe(Run(tools.Ffprobe, FfmpegArguments.Probe(path), cancellationToken));
+        }
+        catch (NoVideoStreamException)
+        {
+            return FfmpegArguments.ParseProbe(Run(tools.Ffprobe, FfmpegArguments.Probe(path, thorough: true), cancellationToken));
+        }
     }
 
     /// <summary>Writes the poster, thumbnail and 720p version into <paramref name="workFolder"/>/<paramref name="relativeFolder"/>.</summary>
@@ -124,7 +134,7 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
         bool TakeFrame(double atSeconds)
         {
             File.Delete(frame);
-            Run(tools.Ffmpeg, FfmpegArguments.Frame(sourcePath, atSeconds, probe.Width, probe.Height, frame, probe.VideoStream), cancellationToken);
+            Run(tools.Ffmpeg, FfmpegArguments.Frame(sourcePath, atSeconds, probe.Width, probe.Height, probe.VideoStream, frame), cancellationToken);
             var written = new FileInfo(frame);
             return written.Exists && written.Length > 0;
         }
@@ -166,7 +176,7 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
         var proxyPath = $"{relativeFolder}/{ProxyName}.mp4";
         var proxy = Path.Combine(workFolder, proxyPath);
         var temporary = proxy + ".tmp";
-        Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, temporary, probe.VideoStream), cancellationToken);
+        Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary), cancellationToken);
         File.Move(temporary, proxy, overwrite: true);
 
         return [.. posters, new ManifestDerivative(ProxyName, proxyPath, width, height, ProxyContentType)];
@@ -233,9 +243,14 @@ public static class VideoScale
 /// <summary>Command lines for ffprobe and ffmpeg, as argument lists.</summary>
 public static class FfmpegArguments
 {
-    public static IReadOnlyList<string> Probe(string input) =>
+    /// <summary>
+    /// <paramref name="thorough"/> reads up to 100 MB and 100 seconds before deciding which streams the file
+    /// has, instead of FFmpeg's few megabytes and seconds.
+    /// </summary>
+    public static IReadOnlyList<string> Probe(string input, bool thorough = false) =>
     [
         "-v", "error",
+        .. thorough ? (string[])["-probesize", "100M", "-analyzeduration", "100M"] : [],
         "-select_streams", "v",
         "-show_entries", "stream=width,height,sample_aspect_ratio:stream_disposition=attached_pic:stream_tags=rotate:stream_side_data=rotation:format=duration",
         "-of", "json",
@@ -249,7 +264,7 @@ public static class FfmpegArguments
     /// </summary>
     public static string Filter(int width, int height) => $"yadif=deint=interlaced,scale={width}:{height},setsar=1";
 
-    public static IReadOnlyList<string> Frame(string input, double atSeconds, int width, int height, string output, int videoStream = 0) =>
+    public static IReadOnlyList<string> Frame(string input, double atSeconds, int width, int height, int videoStream, string output) =>
     [
         "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
         "-ss", atSeconds.ToString("0.###", CultureInfo.InvariantCulture),
@@ -261,7 +276,7 @@ public static class FfmpegArguments
         output,
     ];
 
-    public static IReadOnlyList<string> Proxy(string input, int width, int height, VideoEncoder encoder, string output, int videoStream = 0)
+    public static IReadOnlyList<string> Proxy(string input, int width, int height, VideoEncoder encoder, int videoStream, string output)
     {
         List<string> arguments =
         [
@@ -309,7 +324,9 @@ public static class FfmpegArguments
             : [];
         if (footage.Count == 0)
         {
-            throw new NoVideoStreamException();
+            throw new NoVideoStreamException(streams.ValueKind == JsonValueKind.Array && streams.GetArrayLength() > 0
+                ? NoVideoStreamException.CoverArtOnly
+                : NoVideoStreamException.NoStream);
         }
 
         var (stream, videoStream) = footage[0];
@@ -332,7 +349,7 @@ public static class FfmpegArguments
                 ? Math.Round(seconds, 3)
                 : null;
 
-        return new VideoProbe(width, height, duration) { VideoStream = videoStream };
+        return new VideoProbe(width, height, duration, videoStream);
     }
 
     private static bool IsAttachedPicture(JsonElement stream) =>
