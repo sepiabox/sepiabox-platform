@@ -42,6 +42,33 @@ public static class AzureInfrastructure
     public static readonly IReadOnlyList<string> BlobContainers =
         ["originals", "derivatives", "manifests", "incoming", "exports", "dataprotection"];
 
+    /// <summary>How long a deleted or overwritten blob can be restored.</summary>
+    public const int BlobSoftDeleteDays = 7;
+
+    /// <summary>
+    /// The PostgreSQL administrator login azd generates once: letters only, which Azure accepts as a login.
+    /// </summary>
+    public static GenerateParameterDefault PostgresLogin { get; } = new()
+    {
+        MinLength = 12,
+        Numeric = false,
+        Special = false,
+    };
+
+    /// <summary>
+    /// The PostgreSQL password azd generates once. No special characters: Aspire writes it unquoted into the
+    /// Npgsql connection string, where a <c>;</c> or a quote would break it. Upper and lower case letters and
+    /// digits are three of the four character classes Azure requires three of.
+    /// </summary>
+    public static GenerateParameterDefault PostgresPassword { get; } = new()
+    {
+        MinLength = 32,
+        Special = false,
+        MinLower = 1,
+        MinUpper = 1,
+        MinNumeric = 1,
+    };
+
     // The migrations of a catalog this size take seconds; ten minutes is plenty and bounds a stuck run.
     private const int MigrateTimeoutSeconds = 600;
 
@@ -104,6 +131,14 @@ public static class AzureInfrastructure
             blobService = new BlobService("blobService") { Parent = account };
             infrastructure.Add(blobService);
         }
+
+        // A deleted or overwritten blob can be undeleted for a week: a mistaken delete (S-057) or a bad
+        // manifest merge is recoverable, and a week of soft-deleted data costs little next to the library.
+        blobService.DeleteRetentionPolicy = new DeleteRetentionPolicy
+        {
+            IsEnabled = true,
+            Days = BlobSoftDeleteDays,
+        };
 
         foreach (var name in BlobContainers)
         {

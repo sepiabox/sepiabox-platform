@@ -1,9 +1,10 @@
+using System.Text.Json.Nodes;
 using System.Xml.Linq;
 
 namespace Sepiabox.AppHost.Tests;
 
-/// <summary>The images azd builds with the SDK's container support for the published projects.</summary>
-public sealed class ContainerImageTests
+/// <summary>Project settings the published apps depend on: their container images and logging.</summary>
+public sealed class ProjectSettingsTests
 {
     [Fact]
     public void Web_image_is_the_default_aspnet_image_with_icu()
@@ -22,6 +23,16 @@ public sealed class ContainerImageTests
         var worker = Properties("src/Sepiabox.Worker/Sepiabox.Worker.csproj");
 
         Assert.Equal("true", worker["EnableSdkContainerSupport"]);
+    }
+
+    [Fact]
+    public void Web_does_not_log_every_sql_command()
+    {
+        // At Information, EF logs each query: in Azure that would fill the workspace's 0.15 GB daily cap (S-031).
+        var settings = JsonNode.Parse(File.ReadAllText(Path.Combine(Repository.Root, "src/Sepiabox.Web/appsettings.json")))!;
+
+        Assert.Equal(
+            "Warning", settings["Logging"]!["LogLevel"]!["Microsoft.EntityFrameworkCore.Database.Command"]!.GetValue<string>());
     }
 
     private static Dictionary<string, string> Properties(string project) =>

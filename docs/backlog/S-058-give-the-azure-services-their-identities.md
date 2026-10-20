@@ -13,6 +13,9 @@ S-032 creates the resources. The web and the worker jobs then need managed ident
 - Uploader access: a parameter `uploaderPrincipalIds` (the Entra object ids of the people who run `sepiabox-ingest upload --destination azure`) gets *Storage Blob Data Contributor* on the storage account; Owner on the resource group grants no data access (`docs/operations.md`).
 - Key Vault holds the OAuth secrets, `Access:Emails`, the catalog connection and `Anthropic--ApiKey` (D-052); they reach the apps as Key Vault references or Aspire secret parameters, read through `IConfiguration` (D-051).
 - Data protection: the web persists its keys to Blob Storage (`dataprotection` container) and protects them with a Key Vault key (`PersistKeysToAzureBlobStorage` + `ProtectKeysWithAzureKeyVault`, managed identity), as host wiring in `Program.cs`.
+- Database role (D-061): today both apps connect as the PostgreSQL server administrator. The migrate job (the administrator) creates a least-privilege application role (read and write on the catalog's tables, no DDL) and its Key Vault connection string; the web connects with that role instead of the administrator.
+- Replace the role assignments Aspire derives from the references in S-032 (D-061: the web holds Storage Blob, Queue and Table Data **Contributor** on the whole account) with exactly the roles above.
+- Aspire turns on Container Apps' managed data protection for the web (`runtime.dotnet.autoConfigureDataProtection: true`, S-032); it overlaps with the key ring above, so keep exactly one of the two and record which.
 
 ### Out of scope
 - The custom domain (S-035).
@@ -21,6 +24,8 @@ S-032 creates the resources. The web and the worker jobs then need managed ident
 - [ ] Given the generated Bicep, then the web identity has exactly the roles in Scope (Reader on the account, Contributor on `dataprotection` only, Key Vault Secrets User, Crypto User on the key), the worker identity exactly its roles, and each id in `uploaderPrincipalIds` has *Storage Blob Data Contributor* on the account.
 - [ ] Given the generated infrastructure, when it is inspected, then `Auth:Google:ClientId`, `Auth:Google:ClientSecret`, `Auth:Microsoft:ClientId`, `Auth:Microsoft:ClientSecret`, `Access:Emails` and `Anthropic:ApiKey` reach the web as Key Vault references or Aspire secret parameters, never as plain values.
 - [ ] Given the web in the `Production` environment, when it starts, then its data protection keys are persisted to Blob Storage and protected with a Key Vault key, so a restart, a new revision or a second replica keeps everyone signed in (verified by a test of the web's service registration).
+- [ ] Given the generated infrastructure and the migrations, then the web's connection string names the application role, not the server administrator, and that role cannot change the schema (verified by an integration test against PostgreSQL).
+- [ ] Given the generated Bicep, then exactly one data protection mechanism is configured for the web (either the Blob Storage key ring or Container Apps' `autoConfigureDataProtection`, not both).
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), after adding the Container Apps default host's `/signin-google` and `/signin-microsoft` redirect URIs to the OAuth clients, when I sign in with Google on `https://<default host>`, restart the web revision and reload the page, then I am still signed in; and an account not on `Access:Emails` lands on the no-access page. (S-035 repeats this on `app.sepiabox.com`.)
 
 ### Technical notes

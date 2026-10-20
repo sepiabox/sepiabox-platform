@@ -69,7 +69,11 @@ else
 
     // The catalog code reads a plain Npgsql connection string, so the server takes a password; Aspire
     // keeps the connection strings in Key Vault and the apps read them as Key Vault references.
-    postgres.WithPasswordAuthentication(vault)
+    // Declared rather than left to Aspire so the password has no character that needs quoting (D-061).
+    // azd generates both once and keeps them in the azd environment (docs/operations.md).
+    var postgresLogin = builder.AddParameter("pg-username", AzureInfrastructure.PostgresLogin, secret: false);
+    var postgresPassword = builder.AddParameter("pg-password", AzureInfrastructure.PostgresPassword, secret: true);
+    postgres.WithPasswordAuthentication(vault, postgresLogin, postgresPassword)
         .ConfigureInfrastructure(AzureInfrastructure.ConfigurePostgres);
     storage.ConfigureInfrastructure(AzureInfrastructure.ConfigureStorage);
 

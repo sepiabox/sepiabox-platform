@@ -24,6 +24,7 @@ Repeatable deploys, with no secrets in the repository and never running on third
 
 ### Technical notes
 - Configuring the environment and the federated credential is a human step (`docs/operations.md`).
+- Update (S-032, D-061): deploy by running `scripts/deploy.sh`, not a bare `azd deploy` (the `predeploy` hook refuses it); the script already runs the migrate job and waits for it. The workflow creates the azd environment `sepiabox` in `francecentral` and supplies the PostgreSQL administrator login and password from GitHub secrets (`PG_USERNAME`, `PG_PASSWORD`, set by the owner from the values azd generated on the first deploy) with `azd env config set infra.parameters.pg_username` / `pg_password`, since a newly generated login cannot be applied to the existing server. Check the purge filters against the repository names azd actually pushes.
 
 ### Expected tests
 - `actionlint` and a test that parses the YAML (triggers, permissions, environment).

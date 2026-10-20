@@ -9,7 +9,14 @@ namespace Sepiabox.AppHost.Tests;
 /// </summary>
 public sealed class DeployScriptTests : IDisposable
 {
-    private static readonly string s_root = Repository.Root;
+    private const string JobStart =
+        $"az containerapp job start --name sepiabox-migrate --resource-group {ShutdownRunbook.ResourceGroup} --query name --output tsv";
+    private const string JobStatus =
+        $"az containerapp job execution show --name sepiabox-migrate --resource-group {ShutdownRunbook.ResourceGroup} --job-execution-name sepiabox-migrate-run1 --query properties.status --output tsv";
+    private const string JobStop =
+        $"az containerapp job stop --name sepiabox-migrate --resource-group {ShutdownRunbook.ResourceGroup} --job-execution-name sepiabox-migrate-run1";
+    private const string DeployWeb = "azd deploy web --no-prompt";
+
     private readonly string _stubs = Path.Combine(Path.GetTempPath(), "sepiabox-deploy-" + Guid.NewGuid().ToString("N"));
     private readonly string _calls;
 
@@ -26,14 +33,36 @@ public sealed class DeployScriptTests : IDisposable
               case "$3" in
                 AZURE_ENV_NAME) echo "$STUB_ENV_NAME" ;;
                 AZURE_LOCATION) echo "$STUB_LOCATION" ;;
+                AZURE_RESOURCE_GROUP)
+                  if [ -z "$STUB_RESOURCE_GROUP" ]; then
+                    echo "ERROR: key not found" >&2
+                    exit 1
+                  fi
+                  echo "$STUB_RESOURCE_GROUP" ;;
               esac
             fi
             """);
+        // Each status query answers the next word of STUB_STATUSES (the last one repeats); FAIL makes the
+        // query itself fail, as a network error would.
         WriteStub("az", """
             echo "az $*" >> "$CALLS"
             case "$*" in
+              "postgres flexible-server show"*)
+                if [ "$STUB_PG_STATE" = "MISSING" ]; then
+                  echo "ResourceNotFound" >&2
+                  exit 3
+                fi
+                echo "$STUB_PG_STATE" ;;
               "containerapp job start"*) echo "sepiabox-migrate-run1" ;;
-              "containerapp job execution show"*) echo "$STUB_STATUS" ;;
+              "containerapp job execution show"*)
+                n=$(( $(cat "$CALLS.polls" 2>/dev/null || echo 0) + 1 ))
+                echo "$n" > "$CALLS.polls"
+                status=$(echo "$STUB_STATUSES" | awk -v n="$n" '{ print (n <= NF ? $n : $NF) }')
+                if [ "$status" = "FAIL" ]; then
+                  echo "Connection reset" >&2
+                  exit 1
+                fi
+                echo "$status" ;;
             esac
             """);
     }
@@ -43,45 +72,92 @@ public sealed class DeployScriptTests : IDisposable
     [UnixFact]
     public async Task Deploy_migrates_the_cloud_database_before_the_web_when_the_job_succeeds()
     {
-        var exitCode = await RunDeployAsync(status: "Succeeded");
+        var result = await RunDeployAsync("Succeeded");
 
-        Assert.Equal(0, exitCode);
+        Assert.Equal(0, result.ExitCode);
         Assert.Equal(
-            [
-                "azd provision --no-prompt",
-                "azd deploy migrate --no-prompt",
-                $"az containerapp job start --name sepiabox-migrate --resource-group {ShutdownRunbook.ResourceGroup} --query name --output tsv",
-                $"az containerapp job execution show --name sepiabox-migrate --resource-group {ShutdownRunbook.ResourceGroup} --job-execution-name sepiabox-migrate-run1 --query properties.status --output tsv",
-                "azd deploy web --no-prompt",
-            ],
-            Calls().Where(call => !call.StartsWith("azd env", StringComparison.Ordinal)));
+            ["azd provision --no-prompt", "azd deploy migrate --no-prompt", JobStart, JobStatus, DeployWeb],
+            Calls().Where(call => !call.StartsWith("azd env", StringComparison.Ordinal)
+                && !call.StartsWith("az postgres", StringComparison.Ordinal)));
         // What azure.yaml's predeploy hook checks, so that only this script deploys.
         Assert.Equal(["1", "1"], File.ReadAllLines(_calls + ".guard"));
+        Assert.Contains("Migrations applied.", result.Output, StringComparison.Ordinal);
+    }
+
+    [UnixTheory]
+    [InlineData("Running Running Succeeded", 3)]
+    [InlineData("Unknown Processing Succeeded", 3)]
+    [InlineData("FAIL Running FAIL Succeeded", 4)]
+    public async Task Deploy_keeps_polling_until_the_job_succeeds_when_it_is_running_or_a_query_fails(
+        string statuses, int polls)
+    {
+        var result = await RunDeployAsync(statuses);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(polls, Calls().Count(call => call == JobStatus));
+        Assert.Equal(DeployWeb, Calls()[^1]);
     }
 
     [UnixTheory]
     [InlineData("Failed")]
-    [InlineData("Stopped")]
+    [InlineData("Running Stopped")]
     [InlineData("Degraded")]
-    public async Task Deploy_leaves_the_web_alone_when_the_migration_does_not_succeed(string status)
+    public async Task Deploy_leaves_the_web_alone_when_the_migration_does_not_succeed(string statuses)
     {
-        var exitCode = await RunDeployAsync(status);
+        var result = await RunDeployAsync(statuses);
 
-        Assert.Equal(1, exitCode);
+        Assert.Equal(1, result.ExitCode);
         Assert.Contains("azd deploy migrate --no-prompt", Calls());
-        Assert.DoesNotContain(Calls(), call => call.StartsWith("azd deploy web", StringComparison.Ordinal));
+        Assert.DoesNotContain(DeployWeb, Calls());
+        Assert.Contains(
+            $"ended as {statuses.Split(' ')[^1]}; the web was not deployed.", result.Error, StringComparison.Ordinal);
     }
 
     [UnixTheory]
-    [InlineData("sepiabox", "westeurope")]
-    [InlineData("other", "francecentral")]
-    public async Task Deploy_refuses_to_start_when_the_azd_environment_is_not_sepiabox_in_france_central(
-        string environmentName, string location)
+    [InlineData("Running")]
+    [InlineData("FAIL")]
+    public async Task Deploy_stops_the_job_and_leaves_the_web_alone_when_the_migration_times_out(string statuses)
     {
-        var exitCode = await RunDeployAsync("Succeeded", environmentName, location);
+        var result = await RunDeployAsync(statuses, timeoutSeconds: 1);
 
-        Assert.Equal(1, exitCode);
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(JobStop, Calls());
+        Assert.DoesNotContain(DeployWeb, Calls());
+        Assert.Contains("did not finish in 1s", result.Error, StringComparison.Ordinal);
+        Assert.Contains("may be partly applied", result.Error, StringComparison.Ordinal);
+    }
+
+    [UnixTheory]
+    [InlineData("sepiabox", "westeurope", "", "must be in francecentral")]
+    [InlineData("other", "francecentral", "", "Select the azd environment 'sepiabox'")]
+    [InlineData("sepiabox", "francecentral", "rg-other", "deploys to rg-other, not rg-sepiabox")]
+    public async Task Deploy_refuses_to_start_when_the_azd_environment_is_not_sepiabox_in_france_central(
+        string environmentName, string location, string resourceGroup, string message)
+    {
+        var result = await RunDeployAsync("Succeeded", environmentName, location, resourceGroup);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(message, result.Error, StringComparison.Ordinal);
         Assert.All(Calls(), call => Assert.StartsWith("azd env get-value", call, StringComparison.Ordinal));
+    }
+
+    [UnixFact]
+    public async Task Deploy_refuses_to_start_when_postgres_is_stopped()
+    {
+        var result = await RunDeployAsync("Succeeded", postgresState: "Stopped");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("sepiabox-pg is stopped", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("azd provision --no-prompt", Calls());
+    }
+
+    [UnixFact]
+    public async Task Deploy_provisions_the_server_when_it_does_not_exist_yet()
+    {
+        var result = await RunDeployAsync("Succeeded", postgresState: "MISSING");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("azd provision --no-prompt", Calls());
     }
 
     [UnixTheory]
@@ -89,26 +165,36 @@ public sealed class DeployScriptTests : IDisposable
     [InlineData("1", 0)]
     public async Task Azd_predeploy_hook_refuses_a_deploy_that_does_not_come_from_the_script(string guard, int expected)
     {
-        var azureYaml = await File.ReadAllTextAsync(Path.Combine(s_root, "azure.yaml"));
+        var azureYaml = await File.ReadAllTextAsync(Path.Combine(Repository.Root, "azure.yaml"));
         var hook = Regex.Match(azureYaml, @"predeploy:\s+posix:\s+shell: sh\s+run: '(?<run>[^']+)'");
         Assert.True(hook.Success, "azure.yaml has no POSIX predeploy hook.");
 
-        var exitCode = await RunAsync("sh", ["-c", hook.Groups["run"].Value], new() { ["SEPIABOX_DEPLOY_SCRIPT"] = guard });
+        var result = await RunAsync("sh", ["-c", hook.Groups["run"].Value], new() { ["SEPIABOX_DEPLOY_SCRIPT"] = guard });
 
-        Assert.Equal(expected, exitCode);
+        Assert.Equal(expected, result.ExitCode);
     }
 
-    private Task<int> RunDeployAsync(string status, string environmentName = "sepiabox", string location = "francecentral") =>
-        RunAsync("bash", [Path.Combine(s_root, "scripts", "deploy.sh")], new()
+    private Task<ProcessResult> RunDeployAsync(
+        string statuses,
+        string environmentName = "sepiabox",
+        string location = "francecentral",
+        string resourceGroup = "rg-sepiabox",
+        string postgresState = "Ready",
+        int timeoutSeconds = 30) =>
+        RunAsync("bash", [Path.Combine(Repository.Root, "scripts", "deploy.sh")], new()
         {
             ["PATH"] = _stubs + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
             ["CALLS"] = _calls,
-            ["STUB_STATUS"] = status,
+            ["STUB_STATUSES"] = statuses,
             ["STUB_ENV_NAME"] = environmentName,
             ["STUB_LOCATION"] = location,
+            ["STUB_RESOURCE_GROUP"] = resourceGroup,
+            ["STUB_PG_STATE"] = postgresState,
+            ["SEPIABOX_MIGRATE_TIMEOUT_SECONDS"] = timeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["SEPIABOX_MIGRATE_POLL_SECONDS"] = "0.1",
         });
 
-    private static async Task<int> RunAsync(string fileName, string[] arguments, Dictionary<string, string> environment)
+    private static async Task<ProcessResult> RunAsync(string fileName, string[] arguments, Dictionary<string, string> environment)
     {
         var start = new ProcessStartInfo(fileName) { RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in arguments)
@@ -135,8 +221,7 @@ public sealed class DeployScriptTests : IDisposable
             throw;
         }
 
-        await Task.WhenAll(output, error);
-        return process.ExitCode;
+        return new ProcessResult(process.ExitCode, await output, await error);
     }
 
     private List<string> Calls() => File.Exists(_calls) ? [.. File.ReadAllLines(_calls)] : [];
@@ -150,4 +235,6 @@ public sealed class DeployScriptTests : IDisposable
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
     }
+
+    private sealed record ProcessResult(int ExitCode, string Output, string Error);
 }

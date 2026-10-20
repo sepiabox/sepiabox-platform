@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace Sepiabox.AppHost.Tests;
@@ -34,6 +35,59 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
 
         Assert.Equal("'azure.extensions'", configuration.Property("name"));
         Assert.Equal("'VECTOR,POSTGIS'", configuration.Property("value"));
+    }
+
+    [Fact]
+    public void Postgres_credentials_are_generated_without_characters_that_break_the_connection_string()
+    {
+        // Aspire writes the password unquoted into `Password=...;`, so a `;` or a quote would break it.
+        var password = Generate("pg-password");
+        var login = Generate("pg-username");
+
+        Assert.True(published.Resource("pg-password")["inputs"]!["value"]!["secret"]!.GetValue<bool>());
+        Assert.False(password["special"]!.GetValue<bool>());
+        Assert.Equal(32, password["minLength"]!.GetValue<int>());
+        Assert.Equal(1, password["minLower"]!.GetValue<int>());
+        Assert.Equal(1, password["minUpper"]!.GetValue<int>());
+        Assert.Equal(1, password["minNumeric"]!.GetValue<int>());
+        Assert.False(login["special"]!.GetValue<bool>());
+        Assert.False(login["numeric"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void Postgres_firewall_has_only_the_azure_services_rule_when_published()
+    {
+        // Accepted exposure (D-061): any Azure tenant reaches port 5432 and must still know the password.
+        // A change here must be deliberate.
+        var rule = Assert.Single(published.Declarations("Microsoft.DBforPostgreSQL/flexibleServers/firewallRules"));
+
+        Assert.Equal("'AllowAllAzureIps'", rule.Property("name"));
+        Assert.Equal("'0.0.0.0'", rule.Property("startIpAddress"));
+        Assert.Equal("'0.0.0.0'", rule.Property("endIpAddress"));
+    }
+
+    [Fact]
+    public void No_module_outputs_a_password_or_a_key_when_published()
+    {
+        var outputs = published.Modules.Values
+            .SelectMany(module => module.Split('\n'))
+            .Where(line => line.StartsWith("output ", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.NotEmpty(outputs);
+        Assert.DoesNotContain(outputs, line => line.Contains("administratorLoginPassword", StringComparison.Ordinal));
+        Assert.DoesNotContain(outputs, line => line.Contains("listKeys", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Storage_takes_no_shared_keys_and_keeps_deleted_blobs_for_a_week_when_published()
+    {
+        var account = published.The("Microsoft.Storage/storageAccounts");
+        var retention = published.The("Microsoft.Storage/storageAccounts/blobServices").Block("deleteRetentionPolicy");
+
+        Assert.Equal("false", account.Property("allowSharedKeyAccess"));
+        Assert.Contains("enabled: true", retention, StringComparison.Ordinal);
+        Assert.Contains("days: 7", retention, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -182,6 +236,9 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
         Assert.Empty(published.Declarations("Microsoft.App/managedEnvironments/dotNetComponents"));
         Assert.Single(published.Declarations("Microsoft.KeyVault/vaults"));
     }
+
+    private JsonObject Generate(string parameter) =>
+        published.Resource(parameter)["inputs"]!["value"]!["default"]!["generate"]!.AsObject();
 
     private BicepResource WebApp() => published.The(ContainerApp);
 
