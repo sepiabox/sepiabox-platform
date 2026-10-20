@@ -82,6 +82,18 @@ public static class AzureInfrastructure
     /// </summary>
     public const string UploaderPrincipalIdsParameter = "uploaderPrincipalIds";
 
+    /// <summary>The azd parameter with the web's custom domain, empty for none (S-035).</summary>
+    public const string CustomDomainParameter = "customDomain";
+
+    /// <summary>The azd parameter that binds the custom domain: <c>Disabled</c> first, <c>SniEnabled</c> once its DNS is in place.</summary>
+    public const string CustomDomainBindingParameter = "customDomainBinding";
+
+    /// <summary>The environment's output with the custom domain verification id (the TXT record <c>asuid.app</c>).</summary>
+    public const string CustomDomainVerificationIdOutput = "AZURE_CONTAINER_APPS_CUSTOM_DOMAIN_VERIFICATION_ID";
+
+    /// <summary>The managed certificate of the custom domain, in the Container Apps environment.</summary>
+    public const string CustomDomainCertificateName = "sepiabox-custom-domain";
+
     /// <summary>How long a deleted or overwritten blob can be restored.</summary>
     public const int BlobSoftDeleteDays = 7;
 
@@ -222,9 +234,15 @@ public static class AzureInfrastructure
 
     public static void ConfigureContainerAppEnvironment(AzureResourceInfrastructure infrastructure)
     {
-        foreach (var environment in infrastructure.GetProvisionableResources().OfType<ContainerAppManagedEnvironment>())
+        foreach (var environment in infrastructure.GetProvisionableResources().OfType<ContainerAppManagedEnvironment>().ToList())
         {
             environment.Location = Region;
+
+            // The value of the TXT record asuid.<subdomain> that proves the custom domain is ours (S-035).
+            infrastructure.Add(new ProvisioningOutput(CustomDomainVerificationIdOutput, typeof(string))
+            {
+                Value = environment.CustomDomainConfiguration.CustomDomainVerificationId,
+            });
         }
 
         // The identity the apps pull images with.
@@ -240,7 +258,30 @@ public static class AzureInfrastructure
         identity.Location = Region;
     }
 
-    public static void ConfigureWebApp(AzureResourceInfrastructure infrastructure, ContainerApp app)
+    /// <summary>
+    /// The web app, with the optional custom domain (S-035, D-065): none while <c>customDomain</c> is empty; the
+    /// host name with its binding disabled while <c>customDomainBinding</c> is <c>Disabled</c>; bound with SNI to
+    /// the managed certificate <c>Bicep/domain.bicep</c> creates once it is <c>SniEnabled</c>.
+    /// </summary>
+    public static Action<AzureResourceInfrastructure, ContainerApp> ConfigureWebApp(
+        IResourceBuilder<ParameterResource> customDomain, IResourceBuilder<ParameterResource> customDomainBinding,
+        BicepOutputReference environmentId) =>
+        (infrastructure, app) =>
+        {
+            ConfigureWebApp(infrastructure, app);
+
+            // The names Aspire gives the same values elsewhere in the module, so each is one parameter.
+            var domain = customDomain.AsProvisioningParameter(infrastructure, "customdomain_value").BicepIdentifier;
+            var binding = customDomainBinding.AsProvisioningParameter(infrastructure, "customdomainbinding_value").BicepIdentifier;
+            var environment = environmentId
+                .AsProvisioningParameter(infrastructure, "aca_outputs_azure_container_apps_environment_id").BicepIdentifier;
+            // One conditional expression for the whole list: Azure.Provisioning has no conditional elements.
+            ((IBicepValue)app.Configuration.Ingress.CustomDomains).Assign(new BicepValue<string>(new IdentifierExpression(
+                $"empty({domain}) ? [] : [{{ name: {domain}, bindingType: {binding}, "
+                + $"certificateId: {binding} == 'SniEnabled' ? '${{{environment}}}/managedCertificates/{CustomDomainCertificateName}' : null }}]")));
+        };
+
+    private static void ConfigureWebApp(AzureResourceInfrastructure infrastructure, ContainerApp app)
     {
         ArgumentNullException.ThrowIfNull(app);
         app.Name = WebAppName;

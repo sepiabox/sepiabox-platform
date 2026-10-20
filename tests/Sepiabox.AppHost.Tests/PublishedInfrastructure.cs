@@ -92,9 +92,11 @@ public sealed class PublishedInfrastructure : IAsyncLifetime
 
 /// <summary>
 /// One <c>resource</c> declaration of a module: each runs from a line <c>resource name 'Type@version' = {</c>
-/// (or <c>= [</c> for a loop) to the closing brace (or bracket) at the start of a line.
+/// (or <c>= [</c> for a loop, <c>= if (condition) {</c> for a conditional resource) to the closing brace (or
+/// bracket) at the start of a line.
 /// </summary>
-public sealed partial record BicepResource(string Identifier, string Type, string ApiVersion, bool IsExisting, bool IsLoop, string Body)
+public sealed partial record BicepResource(
+    string Identifier, string Type, string ApiVersion, bool IsExisting, bool IsLoop, string Body, string? Condition = null)
 {
     public static IEnumerable<BicepResource> Parse(string module)
     {
@@ -106,7 +108,8 @@ public sealed partial record BicepResource(string Identifier, string Type, strin
                 match.Groups["version"].Value,
                 match.Groups["existing"].Success,
                 match.Groups["open"].Value == "[",
-                match.Groups["body"].Value);
+                match.Groups["body"].Value,
+                match.Groups["condition"].Success ? match.Groups["condition"].Value : null);
         }
     }
 
@@ -136,7 +139,7 @@ public sealed partial record BicepResource(string Identifier, string Type, strin
     }
 
     [GeneratedRegex(
-        @"^resource (?<id>\w+) '(?<type>[^@']+)@(?<version>[^']+)' (?<existing>existing )?= (?<open>[\{\[])\r?\n(?<body>.*?)^[\}\]]",
+        @"^resource (?<id>\w+) '(?<type>[^@']+)@(?<version>[^']+)' (?<existing>existing )?= (?:if \((?<condition>.+?)\) )?(?<open>[\{\[])\r?\n(?<body>.*?)^[\}\]]",
         RegexOptions.Multiline | RegexOptions.Singleline)]
     private static partial Regex Declaration();
 }
