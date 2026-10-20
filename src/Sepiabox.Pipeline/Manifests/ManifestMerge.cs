@@ -22,6 +22,10 @@ public static class ManifestMerge
             ? (existing, incoming)
             : (incoming, existing);
 
+        // Faces are opt-in (S-018): a work folder processed without --faces knows nothing about them, so it never
+        // replaces faces that another one found.
+        var faces = incoming.FacesProcessed || !existing.FacesProcessed ? incoming : existing;
+
         return description with
         {
             // Ranked by source, so the date does not depend on which drive uploads first (D-046).
@@ -29,6 +33,8 @@ public static class ManifestMerge
             Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
             Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
             Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),
+            FacesProcessed = faces.FacesProcessed,
+            Faces = faces.Faces,
         };
     }
 

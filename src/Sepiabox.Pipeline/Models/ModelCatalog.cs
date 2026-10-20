@@ -21,6 +21,12 @@ public static partial class ModelCatalog
 {
     public const string ClipVision = "clip-vit-b32-vision";
 
+    /// <summary>YuNet face detection (S-018).</summary>
+    public const string YuNet = "yunet-2023mar";
+
+    /// <summary>SFace face recognition (S-018).</summary>
+    public const string SFace = "sface-2021dec";
+
     private static readonly JsonSerializerOptions s_options = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     private static readonly HashSet<string> s_licenses = new(StringComparer.Ordinal) { "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause" };

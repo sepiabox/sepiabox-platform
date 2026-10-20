@@ -246,12 +246,70 @@ public sealed class ManifestMergeTests
     }
 
     [Fact]
+    public void A_manifest_processed_without_faces_never_erases_the_stored_faces()
+    {
+        var withFaces = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9)] };
+        var withoutFaces = Photo(Source("HD do Jonathas", "c.jpg"));
+
+        var merged = ManifestMerge.Merge(withFaces, withoutFaces);
+
+        Assert.True(merged.FacesProcessed);
+        Assert.Equal(0.9, Assert.Single(merged.Faces).Score);
+        Assert.Equal(2, merged.Sources.Count);
+    }
+
+    [Fact]
+    public void Takes_the_incoming_faces_when_the_stored_manifest_has_none_processed()
+    {
+        var merged = ManifestMerge.Merge(
+            Photo(Source("HD da Ana", "a.jpg")),
+            Photo(Source("HD do Jonathas", "c.jpg")) with { FacesProcessed = true, Faces = [Face(0.85)] });
+
+        Assert.True(merged.FacesProcessed);
+        Assert.Equal(0.85, Assert.Single(merged.Faces).Score);
+    }
+
+    [Fact]
+    public void Takes_the_incoming_faces_when_both_were_processed()
+    {
+        var stored = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9), Face(0.8)] };
+        var incoming = Photo(Source("HD do Jonathas", "c.jpg")) with { FacesProcessed = true, Faces = [] };
+
+        var merged = ManifestMerge.Merge(stored, incoming);
+
+        Assert.True(merged.FacesProcessed);
+        Assert.Empty(merged.Faces);
+    }
+
+    [Fact]
+    public void Keeps_faces_unprocessed_when_neither_side_looked_for_them()
+    {
+        var merged = ManifestMerge.Merge(Photo(Source("HD da Ana", "a.jpg")), Photo(Source("HD do Jonathas", "c.jpg")));
+
+        Assert.False(merged.FacesProcessed);
+        Assert.Empty(merged.Faces);
+    }
+
+    [Fact]
+    public void Keeps_the_faces_of_a_described_photo_when_the_incoming_run_could_not_make_thumbnails()
+    {
+        var described = Photo(Source("HD da Ana", "a.jpg")) with { FacesProcessed = true, Faces = [Face(0.9)] };
+        var failed = Photo(Source("HD do Jonathas", "a.jpg")) with { Width = null, Derivatives = [] };
+
+        Assert.Single(ManifestMerge.Merge(described, failed).Faces);
+        Assert.Single(ManifestMerge.Merge(failed, described).Faces);
+    }
+
+    [Fact]
     public void Refuses_to_merge_different_assets()
     {
         var other = Photo(Source("HD da Ana", "a.jpg")) with { Id = new string('f', 64) };
 
         Assert.Throws<ArgumentException>(() => ManifestMerge.Merge(Photo(Source("HD da Ana", "a.jpg")), other));
     }
+
+    private static ManifestFace Face(double score) =>
+        new([0.1, 0.2, 0.3, 0.4], score, Convert.ToBase64String(new byte[128 * sizeof(float)]));
 
     private static (DateTime?, CaptureDateSource?) DateOf(Manifest manifest) => (manifest.CapturedAt, manifest.CapturedAtSource);
 

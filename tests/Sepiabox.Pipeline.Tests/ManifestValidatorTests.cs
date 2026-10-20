@@ -195,6 +195,92 @@ public sealed class ManifestValidatorTests
         Assert.Contains("/embeddings/clip-vit-b32", error, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Accepts_detected_faces_when_faces_were_processed()
+    {
+        var json = ValidJson(node =>
+        {
+            node["facesProcessed"] = true;
+            node["faces"] = new JsonArray(Face());
+        });
+
+        Assert.True(s_validator.TryValidate(json, out var manifest, out var error), error);
+        var face = Assert.Single(manifest.Faces);
+        Assert.Equal([0.25, 0.1, 0.2, 0.3], face.Box);
+        Assert.Equal(0.97, face.Score);
+        Assert.Equal(128, EmbeddingCodec.Decode(face.Embedding).Length);
+    }
+
+    [Fact]
+    public void Accepts_a_manifest_written_before_faces_with_faces_not_processed_and_none_listed()
+    {
+        Assert.True(s_validator.TryValidate(ValidJson(), out var manifest, out var error), error);
+        Assert.False(manifest.FacesProcessed);
+        Assert.Empty(manifest.Faces);
+    }
+
+    [Fact]
+    public void Rejects_faces_when_faces_were_not_processed()
+    {
+        var json = ValidJson(node => node["faces"] = new JsonArray(Face()));
+
+        Assert.False(s_validator.TryValidate(json, out _, out var error));
+        Assert.Contains("/faces", error, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string, string> InvalidFaces => new()
+    {
+        { "box", "[0.1, 0.2, 0.3]" },
+        { "box", "[0.1, 0.2, 0.3, 1.5]" },
+        { "box", "[-0.1, 0.2, 0.3, 0.4]" },
+        { "score", "1.2" },
+        { "score", "\"high\"" },
+        { "embedding", "\"AAAA\"" },
+        { "unknown", "1" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidFaces))]
+    public void Rejects_a_face_that_does_not_match_the_schema(string property, string value)
+    {
+        var json = ValidJson(node =>
+        {
+            node["facesProcessed"] = true;
+            var face = Face();
+            face[property] = JsonNode.Parse(value);
+            node["faces"] = new JsonArray(face);
+        });
+
+        Assert.False(s_validator.TryValidate(json, out _, out var error));
+        Assert.Contains("/faces/0", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rejects_a_face_without_an_embedding()
+    {
+        var json = ValidJson(node =>
+        {
+            node["facesProcessed"] = true;
+            var face = Face();
+            face.Remove("embedding");
+            node["faces"] = new JsonArray(face);
+        });
+
+        Assert.False(s_validator.TryValidate(json, out _, out _));
+    }
+
+    private static JsonObject Face()
+    {
+        var embedding = new float[128];
+        embedding[0] = 1;
+        return new JsonObject
+        {
+            ["box"] = new JsonArray(0.25, 0.1, 0.2, 0.3),
+            ["score"] = 0.97,
+            ["embedding"] = EmbeddingCodec.Encode(embedding),
+        };
+    }
+
     private static string ValidJson(Action<JsonObject>? change = null)
     {
         var node = JsonNode.Parse(ManifestJson.Serialize(TestManifests.Photo(TestManifests.Source("HD da Ana", "2019/praia.jpg"))))!.AsObject();

@@ -39,6 +39,21 @@ public class ManifestTests
     }
 
     [Fact]
+    public void Writes_faces_as_box_score_and_embedding()
+    {
+        var face = new ManifestFace([0.25, 0.1, 0.2, 0.3], 0.97, "AAAA");
+
+        var json = JsonNode.Parse(ManifestJson.Serialize(Sample with { FacesProcessed = true, Faces = [face] }))!.AsObject();
+
+        Assert.True((bool)json["facesProcessed"]!);
+        var written = json["faces"]![0]!.AsObject();
+        Assert.Equal(["box", "score", "embedding"], written.Select(p => p.Key));
+        Assert.Equal([0.25, 0.1, 0.2, 0.3], written["box"]!.AsArray().Select(v => (double)v!));
+        Assert.Equal(0.97, (double)written["score"]!);
+        Assert.Equal("AAAA", (string)written["embedding"]!);
+    }
+
+    [Fact]
     public void Omits_the_capture_date_source_when_there_is_no_capture_date()
     {
         var json = JsonNode.Parse(ManifestJson.Serialize(Sample with { Captured = null }))!.AsObject();
