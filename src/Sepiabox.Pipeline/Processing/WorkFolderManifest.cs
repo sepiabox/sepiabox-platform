@@ -13,7 +13,8 @@ public sealed record WorkFolderOutcome(EmbeddingOutcome? Embedding, EmbeddingOut
 /// <summary>
 /// Adds what an unchanged file's manifest is missing, its embedding and its faces, from the work folder: the manifest
 /// is read once, both are added in memory and it is written once, only when something was added. A failure to read
-/// or write the manifest is reported once, on the embedding when there is an embedder.
+/// or write the manifest is reported once: a read failure on the embedding when there is an embedder, a write failure
+/// on the embedding when one was added; otherwise on the faces.
 /// </summary>
 public static class WorkFolderManifest
 {

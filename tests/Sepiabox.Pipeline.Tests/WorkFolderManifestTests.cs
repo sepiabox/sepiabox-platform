@@ -69,11 +69,75 @@ public sealed class WorkFolderManifestTests : IDisposable
         Assert.Equal((EmbeddingStatus.ManifestMissing, EmbeddingStatus.ManifestMissing), (outcome.Embedding!.Status, outcome.Faces!.Status));
     }
 
+    [Fact]
+    public void Gives_a_category_without_the_file_details_when_a_manifest_is_corrupt()
+    {
+        var path = _work.Write("manifests/corrupt.json", "{ not json"u8.ToArray());
+
+        var outcome = WorkFolderManifest.TryAdd(path, _work.Path, new FakeEmbedder(), faces: null).Embedding!;
+
+        Assert.Equal("Could not read its manifest (JsonException)", outcome.Category);
+    }
+
+    [Fact]
+    public void A_manifest_file_is_rewritten_with_the_embedding()
+    {
+        var path = WriteManifest(Photo());
+
+        var outcome = WorkFolderManifest.TryAdd(path, _work.Path, new FakeEmbedder(), faces: null).Embedding!;
+
+        Assert.Equal(EmbeddingStatus.Added, outcome.Status);
+        Assert.True(ManifestJson.Deserialize(File.ReadAllText(path)).Embeddings.ContainsKey(ClipImageEmbedder.ModelKey));
+    }
+
+    [Fact]
+    public void A_manifest_file_that_needs_nothing_is_not_rewritten()
+    {
+        var path = WriteManifest(Photo(), withDerivatives: false);
+        var before = File.ReadAllText(path);
+        File.SetLastWriteTimeUtc(path, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var outcome = WorkFolderManifest.TryAdd(path, _work.Path, new FakeEmbedder(), faces: null).Embedding!;
+
+        Assert.Equal(EmbeddingStatus.NoDerivative, outcome.Status);
+        Assert.Equal(before, File.ReadAllText(path));
+        Assert.Equal(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc), File.GetLastWriteTimeUtc(path));
+    }
+
+    [Fact]
+    public void A_corrupt_manifest_file_is_reported_and_left_as_it_is()
+    {
+        var path = _work.Write("manifests/corrupt.json", "{ not json"u8.ToArray());
+
+        var outcome = WorkFolderManifest.TryAdd(path, _work.Path, new FakeEmbedder(), faces: null).Embedding!;
+
+        Assert.Equal(EmbeddingStatus.Failed, outcome.Status);
+        Assert.Null(outcome.Manifest);
+        Assert.Contains("Could not read its manifest", outcome.Problem, StringComparison.Ordinal);
+        Assert.Equal("{ not json", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void Reports_a_missing_manifest_when_the_file_is_gone()
+    {
+        var outcome = WorkFolderManifest.TryAdd(Path.Combine(_work.Path, "manifests", "gone.json"), _work.Path, new FakeEmbedder(), faces: null).Embedding!;
+
+        Assert.Equal(EmbeddingStatus.ManifestMissing, outcome.Status);
+    }
+
+    [Fact]
+    public void Reports_a_missing_manifest_when_its_folder_is_gone()
+    {
+        var outcome = WorkFolderManifest.TryAdd(Path.Combine(_work.Path, "nowhere", "gone.json"), _work.Path, new FakeEmbedder(), faces: null).Embedding!;
+
+        Assert.Equal(EmbeddingStatus.ManifestMissing, outcome.Status);
+    }
+
     private static Manifest Photo() => TestManifests.Photo(TestManifests.Source("HD da Ana", "2019/praia.jpg"));
 
-    private string WriteManifest(Manifest manifest)
+    private string WriteManifest(Manifest manifest, bool withDerivatives = true)
     {
-        foreach (var derivative in manifest.Derivatives)
+        foreach (var derivative in withDerivatives ? manifest.Derivatives : [])
         {
             _work.Write(derivative.Path, [1, 2, 3]);
         }

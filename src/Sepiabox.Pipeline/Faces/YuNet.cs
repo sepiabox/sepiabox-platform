@@ -43,7 +43,6 @@ public static class YuNet
     /// <summary>The outputs of one stride: <c>cls_8</c>, <c>obj_8</c>, <c>bbox_8</c> (4 per cell) and <c>kps_8</c> (10 per cell).</summary>
     public sealed record StrideOutput(int Stride, float[] Class, float[] Objectness, float[] Box, float[] Landmarks);
 
-
     /// <summary>Faces with a score of at least <paramref name="minimumScore"/>, best first, in input pixels.</summary>
     public static List<FaceCandidate> Decode(IReadOnlyList<StrideOutput> outputs, double minimumScore)
     {

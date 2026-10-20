@@ -65,8 +65,8 @@ public static class ModelSession
         {
             // ONNX Runtime's native library is missing or broken on this computer: the model itself may be fine. A type
             // initializer hides the real cause in its inner exception.
-            var cause = ex is TypeInitializationException { InnerException: { } inner } ? inner.Message : ex.Message;
-            warning = $"ONNX Runtime could not start ({cause}), {consequence}. Reinstall sepiabox-ingest; the model files are kept.";
+            warning = $"ONNX Runtime could not start ({ex.GetBaseException().Message}), {consequence}. "
+                + "Reinstall sepiabox-ingest; the model files are kept.";
             return null;
         }
         catch (OnnxRuntimeException ex)
@@ -87,7 +87,7 @@ public static class ModelSession
             // verification is kept, since hashing it again would change nothing.
             session.Dispose();
             warning = $"{path} is not the model version this build of sepiabox-ingest expects: it has no input {expected} "
-                + $"(it has {found}), {consequence}. Update sepiabox-ingest, then {char.ToLowerInvariant(remedy[0])}{remedy[1..]}";
+                + $"(it has {found}), {consequence}. Update sepiabox-ingest. {remedy}";
             return null;
         }
 

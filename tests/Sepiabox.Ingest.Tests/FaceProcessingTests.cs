@@ -57,8 +57,7 @@ public sealed class FaceProcessingTests : IDisposable
         using (var image = new MagickImage(Path.Combine("TestData", "face-portrait.jpg")))
         {
             image.Rotate(-90);
-            // Both, as in TestPhotos.Sized: the attribute alone writes no EXIF profile, and ImageMagick writes the
-            // profile's tag from the attribute. The check below proves the saved file says 6.
+            // Both, as in TestPhotos.Sized: the attribute alone writes no EXIF profile.
             image.Orientation = Orientation.RightTop;
             var exif = new ExifProfile();
             exif.SetValue(ExifTag.Orientation, (ushort)6);
