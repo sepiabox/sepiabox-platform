@@ -1,5 +1,6 @@
 using Npgsql;
 using Sepiabox.Catalog;
+using Sepiabox.Web;
 using Sepiabox.Web.Auth;
 using Sepiabox.Web.Components;
 using Sepiabox.Web.Localization;
@@ -8,6 +9,8 @@ using Sepiabox.Web.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+// Before anything reads configuration, so the sign-in secrets and the access list come from Key Vault in Azure.
+builder.AddSepiaboxSecrets();
 
 // Both integrations also register health checks, so /health covers the database and blob storage.
 // EF uses this same data source, so the app and its health check share one pool.
@@ -22,12 +25,14 @@ builder.Services.AddSingleton<ISasUrlFactory, SasUrlFactory>();
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 
 builder.AddSepiaboxAuth();
+builder.AddSepiaboxKeyRing();
 builder.Services.AddSepiaboxLocalization();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 var app = builder.Build();
+app.WarnAboutEphemeralKeys();
 
 app.UseSepiaboxForwardedHeaders();
 // Before the error and status code pages, so they too are in the visitor's language (D-050).

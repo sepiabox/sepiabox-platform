@@ -30,6 +30,7 @@ Every manifest sent from the PC must be imported without intervention and withou
 ### Technical notes
 - `Azure.Messaging.ServiceBus`. Resources added via Aspire (`AddAzureServiceBus`) and `ConfigureInfrastructure` for Event Grid.
 - Portability (D-051, new code only): the new queue loop depends on an `IBlobEventQueue` interface (receive a `BlobCreated(container, name)`, complete, abandon) declared in the worker; the Service Bus receiver and the Event Grid payload parsing are its Azure implementation, registered in `Program.cs`. Unit tests use an in-memory queue. The existing manifest reads stay as they are; S-050 (after the MVP) moves the interface to `Sepiabox.Storage`.
+- Database role (S-058, D-062): if the import job applies migrations (`import --migrate`), give it the same `Catalog:AppRole:Name` and `Catalog:AppRole:Password` settings as the `sepiabox-migrate` job, so the web's role is granted any new table; otherwise it must never migrate. Its identity is the worker's (`migrate-identity`), which already has Storage Blob Data Reader; add the Service Bus receiver role.
 - Decisions: D-008, D-051.
 
 ### Expected tests

@@ -1,5 +1,6 @@
 using Aspire.Hosting.Azure;
 using Azure.Core;
+using Azure.Provisioning;
 using Azure.Provisioning.AppContainers;
 using Azure.Provisioning.ApplicationInsights;
 using Azure.Provisioning.ContainerRegistry;
@@ -26,6 +27,9 @@ public static class AzureInfrastructure
     /// <summary>The PostgreSQL server; the shutdown runbook stops it (S-030).</summary>
     public const string PostgresServerName = "sepiabox-pg";
 
+    /// <summary>The PostgreSQL server's host name, which Azure derives from its name.</summary>
+    public const string PostgresHostName = PostgresServerName + ".postgres.database.azure.com";
+
     /// <summary>The Container Apps job that runs <c>sepiabox-worker migrate</c> on every deploy.</summary>
     public const string MigrateJobName = "sepiabox-migrate";
 
@@ -41,6 +45,17 @@ public static class AzureInfrastructure
     /// </summary>
     public static readonly IReadOnlyList<string> BlobContainers =
         ["originals", "derivatives", "manifests", "incoming", "exports", "dataprotection"];
+
+    /// <summary>
+    /// The least-privilege PostgreSQL role the web connects with; <c>sepiabox-worker migrate</c> creates it
+    /// (S-058, D-062).
+    /// </summary>
+    public const string AppRoleName = "sepiabox_web";
+
+    /// <summary>
+    /// The azd parameter with the Entra object ids (comma-separated) of the people who upload (S-058).
+    /// </summary>
+    public const string UploaderPrincipalIdsParameter = "uploaderPrincipalIds";
 
     /// <summary>How long a deleted or overwritten blob can be restored.</summary>
     public const int BlobSoftDeleteDays = 7;
@@ -69,6 +84,8 @@ public static class AzureInfrastructure
         MinUpper = 1,
         MinNumeric = 1,
     };
+
+    private const string AutoConfigureDataProtectionProperty = "AutoConfigureDataProtection";
 
     // The migrations of a catalog this size take seconds; ten minutes is plenty and bounds a stuck run.
     private const int MigrateTimeoutSeconds = 600;
@@ -207,6 +224,12 @@ public static class AzureInfrastructure
         ingress.External = true;
         ingress.AllowInsecure = false;
         ingress.Transport = ContainerAppIngressTransportMethod.Http;
+
+        // The web keeps its own key ring in Blob Storage under a Key Vault key (S-058, D-062); Container
+        // Apps' managed data protection, which Aspire turns on, would be a second one.
+        // Aspire adds the setting as a property of its own (runtime.dotnet.autoConfigureDataProtection), with no
+        // typed accessor.
+        app.Configuration.ProvisionableProperties[AutoConfigureDataProtectionProperty].Assign(new BicepValue<bool>(false));
     }
 
     public static void ConfigureMigrateJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)
