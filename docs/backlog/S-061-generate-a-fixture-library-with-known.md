@@ -15,9 +15,9 @@ The MVP acceptance test (S-054) needs a folder of photos and videos whose counts
 - Running the pipeline over it (S-054).
 
 ### Acceptance criteria
-- [ ] Given a seed, when the library is generated twice, then the files and the expected numbers are identical.
-- [ ] Given a generated library, when `process` runs on it, then the manifests in the work folder, counted per year × kind and undated in the test, equal the generator's expected numbers, with the duplicate counted once and the folder-dated files in their year. (S-054 checks the same numbers against `sepiabox-ingest report`, S-062.)
-- [ ] Given the generated videos, when `process` runs, then their manifests have the locations the generator wrote.
+- [x] Given a seed, when the library is generated twice, then the files and the expected numbers are identical.
+- [x] Given a generated library, when `process` runs on it, then the manifests in the work folder, counted per year × kind and undated in the test, equal the generator's expected numbers, with the duplicate counted once and the folder-dated files in their year. (S-054 checks the same numbers against `sepiabox-ingest report`, S-062.)
+- [x] Given the generated videos, when `process` runs, then their manifests have the locations the generator wrote.
 
 ### Technical notes
 - Integration (FFmpeg); tiny images from `TestPhotos`; no binary committed.
