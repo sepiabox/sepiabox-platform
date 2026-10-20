@@ -76,6 +76,7 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
         ["video/mpeg"] = ".mpg",
         ["video/mp2t"] = ".mts",
         ["video/dv"] = ".dv",
+        // The pre-IANA name for DV, which other tools and cloud sources still use for the same files.
         ["video/x-dv"] = ".dv",
     };
 

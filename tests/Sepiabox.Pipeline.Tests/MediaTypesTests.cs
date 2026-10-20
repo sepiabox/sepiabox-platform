@@ -42,6 +42,8 @@ public class MediaTypesTests
     [InlineData("VIDEO_TS/VTS_01_1.VOB")]
     [InlineData("VIDEO_TS/VTS_12_9.VOB")]
     [InlineData("holiday.vob")]
+    // Only ASCII digits make a menu name; \d would also match these Arabic-Indic ones.
+    [InlineData("VTS_\u0660\u0661_0.VOB")]
     public void Classifies_dvd_title_parts_as_video_when_the_vob_is_not_a_menu(string path) =>
         Assert.Equal(MediaKind.Video, MediaTypes.Classify(path));
 

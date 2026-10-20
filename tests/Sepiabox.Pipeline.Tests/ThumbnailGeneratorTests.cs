@@ -230,6 +230,7 @@ internal static class CanonRaw
         return (offset, next, values);
     }
 
+    // Writes an offset that was not known earlier, then goes back to the end so later writes append.
     private static void Patch(BinaryWriter writer, int position, int value)
     {
         var end = writer.BaseStream.Position;
