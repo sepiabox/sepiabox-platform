@@ -2,15 +2,16 @@
    signed storage link (D-039, D-049), so the page never holds a link that could expire while it is open.
    wwwroot/video.js retries a failed video once with a fresh link and then reveals the error message.
    It changes the video's src in the browser, so this component must stay static server rendering: an
-   interactive render would put the original src back, and the retry with it. *@
+   interactive render, or enhanced navigation's DOM merge when the same page is loaded again, would put
+   the original src back, and the retry with it. *@
 
 @if (HasProxy)
 {
     <div class="player">
         <video data-player controls preload="metadata" playsinline aria-label="@Label"
                src="fotos/@AssetId/@DerivativeNames.Proxy" poster="@PosterUrl"></video>
-        @* Empty until video.js fills it, so screen readers announce the text when it appears. *@
-        <p class="player-error" role="alert" hidden data-message="@ErrorMessage"></p>
+        @* Empty, and so hidden by CSS, until video.js fills it; screen readers announce the text as it appears. *@
+        <p class="player-error" role="alert" data-message="@ErrorMessage"></p>
     </div>
 }
 else

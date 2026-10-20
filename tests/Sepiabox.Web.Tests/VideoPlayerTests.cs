@@ -32,9 +32,9 @@ public sealed class VideoPlayerTests : BunitContext
         var video = player.Find(".player video[data-player]");
         Assert.Empty(video.Children);
         var message = player.Find(".player .player-error");
-        Assert.True(message.HasAttribute("hidden"));
+        // Visible but empty (CSS hides it while empty): video.js only sets its text, which screen readers announce.
+        Assert.False(message.HasAttribute("hidden"));
         Assert.Equal("alert", message.GetAttribute("role"));
-        // Empty until video.js reveals it, so the alert is announced when its text appears.
         Assert.Equal(string.Empty, message.TextContent);
         Assert.Equal("Não foi possível reproduzir o vídeo. Descarregue o original.", message.GetAttribute("data-message"));
     }

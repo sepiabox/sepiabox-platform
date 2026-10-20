@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Text.RegularExpressions;
 using System.Web;
 using AngleSharp.Html.Parser;
 using Sepiabox.Web.Services;
@@ -64,7 +65,8 @@ public sealed class VideoEndpointTests
         Assert.Contains($"poster=\"fotos/{s_video}/poster\"", html, StringComparison.Ordinal);
         using var document = await new HtmlParser().ParseDocumentAsync(html);
         var scripts = document.Scripts.Select(s => s.GetAttribute("src") ?? string.Empty).ToList();
-        Assert.Contains(scripts, src => src.StartsWith("video", StringComparison.Ordinal) && src.EndsWith(".js", StringComparison.Ordinal));
+        // The file name exactly, fingerprinted or not.
+        Assert.Contains(scripts, src => Regex.IsMatch(src, @"^video(\.[a-z0-9]+)?\.js$"));
         Assert.DoesNotContain("sig=", html, StringComparison.Ordinal);
     }
 
