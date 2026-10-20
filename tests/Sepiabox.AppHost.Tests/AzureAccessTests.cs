@@ -97,6 +97,12 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
     {
         // S-013, D-069: the container's clock is UTC; the family's day is Lisbon's.
         Assert.Equal("Europe/Lisbon", Environment("web")["Search__TimeZone"]);
+    }
+
+    // The web runs in a Linux container; with invariant globalization Windows cannot resolve IANA ids.
+    [UnixFact("IANA time zone ids need ICU or tzdata, which the invariant-globalization Windows run lacks.")]
+    public void Search_time_zone_resolves_when_the_web_runs_on_linux()
+    {
         Assert.True(TimeZoneInfo.TryFindSystemTimeZoneById(AzureInfrastructure.SearchTimeZone, out _));
     }
 
