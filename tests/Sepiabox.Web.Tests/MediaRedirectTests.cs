@@ -12,7 +12,7 @@ public sealed class MediaRedirectTests(CatalogFixture catalog)
     public async Task A_thumbnail_redirects_to_a_cacheable_read_only_link_that_expires_within_15_minutes()
     {
         await using var web = await WebWithPhotoAsync(Ids.Of(1));
-        using var http = web.CreateNonRedirectingClient();
+        using var http = web.CreateSignedInClient(followRedirects: false);
 
         var before = DateTimeOffset.UtcNow;
         using var response = await http.GetAsync(new Uri($"/fotos/{Ids.Of(1)}/thumb-256", UriKind.Relative));
@@ -33,7 +33,7 @@ public sealed class MediaRedirectTests(CatalogFixture catalog)
     public async Task The_original_redirects_to_a_download_named_after_its_source()
     {
         await using var web = await WebWithPhotoAsync(Ids.Of(2));
-        using var http = web.CreateNonRedirectingClient();
+        using var http = web.CreateSignedInClient(followRedirects: false);
 
         using var response = await http.GetAsync(new Uri($"/fotos/{Ids.Of(2)}/original", UriKind.Relative));
 
@@ -54,7 +54,7 @@ public sealed class MediaRedirectTests(CatalogFixture catalog)
     public async Task Anything_that_does_not_exist_is_a_404(string path)
     {
         await using var web = await WebWithPhotoAsync(Ids.Of(3));
-        using var http = web.CreateNonRedirectingClient();
+        using var http = web.CreateSignedInClient(followRedirects: false);
 
         // {0} is an id that is not in the catalog; {1} is a photo, which has no poster.
         var url = string.Format(CultureInfo.InvariantCulture, path, Ids.Of(4), Ids.Of(3));

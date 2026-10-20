@@ -1,5 +1,6 @@
 using Npgsql;
 using Sepiabox.Catalog;
+using Sepiabox.Web.Auth;
 using Sepiabox.Web.Components;
 using Sepiabox.Web.Services;
 
@@ -19,10 +20,14 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ISasUrlFactory, SasUrlFactory>();
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 
+builder.AddSepiaboxAuth();
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 var app = builder.Build();
+
+app.UseSepiaboxForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -32,9 +37,13 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
-app.MapStaticAssets();
+// Styles, fonts and scripts hold nothing private, and the sign-in page needs them before sign-in.
+app.MapStaticAssets().AllowAnonymous();
+app.MapSepiaboxAuth();
 app.MapMediaEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

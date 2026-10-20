@@ -1,4 +1,5 @@
 using Azure;
+using Microsoft.Extensions.Logging;
 using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
@@ -64,4 +65,18 @@ internal static class Details
     public static AssetDetail Photo(string id, DateTime? capturedAt = null, string? previewName = DerivativeNames.Preview) =>
         new(id, AssetKinds.Photo, capturedAt, "Apple", "iPhone 15", 4000, 3000, previewName,
             [new AssetSourceDetail("local", "HD Ana", "2019/praia.jpg")]);
+}
+
+/// <summary>Keeps what was logged, so a test can check a warning.</summary>
+internal sealed class ListLogger<T> : ILogger<T>
+{
+    public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+    public IDisposable? BeginScope<TState>(TState state)
+        where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+        Entries.Add((logLevel, formatter(state, exception)));
 }

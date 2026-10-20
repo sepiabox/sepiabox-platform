@@ -14,7 +14,7 @@ public sealed class TimelinePageTests(CatalogFixture catalog)
     public async Task The_timeline_renders_against_a_real_catalog_without_storage_links()
     {
         await using var web = await WebWithPhotoAsync();
-        using var http = web.CreateClient();
+        using var http = web.CreateSignedInClient();
 
         var html = await http.GetStringAsync(new Uri("/", UriKind.Relative));
 
@@ -29,7 +29,7 @@ public sealed class TimelinePageTests(CatalogFixture catalog)
     public async Task A_page_beyond_the_end_says_there_are_no_more_photos(string query)
     {
         await using var web = await WebWithPhotoAsync();
-        using var http = web.CreateClient();
+        using var http = web.CreateSignedInClient();
 
         using var response = await http.GetAsync(new Uri("/" + query, UriKind.Relative));
         var html = await response.Content.ReadAsStringAsync();
@@ -46,7 +46,7 @@ public sealed class TimelinePageTests(CatalogFixture catalog)
         // Null means page 1, which shows the photo's month.
         expected ??= PortugueseDates.MonthAndYear(PhotoDate.Year, PhotoDate.Month);
         await using var web = await WebWithPhotoAsync();
-        using var http = web.CreateClient();
+        using var http = web.CreateSignedInClient();
 
         using var response = await http.GetAsync(new Uri("/" + query, UriKind.Relative));
 
@@ -58,7 +58,7 @@ public sealed class TimelinePageTests(CatalogFixture catalog)
     public async Task A_photo_page_renders_against_a_real_catalog()
     {
         await using var web = await WebWithPhotoAsync();
-        using var http = web.CreateClient();
+        using var http = web.CreateSignedInClient();
 
         var html = await http.GetStringAsync(new Uri($"/fotos/{Ids.Of(12)}", UriKind.Relative));
 

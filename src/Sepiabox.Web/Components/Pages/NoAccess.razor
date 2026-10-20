@@ -1,0 +1,31 @@
+@page "/sem-acesso"
+@attribute [AllowAnonymous]
+@* Static server rendering, like the sign-in page. *@
+
+<PageTitle>Sem acesso · Sepiabox</PageTitle>
+
+<section class="auth">
+    <h1>Sem acesso</h1>
+    <p>Esta conta não tem acesso ao Sepiabox. Peça a quem gere a biblioteca para a adicionar, ou entre com outra conta.</p>
+
+    <div class="providers">
+        @if (_signedIn)
+        {
+            <SignOutButton Label="Sair e entrar com outra conta" />
+        }
+        else
+        {
+            <a class="button" href="entrar">Entrar com outra conta</a>
+        }
+    </div>
+</section>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private bool _signedIn;
+
+    protected override async Task OnInitializedAsync() =>
+        _signedIn = AuthenticationState is not null && (await AuthenticationState).User.Identity?.IsAuthenticated == true;
+}

@@ -1,0 +1,82 @@
+@page "/entrar"
+@attribute [AllowAnonymous]
+@inject SignInProviders Providers
+@inject IAuthorizationService Authorization
+@inject IAuthorizationPolicyProvider Policies
+@inject IWebHostEnvironment Environment
+@inject NavigationManager Navigation
+@* Static server rendering: the buttons are plain links that leave for Google or Microsoft. *@
+
+<PageTitle>Entrar · Sepiabox</PageTitle>
+
+<section class="auth">
+    <h1>Entrar</h1>
+    <p>O Sepiabox é privado. Entre com a conta Google ou Microsoft que tem acesso.</p>
+
+    @if (Error is not null)
+    {
+        <p class="error" role="alert">Não foi possível entrar. Tente novamente.</p>
+    }
+
+    @if (Providers.Any)
+    {
+        <div class="providers">
+            @if (Providers.Google is not null)
+            {
+                <a class="button" href="@ProviderLink(SignInProviders.GoogleRoute)" data-enhance-nav="false">Entrar com Google</a>
+            }
+            @if (Providers.Microsoft is not null)
+            {
+                <a class="button" href="@ProviderLink(SignInProviders.MicrosoftRoute)" data-enhance-nav="false">Entrar com Microsoft</a>
+            }
+        </div>
+    }
+    else if (Environment.IsDevelopment())
+    {
+        <form class="dev-login" method="post" action="dev-login" data-enhance="false">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="@Return" />
+            <label for="email">E-mail (só em desenvolvimento)</label>
+            <input id="email" name="email" type="email" required />
+            <button type="submit" class="button">Entrar</button>
+        </form>
+    }
+    else
+    {
+        <p class="empty">A entrada ainda não está configurada.</p>
+    }
+</section>
+
+@code {
+    // The page is rendered statically on the server (no @rendermode), so the request is always there.
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    // The cookie handler names it ReturnUrl when it sends a visitor here.
+    [SupplyParameterFromQuery(Name = "ReturnUrl")]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = AuthSetup.SignInErrorQuery)]
+    private string? Error { get; set; }
+
+    private string Return => AuthSetup.LocalReturnUrl(
+        HttpContext?.Request ?? throw new InvalidOperationException("/entrar is only rendered on the server."),
+        ReturnUrl);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Someone who already has access (the same policy as every page) has nothing to do here.
+        if (AuthenticationState is not null
+            && await Policies.GetDefaultPolicyAsync() is { } policy
+            && (await Authorization.AuthorizeAsync((await AuthenticationState).User, policy)).Succeeded)
+        {
+            Navigation.NavigateTo(Return);
+        }
+    }
+
+    private string ProviderLink(string provider) =>
+        $"entrar/{provider}?returnUrl={Uri.EscapeDataString(Return)}";
+}

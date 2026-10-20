@@ -1,0 +1,10 @@
+@* A form post with an antiforgery token, so another site cannot sign anyone out. *@
+<form class="sign-out" method="post" action="sair">
+    <AntiforgeryToken />
+    <button type="submit">@Label</button>
+</form>
+
+@code {
+    [Parameter]
+    public string Label { get; set; } = "Sair";
+}
