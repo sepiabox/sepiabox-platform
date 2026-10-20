@@ -272,6 +272,61 @@ main {
     background: var(--cyanotype);
     color: var(--white);
     text-decoration: none;
+    border: 0;
+    border-radius: 4px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.user {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+}
+
+.sign-out {
+    margin: 0 0 0 16px;
+}
+
+.sign-out button {
+    padding: 4px 12px;
+    background: none;
+    color: var(--cyanotype);
+    border: 1px solid var(--mat);
+    border-radius: 4px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.auth {
+    max-width: 420px;
+    margin: 48px auto;
+    padding: 24px;
+    background: var(--white);
+    border: 1px solid var(--mat);
+    border-radius: 4px;
+}
+
+.auth .providers {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.auth .providers .sign-out {
+    margin: 0;
+}
+
+.dev-login {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dev-login input {
+    padding: 8px;
+    font: inherit;
+    border: 1px solid var(--mat);
     border-radius: 4px;
 }
 

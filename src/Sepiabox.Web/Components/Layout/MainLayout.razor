@@ -5,6 +5,12 @@
         <img src="symbol.svg" alt="" width="28" height="28" />
         <span>sepiabox</span>
     </a>
+    <AuthorizeView>
+        <Authorized>
+            <span class="user">@context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value</span>
+            <SignOutButton />
+        </Authorized>
+    </AuthorizeView>
 </header>
 
 <main>

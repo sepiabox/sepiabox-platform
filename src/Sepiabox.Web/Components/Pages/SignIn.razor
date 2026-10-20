@@ -1,0 +1,50 @@
+@page "/entrar"
+@attribute [AllowAnonymous]
+@inject SignInProviders Providers
+@inject IWebHostEnvironment Environment
+@* Static server rendering: the buttons are plain links that leave for Google or Microsoft. *@
+
+<PageTitle>Entrar · Sepiabox</PageTitle>
+
+<section class="auth">
+    <h1>Entrar</h1>
+    <p>O Sepiabox é privado. Entre com a conta Google ou Microsoft que tem acesso.</p>
+
+    @if (Providers.Any)
+    {
+        <div class="providers">
+            @if (Providers.Google is not null)
+            {
+                <a class="button" href="@ProviderLink(SignInProviders.GoogleRoute)" data-enhance-nav="false">Entrar com Google</a>
+            }
+            @if (Providers.Microsoft is not null)
+            {
+                <a class="button" href="@ProviderLink(SignInProviders.MicrosoftRoute)" data-enhance-nav="false">Entrar com Microsoft</a>
+            }
+        </div>
+    }
+    else if (Environment.IsDevelopment())
+    {
+        <form class="dev-login" method="get" action="dev-login" data-enhance-nav="false">
+            <input type="hidden" name="returnUrl" value="@Return" />
+            <label for="email">E-mail (só em desenvolvimento)</label>
+            <input id="email" name="email" type="email" required />
+            <button type="submit" class="button">Entrar</button>
+        </form>
+    }
+    else
+    {
+        <p class="empty">A entrada ainda não está configurada.</p>
+    }
+</section>
+
+@code {
+    // The cookie handler names it ReturnUrl when it sends a visitor here.
+    [SupplyParameterFromQuery(Name = "ReturnUrl")]
+    private string? ReturnUrl { get; set; }
+
+    private string Return => AuthSetup.LocalReturnUrl(ReturnUrl);
+
+    private string ProviderLink(string provider) =>
+        $"entrar/{provider}?returnUrl={Uri.EscapeDataString(Return)}";
+}
