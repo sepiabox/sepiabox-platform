@@ -43,6 +43,12 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Warning, Message = "Message {MessageId} was imported but its lock had expired; its redelivery imports the manifest again, changing nothing.")]
     public static partial void LockLost(ILogger logger, string messageId);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Loaded {Cities} GeoNames cities.")]
+    public static partial void GeoNamesLoaded(ILogger logger, int cities);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Named the place of {Assets} assets.")]
+    public static partial void PlacesRefreshed(ILogger logger, int assets);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Stopped before finishing; running the same command again continues.")]
     public static partial void Cancelled(ILogger logger);
 

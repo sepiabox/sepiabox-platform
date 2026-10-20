@@ -154,7 +154,7 @@ public sealed class EmbeddingImportTests(CatalogFixture fixture)
     }
 
     private static Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container) =>
-        new ManifestImporter(db, new ManifestValidator(), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
+        new ManifestImporter(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
             .ImportOnceAsync(container, CancellationToken.None);
 
     private static async Task PutAsync(BlobContainerClient container, Manifest manifest) =>

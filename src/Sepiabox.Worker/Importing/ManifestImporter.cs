@@ -27,7 +27,7 @@ public sealed record ImportResult(int Imported, int Unchanged, IReadOnlyList<Imp
 /// reported and never stops the others.
 /// </summary>
 public sealed class ManifestImporter(
-    CatalogDbContext db, ManifestValidator validator, TimeProvider clock, ILogger<ManifestImporter> logger)
+    CatalogDbContext db, ManifestValidator validator, IPlaceResolver places, TimeProvider clock, ILogger<ManifestImporter> logger)
 {
     private static readonly GeometryFactory s_wgs84 = new(new PrecisionModel(), 4326);
 
@@ -177,6 +177,34 @@ public sealed class ManifestImporter(
         }
     }
 
+    /// <summary>
+    /// Names the asset's place (S-012) when its location is new or changed, or it has none yet; a re-import of
+    /// the same location keeps the place without a query. Without GeoNames loaded no place is found, and
+    /// <c>places refresh</c> names the asset after the load.
+    /// </summary>
+    private async Task NamePlaceAsync(Asset asset, Point? location, CancellationToken cancellationToken)
+    {
+        if (location is null)
+        {
+            SetPlace(asset, null);
+            return;
+        }
+
+        if (asset.PlaceCity is not null && asset.Location is { } previous && previous.EqualsExact(location))
+        {
+            return;
+        }
+
+        SetPlace(asset, await places.ResolveAsync(location, cancellationToken));
+    }
+
+    private static void SetPlace(Asset asset, Place? place)
+    {
+        asset.PlaceCity = place?.City;
+        asset.PlaceRegion = place?.Region;
+        asset.PlaceCountry = place?.Country;
+    }
+
     private async Task SaveAsync(
         Manifest manifest, string kind, IReadOnlyDictionary<string, float[]> embeddings, string blobName, string etag,
         CancellationToken cancellationToken)
@@ -197,7 +225,9 @@ public sealed class ManifestImporter(
         asset.ContentType = manifest.ContentType;
         // Wall-clock time from the camera (the schema refuses offsets): stored exactly as written.
         asset.CapturedAt = manifest.CapturedAt is { } captured ? DateTime.SpecifyKind(captured, DateTimeKind.Unspecified) : null;
-        asset.Location = manifest.Location is { } at ? s_wgs84.CreatePoint(new Coordinate(at.Longitude, at.Latitude)) : null;
+        var location = manifest.Location is { } at ? s_wgs84.CreatePoint(new Coordinate(at.Longitude, at.Latitude)) : null;
+        await NamePlaceAsync(asset, location, cancellationToken);
+        asset.Location = location;
         asset.CameraMake = manifest.Camera?.Make;
         asset.CameraModel = manifest.Camera?.Model;
         asset.Width = manifest.Width;

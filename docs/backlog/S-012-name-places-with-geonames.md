@@ -20,15 +20,15 @@
 - Loading GeoNames in Azure (S-059).
 
 ### Acceptance criteria
-- [ ] Given a test file with 5 cities, when I load it twice, then the table has 5 rows.
-- [ ] Given an asset at 41.18, −8.69, when it is imported, then the place is "Matosinhos".
-- [ ] Given an asset 300 km from the nearest city, then it has no place.
-- [ ] Given `places refresh`, then older assets without a place get resolved.
+- [x] Given a test file with 5 cities, when I load it twice, then the table has 5 rows.
+- [x] Given an asset at 41.18, −8.69, when it is imported, then the place is "Matosinhos".
+- [x] Given an asset 300 km from the nearest city, then it has no place.
+- [x] Given `places refresh`, then older assets without a place get resolved.
 
 ### Technical notes
 - Query: `ORDER BY location <-> @point LIMIT 1` with `ST_DWithin(location, @point, 50000)`.
 - Place names are stored as GeoNames writes them (`name`, often the English name for large cities, "Lisbon"); they are data, not translated UI text (D-050). Alternate names are out of scope: the question translator (S-025) maps "Lisboa" to the stored name.
-- Small TSV fixture at `tests/.../TestData/geonames-sample.txt`.
+- Small synthetic GeoNames files, written by the tests (`tests/Sepiabox.Worker.Tests/Places/GeoNamesSample.cs`); no GeoNames data is committed.
 - Portability (D-051): the nearest-city query is PostGIS-specific and lives in a provider-specific class (`PostgisPlaceResolver`) behind a `IPlaceResolver` service; loading and the rest of the catalog code stay plain EF Core.
 - Decisions: D-009, D-050, D-051.
 

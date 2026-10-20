@@ -125,7 +125,7 @@ public sealed class QueueImportIntegrationTests(CatalogFixture fixture)
     }
 
     private static ManifestImporter Importer(CatalogDbContext db) =>
-        new(db, new ManifestValidator(), TimeProvider.System, NullLogger<ManifestImporter>.Instance);
+        new(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance);
 
     private static QueueImport Import(IBlobEventQueue queue, CatalogDbContext db, BlobContainerClient container) =>
         new(

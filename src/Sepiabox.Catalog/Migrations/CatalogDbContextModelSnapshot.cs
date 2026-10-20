@@ -72,6 +72,21 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("geography (Point, 4326)")
                         .HasColumnName("location");
 
+                    b.Property<string>("PlaceCity")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("place_city");
+
+                    b.Property<string>("PlaceCountry")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("place_country");
+
+                    b.Property<string>("PlaceRegion")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("place_region");
+
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint")
                         .HasColumnName("size_bytes");
@@ -199,6 +214,60 @@ namespace Sepiabox.Catalog.Migrations
                         .HasName("pk_derivatives");
 
                     b.ToTable("derivatives", (string)null);
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.GeoName", b =>
+                {
+                    b.Property<long>("GeonameId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("geoname_id");
+
+                    b.Property<string>("Admin1Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("admin1_name");
+
+                    b.Property<string>("AsciiName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("ascii_name");
+
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("country_code");
+
+                    b.Property<string>("CountryName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("country_name");
+
+                    b.Property<Point>("Location")
+                        .IsRequired()
+                        .HasColumnType("geography (Point, 4326)")
+                        .HasColumnName("location");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<long>("Population")
+                        .HasColumnType("bigint")
+                        .HasColumnName("population");
+
+                    b.HasKey("GeonameId")
+                        .HasName("pk_geonames");
+
+                    b.HasIndex("Location")
+                        .HasDatabaseName("ix_geonames_location");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Location"), "gist");
+
+                    b.ToTable("geonames", (string)null);
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.ManifestImport", b =>

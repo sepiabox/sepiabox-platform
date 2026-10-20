@@ -18,6 +18,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<AssetEmbedding> AssetEmbeddings => Set<AssetEmbedding>();
 
+    public DbSet<GeoName> GeoNames => Set<GeoName>();
+
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options
@@ -55,6 +57,9 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             // Camera clocks have no time zone, so the value is stored exactly as read.
             asset.Property(a => a.CapturedAt).HasColumnType("timestamp without time zone");
             asset.Property(a => a.Location).HasColumnType("geography (Point, 4326)");
+            asset.Property(a => a.PlaceCity).HasMaxLength(200);
+            asset.Property(a => a.PlaceRegion).HasMaxLength(200);
+            asset.Property(a => a.PlaceCountry).HasMaxLength(200);
             // The timeline's order (newest first, undated last, then id), so a page is an index range scan.
             asset.HasIndex(a => new { a.CapturedAt, a.Id })
                 .HasDatabaseName("ix_assets_timeline")
@@ -88,6 +93,22 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
                 .HasDatabaseName("ix_asset_embeddings_embedding")
                 .HasMethod("hnsw")
                 .HasOperators("vector_cosine_ops");
+        });
+
+        modelBuilder.Entity<GeoName>(geoName =>
+        {
+            geoName.ToTable("geonames");
+            geoName.HasKey(g => g.GeonameId);
+            // GeoNames' own ids: never generated here, so a load replaces rows with the same ids.
+            geoName.Property(g => g.GeonameId).ValueGeneratedNever();
+            geoName.Property(g => g.Name).HasMaxLength(200);
+            geoName.Property(g => g.AsciiName).HasMaxLength(200);
+            geoName.Property(g => g.CountryCode).HasMaxLength(2);
+            geoName.Property(g => g.CountryName).HasMaxLength(200);
+            geoName.Property(g => g.Admin1Name).HasColumnName("admin1_name").HasMaxLength(200);
+            geoName.Property(g => g.Location).HasColumnType("geography (Point, 4326)");
+            // Nearest-city lookups: ST_DWithin and the <-> distance order both use a GiST index (S-012).
+            geoName.HasIndex(g => g.Location).HasDatabaseName("ix_geonames_location").HasMethod("gist");
         });
 
         modelBuilder.Entity<ManifestImport>(import =>

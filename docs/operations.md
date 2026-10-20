@@ -195,6 +195,17 @@ KEDA may also start short executions that find nothing to receive, or fail, whil
 
 **Names.** A storage account can have only one Event Grid system topic (`sepiabox-storage-events`); if one already exists on the account, delete it or reuse its name in `Bicep/events.bicep`. `sepiabox-sb` is a global name: if Azure reports it as taken, change it in `AzureInfrastructure.ServiceBusName` here and in the shutdown runbook's `ServiceBusNamespace` in sepiabox-infra (`automation/Stop-Sepiabox.ps1`, `scripts/resume.sh`, `scripts/emergency-stop.sh`) in the same change, with the test constant `ShutdownRunbook.ServiceBusNamespace`.
 
+## Place names (GeoNames)
+
+Photos get a place ("Matosinhos, Porto, Portugal") from the GeoNames cities loaded in the catalog: the nearest city within 50 km of the photo's location, when it is imported (S-012, D-066). Until the cities are loaded, assets are imported without a place. In Azure, S-059 adds the job that downloads and loads them. To load them locally (the catalog of `dotnet run --project src/Sepiabox.AppHost`, or any catalog in `ConnectionStrings__catalog`, with an administrator connection):
+
+1. Download `cities500.zip`, `admin1CodesASCII.txt` and `countryInfo.txt` from https://download.geonames.org/export/dump/ into a folder outside the repository. GeoNames is CC BY 4.0: never commit these files.
+2. Run `dotnet run --project src/Sepiabox.Worker -- geonames load <folder>/cities500.zip --admin1 <folder>/admin1CodesASCII.txt --countries <folder>/countryInfo.txt`. It replaces the cities in one transaction (about 200,000 rows, a minute or two), so running it again with newer files is safe, and a failed load keeps the previous cities.
+3. Run `dotnet run --project src/Sepiabox.Worker -- places refresh` to name assets imported before the load. It only names assets that have a location and no place, so it is safe to run again.
+4. Loading a newer dump does not rename places already set. To name every asset again from the new cities, run `places refresh --all`.
+
+The application role `sepiabox_web` can read the cities but not change them: load them with the administrator connection (D-066).
+
 ## Uploading the drive to Azure
 
 1. Once: be listed in `uploaderPrincipalIds` (see the prerequisites) and run `az login` on the computer with the work folder; `upload` signs in with `DefaultAzureCredential`, so the Azure CLI login is enough.

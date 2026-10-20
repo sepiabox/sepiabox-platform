@@ -61,13 +61,16 @@ public sealed class LibraryQueriesTests(CatalogFixture catalog)
     public async Task An_asset_comes_back_with_its_sources_and_preview()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();
-        db.Assets.Add(CatalogData.Photo(Ids.Of(9), new DateTime(2019, 7, 14, 10, 32, 0)));
+        var photo = CatalogData.Photo(Ids.Of(9), new DateTime(2019, 7, 14, 10, 32, 0));
+        (photo.PlaceCity, photo.PlaceRegion, photo.PlaceCountry) = ("Matosinhos", "Porto", "Portugal");
+        db.Assets.Add(photo);
         await db.SaveChangesAsync();
         var queries = Queries(db);
 
         var asset = await queries.GetAssetAsync(Ids.Of(9));
 
         Assert.NotNull(asset);
+        Assert.Equal("Matosinhos, Porto, Portugal", asset.Place);
         Assert.Equal(DerivativeNames.Preview, asset.PreviewName);
         Assert.Equal("HD Ana", Assert.Single(asset.Sources).Name);
         Assert.Null(await queries.GetAssetAsync(Ids.Of(10)));

@@ -13,7 +13,8 @@ public sealed record AssetSourceDetail(string Type, string Name, string Path);
 
 /// <summary>
 /// One asset for the detail page. <c>PreviewName</c> is the derivative shown large: the photo preview, or the
-/// video poster. <c>HasProxy</c> says whether a video's 720p version exists, so it can be played.
+/// video poster. <c>HasProxy</c> says whether a video's 720p version exists, so it can be played. <c>Place</c> is
+/// the city, region and country GeoNames named (S-012), as one line.
 /// </summary>
 public sealed record AssetDetail(
     string Id,
@@ -26,7 +27,8 @@ public sealed record AssetDetail(
     string? PreviewName,
     IReadOnlyList<AssetSourceDetail> Sources,
     double? DurationSeconds,
-    bool HasProxy);
+    bool HasProxy,
+    string? Place = null);
 
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
 public sealed record OriginalFile(string FileName, string ContentType);
@@ -146,7 +148,8 @@ public sealed class LibraryQueries(IDbContextFactory<CatalogDbContext> contexts)
             preview,
             [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path))],
             asset.DurationSeconds,
-            asset.Derivatives.Any(d => d.Name == DerivativeNames.Proxy));
+            asset.Derivatives.Any(d => d.Name == DerivativeNames.Proxy),
+            PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry));
     }
 
     public async Task<string?> GetDerivativeBlobPathAsync(string id, string name, CancellationToken cancellationToken = default)

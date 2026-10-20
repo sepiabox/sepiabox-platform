@@ -349,7 +349,7 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
         """;
 
     private Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container) =>
-        new ManifestImporter(db, new ManifestValidator(), _clock, NullLogger<ManifestImporter>.Instance)
+        new ManifestImporter(db, new ManifestValidator(), new PostgisPlaceResolver(db), _clock, NullLogger<ManifestImporter>.Instance)
             .ImportOnceAsync(container, CancellationToken.None);
 
     private static Task<Asset> LoadAsync(CatalogDbContext db) =>

@@ -14,9 +14,10 @@ public static partial class CatalogAppRole
     // find no role and both try to create it.
     private const long AdvisoryLockKey = 0x5E91AB0C;
 
-    // Tables the role may read but never write: the migration history, PostGIS's reference table and EF's
-    // migration lock table, if the provider has one.
-    private static readonly string[] s_readOnlyTables = ["__EFMigrationsHistory", "__EFMigrationsLock", "spatial_ref_sys"];
+    // Tables the role may read but never write: the migration history, PostGIS's reference table, EF's
+    // migration lock table if the provider has one, and GeoNames, which only `geonames load` (run as the
+    // administrator, S-059) replaces (D-066).
+    private static readonly string[] s_readOnlyTables = ["__EFMigrationsHistory", "__EFMigrationsLock", "spatial_ref_sys", "geonames"];
 
     /// <summary>
     /// Creates the role, or updates its password, and grants it the catalog's rows. Run by the administrator

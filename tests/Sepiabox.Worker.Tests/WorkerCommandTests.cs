@@ -26,6 +26,27 @@ public sealed class WorkerCommandTests
         Assert.Equal(new WorkerCommand(WorkerAction.ImportFromQueue, false), command);
     }
 
+    [Theory]
+    [InlineData("geonames", "load", "cities500.zip", "--admin1", "admin1CodesASCII.txt", "--countries", "countryInfo.txt")]
+    [InlineData("geonames", "load", "cities500.zip", "--countries", "countryInfo.txt", "--admin1", "admin1CodesASCII.txt")]
+    public void Parses_geonames_load_with_its_three_files(params string[] args)
+    {
+        Assert.True(WorkerCommand.TryParse(args, out var command, out _));
+        Assert.Equal(
+            new WorkerCommand(
+                WorkerAction.GeoNamesLoad, false, new GeoNamesSource("cities500.zip", "admin1CodesASCII.txt", "countryInfo.txt")),
+            command);
+    }
+
+    [Fact]
+    public void Parses_places_refresh()
+    {
+        Assert.True(WorkerCommand.TryParse(["places", "refresh"], out var command, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.PlacesRefresh, false), command);
+        Assert.True(WorkerCommand.TryParse(["places", "refresh", "--all"], out var all, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.PlacesRefresh, false, AllPlaces: true), all);
+    }
+
     public static TheoryData<string[]> InvalidArguments => new()
     {
         Array.Empty<string>(),
@@ -36,6 +57,18 @@ public sealed class WorkerCommandTests
         new[] { "import", "--once", "--from-queue" },
         new[] { "migrate", "--once" },
         new[] { "export" },
+        new[] { "geonames" },
+        new[] { "geonames", "load" },
+        new[] { "geonames", "load", "cities500.zip" },
+        new[] { "geonames", "load", "cities500.zip", "--admin1", "a.txt" },
+        new[] { "geonames", "load", "cities500.zip", "--admin1", "a.txt", "--countries" },
+        new[] { "geonames", "load", "cities500.zip", "--admin1", "--countries", "c.txt" },
+        new[] { "geonames", "load", "cities500.zip", "--admin1", "a.txt", "--admin1", "b.txt", "--countries", "c.txt" },
+        new[] { "geonames", "load", "cities500.zip", "--admin1", "a.txt", "--countries", "c.txt", "--migrate", "x" },
+        new[] { "geonames", "load", "--admin1", "a.txt", "--countries", "c.txt" },
+        new[] { "places" },
+        new[] { "places", "refresh", "--force" },
+        new[] { "places", "refresh", "--all", "--all" },
     };
 
     [Theory]

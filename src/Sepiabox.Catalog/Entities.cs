@@ -34,6 +34,16 @@ public sealed class Asset
 
     public double? DurationSeconds { get; set; }
 
+    /// <summary>
+    /// The nearest GeoNames city within 50 km of <see cref="Location"/>, its first-level region and its country,
+    /// as GeoNames names them (S-012, D-066); null when the asset has no location or no city is near enough.
+    /// </summary>
+    public string? PlaceCity { get; set; }
+
+    public string? PlaceRegion { get; set; }
+
+    public string? PlaceCountry { get; set; }
+
     /// <summary>When the asset first entered the catalog.</summary>
     public DateTimeOffset ImportedAt { get; set; }
 
@@ -101,4 +111,29 @@ public sealed class AssetEmbedding
     public required string Model { get; set; }
 
     public required Vector Embedding { get; set; }
+}
+
+/// <summary>
+/// A populated place from GeoNames' <c>cities500</c> (S-012, D-066), with its first-level region and country
+/// names resolved at load time. GeoNames data is CC BY 4.0 (README).
+/// </summary>
+public sealed class GeoName
+{
+    public long GeonameId { get; set; }
+
+    public required string Name { get; set; }
+
+    public required string AsciiName { get; set; }
+
+    /// <summary>ISO 3166-1 alpha-2.</summary>
+    public required string CountryCode { get; set; }
+
+    public string? CountryName { get; set; }
+
+    public string? Admin1Name { get; set; }
+
+    public long Population { get; set; }
+
+    /// <summary>WGS 84 point (SRID 4326): X is longitude, Y is latitude.</summary>
+    public required NetTopologySuite.Geometries.Point Location { get; set; }
 }

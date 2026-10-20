@@ -19,7 +19,8 @@ S-012 loads GeoNames and resolves places with worker commands. The cloud catalog
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), when the job has run and a photo taken in Lisbon is imported, then its detail page shows "Lisbon".
 
 ### Technical notes
-- Decisions: D-009, D-034.
+- Download safeguards (D-066, from the S-012 review): download only over HTTPS from `download.geonames.org`; log each file's SHA-256, size and date (a pinned hash is not possible, GeoNames republishes daily); refuse the load when the city count is below 150,000 or more than about 10% below the previous load's; on any failure keep the previous `geonames` table (`geonames load` already replaces it in one transaction).
+- Decisions: D-009, D-034, D-066.
 
 ### Expected tests
 - Infrastructure generation test.

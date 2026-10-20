@@ -14,6 +14,7 @@ using Sepiabox.Worker;
 using Sepiabox.Worker.Azure;
 using Sepiabox.Worker.Events;
 using Sepiabox.Worker.Importing;
+using Sepiabox.Worker.Places;
 
 if (args is ["-h" or "--help" or "help"])
 {
@@ -51,6 +52,12 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
         builder.Services.AddScoped<ManifestImporter>();
     }
 
+    if (command.Action is WorkerAction.ImportOnce or WorkerAction.ImportFromQueue or WorkerAction.PlacesRefresh)
+    {
+        // The PostGIS implementation (D-051), on the same context as the importer.
+        builder.Services.AddScoped<IPlaceResolver, PostgisPlaceResolver>();
+    }
+
     // Read when first used, so a missing setting is reported like any other failure (exit code 1).
     builder.Services.AddDbContext<CatalogDbContext>((services, options) => CatalogDbContext.Configure(
         options,
@@ -81,6 +88,26 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
                 (NpgsqlConnection)db.Database.GetDbConnection(), appRole.Name, appRole.Password, cancellationToken);
             Log.AppRoleEnsured(logger, appRole.Name);
         }
+    }
+
+    if (command is { Action: WorkerAction.GeoNamesLoad, GeoNames: { } source })
+    {
+        // Read the small lookups first, so a wrong path fails before the table is touched.
+        var admin1 = GeoNamesFiles.ReadAdmin1(source.Admin1);
+        var countries = GeoNamesFiles.ReadCountries(source.Countries);
+        var loaded = await new GeoNamesLoader(services.GetRequiredService<CatalogDbContext>())
+            .LoadAsync(GeoNamesFiles.ReadCities(source.Cities), admin1, countries, cancellationToken);
+        Log.GeoNamesLoaded(logger, loaded);
+        return ExitCodes.Success;
+    }
+
+    if (command.Action == WorkerAction.PlacesRefresh)
+    {
+        var named = await new PlacesRefresh(
+                services.GetRequiredService<CatalogDbContext>(), services.GetRequiredService<IPlaceResolver>(), command.AllPlaces)
+            .RunAsync(cancellationToken);
+        Log.PlacesRefreshed(logger, named);
+        return ExitCodes.Success;
     }
 
     if (command.Action == WorkerAction.ImportFromQueue)
