@@ -15,7 +15,7 @@ const string Usage = """
       upload <dir> --destination local|azure
                                      Send a process work folder to Blob Storage: originals, then
                                      thumbnails and videos, then manifests. Running again resumes.
-      models download                Download the ML models (CLIP) and check their SHA-256.
+      models download                Download the ML models (CLIP, faces) and check their SHA-256.
 
     Options for scan:
       --report <file>  Also write the full result, with every duplicate and problem, as JSON.
@@ -29,6 +29,8 @@ const string Usage = """
       --models <folder>     Folder with the downloaded models. Default: where models download puts them.
       --retry-left-out      Read again the files earlier runs left out as holding no video.
       --list-left-out       List every file earlier runs left out, not just how many.
+      --faces               Also find faces, so people can be recognised. Off by default: faces are
+                            biometric data. A later run with --faces adds them from the work folder.
 
     Options for models download:
       --models <folder>     Where to put the models. Default: %LOCALAPPDATA%\Sepiabox\models on
@@ -112,8 +114,14 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
     Console.Error.WriteLine();
 
     Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, left out {result.NotVideo:N0}, embeddings added {result.Embedded:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
+    if (options.Faces)
+    {
+        Console.WriteLine($"Faces: {result.FacesFound:N0} found in {result.FacesChecked:N0} photos and videos checked.");
+    }
+
     // Warnings, not failures: the files are processed and the next run computes their embeddings again.
     EmbeddingWarnings.Write(result.EmbeddingProblems, Console.Error);
+    EmbeddingWarnings.Write(result.FaceProblems, Console.Error, "were not checked for faces yet");
 
     Console.WriteLine($"Manifests: {result.ManifestFolder}");
     if (result.Warning is not null)

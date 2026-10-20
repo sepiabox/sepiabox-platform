@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <None Include="..\Sepiabox.Pipeline.Tests\TestData\taken-2019-07-14.jpg" Link="TestData\taken-2019-07-14.jpg" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Sepiabox.Pipeline.Tests\TestData\face-portrait.jpg" Link="TestData\face-portrait.jpg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
