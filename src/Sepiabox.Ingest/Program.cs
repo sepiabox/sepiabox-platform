@@ -79,7 +79,7 @@ try
         _ => UsageError($"Unknown command '{args[0]}'."),
     };
 }
-catch (DirectoryNotFoundException ex)
+catch (Exception ex) when (ex is DirectoryNotFoundException or ClockSkewException)
 {
     Console.Error.WriteLine(ex.Message);
     return 1;

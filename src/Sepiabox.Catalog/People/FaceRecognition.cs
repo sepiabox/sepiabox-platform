@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 namespace Sepiabox.Catalog.People;
@@ -12,9 +13,16 @@ namespace Sepiabox.Catalog.People;
 /// Every manifest blob last written before this time carries the erase (the <c>faces sweep</c> job); null until its
 /// first full pass after <paramref name="ErasedAt"/>.
 /// </param>
-public sealed record FaceRecognitionState(bool On, DateTimeOffset? ErasedAt, DateTimeOffset? SweptThrough)
+/// <param name="EnabledAt">When the family last turned it back on after an erase (server time).</param>
+public sealed record FaceRecognitionState(bool On, DateTimeOffset? ErasedAt, DateTimeOffset? SweptThrough, DateTimeOffset? EnabledAt = null)
 {
     public static readonly FaceRecognitionState Default = new(true, null, null);
+
+    /// <summary>
+    /// How far a computer's clock, which writes <c>facesDetectedAt</c>, may lag the server's when faces are compared with
+    /// <see cref="EnabledAt"/> (D-081); <c>upload</c> refuses a clock more than 5 minutes off.
+    /// </summary>
+    public static readonly TimeSpan ClockMargin = TimeSpan.FromMinutes(15);
 
     /// <summary>Faces were erased and the stored manifests do not all carry the erase yet.</summary>
     public bool ManifestsPending => ErasedAt is not null && SweptThrough is null;
@@ -24,7 +32,10 @@ public sealed record FaceRecognitionState(bool On, DateTimeOffset? ErasedAt, Dat
     /// faces found after the last erase (faces without a time were found before the field existed, so before it).
     /// </summary>
     public bool Accepts(DateTimeOffset? detectedAt) =>
-        On && (ErasedAt is not { } erased || (detectedAt is { } detected && detected > erased));
+        On
+        && (ErasedAt is not { } erased || (detectedAt is { } detected && detected > erased))
+        // Found while recognition was off, give or take a computer's clock: not imported either.
+        && (EnabledAt is not { } enabled || (detectedAt is { } found && found > enabled - ClockMargin));
 }
 
 /// <summary>
@@ -37,29 +48,39 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
     public const string RecognitionKey = "faces.recognition";
     public const string ErasedAtKey = "faces.erased_at";
     public const string SweptThroughKey = "faces.swept_through";
+    public const string EnabledAtKey = "faces.enabled_at";
+    public const string SweepKey = "faces.sweep";
 
     public static async Task<FaceRecognitionState> ReadAsync(CatalogDbContext db, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(db);
         var values = await db.Settings.AsNoTracking()
-            .Where(s => s.Key == RecognitionKey || s.Key == ErasedAtKey || s.Key == SweptThroughKey)
+            .Where(s => s.Key == RecognitionKey || s.Key == ErasedAtKey || s.Key == SweptThroughKey || s.Key == EnabledAtKey)
             .ToDictionaryAsync(s => s.Key, s => s.Value, cancellationToken);
         return new FaceRecognitionState(
             !values.TryGetValue(RecognitionKey, out var on) || on != "off",
             Time(values.GetValueOrDefault(ErasedAtKey)),
-            Time(values.GetValueOrDefault(SweptThroughKey)));
+            Time(values.GetValueOrDefault(SweptThroughKey)),
+            Time(values.GetValueOrDefault(EnabledAtKey)));
     }
 
     /// <summary>
     /// Turns recognition off: deletes every face, person (with their centroids and names), erased-face box and asset
     /// face version, and records when, so imports store no face found until then and the <c>faces sweep</c> job erases
-    /// them from the stored manifests.
+    /// them from the stored manifests. Null, changing and recording nothing, when it is already off with no face and no
+    /// person: a second click is not a second erase.
     /// </summary>
-    public Task<FaceDataDeletion> TurnOffAsync(string deletedBy, CancellationToken cancellationToken = default)
+    public Task<FaceDataDeletion?> TurnOffAsync(string deletedBy, CancellationToken cancellationToken = default)
     {
         var by = NormalizeEmail(deletedBy);
-        return InTransactionAsync(async () =>
+        return InTransactionAsync<FaceDataDeletion?>(async () =>
         {
+            if (!(await ReadAsync(db, cancellationToken)).On
+                && !await db.Faces.AnyAsync(cancellationToken) && !await db.People.AnyAsync(cancellationToken))
+            {
+                return null;
+            }
+
             var now = Seconds(clock.GetUtcNow());
             var deletion = new FaceDataDeletion
             {
@@ -74,7 +95,7 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
                 .ExecuteUpdateAsync(set => set.SetProperty(a => a.FacesVersion, (int?)null), cancellationToken);
             await SetAsync(RecognitionKey, "off", cancellationToken);
             await SetAsync(ErasedAtKey, Format(now), cancellationToken);
-            await db.Settings.Where(s => s.Key == SweptThroughKey).ExecuteDeleteAsync(cancellationToken);
+            await db.Settings.Where(s => s.Key == SweptThroughKey || s.Key == SweepKey).ExecuteDeleteAsync(cancellationToken);
             db.FaceDataDeletions.Add(deletion);
             await db.SaveChangesAsync(cancellationToken);
             return deletion;
@@ -94,6 +115,7 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
             }
 
             await SetAsync(RecognitionKey, "on", cancellationToken);
+            await SetAsync(EnabledAtKey, Format(Seconds(clock.GetUtcNow())), cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             return true;
         }, cancellationToken);
@@ -153,6 +175,49 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
             return true;
         }, cancellationToken);
 
+    /// <summary>Where an unfinished sweep of the current erase stopped, if any (null otherwise).</summary>
+    public static async Task<SweepCheckpoint?> ReadSweepAsync(CatalogDbContext db, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var value = await db.Settings.AsNoTracking().Where(s => s.Key == SweepKey).Select(s => s.Value).SingleOrDefaultAsync(cancellationToken);
+        var state = await ReadAsync(db, cancellationToken);
+        try
+        {
+            return value is not null && JsonSerializer.Deserialize<SweepCheckpoint>(value) is { } checkpoint && checkpoint.ErasedAt == state.ErasedAt
+                ? checkpoint
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Saves where the sweep is (false, saving nothing, when recognition was turned off again since: that erase starts a
+    /// sweep of its own); null clears it.
+    /// </summary>
+    public Task<bool> SaveSweepAsync(DateTimeOffset erasedAt, SweepCheckpoint? checkpoint, CancellationToken cancellationToken = default) =>
+        InTransactionAsync(async () =>
+        {
+            if ((await ReadAsync(db, cancellationToken)).ErasedAt != erasedAt)
+            {
+                return false;
+            }
+
+            if (checkpoint is null)
+            {
+                await db.Settings.Where(s => s.Key == SweepKey).ExecuteDeleteAsync(cancellationToken);
+            }
+            else
+            {
+                await SetAsync(SweepKey, JsonSerializer.Serialize(checkpoint), cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
+            return true;
+        }, cancellationToken);
+
     /// <summary>The last deletions, newest first, for the settings page.</summary>
     public static async Task<IReadOnlyList<FaceDataDeletion>> HistoryAsync(CatalogDbContext db, int count, CancellationToken cancellationToken = default)
     {
@@ -206,3 +271,10 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
         }
     }
 }
+
+/// <summary>
+/// An unfinished <c>faces sweep</c> (D-081): the erase it carries, the blobs it looks at (written since
+/// <paramref name="Since"/>, all when null), when it started, the listing's continuation token after the last page
+/// done, and whether a manifest of an earlier page could not be erased (then the pass cannot record itself as complete).
+/// </summary>
+public sealed record SweepCheckpoint(DateTimeOffset ErasedAt, DateTimeOffset? Since, DateTimeOffset StartedAt, string? Token, bool Failed);

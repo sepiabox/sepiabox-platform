@@ -45,6 +45,8 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         Assert.Equal("Sim, desligar e apagar", confirming.Find("form.confirm button").TextContent);
         Assert.Equal("settings", confirming.Find("form.confirm a").GetAttribute("href"));
         Assert.Contains("process --faces", confirming.Find(".work-folder").TextContent, StringComparison.Ordinal);
+        Assert.StartsWith("Os backups automáticos", confirming.Find(".backups").TextContent, StringComparison.Ordinal);
+        Assert.Contains("das cópias das informações guardadas na nuvem (manifestos)", confirming.Find(".confirm-off .note").TextContent, StringComparison.Ordinal);
         Assert.Empty(_faces.Calls);
     }
 
@@ -55,7 +57,7 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         var pending = Render<Settings>();
 
         Assert.Equal("Face recognition is off: no face is imported.", pending.Find(".faces-status").TextContent);
-        Assert.StartsWith("The faces are being erased from the stored manifests too", pending.Find(".faces-sweep").TextContent, StringComparison.Ordinal);
+        Assert.StartsWith("The faces are being erased from the copies of the library's information kept in the cloud (manifests) too", pending.Find(".faces-sweep").TextContent, StringComparison.Ordinal);
         Assert.Empty(pending.FindAll("form.turn-on"));
 
         _faces.State = _faces.State with { SweptThrough = DateTimeOffset.UnixEpoch.AddHours(1) };
@@ -83,7 +85,7 @@ public sealed class FaceSettingsPageTests : LocalizedContext
 
     [Theory]
     [InlineData("faces-off", "Face recognition is off and the face data was deleted.")]
-    [InlineData("faces-pending", "Not yet: the faces are still being erased from the stored manifests.")]
+    [InlineData("faces-pending", "Not yet: the faces are still being erased from the copies in the cloud.")]
     public void Shows_what_happened_from_the_note_in_the_address(string note, string expected)
     {
         Services.GetRequiredService<NavigationManager>().NavigateTo($"settings?note={note}");
@@ -229,6 +231,60 @@ public sealed partial class FaceSettingsPostTests
 public sealed class FaceSettingsCatalogTests(CatalogFixture catalog)
 {
     private const string Ana = "ana@example.com";
+
+    [Fact]
+    public async Task Turning_recognition_off_empties_the_people_filter_the_photo_s_people_and_the_translator_s_names()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.Add(CatalogData.Photo(Ids.Of(1), new DateTime(2019, 7, 14)));
+        db.Faces.Add(Face(new Catalog.Person { Name = "Ana", UserEmail = Ana, FaceCount = 1 }));
+        await db.SaveChangesAsync();
+        var contexts = new TestContexts(catalog.ConnectionStringFor(db));
+        var library = new LibraryQueries(contexts, TimeProvider.System, user: new SignedIn(Ana));
+        Assert.Equal(["Ana"], (await library.GetFilterOptionsAsync()).People);
+
+        await new FaceSettings(contexts, TimeProvider.System).TurnOffAsync(Ana);
+
+        var options = await library.GetFilterOptionsAsync();
+        Assert.Empty(options.People);
+        Assert.False(options.MeLinked);
+        Assert.Empty((await library.GetAssetAsync(Ids.Of(1)))!.People);
+        var translator = new FakeTranslator();
+        var questions = new QuestionService(translator, new FakeQuestionQuota(), library, new QuestionLimits(), TimeProvider.System);
+        await questions.AskAsync("fotos com a Ana", new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Email, Ana)], "test")));
+        Assert.DoesNotContain(
+            Assert.Single(translator.Calls).Context.Lists,
+            list => list.DslField == "filters.people.all" && list.Values.Count > 0);
+        await using var search = contexts.CreateDbContext();
+        var unknown = await Assert.ThrowsAsync<Catalog.Search.UnknownPeopleException>(() => new Catalog.Search.SearchService(search, TimeProvider.System, userEmail: Ana)
+            .ExecuteAsync(new Catalog.Search.SearchQuery
+            {
+                Filters = new Catalog.Search.SearchFilters { People = new Catalog.Search.PeopleFilter { All = ["Ana"], IncludeMe = true } },
+            }));
+        Assert.Equal(["Ana"], unknown.Missing);
+        Assert.True(unknown.MeMissing);
+    }
+
+    private static Face Face(Catalog.Person person)
+    {
+        var embedding = new float[128];
+        embedding[0] = 1;
+        return new Face
+        {
+            AssetId = Ids.Of(1),
+            Box = [0.1, 0.2, 0.3, 0.4],
+            Score = 0.9,
+            Embedding = new Vector(embedding),
+            Person = person,
+            Assignment = FaceAssignments.Auto,
+        };
+    }
+
+    private sealed class SignedIn(string email) : ICurrentUser
+    {
+        public string? Email => email;
+    }
 
     [Fact]
     public async Task Turning_recognition_off_from_the_page_empties_faces_and_people_and_keeps_the_photos()

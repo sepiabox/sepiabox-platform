@@ -41,7 +41,7 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
         Assert.All(await db.Assets.AsNoTracking().ToListAsync(), a => Assert.Null(a.FacesVersion));
         var recorded = await db.FaceDataDeletions.AsNoTracking().SingleAsync();
         Assert.Equal((FaceDataDeletionScopes.Library, 2, 2, Ana), (recorded.Scope, recorded.Faces, recorded.People, recorded.DeletedBy));
-        Assert.Equal(deletion.DeletedAt, recorded.DeletedAt);
+        Assert.Equal(deletion!.DeletedAt, recorded.DeletedAt);
         var state = await FaceRecognition.ReadAsync(db);
         Assert.False(state.On);
         Assert.Equal(deletion.DeletedAt, state.ErasedAt);
@@ -123,7 +123,7 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
         Assert.False(turnOff.IsCompleted);
 
         await transaction.CommitAsync();
-        Assert.Equal(0, (await turnOff).Faces);
+        Assert.Equal(0, (await turnOff)!.Faces);
     }
 
     [Fact]
@@ -190,6 +190,92 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Turning_recognition_off_again_with_nothing_left_changes_and_records_nothing()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var clock = new SettableClock(new DateTimeOffset(2026, 10, 21, 9, 0, 0, TimeSpan.Zero));
+        Assert.NotNull(await new FaceRecognition(db, clock).TurnOffAsync(Ana));
+        clock.Now += TimeSpan.FromHours(1);
+
+        var again = await new FaceRecognition(db, clock).TurnOffAsync("bruno@example.com");
+
+        Assert.Null(again);
+        Assert.Equal(1, await db.FaceDataDeletions.CountAsync());
+        Assert.Equal(new DateTimeOffset(2026, 10, 21, 9, 0, 0, TimeSpan.Zero), (await FaceRecognition.ReadAsync(db)).ErasedAt);
+    }
+
+    [Fact]
+    public async Task Takes_a_computer_s_clock_into_account_when_recognition_is_back_on()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var erasedAt = new DateTimeOffset(2026, 10, 21, 9, 0, 0, TimeSpan.Zero);
+        var clock = new SettableClock(erasedAt);
+        await new FaceRecognition(db, clock).TurnOffAsync(Ana);
+        Assert.True(await new FaceRecognition(db, clock).MarkSweptAsync(erasedAt, erasedAt.AddMinutes(30)));
+        clock.Now = erasedAt.AddHours(1);
+        Assert.True(await new FaceRecognition(db, clock).TurnOnAsync());
+        var enabledAt = clock.Now;
+        Assert.Equal(enabledAt, (await FaceRecognition.ReadAsync(db)).EnabledAt);
+        // A computer ten minutes ahead stamps faces found just before the erase after it: found while recognition was
+        // off, so not imported.
+        var ahead = FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 1))) with { FacesDetectedAt = erasedAt.AddMinutes(2) };
+        // A computer ten minutes behind stamps faces found five minutes after switching back on before it: imported.
+        var behind = FaceImportTests.WithFaces(2, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 3))) with { FacesDetectedAt = enabledAt.AddMinutes(-5) };
+        // Faces found twenty minutes before switching back on, while it was off: not imported.
+        var whileOff = FaceImportTests.WithFaces(3, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 4))) with { FacesDetectedAt = enabledAt.AddMinutes(-20) };
+        foreach (var manifest in new[] { ahead, behind, whileOff })
+        {
+            await PutAsync(container, manifest);
+        }
+
+        await ImportAsync(db, container);
+
+        Assert.Equal([behind.Id], await db.Faces.Select(f => f.AssetId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Resumes_a_stopped_sweep_and_allows_turning_back_on_only_once_every_manifest_is_erased()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var manifests = Enumerable.Range(1, 7)
+            .Select(n => FaceImportTests.WithFaces(n, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: n))))
+            .ToList();
+        foreach (var manifest in manifests)
+        {
+            await PutAsync(container, manifest);
+        }
+
+        await Recognition(db).TurnOffAsync(Ana);
+        // Two blobs a page, and a run stops after its first page, as the job's budget or timeout would stop it.
+        var stopping = new SweepOptions(Concurrency: 4, PageSize: 2, Budget: TimeSpan.Zero);
+
+        var runs = new List<SweepResult> { await SweepAsync(db, container, stopping) };
+        Assert.False(runs[0].Finished);
+        Assert.Equal(2, runs[0].Erased);
+        Assert.NotNull(await FaceRecognition.ReadSweepAsync(db));
+        Assert.False(await Recognition(db).TurnOnAsync());
+        while (!runs[^1].Finished)
+        {
+            Assert.True(runs.Count < 10, "The sweep does not finish.");
+            Assert.False(await Recognition(db).TurnOnAsync());
+            runs.Add(await SweepAsync(db, container, stopping));
+        }
+
+        Assert.Equal(4, runs.Count);
+        Assert.Equal(7, runs.Sum(r => r.Erased));
+        Assert.All(runs, r => Assert.Equal(0, r.Unchanged));
+        foreach (var manifest in manifests)
+        {
+            Assert.Empty((await StoredAsync(container, manifest.Id)).Faces);
+        }
+
+        Assert.Null(await FaceRecognition.ReadSweepAsync(db));
+        Assert.True(await Recognition(db).TurnOnAsync());
+    }
+
+    [Fact]
     public async Task Leaves_the_sweep_pending_while_a_stored_manifest_cannot_be_read()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
@@ -220,9 +306,16 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
 
     private static FaceRecognition Recognition(CatalogDbContext db) => new(db, TimeProvider.System);
 
-    private static Task<SweepResult> SweepAsync(CatalogDbContext db, BlobContainerClient container) =>
-        new ManifestFacesSweep(db, new ManifestStore(new ManifestValidator()), TimeProvider.System, NullLogger.Instance)
+    private static Task<SweepResult> SweepAsync(CatalogDbContext db, BlobContainerClient container, SweepOptions? options = null) =>
+        new ManifestFacesSweep(db, new ManifestStore(new ManifestValidator()), TimeProvider.System, NullLogger.Instance, options)
             .RunAsync(container, CancellationToken.None);
+
+    private sealed class SettableClock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
 
     private static async Task<Manifest> StoredAsync(BlobContainerClient container, string id) =>
         ManifestJson.Deserialize((await container.GetBlobClient(BlobLayout.ManifestBlobName(id)).DownloadContentAsync()).Value.Content.ToString());

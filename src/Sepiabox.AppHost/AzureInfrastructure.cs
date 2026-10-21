@@ -65,7 +65,7 @@ public static class AzureInfrastructure
 
     /// <summary>
     /// When <see cref="FacesJobName"/> runs: hourly. While face recognition was never turned off a run is one query; after
-    /// an erase, the settings page says the stored manifests are cleaned "within the hour".
+    /// an erase, each run carries the pass on from its checkpoint, so a large library is cleaned within a few hours.
     /// </summary>
     public const string FacesSchedule = "17 * * * *";
 

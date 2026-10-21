@@ -705,7 +705,7 @@
     <value>Turn off and delete face data</value>
   </data>
   <data name="Settings_Faces_OffExplain" xml:space="preserve">
-    <value>Turn face recognition off? Every face and every person, with their names and “This is me”, is deleted now, and this cannot be undone. The photos and videos stay. Within the hour the faces are erased from the stored manifests too, and no face is imported until recognition is turned back on.</value>
+    <value>Turn face recognition off? Every face and every person, with their names and “This is me”, is deleted now, and this cannot be undone. The photos and videos stay. The faces are then erased from the copies of the library's information kept in the cloud (manifests) too, within a few hours on a large library, and no face is imported until recognition is turned back on.</value>
   </data>
   <data name="Settings_Faces_OffConfirm" xml:space="preserve">
     <value>Yes, turn off and delete</value>
@@ -717,10 +717,10 @@
     <value>Face recognition is off: no face is imported.</value>
   </data>
   <data name="Settings_Faces_Pending" xml:space="preserve">
-    <value>The faces are being erased from the stored manifests too (within the hour). Recognition can be turned back on once that is done.</value>
+    <value>The faces are being erased from the copies of the library's information kept in the cloud (manifests) too, within a few hours on a large library. Recognition can be turned back on once that is done.</value>
   </data>
   <data name="Settings_Faces_Swept" xml:space="preserve">
-    <value>The faces were erased from the stored manifests too.</value>
+    <value>The faces were erased from the copies of the library's information kept in the cloud (manifests) too.</value>
   </data>
   <data name="Settings_Faces_On" xml:space="preserve">
     <value>Turn face recognition on</value>
@@ -744,7 +744,7 @@
     <value>Face recognition is on: faces found from now on are imported.</value>
   </data>
   <data name="Settings_Error_Pending" xml:space="preserve">
-    <value>Not yet: the faces are still being erased from the stored manifests.</value>
+    <value>Not yet: the faces are still being erased from the copies in the cloud.</value>
   </data>
   <data name="Settings_Error_NoEmail" xml:space="preserve">
     <value>Your sign-in has no e-mail address, so nothing was changed.</value>
@@ -756,7 +756,7 @@
     <value>Delete face data</value>
   </data>
   <data name="Delete_Explain" xml:space="preserve">
-    <value>This person, their name and all their faces are deleted, and this cannot be undone. The photos stay, and their faces are not found again when the photos are imported again. To erase every face from the stored manifests too, turn face recognition off in Settings.</value>
+    <value>This person, their name and all their faces are deleted, and this cannot be undone. The photos stay, and their faces are not found again when the photos are imported again. To erase every face from the copies of the library's information kept in the cloud (manifests) too, turn face recognition off in Settings. Automatic backups still hold the deleted data for up to 7 days; after that it is gone.</value>
   </data>
   <data name="Delete_Confirm" xml:space="preserve">
     <value>Delete</value>
@@ -766,5 +766,8 @@
   </data>
   <data name="People_FacesOff" xml:space="preserve">
     <value>Face recognition is off, so there are no people.</value>
+  </data>
+  <data name="Settings_Faces_Backups" xml:space="preserve">
+    <value>Automatic backups (the database's point-in-time restore, and deleted or overwritten files kept for 7 days) still hold deleted face data for up to 7 days; after that it is gone.</value>
   </data>
 </root>

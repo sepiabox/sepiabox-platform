@@ -46,8 +46,11 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not erase the faces of manifest {BlobName}: {Reason}")]
     public static partial void SweepProblem(ILogger logger, string blobName, string reason);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Swept the face erase of {ErasedAt:O} into the manifests: {Erased} erased, {Unchanged} already erased, {Problems} with problems.")]
-    public static partial void FacesSwept(ILogger logger, DateTimeOffset erasedAt, int erased, int unchanged, int problems);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Swept the face erase of {ErasedAt:O} into the manifests (pass finished: {Finished}): {Erased} erased, {Unchanged} already erased, {Problems} with problems.")]
+    public static partial void FacesSwept(ILogger logger, DateTimeOffset erasedAt, bool finished, int erased, int unchanged, int problems);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Another faces sweep is running; this one does nothing.")]
+    public static partial void SweepBusy(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Loaded {Cities} GeoNames cities.")]
     public static partial void GeoNamesLoaded(ILogger logger, int cities);

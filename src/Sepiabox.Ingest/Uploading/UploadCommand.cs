@@ -15,6 +15,17 @@ using Sepiabox.Pipeline.Storage;
 
 namespace Sepiabox.Ingest.Uploading;
 
+/// <summary>This computer's clock is too far from the storage server's for face times to be trusted (S-022, D-081).</summary>
+public sealed class ClockSkewException(TimeSpan skew) : Exception(Describe(skew))
+{
+    public TimeSpan Skew { get; } = skew;
+
+    private static string Describe(TimeSpan skew) =>
+        $"This computer's clock is {Math.Abs(skew.TotalMinutes):N0} minutes {(skew > TimeSpan.Zero ? "ahead of" : "behind")} the storage server's. " +
+        $"Set it right (synchronize it with internet time) and upload again: faces are kept or erased by the time they were found, " +
+        $"so upload refuses a clock more than {UploadCommand.MaxClockSkew.TotalMinutes:N0} minutes off.";
+}
+
 public sealed record UploadResult(
     int Assets,
     int Uploaded,
@@ -33,6 +44,12 @@ public static class UploadCommand
 
     public const int BlockSize = 8 * 1024 * 1024;
     public const int ParallelUploads = 4;
+
+    /// <summary>
+    /// How far this computer's clock may be from the storage server's (S-022, D-081): <c>facesDetectedAt</c> comes from
+    /// it and is compared with the server's erase and switch-on times.
+    /// </summary>
+    public static readonly TimeSpan MaxClockSkew = TimeSpan.FromMinutes(5);
 
     public static BlobServiceClient CreateClient(UploadOptions options) => options.Destination switch
     {
@@ -54,7 +71,8 @@ public static class UploadCommand
         BlobServiceClient service,
         IProgress<long>? bytesSent,
         IManifestValidator validator,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeProvider? clock = null)
     {
         var workFolder = Path.GetFullPath(options.WorkFolder);
         var manifestFolder = Path.Combine(workFolder, "manifests");
@@ -72,6 +90,8 @@ public static class UploadCommand
         {
             await container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
         }
+
+        await CheckClockAsync(containers.Manifests, clock ?? TimeProvider.System, cancellationToken);
 
         using var state = new UploadState(databasePath);
         var run = new Run(
@@ -93,6 +113,29 @@ public static class UploadCommand
 
         return new UploadResult(
             manifestFiles.Length, run.Uploaded, run.Skipped, run.Bytes, stopwatch.Elapsed, [.. run.Problems.OrderBy(p => p.Path)]);
+    }
+
+    /// <summary>
+    /// Refuses to upload when this computer's clock is more than <see cref="MaxClockSkew"/> from the storage server's,
+    /// read from the <c>Date</c> header of a request to it.
+    /// </summary>
+    internal static async Task CheckClockAsync(BlobContainerClient container, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        var before = clock.GetUtcNow();
+        var response = (await container.GetPropertiesAsync(cancellationToken: cancellationToken)).GetRawResponse();
+        var after = clock.GetUtcNow();
+        if (response.Headers.Date is not { } server)
+        {
+            return;
+        }
+
+        // The header has whole seconds and was written somewhere during the request: compared with its middle.
+        var local = before + ((after - before) / 2);
+        var skew = local - server;
+        if (skew.Duration() > MaxClockSkew)
+        {
+            throw new ClockSkewException(skew);
+        }
     }
 
     /// <summary>
