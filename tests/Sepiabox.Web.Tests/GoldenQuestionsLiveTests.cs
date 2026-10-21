@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Search.Questions;
+using Sepiabox.Tests.Live;
 using Sepiabox.Web.Services;
 using Xunit.Abstractions;
 
@@ -11,7 +12,7 @@ namespace Sepiabox.Web.Tests;
 /// The golden set against the real Anthropic API (S-025, D-054): every question, in both languages, must mean its
 /// expected query, which is checked by running both on the fixture catalog. Never in CI (Category=LiveApi); run
 /// with <c>SEPIABOX_ANTHROPIC_API_KEY</c> before the story is done. <c>SEPIABOX_RECORD_GOLDEN=1</c> also refreshes the
-/// recorded responses CI replays.
+/// recorded responses CI replays, only when every question passed (<see cref="LiveRecording"/>).
 /// </summary>
 [Collection(CatalogGroup.Name)]
 [Trait("Category", "LiveApi")]
@@ -64,10 +65,8 @@ public sealed class GoldenQuestionsLiveTests(CatalogFixture catalog, ITestOutput
 
         var total = golden.Questions.Count * 2;
         output.WriteLine($"Model {options.Model}, {DateTime.UtcNow:yyyy-MM-dd}: {total - failed.Count}/{total} passed, {retried.Count} after a retry ({string.Join(", ", retried)}).");
-        if (Environment.GetEnvironmentVariable("SEPIABOX_RECORD_GOLDEN") == "1")
-        {
-            Record(options.Model, responses);
-        }
+        output.WriteLine(LiveRecording.RecordIfPassed(
+            LiveRecording.Requested, failed.Count, GoldenQuestions.PathOf(GoldenQuestions.RecordedFileName), () => Record(options.Model, responses)));
 
         Assert.Empty(failed);
     }

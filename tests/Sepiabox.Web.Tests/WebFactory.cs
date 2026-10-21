@@ -80,7 +80,11 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             // Never the developer's or CI's downloaded models: a test chooses with QueryEmbedder.
             .UseSetting("Search:ModelFolder", Path.Combine(Path.GetTempPath(), "sepiabox-tests-no-models"))
             // Never the developer's key from user secrets: a test that needs questions gives a fake translator.
-            .UseSetting("Anthropic:ApiKey", string.Empty);
+            .UseSetting("Anthropic:ApiKey", string.Empty)
+            // Nor the developer's Key Vault: Development loads user secrets, which these settings override (a
+            // test that needs a key ring URI sets it in Settings).
+            .UseSetting($"ConnectionStrings:{AzureSetup.VaultConnectionName}", string.Empty)
+            .UseSetting(AzureSetup.KeyUriKey, string.Empty);
         foreach (var (key, value) in Settings)
         {
             builder.UseSetting(key, value);

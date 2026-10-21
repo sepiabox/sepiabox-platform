@@ -26,6 +26,7 @@
     <Using Include="Xunit" />
     <Using Include="Sepiabox.Tests.Shared" />
     <Using Include="Sepiabox.Tests.Catalog" />
+    <Using Include="Sepiabox.Tests.Places" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,8 +40,9 @@
     <Compile Include="..\Shared\TempFolder.cs" LinkBase="Shared" />
     <Compile Include="..\Shared\TestModels.cs" LinkBase="Shared" />
     <Compile Include="..\Shared\Catalog\*.cs" LinkBase="Shared\Catalog" />
+    <Compile Include="..\Shared\Live\*.cs" LinkBase="Shared\Live" />
     <!-- The synthetic GeoNames sample the fixture's locations resolve against (S-012, S-061). -->
-    <Compile Include="..\Sepiabox.Worker.Tests\Places\GeoNamesSample.cs" LinkBase="Shared" />
+    <Compile Include="..\Shared\Places\*.cs" LinkBase="Shared\Places" />
   </ItemGroup>
 
 </Project>

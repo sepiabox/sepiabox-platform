@@ -40,11 +40,11 @@ In a session that has `SEPIABOX_ANTHROPIC_API_KEY`, Docker, and `ffmpeg` and `ff
    docker build -t sepiabox-postgres-local:test /tmp/pgtest
    export SEPIABOX_TEST_POSTGRES_IMAGE=sepiabox-postgres-local:test
    ```
-3. `SEPIABOX_RECORD_GOLDEN=1 dotnet test tests/Sepiabox.Acceptance.Tests --filter "Category=LiveApi" --logger "console;verbosity=detailed"`. It must report `Passed: 1` (`Skipped: 1` means the key is not set); its output ends with `Model claude-haiku-5-5, <date>: <passed>/16 answered right, <n> after a retry (<ids>).` and lists every miss with both numbers. It rewrites every response of `tests/Sepiabox.Acceptance.Tests/TestData/acceptance.recorded.json` and removes its `placeholders`.
+3. `SEPIABOX_RECORD_GOLDEN=1 dotnet test tests/Sepiabox.Acceptance.Tests --filter "Category=LiveApi" --logger "console;verbosity=detailed"`. It must report `Passed: 1` (`Skipped: 1` means the key is not set); its output ends with `Model claude-haiku-5-5, <date>: <passed>/16 answered right, <n> after a retry (<ids>).` and lists every miss with both numbers. When every question passed (retries allowed) it rewrites every response of `tests/Sepiabox.Acceptance.Tests/TestData/acceptance.recorded.json`, removes its `placeholders` and prints `Recorded <path>.`; otherwise it prints `Not recording: N failed, ...` and leaves the file as it was.
 4. `dotnet test tests/Sepiabox.Acceptance.Tests --filter "FullyQualifiedName~MvpAcceptance&Category!=LiveApi"` (the CI replay, now on the recorded responses) must pass: `Passed: 7`.
 5. `git add tests/Sepiabox.Acceptance.Tests/TestData/acceptance.recorded.json`, tick the second acceptance criterion with the run's line, set S-054 to `done` in `docs/backlog/README.md` and in the Status below, commit, push, and put the run's line from step 3 in the PR description.
 
-If the run fails, keep the story `blocked`, do not commit the recorded file, and report the misses: they are prompt or question fixes for a review iteration.
+If the run fails, keep the story `blocked` (the recorded file is unchanged, so there is nothing to commit) and report the misses: they are prompt or question fixes for a review iteration.
 
 ### Status
 - `blocked` (2026-10-21): everything is implemented and tested (D-076) but the required live run with recording (D-054), above.

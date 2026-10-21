@@ -2,7 +2,9 @@ using System.Security.Claims;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Catalog;
@@ -14,10 +16,10 @@ using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
 using Sepiabox.Pipeline.Video;
 using Sepiabox.Search.Questions;
+using Sepiabox.Web;
 using Sepiabox.Web.Services;
 using Sepiabox.Worker.Importing;
 using Sepiabox.Worker.Places;
-using Sepiabox.Worker.Tests.Places;
 
 namespace Sepiabox.Acceptance.Tests;
 
@@ -36,6 +38,8 @@ public sealed class MvpWorld : IAsyncLifetime, IDisposable
     private readonly TempFolder _drive = new();
     private readonly TempFolder _work = new();
     private readonly TempFolder _elsewhere = new();
+    private readonly ForwardingTranslator _translator = new();
+    private readonly SemaphoreSlim _asking = new(1, 1);
     private WebApplicationFactory<QuestionService>? _web;
 
     /// <summary>What the generator wrote: the reference for cities, and for the totals with <see cref="Report"/>.</summary>
@@ -77,7 +81,7 @@ public sealed class MvpWorld : IAsyncLifetime, IDisposable
         Import = await new ManifestImporter(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
             .ImportOnceAsync(_catalog.Blobs.GetBlobContainerClient(BlobLayout.ManifestsContainer), CancellationToken.None);
 
-        _web = new AcceptanceWeb(_catalog.ConnectionStringFor(db), _catalog.BlobConnectionString);
+        _web = new AcceptanceWeb(_catalog.ConnectionStringFor(db), _catalog.BlobConnectionString, _translator);
         // Builds the web's host (its Program.cs), as a request would, without sending one.
         _ = _web.Services;
     }
@@ -96,31 +100,38 @@ public sealed class MvpWorld : IAsyncLifetime, IDisposable
     public void Dispose()
     {
         _web?.Dispose();
+        _asking.Dispose();
         _drive.Dispose();
         _work.Dispose();
         _elsewhere.Dispose();
     }
 
     /// <summary>
-    /// Asks <paramref name="question"/> as the question box does: the web's <see cref="QuestionService"/> with its own
-    /// library, quota, limits and clock, and <paramref name="translator"/>; then counts the query it became.
+    /// Asks <paramref name="question"/> as the question box does, through the web container's own
+    /// <see cref="QuestionService"/> (its library, quota, limits, clock and search options, as Program.cs wires them),
+    /// with <paramref name="translator"/> answering in place of the configured one; then counts the query it became.
     /// </summary>
     public async Task<(AskResult Asked, CountResult? Count)> AskAsync(string question, IQuestionTranslator translator)
     {
-        using var scope = _web!.Services.CreateScope();
-        var services = scope.ServiceProvider;
-        var library = services.GetRequiredService<ILibraryQueries>();
-        var questions = new QuestionService(
-            translator,
-            services.GetRequiredService<IQuestionQuota>(),
-            library,
-            services.GetRequiredService<QuestionLimits>(),
-            services.GetRequiredService<TimeProvider>(),
-            services.GetRequiredService<SearchOptions>());
-        var person = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Email, Person)], "acceptance"));
-        var asked = await questions.AskAsync(question, person);
-        var count = asked is { Outcome: AskOutcome.Answered, Query: { Aggregate: not null } query } ? await library.CountAsync(query) : null;
-        return (asked, count);
+        // One question at a time: the web's translator is a single stand-in that forwards to this one.
+        await _asking.WaitAsync();
+        try
+        {
+            _translator.Current = translator;
+            using var scope = _web!.Services.CreateScope();
+            var services = scope.ServiceProvider;
+            var person = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Email, Person)], "acceptance"));
+            var asked = await services.GetRequiredService<QuestionService>().AskAsync(question, person);
+            var count = asked is { Outcome: AskOutcome.Answered, Query: { Aggregate: not null } query }
+                ? await services.GetRequiredService<ILibraryQueries>().CountAsync(query)
+                : null;
+            return (asked, count);
+        }
+        finally
+        {
+            _translator.Current = null;
+            _asking.Release();
+        }
     }
 
     /// <summary>Counts <paramref name="dsl"/> with the web's library queries, with no question in between.</summary>
@@ -137,10 +148,10 @@ public sealed class MvpWorld : IAsyncLifetime, IDisposable
     }
 
     /// <summary>
-    /// The web as Program.cs builds it, on the test catalog and Azurite; questions come from the test's translator. The
-    /// entry type is any web type: the worker has a <c>Program</c> too.
+    /// The web as Program.cs builds it, on the test catalog and Azurite, with the test's translator as its
+    /// <see cref="IQuestionTranslator"/>. The entry type is any web type: the worker has a <c>Program</c> too.
     /// </summary>
-    private sealed class AcceptanceWeb(string catalog, string blobs) : WebApplicationFactory<QuestionService>
+    private sealed class AcceptanceWeb(string catalog, string blobs, IQuestionTranslator translator) : WebApplicationFactory<QuestionService>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder) => builder
             .UseEnvironment("Development")
@@ -149,8 +160,28 @@ public sealed class MvpWorld : IAsyncLifetime, IDisposable
             .UseSetting("Access:Emails", Person)
             .UseSetting("Search:TimeZone", "Europe/Lisbon")
             .UseSetting("Search:ModelFolder", TestModels.None)
-            // Never a developer's key: the test hands the question service its own translator.
+            // Development loads the developer's user secrets; these settings override them (and environment
+            // variables), so neither a key nor a vault there reaches Anthropic or Azure. Settings, not an in-memory
+            // source, because Program.cs reads the vault's connection before the app configuration is applied.
             .UseSetting("Anthropic:ApiKey", string.Empty)
-            .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
+            .UseSetting($"ConnectionStrings:{AzureSetup.VaultConnectionName}", string.Empty)
+            .UseSetting(AzureSetup.KeyUriKey, string.Empty)
+            .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Warning))
+            .ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IQuestionTranslator>();
+                services.AddSingleton(translator);
+            });
+    }
+
+    /// <summary>The web's translator: forwards to the one the current question was asked with.</summary>
+    private sealed class ForwardingTranslator : IQuestionTranslator
+    {
+        public IQuestionTranslator? Current { get; set; }
+
+        public bool IsConfigured => Current?.IsConfigured ?? false;
+
+        public Task<QuestionTranslation> TranslateAsync(string question, QuestionContext context, CancellationToken cancellationToken = default) =>
+            (Current ?? throw new InvalidOperationException("No translator for this question.")).TranslateAsync(question, context, cancellationToken);
     }
 }

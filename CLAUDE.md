@@ -45,7 +45,8 @@ scripts/deploy.sh      the only way to deploy: azd provision, migrate job, then 
 azure.yaml             azd project: the AppHost is the infrastructure
 tests/
   Sepiabox.<Project>.Tests/   one xUnit project per source project
-  Shared/              helpers compiled into the test projects (Catalog/ holds the PostgreSQL + Azurite fixture)
+  Sepiabox.Acceptance.Tests/  the MVP's end-to-end acceptance across ingest, worker and web (D-076)
+  Shared/              helpers compiled into the test projects (Catalog/ holds the PostgreSQL + Azurite fixture, Places/ the GeoNames sample, Live/ the live-run recording rule)
 docs/
   architecture.md, decisions.md, operations.md
   backlog/             one file per story plus the index

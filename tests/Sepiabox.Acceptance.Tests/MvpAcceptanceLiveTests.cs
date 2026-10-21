@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Search.Questions;
+using Sepiabox.Tests.Live;
 using Sepiabox.Web.Services;
 using Xunit.Abstractions;
 
@@ -14,8 +15,9 @@ namespace Sepiabox.Acceptance.Tests;
 /// The MVP's acceptance with the real Anthropic API (S-054, D-054): every acceptance question, in both languages,
 /// must be answered with <c>report</c>'s or the generator's numbers, which is how its meaning is compared (one retry
 /// per question, recorded). Never in CI (Category=LiveApi); <c>SEPIABOX_RECORD_GOLDEN=1</c> also rewrites
-/// <c>acceptance.recorded.json</c>, which <see cref="MvpAcceptanceTests"/> replays. The world is built inside the test,
-/// not as a fixture, so a run without the key starts no container.
+/// <c>acceptance.recorded.json</c>, which <see cref="MvpAcceptanceTests"/> replays, only when every question passed
+/// (<see cref="LiveRecording"/>). The world is built inside the test, not as a fixture, so a run without the key
+/// starts no container.
 /// </summary>
 [Trait("Category", "LiveApi")]
 public sealed class MvpAcceptanceLiveTests(ITestOutputHelper output)
@@ -28,9 +30,10 @@ public sealed class MvpAcceptanceLiveTests(ITestOutputHelper output)
         var options = new AnthropicQuestionOptions { ApiKey = key, MaxRetries = 2, Timeout = TimeSpan.FromSeconds(60) };
         using var translator = new AnthropicQuestionTranslator(options, QuestionService.Validate, NullLogger<AnthropicQuestionTranslator>.Instance);
         using var world = new MvpWorld();
-        await world.InitializeAsync();
         try
         {
+            // Inside the try, so a setup that fails half-way still stops its containers.
+            await world.InitializeAsync();
             var responses = new SortedDictionary<string, string>(StringComparer.Ordinal);
             var retried = new List<string>();
             var failed = new List<string>();
@@ -68,10 +71,8 @@ public sealed class MvpAcceptanceLiveTests(ITestOutputHelper output)
             var total = questions.Count * 2;
             var failedQuestions = failed.Select(f => f[..f.IndexOf(' ', StringComparison.Ordinal)]).Distinct().Count();
             output.WriteLine($"Model {options.Model}, {DateTime.UtcNow:yyyy-MM-dd}: {total - failedQuestions}/{total} answered right, {retried.Count} after a retry ({string.Join(", ", retried)}).");
-            if (Environment.GetEnvironmentVariable("SEPIABOX_RECORD_GOLDEN") == "1")
-            {
-                Record(options.Model, responses);
-            }
+            output.WriteLine(LiveRecording.RecordIfPassed(
+                LiveRecording.Requested, failed.Count, AcceptanceQuestions.PathOf(AcceptanceQuestions.RecordedFileName), () => Record(options.Model, responses)));
 
             Assert.True(failed.Count == 0, "Answers that differ:\n" + string.Join('\n', failed));
         }
