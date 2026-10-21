@@ -15,8 +15,11 @@ S-053 reads phone video locations from QuickTime metadata. It landed before the 
 - Refreshing manifests already uploaded without the work folder.
 
 ### Acceptance criteria
-- [ ] Given a work folder processed with the previous metadata version, when `process` runs again on the same drive, then the videos' manifests gain their location and the derivative files' write times are unchanged.
-- [ ] Given an unchanged file already at the current version, then its headers are not read again.
+- [x] Given a work folder processed with the previous metadata version, when `process` runs again on the same drive, then the videos' manifests gain their location and the derivative files' write times are unchanged.
+- [x] Given an unchanged file already at the current version, then its headers are not read again.
+
+### Status
+- `doing` (2026-10-21): implemented and tested (D-089).
 
 ### Technical notes
 - Same "only what changed" approach as embeddings and faces (D-042, D-047): the work folder is the source of truth.

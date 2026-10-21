@@ -148,7 +148,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 |---|---|---|---|---|---|---|
 | S-014 | [Save personal places and filter by them](S-014-save-personal-places-and-filter-by-them.md) | Search | S-013, S-025 | Medium | M | `done` |
 | S-017 | [Show more photos similar to this one](S-017-show-more-photos-similar-to-this-one.md) | Search | S-015, S-013 | Medium | S | `done` |
-| S-060 | [Refresh video locations in processed work folders](S-060-refresh-video-locations-in-processed-work-folders.md) | Local ingest | S-053 | Low | S | `todo` |
+| S-060 | [Refresh video locations in processed work folders](S-060-refresh-video-locations-in-processed-work-folders.md) | Local ingest | S-053 | Low | S | `doing` |
 
 ### Sprint 13 — Occasions
 
