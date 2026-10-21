@@ -6,7 +6,9 @@ using NetTopologySuite.Geometries;
 using Npgsql;
 using Pgvector;
 using Sepiabox.Catalog;
+using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Embeddings;
+using Sepiabox.Pipeline.Faces;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Storage;
@@ -17,18 +19,26 @@ public sealed record ImportProblem(string BlobName, string Reason);
 
 /// <summary>
 /// What an import did. <see cref="Problems"/> are manifests that were not imported and make the exit code
-/// non-zero; <see cref="Warnings"/> are manifests imported without an embedding that could not be stored (D-043).
+/// non-zero; <see cref="Warnings"/> are manifests imported without an embedding or a face that could not be stored
+/// (D-043).
 /// </summary>
 public sealed record ImportResult(int Imported, int Unchanged, IReadOnlyList<ImportProblem> Problems, IReadOnlyList<ImportProblem> Warnings);
 
 /// <summary>
 /// Copies manifests from Blob Storage into the catalog (S-008). Each manifest blob is imported once per
 /// version (ETag), so running it again only picks up new or changed manifests. One bad manifest is
-/// reported and never stops the others.
+/// reported and never stops the others. Faces go into people as they arrive (S-019, <see cref="FaceAssigner"/>).
 /// </summary>
 public sealed class ManifestImporter(
-    CatalogDbContext db, ManifestValidator validator, IPlaceResolver places, TimeProvider clock, ILogger<ManifestImporter> logger)
+    CatalogDbContext db,
+    ManifestValidator validator,
+    IPlaceResolver places,
+    TimeProvider clock,
+    ILogger<ManifestImporter> logger,
+    FaceAssignerOptions? faceOptions = null)
 {
+    private readonly FaceAssigner _faces = new(db, faceOptions);
+
     private static readonly GeometryFactory s_wgs84 = new(new PrecisionModel(), 4326);
 
     public async Task<ImportResult> ImportOnceAsync(BlobContainerClient manifests, CancellationToken cancellationToken)
@@ -147,6 +157,8 @@ public sealed class ManifestImporter(
         }
 
         var (embeddings, embeddingProblem) = ReadEmbeddings(manifest);
+        var (faces, faceProblem) = ReadFaces(manifest);
+        var leftOut = embeddingProblem is null ? faceProblem : faceProblem is null ? embeddingProblem : $"{embeddingProblem}; {faceProblem}";
 
         // Only errors known to be about this manifest's data are reported and the import goes on;
         // everything else (connection, missing table, a schema the model no longer matches,
@@ -157,8 +169,8 @@ public sealed class ManifestImporter(
         // it only means an update or delete found its row gone, which is not this manifest's fault.
         try
         {
-            await SaveAsync(manifest, kind, embeddings, blobName, etag, cancellationToken);
-            return (true, embeddingProblem);
+            await SaveAsync(manifest, kind, embeddings, faces, blobName, etag, cancellationToken);
+            return (true, leftOut);
         }
         // Only SaveChanges failures (which EF wraps in DbUpdateException) can be about the data; a read
         // that fails says something about the database. SaveAsync writes only through SaveChangesAsync
@@ -206,8 +218,8 @@ public sealed class ManifestImporter(
     }
 
     private async Task SaveAsync(
-        Manifest manifest, string kind, IReadOnlyDictionary<string, float[]> embeddings, string blobName, string etag,
-        CancellationToken cancellationToken)
+        Manifest manifest, string kind, IReadOnlyDictionary<string, float[]> embeddings, IReadOnlyList<IncomingFace>? faces,
+        string blobName, string etag, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
         var asset = await db.Assets
@@ -299,6 +311,14 @@ public sealed class ManifestImporter(
             }
         }
 
+        // Faces only when the manifest looked for them: false means "not looked for", never "no faces" (D-047), so the
+        // stored faces and their people stay. Faces of an older pipeline never replace a newer one's.
+        if (faces is not null
+            && await _faces.ApplyAsync(asset.Id, asset.FacesVersion, manifest.EffectiveFacesVersion, faces, cancellationToken))
+        {
+            asset.FacesVersion = manifest.EffectiveFacesVersion;
+        }
+
         var import = await db.ManifestImports.FindAsync([blobName], cancellationToken);
         if (import is null)
         {
@@ -360,6 +380,48 @@ public sealed class ManifestImporter(
         }
 
         return (read, problems.Count == 0 ? null : string.Join("; ", problems));
+    }
+
+    /// <summary>
+    /// The faces to store, or null when the manifest did not look for any. The schema has already checked each face's
+    /// shape; a face whose embedding is not 128 finite values with a length, or whose box is not four finite values,
+    /// would break cosine grouping, so it is left out and the manifest listed once in the warnings (D-043, D-047).
+    /// </summary>
+    private static (IReadOnlyList<IncomingFace>? Faces, string? Problem) ReadFaces(Manifest manifest)
+    {
+        if (!manifest.FacesProcessed)
+        {
+            return (null, null);
+        }
+
+        var read = new List<IncomingFace>();
+        var leftOut = 0;
+        foreach (var face in manifest.Faces)
+        {
+            float[] values;
+            try
+            {
+                values = EmbeddingCodec.Decode(face.Embedding);
+            }
+            catch (Exception ex) when (ex is FormatException or InvalidOperationException)
+            {
+                leftOut++;
+                continue;
+            }
+
+            if (values.Length != FaceDetector.Dimensions || values.Any(v => !float.IsFinite(v)) || values.All(v => v == 0)
+                || face.Box.Count != 4 || face.Box.Any(v => !double.IsFinite(v)) || !double.IsFinite(face.Score))
+            {
+                leftOut++;
+                continue;
+            }
+
+            read.Add(new IncomingFace([.. face.Box], face.Score, values));
+        }
+
+        return (read, leftOut == 0
+            ? null
+            : $"has {leftOut} face{(leftOut == 1 ? string.Empty : "s")} whose embedding is not {FaceDetector.Dimensions} finite values with a length or whose box is not four finite values, left out");
     }
 
     // The schema only allows photo and video; anything else is reported before saving.

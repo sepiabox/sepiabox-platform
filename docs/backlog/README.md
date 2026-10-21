@@ -128,7 +128,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-019 | [Group faces into people](S-019-group-faces-into-people.md) | People | S-018, S-010 | High | M | `todo` |
+| S-019 | [Group faces into people](S-019-group-faces-into-people.md) | People | S-018, S-010 | High | M | `done` |
 | S-020 | [Name, merge and correct people](S-020-name-merge-and-correct-people.md) | People | S-019 | High | M | `todo` |
 
 ### Sprint 11 — People II

@@ -54,6 +54,10 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("duration_seconds");
 
+                    b.Property<int?>("FacesVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("faces_version");
+
                     b.Property<int?>("Height")
                         .HasColumnType("integer")
                         .HasColumnName("height");
@@ -216,6 +220,60 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("derivatives", (string)null);
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.Face", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AssetId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("asset_id");
+
+                    b.Property<string>("Assignment")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("assignment");
+
+                    b.PrimitiveCollection<double[]>("Box")
+                        .IsRequired()
+                        .HasColumnType("double precision[]")
+                        .HasColumnName("box");
+
+                    b.Property<Vector>("Embedding")
+                        .IsRequired()
+                        .HasColumnType("vector(128)")
+                        .HasColumnName("embedding");
+
+                    b.Property<long?>("PersonId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("person_id");
+
+                    b.Property<double>("Score")
+                        .HasColumnType("double precision")
+                        .HasColumnName("score");
+
+                    b.HasKey("Id")
+                        .HasName("pk_faces");
+
+                    b.HasIndex("AssetId")
+                        .HasDatabaseName("ix_faces_asset_id");
+
+                    b.HasIndex("PersonId")
+                        .HasDatabaseName("ix_faces_person_id");
+
+                    b.ToTable("faces", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded')");
+                        });
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.GeoName", b =>
                 {
                     b.Property<long>("GeonameId")
@@ -291,6 +349,53 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("manifest_imports", (string)null);
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.Person", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Vector>("Centroid")
+                        .HasColumnType("vector(128)")
+                        .HasColumnName("centroid");
+
+                    b.Property<int>("FaceCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("face_count");
+
+                    b.Property<int>("FacesVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("faces_version");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("UserEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("user_email");
+
+                    b.HasKey("Id")
+                        .HasName("pk_people");
+
+                    b.HasIndex("Centroid")
+                        .HasDatabaseName("ix_people_centroid");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Centroid"), "hnsw");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Centroid"), new[] { "vector_cosine_ops" });
+
+                    b.HasIndex("FaceCount", "Id")
+                        .IsDescending(true, false)
+                        .HasDatabaseName("ix_people_face_count");
+
+                    b.ToTable("people", (string)null);
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.QuestionUsage", b =>
                 {
                     b.Property<string>("UserKey")
@@ -358,11 +463,34 @@ namespace Sepiabox.Catalog.Migrations
                         .HasConstraintName("fk_derivatives_assets_asset_id");
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.Face", b =>
+                {
+                    b.HasOne("Sepiabox.Catalog.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_faces_assets_asset_id");
+
+                    b.HasOne("Sepiabox.Catalog.Person", "Person")
+                        .WithMany("Faces")
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_faces_people_person_id");
+
+                    b.Navigation("Person");
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.Asset", b =>
                 {
                     b.Navigation("Derivatives");
 
                     b.Navigation("Sources");
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.Person", b =>
+                {
+                    b.Navigation("Faces");
                 });
 #pragma warning restore 612, 618
         }

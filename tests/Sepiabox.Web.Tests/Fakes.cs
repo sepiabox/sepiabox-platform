@@ -84,6 +84,12 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
     }
 
     public Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Options);
+
+    /// <summary>The people page's people, as the query returns them.</summary>
+    public List<PersonSummary> People { get; init; } = [];
+
+    public Task<IReadOnlyList<PersonSummary>> GetPeopleAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PersonSummary>>(People);
 }
 
 /// <summary>

@@ -561,3 +561,54 @@ main {
     border: 1px solid var(--sepia);
     border-radius: 4px;
 }
+
+.nav-link {
+    color: var(--developer);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.nav-link:hover,
+.nav-link:focus-visible {
+    color: var(--cyanotype);
+    text-decoration: underline;
+}
+
+/* The people page (S-019): one card per person, the face cropped from its thumbnail by an inline style. */
+.page-heading {
+    margin: 24px 0 16px;
+    font-size: 1.5rem;
+}
+
+.people {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.person {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.person .face {
+    position: relative;
+    display: block;
+    aspect-ratio: 1;
+    overflow: hidden;
+    background: var(--mat);
+    border-radius: 50%;
+}
+
+.person .face img {
+    position: absolute;
+    max-width: none;
+}
+
+.person .name {
+    font-weight: 600;
+}

@@ -51,6 +51,7 @@ Checks only a person can do. A story whose automated criteria pass is `done` and
 | After a deploy with `Anthropic--ApiKey` in Key Vault: on the timeline, ask "videos from Lisbon in December 2019" and "fotos na praia no verão passado"; each opens a search whose chips say what was understood, in the page's language. Then `SELECT questions, input_tokens, cache_read_input_tokens FROM question_usage;` shows them counted, with cache reads from the second question on | S-025 |
 | The video playback check in the table above | S-011 |
 | In Azure, with the browser set to English: the timeline's month headings read like "July 2019"; choose Português (Brasil) in the header: the same page comes back with "julho de 2019", and the detail page's date reads like "14 de julho de 2019, 10:32" (the container image has ICU, D-058) | S-044 |
+| After the first deploy with S-019 and `sepiabox-import-all` (see "People"): upload a small folder processed with `process --faces` in which the same person appears in a few photos; open **People** in the header: that person is one card ("Unnamed", "Sem nome" in Portuguese) with the number of faces found, their face cropped from a thumbnail, and people with more faces come first. Report a person split in two or two people merged | S-019 |
 
 ## Deploying to Azure
 
@@ -293,6 +294,14 @@ Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from t
 | Instagram, Facebook | Accounts Center → Your information and permissions → Download your information → format **JSON**, media quality high |
 
 Keep the extracted export on the PC and run `sepiabox-ingest process <folder> --export <kind>`; the export is only read. Exports hold personal data: never commit them or attach them to issues. When a story asks for a small real export to confirm the format, share it privately with the person running it.
+
+## People
+
+Faces found by `process --faces` (S-018) are grouped into people when their manifests are imported (S-019, D-077): a face joins the person whose average face (centroid) is most similar, from a cosine similarity of 0.40 (D-016), or starts a new, unnamed person. The **People** page lists them, most faces first. Naming, merging and correcting people is S-020.
+
+- **After the deploy that brings S-019,** run `sepiabox-import-all` once (see "Automatic import"): its migration makes the import read every manifest again, so faces uploaded before it reach the catalog. Re-importing changes nothing else (D-032).
+- **The threshold** is `People:SameFaceThreshold` (0.40 unless set; above 0 and at most 1), an environment variable `People__SameFaceThreshold` of the import jobs. A higher value splits one person into several more often, a lower one merges different people. It applies to faces imported from then on; faces already grouped stay where they are.
+- **A manifest without faces looked for** (`process` without `--faces`) never removes faces already imported; a new `--faces` run replaces an asset's faces and keeps each face's person when it is found again in about the same place (D-047).
 
 ## Search by description
 

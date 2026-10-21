@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Sepiabox.Catalog;
+using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
 using Sepiabox.Worker;
@@ -49,6 +50,9 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
     {
         builder.AddAzureBlobServiceClient("blobs");
         builder.Services.AddSingleton<ManifestValidator>();
+        // D-016's same-person similarity unless configured (S-019).
+        builder.Services.AddSingleton(FaceAssignerOptions.For(
+            builder.Configuration.GetValue("People:SameFaceThreshold", FaceAssignerOptions.DefaultThreshold)));
         builder.Services.AddScoped<ManifestImporter>();
     }
 
