@@ -55,7 +55,7 @@ public sealed class SavedPlacesFilterTests
 
     [Theory]
     [InlineData(100.0, null, "A mais de 100 km de casa")]
-    [InlineData(null, 2.5, "A até 2,5 km de casa")]
+    [InlineData(null, 2.5, "Até 2,5 km de casa")]
     [InlineData(10.0, 50.0, "Entre 10 e 50 km de casa")]
     public void Shows_places_and_the_distance_from_home_as_removable_chips_in_brazilian_portuguese(double? min, double? max, string expected)
     {
@@ -80,6 +80,31 @@ public sealed class SavedPlacesFilterTests
         var query = new SearchQuery { Filters = new SearchFilters { DistanceFrom = new DistanceFilter { Place = "Casa da praia", MinKm = 100 } } };
 
         Assert.Equal("More than 100 km from Casa da praia", Assert.Single(SearchChips.For(query, Cultures.Text())).Label);
+    }
+
+    [Theory]
+    [InlineData("38.72, -9.13", 38.72, -9.13)]
+    [InlineData(" 38.72,-9.13 ", 38.72, -9.13)]
+    [InlineData("38.72; -9.13", 38.72, -9.13)]
+    [InlineData("38,72 -9,13", 38.72, -9.13)]
+    [InlineData("38,72; -9,13", 38.72, -9.13)]
+    [InlineData("-22.9068, -43.1729", -22.9068, -43.1729)]
+    public void Reads_coordinates_typed_or_pasted_from_a_map(string text, double latitude, double longitude)
+    {
+        Assert.Equal((latitude, longitude), PlaceCoordinates.TryParse(text));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("38.72")]
+    [InlineData("north, west")]
+    [InlineData("91, 0")]
+    [InlineData("0, 181")]
+    [InlineData("38.72, -9.13, 4")]
+    public void Refuses_what_is_not_a_latitude_and_a_longitude(string? text)
+    {
+        Assert.Null(PlaceCoordinates.TryParse(text));
     }
 
     [Fact]
@@ -110,6 +135,7 @@ public sealed class SavedPlacesPageTests : LocalizedContext
     public SavedPlacesPageTests()
     {
         Services.AddSingleton<ISavedPlaces>(_places);
+        Services.AddSingleton<ILibraryQueries>(new FakeLibrary());
         _places.Places.Add(new SavedPlaceSummary(1, "Casa", 38.74, -9.16, 300, IsHome: true));
         _places.Places.Add(new SavedPlaceSummary(2, "Casa da praia", 38.96, -9.41, 500, IsHome: false));
     }
@@ -136,13 +162,19 @@ public sealed class SavedPlacesPageTests : LocalizedContext
     public void Fills_in_a_photo_s_coordinates_and_asks_before_deleting_in_brazilian_portuguese()
     {
         using var language = Cultures.Use(Cultures.BrazilianPortuguese);
-        Services.GetRequiredService<NavigationManager>().NavigateTo("places?lat=38.9603&lon=-9.4104&delete=2");
+        var library = new FakeLibrary();
+        library.Assets[Ids.Of(5)] = Details.Photo(Ids.Of(5), new DateTime(2019, 12, 1)) with { Location = (38.96031234, -9.41) };
+        Services.AddSingleton<ILibraryQueries>(library);
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"places?asset={Ids.Of(5)}&delete=2");
 
         var page = Render<Places>();
 
-        Assert.Equal("38.9603", page.Find("input[name=NewLatitude]").GetAttribute("value"));
-        Assert.Equal("-9.4104", page.Find("input[name=NewLongitude]").GetAttribute("value"));
+        Assert.Equal("38.960312, -9.41", page.Find("input[name=NewCoordinates]").GetAttribute("value"));
         Assert.Equal("200", page.Find("input[name=NewRadius]").GetAttribute("value"));
+        Assert.Equal("60", page.Find("input[name=NewName]").GetAttribute("maxlength"));
+        Assert.All(page.FindAll(".name-hint"), hint => Assert.Equal("O nome vai para o Claude ao responder perguntas; não use o endereço.", hint.TextContent));
+        Assert.Equal(3, page.FindAll(".name-hint").Count);
+        Assert.StartsWith("Um lugar não pode ser movido", page.Find(".cannot-move").TextContent, StringComparison.Ordinal);
         Assert.Equal("Apagar Casa da praia? As fotos e os vídeos tirados lá ficam; só o lugar é apagado.", page.Find(".confirm-delete .note").TextContent);
         Assert.Equal("2", page.Find("form.confirm input[name=DeleteId]").GetAttribute("value"));
     }
@@ -160,8 +192,9 @@ public sealed class SavedPlacesPageTests : LocalizedContext
         var withLocation = Render<PhotoDetail>(p => p.Add(d => d.Id, asset.Id));
         var without = Render<PhotoDetail>(p => p.Add(d => d.Id, Ids.Of(6)));
 
+        // By the photo's id: its coordinates never go in an address.
         var link = withLocation.Find(".save-place a");
-        Assert.Equal(("Salvar este lugar", "places?lat=38.960312&lon=-9.41"), (link.TextContent, link.GetAttribute("href")));
+        Assert.Equal(("Salvar este lugar", $"places?asset={asset.Id}"), (link.TextContent, link.GetAttribute("href")));
         Assert.Empty(without.FindAll(".save-place"));
     }
 
@@ -196,18 +229,25 @@ public sealed class SavedPlacesPostTests
         using var response = await FaceSettingsPostTests.PostAsync(http, "/places", "create", new()
         {
             ["NewName"] = "Casa",
-            ["NewLatitude"] = "38,74",
-            ["NewLongitude"] = "-9.16",
+            ["NewCoordinates"] = "38,74 -9,16",
             ["NewRadius"] = "300",
             ["NewHome"] = "1",
         });
+        using var withoutRadius = await FaceSettingsPostTests.PostAsync(http, "/places", "create", new()
+        {
+            ["NewName"] = "Casa da praia",
+            ["NewCoordinates"] = "38.96, -9.41",
+            ["NewRadius"] = " ",
+        });
 
         Assert.Equal("/places?note=created", response.Headers.Location?.PathAndQuery);
-        Assert.Equal(["create Casa 38.74 -9.16 300 True"], places.Calls);
+        Assert.Equal(["create Casa 38.74 -9.16 300 True", "create Casa da praia 38.96 -9.41 200 False"], places.Calls);
     }
 
-    [Fact]
-    public async Task Refuses_a_latitude_that_is_not_a_number_without_saving()
+    [Theory]
+    [InlineData("north, west", "200", "Write the coordinates as latitude, longitude")]
+    [InlineData("38.74, -9.16", "lots", "The radius must be between 10 and 50000 metres.")]
+    public async Task Shows_what_was_typed_again_with_the_reason_when_it_cannot_be_saved(string coordinates, string radius, string reason)
     {
         var (web, places) = Web();
         await using var _ = web;
@@ -215,13 +255,19 @@ public sealed class SavedPlacesPostTests
 
         using var response = await FaceSettingsPostTests.PostAsync(http, "/places", "create", new()
         {
-            ["NewName"] = "Casa",
-            ["NewLatitude"] = "north",
-            ["NewLongitude"] = "-9.16",
+            ["NewName"] = "Casa nova",
+            ["NewCoordinates"] = coordinates,
+            ["NewRadius"] = radius,
+            ["NewHome"] = "1",
         });
+        var page = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
 
-        Assert.Equal("/places?note=LocationInvalid", response.Headers.Location?.PathAndQuery);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Empty(places.Calls);
+        Assert.Contains(reason, page, StringComparison.Ordinal);
+        Assert.Contains("name=\"NewName\" value=\"Casa nova\"", page, StringComparison.Ordinal);
+        Assert.Contains($"name=\"NewCoordinates\" value=\"{coordinates}\"", page, StringComparison.Ordinal);
+        Assert.Contains($"name=\"NewRadius\" min=\"10\" max=\"50000\" value=\"{radius}\"", page, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -237,11 +283,33 @@ public sealed class SavedPlacesPostTests
             ["EditRadius"] = "800",
             ["EditHome"] = "1",
         });
-        var page = WebUtility.HtmlDecode(await http.GetStringAsync(new Uri(response.Headers.Location!.PathAndQuery, UriKind.Relative)));
+        var page = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
 
-        Assert.Equal("/places?note=NameTaken", response.Headers.Location.PathAndQuery);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(["update 2 casa 800 True"], places.Calls);
         Assert.Contains("Another place already has this name.", page, StringComparison.Ordinal);
+        // The place's form shows what was typed; the other one its own values.
+        Assert.Contains("name=\"EditName\" value=\"casa\"", page, StringComparison.Ordinal);
+        Assert.Contains("name=\"EditName\" value=\"Casa\"", page, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("", "update 2 Casa da praia keep False")]
+    [InlineData("750", "update 2 Casa da praia 750 False")]
+    public async Task Keeps_a_place_s_own_radius_when_the_field_is_left_blank(string radius, string call)
+    {
+        var (web, places) = Web();
+        await using var _ = web;
+        using var http = web.CreateSignedInClient(Ana, followRedirects: false);
+
+        using var response = await FaceSettingsPostTests.PostAsync(http, "/places", "edit-2", new()
+        {
+            ["EditName"] = "Casa da praia",
+            ["EditRadius"] = radius,
+        });
+
+        Assert.Equal("/places?note=updated", response.Headers.Location?.PathAndQuery);
+        Assert.Equal([call], places.Calls);
     }
 
     [Fact]
@@ -258,17 +326,14 @@ public sealed class SavedPlacesPostTests
     }
 
     [Fact]
-    public async Task Needs_a_sign_in_and_links_places_from_the_header()
+    public async Task Links_places_from_the_header()
     {
         var (web, _) = Web();
         await using var __ = web;
-        using var anonymous = web.CreateAnonymousClient();
         using var signedIn = web.CreateSignedInClient(Ana);
 
-        using var response = await anonymous.GetAsync(new Uri("/places", UriKind.Relative));
         var page = await signedIn.GetStringAsync(new Uri("/places", UriKind.Relative));
 
-        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Contains("href=\"places\" class=\"nav-link\"", page, StringComparison.Ordinal);
     }
 

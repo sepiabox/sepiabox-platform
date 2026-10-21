@@ -348,8 +348,8 @@ internal sealed class FakeSavedPlaces : ISavedPlaces
         Record(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"create {name} {latitude} {longitude} {radiusM} {isHome}"));
 
     public Task<Sepiabox.Catalog.SavedPlaces.SavedPlaceOutcome> UpdateAsync(
-        long id, string? name, int radiusM, bool isHome, CancellationToken cancellationToken = default) =>
-        Record(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"update {id} {name} {radiusM} {isHome}"));
+        long id, string? name, int? radiusM, bool isHome, CancellationToken cancellationToken = default) =>
+        Record(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"update {id} {name} {radiusM?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "keep"} {isHome}"));
 
     public Task<Sepiabox.Catalog.SavedPlaces.SavedPlaceOutcome> DeleteAsync(long id, CancellationToken cancellationToken = default) =>
         Record(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"delete {id}"));

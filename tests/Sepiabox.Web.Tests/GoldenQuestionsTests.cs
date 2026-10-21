@@ -81,8 +81,8 @@ public sealed class GoldenQuestionsTests
         Assert.Equal(["Ana", "Bruno", "Carla", "Pedro"], context.Lists.Single(l => l.DslField == "filters.people.all").Values);
         Assert.DoesNotContain(context.Lists.SelectMany(l => l.Values), v => v.Contains('@', StringComparison.Ordinal));
         // The family's places by name, and which is home; never where they are (D-083).
-        Assert.Equal(["Casa", "Casa da praia"], context.Lists.Single(l => l.Name == "saved places").Values);
-        Assert.Equal(["Casa"], context.Lists.Single(l => l.Name == "home place").Values);
+        Assert.Equal(["Apartamento Lapa", "Casa da praia"], context.Lists.Single(l => l.Name == "saved places").Values);
+        Assert.Equal(["Apartamento Lapa"], context.Lists.Single(l => l.Name == "home place").Values);
         Assert.DoesNotContain(context.Lists.SelectMany(l => l.Values), v => v.Contains("38.", StringComparison.Ordinal));
     }
 

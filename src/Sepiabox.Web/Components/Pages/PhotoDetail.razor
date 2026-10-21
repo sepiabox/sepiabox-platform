@@ -53,10 +53,10 @@
                 <dd>@Text.KindLabel(_asset.Kind)</dd>
             </dl>
 
-            @if (_asset.Location is { } location)
+            @if (_asset.Location is not null)
             {
                 @* Opens the places page with this photo's coordinates filled in (S-014). *@
-                <p class="save-place"><a href="@SaveThisPlace(location)">@Text["Detail_SavePlace"]</a></p>
+                <p class="save-place"><a href="places?asset=@_asset.Id">@Text["Detail_SavePlace"]</a></p>
             }
 
             @if (_asset.People.Count > 0)
@@ -133,7 +133,4 @@
         string.Join(' ', new[] { _asset?.CameraMake, _asset?.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s))) is { Length: > 0 } text
             ? text
             : null;
-
-    private static string SaveThisPlace((double Latitude, double Longitude) location) =>
-        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"places?lat={location.Latitude:0.######}&lon={location.Longitude:0.######}");
 }

@@ -16,7 +16,7 @@ public enum SavedPlaceOutcome
     /// <summary>Another place already has that name, ignoring case.</summary>
     NameTaken,
 
-    /// <summary>The name is blank, too long or has control characters.</summary>
+    /// <summary>The name is blank, longer than <see cref="SavedPlaceEditor.MaxNameLength"/> or has control characters.</summary>
     NameInvalid,
 
     /// <summary>The latitude or longitude is not a point on Earth.</summary>
@@ -37,6 +37,12 @@ public sealed class SavedPlaceEditor(CatalogDbContext db)
     public const int MinRadiusM = 10;
     public const int MaxRadiusM = 50_000;
     public const int DefaultRadiusM = 200;
+
+    /// <summary>
+    /// The longest name: a place's name goes to the question translator (D-083), so it is a short label such as "Casa da
+    /// praia", never a street address.
+    /// </summary>
+    public const int MaxNameLength = 60;
 
     /// <summary>The unique index on <c>lower(name)</c>, added by the migration <c>SavedPlaces</c>.</summary>
     public const string NameIndex = "ix_saved_places_lower_name";
@@ -72,10 +78,13 @@ public sealed class SavedPlaceEditor(CatalogDbContext db)
         }, cancellationToken);
     }
 
-    /// <summary>Renames the place, changes its radius and whether it is the home (marking it moves the mark here).</summary>
-    public Task<SavedPlaceOutcome> UpdateAsync(long id, string? name, int radiusM, bool isHome, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Renames the place, changes its radius (null keeps it) and whether it is the home (marking it moves the mark here).
+    /// A place is not moved: it is deleted and saved again.
+    /// </summary>
+    public Task<SavedPlaceOutcome> UpdateAsync(long id, string? name, int? radiusM, bool isHome, CancellationToken cancellationToken = default)
     {
-        if (Check(name, 0, 0, radiusM, out var clean) is { } refused)
+        if (Check(name, 0, 0, radiusM ?? DefaultRadiusM, out var clean) is { } refused)
         {
             return Task.FromResult(refused);
         }
@@ -98,7 +107,7 @@ public sealed class SavedPlaceEditor(CatalogDbContext db)
             }
 
             place.Name = clean;
-            place.RadiusM = radiusM;
+            place.RadiusM = radiusM ?? place.RadiusM;
             place.IsHome = isHome;
             await db.SaveChangesAsync(cancellationToken);
             return SavedPlaceOutcome.Done;
@@ -120,7 +129,7 @@ public sealed class SavedPlaceEditor(CatalogDbContext db)
     private static SavedPlaceOutcome? Check(string? name, double latitude, double longitude, int radiusM, out string clean)
     {
         clean = string.Empty;
-        if (PeopleCuration.CleanName(name, out var cleaned) is not null || cleaned is null)
+        if (PeopleCuration.CleanName(name, out var cleaned) is not null || cleaned is null || cleaned.Length > MaxNameLength)
         {
             return SavedPlaceOutcome.NameInvalid;
         }
@@ -134,12 +143,11 @@ public sealed class SavedPlaceEditor(CatalogDbContext db)
         return radiusM is < MinRadiusM or > MaxRadiusM ? SavedPlaceOutcome.RadiusInvalid : null;
     }
 
-    private Task<bool> NameTakenAsync(string name, long? except, CancellationToken cancellationToken)
-    {
-        // lower() in SQL, as the unique index compares them.
-        string[] lowered = [name.ToLowerInvariant()];
-        return db.SavedPlaces.AnyAsync(p => p.Id != except && lowered.Contains(p.Name.ToLower()), cancellationToken);
-    }
+    // lower() in SQL on both sides, exactly as the unique index compares them.
+    private Task<bool> NameTakenAsync(string name, long? except, CancellationToken cancellationToken) =>
+        db.Database.SqlQuery<bool>(
+            $"SELECT EXISTS (SELECT 1 FROM saved_places WHERE lower(name) = lower({name}) AND id <> {except ?? 0}) AS \"Value\"")
+            .SingleAsync(cancellationToken);
 
     private Task<int> ClearHomeAsync(CancellationToken cancellationToken) =>
         db.SavedPlaces.Where(p => p.IsHome).ExecuteUpdateAsync(set => set.SetProperty(p => p.IsHome, false), cancellationToken);

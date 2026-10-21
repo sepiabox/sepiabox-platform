@@ -71,6 +71,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             // Camera clocks have no time zone, so the value is stored exactly as read.
             asset.Property(a => a.CapturedAt).HasColumnType("timestamp without time zone");
             asset.Property(a => a.Location).HasColumnType("geography (Point, 4326)");
+            // Saved places and distances (S-014): ST_DWithin on a place's centre walks this index (D-083).
+            asset.HasIndex(a => a.Location).HasDatabaseName("ix_assets_location").HasMethod("gist");
             asset.Property(a => a.PlaceCity).HasMaxLength(200);
             asset.Property(a => a.PlaceRegion).HasMaxLength(200);
             asset.Property(a => a.PlaceCountry).HasMaxLength(200);

@@ -8,7 +8,7 @@
   },
   "savedPlaces": [
     {
-      "name": "Casa",
+      "name": "Apartamento Lapa",
       "lat": 38.74,
       "lon": -9.16,
       "radiusM": 300,
@@ -1732,7 +1732,7 @@
             2019
           ],
           "savedPlaces": [
-            "Casa"
+            "Apartamento Lapa"
           ]
         }
       }
@@ -1758,21 +1758,21 @@
       }
     },
     {
-      "id": "places-near-home",
+      "id": "places-near-beach-house",
       "covers": [
         "distance",
-        "home"
+        "saved places"
       ],
-      "en": "photos within 5 km of home",
-      "pt": "fotos a até 5 km de casa",
+      "en": "photos within 50 km of the beach house",
+      "pt": "fotos a até 50 km da casa da praia",
       "expected": {
         "filters": {
           "kinds": [
             "photo"
           ],
           "distanceFrom": {
-            "home": true,
-            "maxKm": 5
+            "place": "Casa da praia",
+            "maxKm": 50
           }
         }
       }

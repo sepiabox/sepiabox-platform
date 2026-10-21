@@ -81,7 +81,7 @@
             "place": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" },
             "home": { "type": "boolean" },
             "minKm": { "type": "number", "minimum": 0, "maximum": 20040 },
-            "maxKm": { "type": "number", "minimum": 0, "maximum": 20040 }
+            "maxKm": { "type": "number", "exclusiveMinimum": 0, "maximum": 20040 }
           }
         },
         "sources": {

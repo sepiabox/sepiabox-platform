@@ -1,12 +1,13 @@
 @page "/places"
 @inject ISavedPlaces SavedPlaceList
+@inject ILibraryQueries Library
 @inject NavigationManager Navigation
 @using System.Globalization
 @using Sepiabox.Catalog.Search
 @using Sepiabox.Catalog.SavedPlaces
-@* The family's places (S-014, D-083), in static server rendering with POST forms answered by a redirect back here
-   with a note, as the person page (S-020). A photo's "Save this place" opens it with the photo's latitude and
-   longitude filled in. *@
+@* The family's places (S-014, D-083), in static server rendering with POST forms: a change that worked is answered
+   with a redirect back here and a note, as the person page (S-020); one that did not is shown again with what was
+   typed and why. A photo's "Save this place" opens it with the photo's coordinates filled in. *@
 
 <PageTitle>@Text["Places_Heading"] · Sepiabox</PageTitle>
 
@@ -36,22 +37,19 @@
         <AntiforgeryToken />
         <label>
             <span>@Text["Places_Name"]</span>
-            <input type="text" name="NewName" maxlength="@SearchQueryJson.MaxNameLength" required />
+            <input type="text" name="NewName" value="@NewName" maxlength="@SavedPlaceEditor.MaxNameLength" required />
+            <span class="hint muted small name-hint">@Text["Places_NameHint"]</span>
         </label>
         <label>
-            <span>@Text["Places_Latitude"]</span>
-            <input type="text" name="NewLatitude" inputmode="decimal" value="@Lat" required />
-        </label>
-        <label>
-            <span>@Text["Places_Longitude"]</span>
-            <input type="text" name="NewLongitude" inputmode="decimal" value="@Lon" required />
+            <span>@Text["Places_CoordinatesLabel"]</span>
+            <input type="text" name="NewCoordinates" value="@(NewCoordinates ?? _photoCoordinates)" placeholder="38.72, -9.13" required />
         </label>
         <label>
             <span>@Text["Places_Radius"]</span>
-            <input type="number" name="NewRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@SavedPlaceEditor.DefaultRadiusM" />
+            <input type="number" name="NewRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@(NewRadius ?? SavedPlaceEditor.DefaultRadiusM.ToString(CultureInfo.InvariantCulture))" />
         </label>
         <label class="home">
-            <input type="checkbox" name="NewHome" value="1" />
+            <input type="checkbox" name="NewHome" value="1" checked="@(NewHome == "1")" />
             <span>@Text["Places_IsHome"]</span>
         </label>
         <button type="submit">@Text["Places_Save"]</button>
@@ -61,9 +59,11 @@
 
 @if (_places is { Count: > 0 } places)
 {
+    <p class="hint muted cannot-move">@Text["Places_CannotMove"]</p>
     <ul class="saved-places">
         @foreach (var place in places)
         {
+            var failed = _failedEdit == place.Id;
             <li class="saved-place">
                 <h2>
                     @place.Name
@@ -82,14 +82,15 @@
                     <AntiforgeryToken />
                     <label>
                         <span>@Text["Places_Name"]</span>
-                        <input type="text" name="EditName" value="@place.Name" maxlength="@SearchQueryJson.MaxNameLength" required />
+                        <input type="text" name="EditName" value="@(failed ? EditName : place.Name)" maxlength="@SavedPlaceEditor.MaxNameLength" required />
+                        <span class="hint muted small name-hint">@Text["Places_NameHint"]</span>
                     </label>
                     <label>
                         <span>@Text["Places_Radius"]</span>
-                        <input type="number" name="EditRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@place.RadiusM" />
+                        <input type="number" name="EditRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@(failed ? EditRadius : place.RadiusM.ToString(CultureInfo.InvariantCulture))" />
                     </label>
                     <label class="home">
-                        <input type="checkbox" name="EditHome" value="1" checked="@place.IsHome" />
+                        <input type="checkbox" name="EditHome" value="1" checked="@(failed ? EditHome == "1" : place.IsHome)" />
                         <span>@Text["Places_IsHome"]</span>
                     </label>
                     <button type="submit">@Text["Places_Update"]</button>
@@ -121,12 +122,9 @@ else
     [SupplyParameterFromQuery(Name = PersonLinks.NoteParameter)]
     public string? Note { get; set; }
 
-    /// <summary>From a photo's "Save this place": its latitude and longitude, as invariant numbers.</summary>
-    [SupplyParameterFromQuery(Name = "lat")]
-    public string? Lat { get; set; }
-
-    [SupplyParameterFromQuery(Name = "lon")]
-    public string? Lon { get; set; }
+    /// <summary>From a photo's "Save this place": the photo, whose coordinates fill the form.</summary>
+    [SupplyParameterFromQuery(Name = "asset")]
+    public string? AssetId { get; set; }
 
     /// <summary>The place whose deletion is asked: a confirmation shows first.</summary>
     [SupplyParameterFromQuery(Name = "delete")]
@@ -136,10 +134,7 @@ else
     public string? NewName { get; set; }
 
     [SupplyParameterFromForm(FormName = "create")]
-    public string? NewLatitude { get; set; }
-
-    [SupplyParameterFromForm(FormName = "create")]
-    public string? NewLongitude { get; set; }
+    public string? NewCoordinates { get; set; }
 
     [SupplyParameterFromForm(FormName = "create")]
     public string? NewRadius { get; set; }
@@ -162,17 +157,33 @@ else
 
     private IReadOnlyList<SavedPlaceSummary>? _places;
     private SavedPlaceSummary? _deleting;
+    private string? _photoCoordinates;
+    private SavedPlaceOutcome? _failure;
+    private long? _failedEdit;
 
-    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key)
-        ? key == "Places_Error_RadiusInvalid"
-            ? Text[key, SavedPlaceEditor.MinRadiusM, SavedPlaceEditor.MaxRadiusM].Value
-            : Text[key].Value
-        : null;
+    private string? NoteText
+    {
+        get
+        {
+            var key = _failure is { } failure ? s_notes[failure.ToString()] : Note is not null && s_notes.TryGetValue(Note, out var known) ? known : null;
+            return key switch
+            {
+                null => null,
+                "Places_Error_RadiusInvalid" => Text[key, SavedPlaceEditor.MinRadiusM, SavedPlaceEditor.MaxRadiusM].Value,
+                "Places_Error_NameInvalid" => Text[key, SavedPlaceEditor.MaxNameLength].Value,
+                _ => Text[key].Value,
+            };
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
         _places = await SavedPlaceList.ListAsync();
         _deleting = Delete is { } id ? _places.FirstOrDefault(p => p.Id == id) : null;
+        if (AssetId is { Length: > 0 } assetId && (await Library.GetAssetAsync(assetId))?.Location is var (latitude, longitude))
+        {
+            _photoCoordinates = string.Create(CultureInfo.InvariantCulture, $"{latitude:0.######}, {longitude:0.######}");
+        }
     }
 
     private string Coordinates(SavedPlaceSummary place) =>
@@ -191,32 +202,56 @@ else
 
     private async Task CreateAsync()
     {
-        var outcome = Coordinate(NewLatitude) is { } latitude && Coordinate(NewLongitude) is { } longitude
-            ? await SavedPlaceList.CreateAsync(NewName, latitude, longitude, Radius(NewRadius), NewHome == "1")
-            : SavedPlaceOutcome.LocationInvalid;
-        Answer(outcome, "created");
+        var outcome = PlaceCoordinates.TryParse(NewCoordinates) is not { } point
+            ? SavedPlaceOutcome.LocationInvalid
+            : !TryRadius(NewRadius, SavedPlaceEditor.DefaultRadiusM, out var radius)
+                ? SavedPlaceOutcome.RadiusInvalid
+                : await SavedPlaceList.CreateAsync(NewName, point.Latitude, point.Longitude, radius!.Value, NewHome == "1");
+        await AnswerAsync(outcome, "created", null);
     }
 
-    private async Task UpdateAsync(long id) =>
-        Answer(await SavedPlaceList.UpdateAsync(id, EditName, Radius(EditRadius), EditHome == "1"), "updated");
+    private async Task UpdateAsync(long id)
+    {
+        // A blank radius keeps the place's own.
+        var outcome = !TryRadius(EditRadius, null, out var radius)
+            ? SavedPlaceOutcome.RadiusInvalid
+            : await SavedPlaceList.UpdateAsync(id, EditName, radius, EditHome == "1");
+        await AnswerAsync(outcome, "updated", id);
+    }
 
     private async Task DeleteAsync()
     {
         var outcome = long.TryParse(DeleteId, NumberStyles.None, CultureInfo.InvariantCulture, out var id)
             ? await SavedPlaceList.DeleteAsync(id)
             : SavedPlaceOutcome.NotFound;
-        Answer(outcome, "deleted");
+        await AnswerAsync(outcome, "deleted", null);
     }
 
-    private void Answer(SavedPlaceOutcome outcome, string done) =>
-        Navigation.NavigateTo($"places?{PersonLinks.NoteParameter}={(outcome == SavedPlaceOutcome.Done ? done : outcome.ToString())}");
+    // Done: back to the page with a note. Refused: the same page again, with what was typed and why.
+    private async Task AnswerAsync(SavedPlaceOutcome outcome, string done, long? editing)
+    {
+        if (outcome == SavedPlaceOutcome.Done || outcome == SavedPlaceOutcome.NotFound)
+        {
+            Navigation.NavigateTo($"places?{PersonLinks.NoteParameter}={(outcome == SavedPlaceOutcome.Done ? done : outcome.ToString())}");
+            return;
+        }
 
-    // Typed by hand or copied from a map: "38.7223", "38,7223" or "-9.1393"; anything else is not a coordinate.
-    private static double? Coordinate(string? value) =>
-        double.TryParse(value?.Trim().Replace(',', '.'), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number)
-            ? number
-            : null;
+        _failure = outcome;
+        _failedEdit = editing;
+        _places = await SavedPlaceList.ListAsync();
+    }
 
-    private static int Radius(string? value) =>
-        int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var radius) ? radius : SavedPlaceEditor.DefaultRadiusM;
+    // A whole number of metres, or blank for blankRadius (null keeps a place's own); false for anything else.
+    private static bool TryRadius(string? value, int? blankRadius, out int? radius)
+    {
+        radius = blankRadius;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        var parsed = int.TryParse(value.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var metres);
+        radius = parsed ? metres : null;
+        return parsed;
+    }
 }

@@ -97,6 +97,10 @@ public sealed class SearchService(
 {
     private readonly string? _me = string.IsNullOrWhiteSpace(userEmail) ? null : userEmail.Trim().ToLowerInvariant();
 
+    // The saved places the last ResolvePlacesAsync read, by the cleaned name the filters gave, and the home.
+    private readonly Dictionary<string, SavedPlace> _places = new(StringComparer.Ordinal);
+    private SavedPlace? _home;
+
     /// <summary>
     /// The people the filters name, by id: every name must be a person's (ignoring case) and, with includeMe, the user
     /// must have said "This is me"; otherwise <see cref="UnknownPeopleException"/>. Run before a search or a count.
@@ -146,23 +150,41 @@ public sealed class SearchService(
     }
 
     /// <summary>
-    /// Checks that every saved place the filters name exists (ignoring case) and, for the distance from home, that a
-    /// place is the home; otherwise <see cref="UnknownPlacesException"/>. Run before a search or a count.
+    /// Reads the saved places the filters name (ignoring case, with PostgreSQL's <c>lower()</c> on both sides, as the
+    /// unique index compares them) and the home, for the search to filter by; throws
+    /// <see cref="UnknownPlacesException"/> when one is not there or the distance from home has no home. Run before a
+    /// search or a count, which <see cref="Filtered"/> and <see cref="Query"/> need it for.
     /// </summary>
     public async Task ResolvePlacesAsync(SearchFilters filters, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filters);
-        var missing = new List<string>();
-        foreach (var name in (filters.SavedPlaces ?? []).Concat(filters.DistanceFrom?.Place is { } place ? [place] : []))
+        _places.Clear();
+        _home = null;
+        if (filters.SavedPlaces is null && filters.DistanceFrom is null)
         {
-            string[] lowered = [NameKey(name)];
-            if (!missing.Contains(name) && !await db.SavedPlaces.AnyAsync(p => lowered.Contains(p.Name.ToLower()), cancellationToken))
-            {
-                missing.Add(name);
-            }
+            return;
         }
 
-        var homeMissing = filters.DistanceFrom is { Home: true } && !await db.SavedPlaces.AnyAsync(p => p.IsHome, cancellationToken);
+        var written = (filters.SavedPlaces ?? []).Concat(filters.DistanceFrom?.Place is { } place ? [place] : []).Distinct().ToList();
+        var cleaned = written.Select(PlaceKey).Distinct().ToArray();
+        // One query for every name: which place, if any, each one is.
+        var matches = cleaned.Length == 0
+            ? []
+            : await db.Database.SqlQuery<PlaceMatch>($"""
+                SELECT n AS "Name", p.id AS "Id"
+                FROM unnest({cleaned}) AS n
+                LEFT JOIN saved_places p ON lower(p.name) = lower(n)
+                """).ToListAsync(cancellationToken);
+        var ids = matches.Where(m => m.Id is not null).Select(m => m.Id!.Value).ToList();
+        var places = await db.SavedPlaces.AsNoTracking().Where(p => ids.Contains(p.Id) || p.IsHome).ToListAsync(cancellationToken);
+        foreach (var match in matches.Where(m => m.Id is not null))
+        {
+            _places[match.Name] = places.Single(p => p.Id == match.Id);
+        }
+
+        _home = places.FirstOrDefault(p => p.IsHome);
+        var missing = written.Where(name => !_places.ContainsKey(PlaceKey(name))).ToList();
+        var homeMissing = filters.DistanceFrom is { Home: true } && _home is null;
         if (missing.Count > 0 || homeMissing)
         {
             throw new UnknownPlacesException(missing, homeMissing);
@@ -388,15 +410,15 @@ public sealed class SearchService(
 
         if (filters.SavedPlaces is { } savedPlaces)
         {
-            var lowered = savedPlaces.Select(NameKey).Distinct().ToList();
-            assets = PostgisDistance.InAny(assets, db.SavedPlaces.Where(p => lowered.Contains(p.Name.ToLower())));
+            assets = PostgisDistance.InAny(assets, savedPlaces.Select(Resolved).DistinctBy(p => p.Id));
         }
 
         if (filters.DistanceFrom is { } distance)
         {
-            string[] lowered = [distance.Place is { } name ? NameKey(name) : string.Empty];
-            var centre = distance.Home ? db.SavedPlaces.Where(p => p.IsHome) : db.SavedPlaces.Where(p => lowered.Contains(p.Name.ToLower()));
-            assets = PostgisDistance.Between(assets, centre, distance.MinKm * 1000, distance.MaxKm * 1000);
+            var centre = distance.Home
+                ? _home ?? throw new InvalidOperationException("Run ResolvePlacesAsync before filtering by the distance from home.")
+                : Resolved(distance.Place!);
+            assets = PostgisDistance.Between(assets, centre.Location, distance.MinKm * 1000, distance.MaxKm * 1000);
         }
 
         if (filters.Sources is { } sources)
@@ -412,6 +434,19 @@ public sealed class SearchService(
 
         return assets;
     }
+
+    private SavedPlace Resolved(string name) => _places.TryGetValue(PlaceKey(name), out var place)
+        ? place
+        : throw new InvalidOperationException($"Run ResolvePlacesAsync before filtering by the saved place '{name}'.");
+
+    // A place's name cleaned as it is stored (D-079); lower() is then applied in SQL.
+    private static string PlaceKey(string name)
+    {
+        PeopleCuration.CleanName(name, out var clean);
+        return clean ?? name.Trim();
+    }
+
+    private sealed record PlaceMatch(string Name, long? Id);
 
     // A searched name cleaned as names are stored (D-079: NFC, invisible formatting dropped, white space collapsed), so a
     // double space or a decomposed "José" still finds the person, then lower-cased to match ignoring case.

@@ -106,6 +106,11 @@ namespace Sepiabox.Catalog.Migrations
                     b.HasKey("Id")
                         .HasName("pk_assets");
 
+                    b.HasIndex("Location")
+                        .HasDatabaseName("ix_assets_location");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Location"), "gist");
+
                     b.HasIndex("CapturedAt", "Id")
                         .IsDescending(true, false)
                         .HasDatabaseName("ix_assets_timeline");

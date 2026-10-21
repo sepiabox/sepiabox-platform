@@ -15,7 +15,8 @@ public interface ISavedPlaces
 
     Task<SavedPlaceOutcome> CreateAsync(string? name, double latitude, double longitude, int radiusM, bool isHome, CancellationToken cancellationToken = default);
 
-    Task<SavedPlaceOutcome> UpdateAsync(long id, string? name, int radiusM, bool isHome, CancellationToken cancellationToken = default);
+    /// <summary>A null radius keeps the place's own.</summary>
+    Task<SavedPlaceOutcome> UpdateAsync(long id, string? name, int? radiusM, bool isHome, CancellationToken cancellationToken = default);
 
     Task<SavedPlaceOutcome> DeleteAsync(long id, CancellationToken cancellationToken = default);
 }
@@ -40,7 +41,7 @@ public sealed class SavedPlaces(IDbContextFactory<CatalogDbContext> contexts) : 
         return (await new SavedPlaceEditor(db).CreateAsync(name, latitude, longitude, radiusM, isHome, cancellationToken)).Outcome;
     }
 
-    public async Task<SavedPlaceOutcome> UpdateAsync(long id, string? name, int radiusM, bool isHome, CancellationToken cancellationToken = default)
+    public async Task<SavedPlaceOutcome> UpdateAsync(long id, string? name, int? radiusM, bool isHome, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         return await new SavedPlaceEditor(db).UpdateAsync(id, name, radiusM, isHome, cancellationToken);

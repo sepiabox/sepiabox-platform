@@ -178,6 +178,7 @@ public sealed partial class FaceSettingsPostTests
     [Theory]
     [InlineData("/settings")]
     [InlineData("/people/7/delete")]
+    [InlineData("/places")]
     public async Task Needs_a_sign_in(string address)
     {
         var (web, _) = Web();

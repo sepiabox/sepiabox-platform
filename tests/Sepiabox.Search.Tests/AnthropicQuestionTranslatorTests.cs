@@ -269,7 +269,7 @@ public sealed class AnthropicQuestionTranslatorTests
         var schema = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
         var text = schema.ToJsonString();
 
-        foreach (var keyword in new[] { "minItems", "maxItems", "minimum", "maximum", "minLength", "maxLength", "pattern", "$schema", "$id" })
+        foreach (var keyword in new[] { "minItems", "maxItems", "minimum", "maximum", "exclusiveMinimum", "minLength", "maxLength", "pattern", "$schema", "$id" })
         {
             Assert.DoesNotContain($"\"{keyword}\"", text, StringComparison.Ordinal);
         }

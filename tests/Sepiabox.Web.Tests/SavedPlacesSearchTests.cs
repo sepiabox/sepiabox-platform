@@ -35,6 +35,49 @@ public sealed class SavedPlacesSearchTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Uses_each_place_s_own_radius_when_searching_several_places()
+    {
+        // A 1,000 m place at home and a 200 m one 10 km north, in one search: a fixed radius of either size fails.
+        await using var db = await CatalogAsync((1, 600), (2, 1_100), (3, 10_150), (4, 10_300));
+        await Editor(db).CreateAsync("Quinta", HomeLatitude, HomeLongitude, 1_000, isHome: false);
+        await Editor(db).CreateAsync("Café", HomeLatitude + (10_000 / MetresPerDegree), HomeLongitude, 200, isHome: false);
+
+        var found = await IdsAsync(db, new SearchFilters { SavedPlaces = ["Quinta", "Café"] });
+
+        Assert.Equal([Ids.Of(3), Ids.Of(1)], found);
+    }
+
+    [Fact]
+    public async Task Leaves_one_home_when_several_places_are_marked_at_once()
+    {
+        await using var db = await CatalogAsync();
+        var ids = new List<long>();
+        for (var i = 0; i < 8; i++)
+        {
+            ids.Add((await Editor(db).CreateAsync($"Lugar {i}", HomeLatitude, HomeLongitude, 300, isHome: false)).Id!.Value);
+        }
+
+        var outcomes = await Task.WhenAll(ids.Select(async id =>
+        {
+            await using var own = new TestContexts(catalog.ConnectionStringFor(db)).CreateDbContext();
+            return await new SavedPlaceEditor(own).UpdateAsync(id, $"Lugar {ids.IndexOf(id)}", null, isHome: true);
+        }));
+
+        Assert.All(outcomes, outcome => Assert.Equal(SavedPlaceOutcome.Done, outcome));
+        Assert.Single(await db.SavedPlaces.Where(p => p.IsHome).ToListAsync());
+        Assert.All(await db.SavedPlaces.ToListAsync(), p => Assert.Equal(300, p.RadiusM));
+    }
+
+    [Fact]
+    public async Task Keeps_names_short_enough_to_be_a_label_not_an_address()
+    {
+        await using var db = await CatalogAsync();
+
+        Assert.Equal(SavedPlaceOutcome.Done, (await Editor(db).CreateAsync(new string('a', 60), 0, 0, 300, isHome: false)).Outcome);
+        Assert.Equal(SavedPlaceOutcome.NameInvalid, (await Editor(db).CreateAsync(new string('b', 61), 0, 0, 300, isHome: false)).Outcome);
+    }
+
+    [Fact]
     public async Task Finds_only_the_assets_more_than_100_km_from_home()
     {
         await using var db = await CatalogAsync((1, 95_000), (2, 105_000), (3, 500_000), (4, 0), (5, null));

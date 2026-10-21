@@ -302,7 +302,7 @@
     <value>Videos from Lisbon in December 2019</value>
   </data>
   <data name="Ask_Hint" xml:space="preserve">
-    <value>In English or Portuguese. Only the question's text is sent to Anthropic's Claude, never your photos.</value>
+    <value>In English or Portuguese. The question and the names in your library (people, places, sources, cities) are sent to Anthropic's Claude; never your photos, e-mail addresses or coordinates.</value>
   </data>
   <data name="Ask_Submit" xml:space="preserve">
     <value>Ask</value>
@@ -782,12 +782,6 @@
   <data name="Places_Name" xml:space="preserve">
     <value>Name</value>
   </data>
-  <data name="Places_Latitude" xml:space="preserve">
-    <value>Latitude</value>
-  </data>
-  <data name="Places_Longitude" xml:space="preserve">
-    <value>Longitude</value>
-  </data>
   <data name="Places_Radius" xml:space="preserve">
     <value>Radius (m)</value>
   </data>
@@ -798,7 +792,7 @@
     <value>Save place</value>
   </data>
   <data name="Places_Hint" xml:space="preserve">
-    <value>On a photo with a location, “Save this place” fills in its latitude and longitude.</value>
+    <value>On a photo with a location, “Save this place” fills in its coordinates.</value>
   </data>
   <data name="Places_HomeMark" xml:space="preserve">
     <value>(home)</value>
@@ -843,10 +837,10 @@
     <value>Another place already has this name.</value>
   </data>
   <data name="Places_Error_NameInvalid" xml:space="preserve">
-    <value>The name is empty, too long or has characters that are not allowed.</value>
+    <value>The name is empty, longer than {0} characters or has characters that are not allowed.</value>
   </data>
   <data name="Places_Error_LocationInvalid" xml:space="preserve">
-    <value>The latitude must be between -90 and 90 and the longitude between -180 and 180.</value>
+    <value>Write the coordinates as latitude, longitude, such as 38.72, -9.13: the latitude between -90 and 90 and the longitude between -180 and 180.</value>
   </data>
   <data name="Places_Error_RadiusInvalid" xml:space="preserve">
     <value>The radius must be between {0} and {1} metres.</value>
@@ -877,5 +871,14 @@
   </data>
   <data name="Search_NoHome" xml:space="preserve">
     <value>No place is marked as home yet: mark one on Places.</value>
+  </data>
+  <data name="Places_NameHint" xml:space="preserve">
+    <value>The name is sent to Claude when answering questions; don't use the street address.</value>
+  </data>
+  <data name="Places_CoordinatesLabel" xml:space="preserve">
+    <value>Coordinates (latitude, longitude)</value>
+  </data>
+  <data name="Places_CannotMove" xml:space="preserve">
+    <value>A place cannot be moved: delete it and save it again at the right spot.</value>
   </data>
 </root>
