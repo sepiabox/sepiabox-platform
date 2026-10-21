@@ -22,10 +22,11 @@ Diff: `fix/brand-alignment` from `4e155f0` to `138b9ec` (platform), `de64148` to
 
 | Priority | Source | Short description | Resolved? | How to fix |
 |---|---|---|---|---|
-| P2 | Atlas | The site's copy presents features that are not built yet (sources, steps, example questions, privacy points) | Open | Waiting on the owner: mark unbuilt features as "coming soon" or keep the full vision |
+| P2 | Atlas | The site's copy presents features that are not built yet (sources, steps, example questions, privacy points) | ✅ Yes (iteration 3) | Owner approved marking unbuilt features "coming soon": only the external drive is available, the cloud sources, the people question and export carry a "coming soon" / "em breve" label, occasions and face-data deletion are dropped, and the hero asks a question that works today; a test checks every label in both languages |
 | P3 | Atlas | The site README still described a single Portuguese page | ✅ Yes (iteration 3) | Describe the English `index.html` and the pt-BR `pt-br/index.html` sharing `styles.css` and `assets/`, and that the Pages workflow publishes `pt-br/` |
 | P4 | Atlas | pt-BR wording: "Ligue o HD", "centro de dados" | ✅ Yes (iteration 3) | "Conecte o HD externo", "data center" |
 | P4 | Atlas | The site's `symbol-small-light.svg` had no source in `sepiabox-brand` | ✅ Yes (iteration 3) | Added to `sepiabox-brand/assets` byte for byte and listed in its README |
-| P4 | Spock | The EN / PT-BR links had no accessible names | ✅ Yes (iteration 3) | `aria-label="English"` and `aria-label="Português (Brasil)"`; the switch test finds the links by those names |
+| P4 | Spock | The EN / PT-BR links had no accessible names | ✅ Yes (iteration 3) | Full language names on the links; the switch test finds them by name |
+| P4 | Atlas | With `aria-label`, the links' accessible names dropped the visible "EN" / "PT-BR" (WCAG 2.5.3, label in name) | ✅ Yes (iteration 3) | No `aria-label`: the visible label followed by a visually hidden " English" / " Português (Brasil)"; the test checks the exact names |
 
-Decision: P2 open, waiting on the owner's decision.
+Decision: every row resolved in iteration 3 → pull requests.
