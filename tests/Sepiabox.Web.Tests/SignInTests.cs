@@ -139,6 +139,7 @@ public sealed class SignInTests
     [InlineData("/no-access")]
     [InlineData("/alive")]
     [InlineData("/app.css")]
+    [InlineData("/favicon.svg")]
     [InlineData("/video.js")]
     public async Task Serves_the_sign_in_pages_probes_and_static_assets_anonymously(string path)
     {

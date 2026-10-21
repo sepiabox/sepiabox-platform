@@ -79,6 +79,16 @@ public sealed class LayoutPagesTests : LocalizedContext
         Assert.NotNull(layout.Find("header form.language"));
     }
 
+    [Fact]
+    public void The_header_wordmark_sets_sepia_apart_from_box()
+    {
+        var layout = Render<MainLayout>(p => p.Add(l => l.Body, (RenderFragment)(b => b.AddContent(0, "page"))));
+
+        var wordmark = layout.Find("header a.brand .wordmark");
+        Assert.Equal("sepiabox", wordmark.TextContent);
+        Assert.Equal("sepia", wordmark.QuerySelector(".wordmark-sepia")!.TextContent);
+    }
+
     [Theory]
     [InlineData(Cultures.English, "No access", "This session no longer has access to Sepiabox.", "Sign in")]
     [InlineData(Cultures.BrazilianPortuguese, "Sem acesso", "Esta sessão não tem mais acesso ao Sepiabox.", "Entrar")]
