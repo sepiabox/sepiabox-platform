@@ -1,0 +1,28 @@
+@* The people faces were grouped into (S-019): most faces first, each with a face cropped from its thumbnail. *@
+
+<ul class="people">
+    @foreach (var person in Ordered)
+    {
+        <li class="person">
+            <span class="face">
+                @if (person.Cover is { } cover)
+                {
+                    <img src="photos/@cover.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@cover.ImageStyle()" />
+                }
+            </span>
+            <span class="name">@(person.Name ?? Text["People_Unnamed"])</span>
+            <span class="count muted small">@FaceCount(person.FaceCount)</span>
+        </li>
+    }
+</ul>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<PersonSummary> People { get; set; } = [];
+
+    // The query already orders them; the page keeps that order whatever it is given.
+    private IEnumerable<PersonSummary> Ordered => People.OrderByDescending(p => p.FaceCount).ThenBy(p => p.Id);
+
+    private string FaceCount(int count) =>
+        count == 1 ? Text["People_Faces_One"] : Text["People_Faces_Other", count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)];
+}

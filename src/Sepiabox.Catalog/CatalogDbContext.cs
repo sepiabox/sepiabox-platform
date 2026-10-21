@@ -22,6 +22,10 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<QuestionUsage> QuestionUsage => Set<QuestionUsage>();
 
+    public DbSet<Person> People => Set<Person>();
+
+    public DbSet<Face> Faces => Set<Face>();
+
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options
@@ -111,6 +115,37 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             geoName.Property(g => g.Location).HasColumnType("geography (Point, 4326)");
             // Nearest-city lookups: ST_DWithin and the <-> distance order both use a GiST index (S-012).
             geoName.HasIndex(g => g.Location).HasDatabaseName("ix_geonames_location").HasMethod("gist");
+        });
+
+        modelBuilder.Entity<Person>(person =>
+        {
+            person.ToTable("people");
+            person.Property(p => p.Name).HasMaxLength(200);
+            person.Property(p => p.UserEmail).HasMaxLength(320);
+            person.Property(p => p.Centroid).HasColumnType("vector(128)");
+            // The people page lists the most photographed first (S-019).
+            person.HasIndex(p => new { p.FaceCount, p.Id })
+                .HasDatabaseName("ix_people_face_count")
+                .IsDescending(true, false);
+            // The nearest centroid for each new face, by cosine distance (D-016's 0.40 similarity).
+            person.HasIndex(p => p.Centroid)
+                .HasDatabaseName("ix_people_centroid")
+                .HasMethod("hnsw")
+                .HasOperators("vector_cosine_ops");
+            person.HasMany(p => p.Faces).WithOne(f => f.Person).HasForeignKey(f => f.PersonId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Face>(face =>
+        {
+            face.ToTable("faces");
+            face.Property(f => f.AssetId).HasMaxLength(64);
+            face.Property(f => f.Box).HasColumnType("double precision[]");
+            face.Property(f => f.Embedding).HasColumnType("vector(128)");
+            face.Property(f => f.Assignment).HasMaxLength(16);
+            face.ToTable(t => t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded')"));
+            face.HasOne<Asset>().WithMany().HasForeignKey(f => f.AssetId).OnDelete(DeleteBehavior.Cascade);
+            face.HasIndex(f => f.AssetId);
+            face.HasIndex(f => f.PersonId);
         });
 
         modelBuilder.Entity<QuestionUsage>(usage =>
