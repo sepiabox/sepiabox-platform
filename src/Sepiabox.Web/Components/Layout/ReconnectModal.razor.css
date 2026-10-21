@@ -20,8 +20,10 @@
 }
 
 
+/* The template's blues swapped for the brand's cyanotype (sepiabox-brand). */
 #components-reconnect-modal {
-    background-color: white;
+    background-color: var(--surface);
+    color: var(--developer);
     width: 20rem;
     margin: 20vh auto;
     padding: 2rem;
@@ -90,18 +92,23 @@
 
 #components-reconnect-modal button {
     border: 0;
-    background-color: #6b9ed2;
-    color: white;
+    background-color: var(--cyanotype);
+    color: var(--white);
     padding: 4px 24px;
     border-radius: 4px;
 }
 
-    #components-reconnect-modal button:hover {
-        background-color: #3b6ea2;
+    #components-reconnect-modal button:hover:not(:disabled) {
+        background-color: var(--cyanotype-hover);
     }
 
     #components-reconnect-modal button:active {
-        background-color: #6b9ed2;
+        background-color: var(--cyanotype);
+    }
+
+    #components-reconnect-modal button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 
 .components-rejoining-animation {
@@ -112,7 +119,7 @@
 
     .components-rejoining-animation div {
         position: absolute;
-        border: 3px solid #0087ff;
+        border: 3px solid var(--cyanotype);
         opacity: 1;
         border-radius: 50%;
         animation: components-rejoining-animation 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite;
