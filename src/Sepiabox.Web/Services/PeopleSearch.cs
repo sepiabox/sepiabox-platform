@@ -14,7 +14,7 @@ public static class PeopleSearch
         var parts = new List<string>();
         if (unknown.Missing.Count > 0)
         {
-            parts.Add(text["Search_UnknownPeople", string.Join(", ", unknown.Missing)]);
+            parts.Add(text["Search_UnknownPeople", Names(unknown.Missing, text)]);
         }
 
         if (unknown.MeMissing)
@@ -23,6 +23,16 @@ public static class PeopleSearch
         }
 
         return string.Join(" ", parts);
+    }
+
+    /// <summary>Names as a sentence reads them: "Ana", "Ana and Rui", "Ana, Rui and Bia" (List_And).</summary>
+    public static string Names(IReadOnlyList<string> names, IStringLocalizer<SharedResource> text)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        ArgumentNullException.ThrowIfNull(text);
+        return names.Count < 2
+            ? string.Join("", names)
+            : text["List_And", string.Join(", ", names.Take(names.Count - 1)), names[^1]];
     }
 
     /// <summary>A 400 naming what is missing: <c>missing</c> (the names) and <c>me</c> (true when "This is me" is).</summary>

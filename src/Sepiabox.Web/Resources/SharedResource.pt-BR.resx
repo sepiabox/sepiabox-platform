@@ -606,11 +606,14 @@
   <data name="Merge_ExplainCards" xml:space="preserve">
     <value>Os rostos da pessoa à esquerda passam para a da direita; a da esquerda deixa de existir.</value>
   </data>
+  <data name="List_And" xml:space="preserve">
+    <value>{0} e {1}</value>
+  </data>
   <data name="Search_UnknownPeople" xml:space="preserve">
-    <value>Nenhuma pessoa se chama {0}.</value>
+    <value>Não há ninguém chamado {0}.</value>
   </data>
   <data name="Search_MeNotLinked" xml:space="preserve">
-    <value>Você ainda não disse “Sou eu” para nenhuma pessoa: abra a sua em Pessoas.</value>
+    <value>Você ainda não marcou “Sou eu” em nenhuma pessoa. Encontre a sua em Pessoas e marque “Sou eu”.</value>
   </data>
   <data name="Chip_People" xml:space="preserve">
     <value>Com: {0}</value>

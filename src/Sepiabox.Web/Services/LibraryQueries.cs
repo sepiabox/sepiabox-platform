@@ -391,7 +391,9 @@ public sealed class LibraryQueries(
         var byName = StringComparer.Create(System.Globalization.CultureInfo.CurrentCulture, ignoreCase: true);
         // People are renamed and merged at any time (S-020), so they are read now rather than cached.
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        var people = await db.People.AsNoTracking().Where(p => p.Name != null && p.FaceCount > 0).Select(p => p.Name!)
+        // FaceCount is the person's counted faces (D-079); the most photographed first when there are more than fit.
+        var people = await db.People.AsNoTracking().Where(p => p.Name != null && p.FaceCount > 0)
+            .OrderByDescending(p => p.FaceCount).ThenBy(p => p.Id).Take(MaxPeople).Select(p => p.Name!)
             .ToListAsync(cancellationToken);
         var me = Me();
         var meLinked = me is not null && await db.People.AsNoTracking().AnyAsync(p => p.UserEmail == me, cancellationToken);

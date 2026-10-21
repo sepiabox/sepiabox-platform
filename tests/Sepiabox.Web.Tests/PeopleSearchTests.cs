@@ -112,6 +112,52 @@ public sealed class PeopleSearchTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Counts_a_photo_once_for_a_person_with_two_counted_faces_in_it()
+    {
+        await using var db = await CatalogAsync((1, ["Ana", "Ana"]), (2, ["Ana"]), (3, ["Pedro"]));
+
+        var count = await Search(db).CountAsync(new SearchQuery
+        {
+            Filters = new SearchFilters(),
+            Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Person },
+        });
+
+        Assert.Equal(2, await db.Faces.CountAsync(f => f.AssetId == Ids.Of(1)));
+        Assert.Equal([new CountGroup("Ana", 2), new CountGroup("Pedro", 1)], count!.Groups);
+    }
+
+    [Fact]
+    public async Task Says_me_is_missing_alongside_a_known_name_for_a_user_who_has_not_said_this_is_me()
+    {
+        await using var db = await CatalogAsync((1, ["Ana", "Carla"]));
+
+        var unknown = await Assert.ThrowsAsync<UnknownPeopleException>(
+            () => IdsAsync(db, new PeopleFilter { All = ["Ana"], IncludeMe = true }, user: "bruno@example.com"));
+
+        Assert.True(unknown.MeMissing);
+        Assert.Empty(unknown.Missing);
+    }
+
+    [Theory]
+    [InlineData("Ana  Maria")]
+    [InlineData(" ana maria ")]
+    [InlineData("Ana \u200BMaria\t")]
+    [InlineData("Jose\u0301")]
+    public async Task Finds_a_person_by_a_name_written_with_extra_spaces_invisible_characters_or_decomposed_accents(string name)
+    {
+        await using var db = await CatalogAsync((1, ["Ana Maria"]), (2, ["Jos\u00E9"]), (3, ["Pedro"]));
+        var expected = name.Contains('J', StringComparison.Ordinal) ? Ids.Of(2) : Ids.Of(1);
+
+        Assert.Equal([expected], await IdsAsync(db, new PeopleFilter { All = [name] }));
+        var count = await Search(db).CountAsync(new SearchQuery
+        {
+            Filters = new SearchFilters { People = new PeopleFilter { All = [name] } },
+            Aggregate = new SearchAggregate(),
+        });
+        Assert.Equal(1, count!.Total);
+    }
+
+    [Fact]
     public async Task Answers_400_with_the_missing_name_when_a_search_names_someone_unknown()
     {
         await using var db = await CatalogAsync((1, ["Ana"]));

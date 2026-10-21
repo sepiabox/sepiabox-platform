@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Sepiabox.Catalog.People;
 
 namespace Sepiabox.Catalog.Search;
 
@@ -38,7 +39,7 @@ public sealed class UnknownPeopleException(IReadOnlyList<string> missing, bool m
     private static string Describe(IReadOnlyList<string> missing, bool meMissing) =>
         string.Join(" ", new[]
         {
-            missing.Count > 0 ? $"No person is called {string.Join(", ", missing)}." : null,
+            missing.Count > 0 ? $"No one is called {string.Join(", ", missing)}." : null,
             meMissing ? "The signed-in user has not said \"This is me\" for any person." : null,
         }.Where(part => part is not null));
 }
@@ -93,7 +94,7 @@ public sealed class SearchService(
         var missing = new List<string>();
         foreach (var name in people.All ?? [])
         {
-            string[] lowered = [name.Trim().ToLowerInvariant()];
+            string[] lowered = [NameKey(name)];
             var id = await db.People.AsNoTracking().Where(p => p.Name != null && lowered.Contains(p.Name.ToLower()))
                 .Select(p => (long?)p.Id).FirstOrDefaultAsync(cancellationToken);
             if (id is { } found)
@@ -354,13 +355,21 @@ public sealed class SearchService(
         return assets;
     }
 
+    // A searched name cleaned as names are stored (D-079: NFC, invisible formatting dropped, white space collapsed), so a
+    // double space or a decomposed "José" still finds the person, then lower-cased to match ignoring case.
+    private static string NameKey(string name)
+    {
+        PeopleCuration.CleanName(name, out var clean);
+        return (clean ?? name.Trim()).ToLowerInvariant();
+    }
+
     // Every person named, and the user's own: each must have a counted face in the photo (D-077, D-079).
     private IQueryable<Asset> WithPeople(IQueryable<Asset> assets, PeopleFilter people)
     {
         var counted = db.Faces.Where(f => f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual);
         foreach (var name in people.All ?? [])
         {
-            string[] lowered = [name.Trim().ToLowerInvariant()];
+            string[] lowered = [NameKey(name)];
             assets = assets.Where(a => counted.Any(f => f.AssetId == a.Id && f.Person!.Name != null && lowered.Contains(f.Person.Name.ToLower())));
         }
 

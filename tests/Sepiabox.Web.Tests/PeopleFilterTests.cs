@@ -79,6 +79,19 @@ public sealed class PeopleFilterTests
         Assert.Null(rows[0].Items!.Aggregate);
     }
 
+    [Theory]
+    [InlineData("pt-BR", new[] { "Zé" }, false, "Não há ninguém chamado Zé.")]
+    [InlineData("pt-BR", new[] { "Zé", "Bia" }, false, "Não há ninguém chamado Zé e Bia.")]
+    [InlineData("pt-BR", new[] { "Zé", "Bia", "Rui" }, true, "Não há ninguém chamado Zé, Bia e Rui. Você ainda não marcou “Sou eu” em nenhuma pessoa. Encontre a sua em Pessoas e marque “Sou eu”.")]
+    [InlineData("en", new[] { "Zé", "Bia" }, false, "No one is called Zé and Bia.")]
+    [InlineData("en", new string[0], true, "You have not marked “This is me” on anyone yet. Find yourself on People and mark “This is me”.")]
+    public void Names_the_missing_people_as_a_sentence_reads_them(string culture, string[] missing, bool me, string expected)
+    {
+        using var _ = Cultures.Use(culture == "en" ? Cultures.English : Cultures.BrazilianPortuguese);
+
+        Assert.Equal(expected, PeopleSearch.Message(new UnknownPeopleException(missing, me), Cultures.Text()));
+    }
+
     [Fact]
     public async Task Gives_the_translator_people_s_names_and_never_an_address()
     {

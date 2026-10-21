@@ -41,11 +41,7 @@ public sealed class CatalogFixture : IAsyncLifetime
             image = built.FullName;
         }
 
-        _postgres = new PostgreSqlBuilder(image)
-            // Every test has its own database, and each keeps a pool of idle connections until the run ends: the
-            // default 100 runs out once a collection has about ninety tests.
-            .WithCommand("-c", "max_connections=500")
-            .Build();
+        _postgres = new PostgreSqlBuilder(image).Build();
         await Task.WhenAll(_postgres.StartAsync(), _azurite.StartAsync());
         Blobs = new BlobServiceClient(BlobConnectionString);
     }
@@ -73,8 +69,10 @@ public sealed class CatalogFixture : IAsyncLifetime
     /// </summary>
     public string ConnectionStringFor(CatalogDbContext db) => ConnectionStringFor(db.Database.GetDbConnection().Database);
 
+    // Without pooling: every test has its own database, and a pool per database would keep its idle connections open
+    // until the run ends, exhausting the server's 100 connections once a collection has about ninety tests.
     private string ConnectionStringFor(string database) =>
-        new NpgsqlConnectionStringBuilder(_postgres.GetConnectionString()) { Database = database }.ConnectionString;
+        new NpgsqlConnectionStringBuilder(_postgres.GetConnectionString()) { Database = database, Pooling = false }.ConnectionString;
 
     public async Task<CatalogDbContext> CreateMigratedDatabaseAsync()
     {
