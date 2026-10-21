@@ -23,7 +23,7 @@
 - [x] Given a place marked as home, when another place is marked as home, then only the second keeps the mark. *(`SavedPlacesSearchTests`, creating and changing a place.)*
 - [x] Given a deleted place, then the assets remain intact. *(`SavedPlacesSearchTests`: the assets and their locations unchanged; a search naming it then reports it unknown.)*
 - [x] Given two places with the same name in different letter case, then the second is rejected. *(`SavedPlacesSearchTests`, on create and on rename, a double space too; backed by a unique index on `lower(name)`.)*
-- [ ] The live golden run (D-054) passes with the six new place questions (12 asks, 110 in all) and records them; until then they are placeholders in `questions.recorded.json` (see "Recording run").
+- [x] The live golden run (D-054) passes with the six new place questions (12 asks, 110 in all) and records them. *(Run on `fe8d956`: `Model claude-haiku-5-5, 2026-10-21: 110/110 passed, 0 after a retry ().` The S-054 acceptance live run, which shares the output format, was re-recorded on `c209ad9`: `16/16 answered right, 0 after a retry ()`.)*
 
 ### Technical notes
 - `ST_DWithin` on `geography`, in the PostGIS-specific class next to S-012's (D-051). Extends `search.v1.json`.
@@ -50,7 +50,7 @@ In a session that has `SEPIABOX_ANTHROPIC_API_KEY` and Docker, on this story's b
 If the run fails, keep the story `blocked` (the recorded file is unchanged) and report the misses: they are prompt or golden-set fixes for a review iteration.
 
 ### Status
-- `blocked` (2026-10-21): implemented and tested (D-083); waiting for the live golden run with recording (D-054), whose six new questions are placeholders until then.
+- `done` (2026-10-21): implemented and tested (D-083, D-085); the live golden run passed 110/110 and was recorded.
 
 ### Expected tests
 - Integration (PostgreSQL): radius, minimum distance, uniqueness. bUnit: form.
