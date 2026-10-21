@@ -46,6 +46,16 @@ public sealed class FaceAssignerTests
     }
 
     [Fact]
+    public void Gives_each_person_one_face_most_similar_first()
+    {
+        var person = SyntheticFaces.Unit(seed: 1);
+        var close = SyntheticFaces.Near(person, seed: 2, noise: 0.2);
+        var closer = SyntheticFaces.Near(person, seed: 3, noise: 0.01);
+
+        Assert.Equal(new Dictionary<int, int> { [1] = 0 }, FaceAssigner.Assign([close, closer], [person], FaceAssignerOptions.DefaultThreshold));
+    }
+
+    [Fact]
     public void Centroid_is_the_normalized_mean_of_the_faces()
     {
         var a = new float[128];

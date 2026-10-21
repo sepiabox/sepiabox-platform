@@ -173,9 +173,10 @@ public sealed class ManifestImporter(
             return (true, leftOut);
         }
         // Only SaveChanges failures (which EF wraps in DbUpdateException) can be about the data; a read
-        // that fails says something about the database. SaveAsync writes only through SaveChangesAsync
-        // (no ExecuteUpdate, ExecuteSql or explicit transaction), so no data error escapes unwrapped;
-        // a raw write added there needs its own catch.
+        // that fails says something about the database. SaveAsync writes only through SaveChangesAsync (no
+        // ExecuteUpdate or raw write; its only other statements are the people lock and its transaction, which
+        // fail only for reasons that are not the manifest's), so no data error escapes unwrapped; a raw write
+        // added there needs its own catch.
         catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException && IsDataError(ex.InnerException)
             // In queue mode a race with another import is not this manifest's fault: the event comes back.
             && !(transientFailuresThrow && ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }))
@@ -221,6 +222,14 @@ public sealed class ManifestImporter(
         Manifest manifest, string kind, IReadOnlyDictionary<string, float[]> embeddings, IReadOnlyList<IncomingFace>? faces,
         string blobName, string etag, CancellationToken cancellationToken)
     {
+        // A manifest with faces is saved in a transaction that holds the people lock from before its faces are read
+        // until its people are saved, so imports running at once assign faces one after the other (D-077).
+        await using var transaction = faces is null ? null : await db.Database.BeginTransactionAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await FaceAssigner.LockAsync(db, cancellationToken);
+        }
+
         var now = clock.GetUtcNow();
         var asset = await db.Assets
             .Include(a => a.Sources)
@@ -332,6 +341,10 @@ public sealed class ManifestImporter(
 
         // One SaveChanges per manifest: the asset and its import record commit together or not at all.
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     /// <summary>

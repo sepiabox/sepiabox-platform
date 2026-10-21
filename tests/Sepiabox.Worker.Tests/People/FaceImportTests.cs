@@ -58,7 +58,7 @@ public sealed class FaceImportTests(CatalogFixture fixture)
     }
 
     [Fact]
-    public async Task Puts_two_alike_faces_of_one_photo_in_one_new_person()
+    public async Task Puts_two_alike_faces_of_one_photo_in_two_people()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
         var container = await fixture.CreateContainerAsync();
@@ -67,7 +67,123 @@ public sealed class FaceImportTests(CatalogFixture fixture)
 
         await ImportAsync(db, container);
 
-        Assert.Equal(2, (await db.People.SingleAsync()).FaceCount);
+        Assert.Equal([1, 1], await db.People.Select(p => p.FaceCount).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Gives_a_photo_s_faces_each_their_own_existing_person_most_similar_first()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var face = SyntheticFaces.Unit(seed: 1);
+        await PutAsync(container, WithFaces(1, Face(s_box, face)));
+        await ImportAsync(db, container);
+        var first = await db.People.AsNoTracking().SingleAsync();
+
+        // Both are like the person; only the closer one joins it.
+        var closer = SyntheticFaces.Near(face, seed: 2, noise: 0.01);
+        await PutAsync(container, WithFaces(2, Face(s_box, SyntheticFaces.Near(face, seed: 3, noise: 0.2)), Face([0.6, 0.2, 0.3, 0.4], closer)));
+        await ImportAsync(db, container);
+
+        Assert.Equal(2, await db.People.CountAsync());
+        var joined = await db.Faces.AsNoTracking().SingleAsync(f => f.AssetId == WithFaces(2).Id && f.PersonId == first.Id);
+        Assert.Equal([0.6, 0.2, 0.3, 0.4], joined.Box);
+    }
+
+    [Theory]
+    [InlineData(0.45, true)]
+    [InlineData(0.35, false)]
+    public async Task Joins_a_person_at_the_default_threshold_of_0_40(double cosine, bool joins)
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        // cos θ·e1 + sin θ·e2 has exactly this cosine with e1.
+        var e1 = new float[128];
+        e1[0] = 1;
+        var tilted = new float[128];
+        tilted[0] = (float)cosine;
+        tilted[1] = (float)Math.Sqrt(1 - (cosine * cosine));
+        await PutAsync(container, WithFaces(1, Face(s_box, e1)));
+        await PutAsync(container, WithFaces(2, Face(s_box, tilted)));
+
+        await ImportAsync(db, container);
+
+        Assert.Equal(joins ? 1 : 2, await db.People.CountAsync());
+    }
+
+    [Fact]
+    public async Task Computes_the_centroid_as_the_normalized_mean_of_the_person_s_faces()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var face = SyntheticFaces.Unit(seed: 1);
+        float[][] faces = [face, SyntheticFaces.Near(face, seed: 2, noise: 0.1), SyntheticFaces.Near(face, seed: 3, noise: 0.1)];
+        for (var n = 0; n < faces.Length; n++)
+        {
+            await PutAsync(container, WithFaces(n + 1, Face(s_box, faces[n])));
+            await ImportAsync(db, container);
+        }
+
+        var person = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal(3, person.FaceCount);
+        var expected = FaceMath.Centroid(faces)!;
+        var centroid = person.Centroid!.ToArray();
+        for (var i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i], centroid[i], 5);
+        }
+    }
+
+    [Fact]
+    public async Task Assigns_one_after_the_other_when_two_imports_run_at_once()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var face = SyntheticFaces.Unit(seed: 1);
+        await PutAsync(container, WithFaces(1, Face(s_box, face)));
+        await ImportAsync(db, container);
+        var connection = fixture.ConnectionStringFor(db);
+        var manifests = Enumerable.Range(2, 8).Select(n => WithFaces(n, Face(s_box, SyntheticFaces.Near(face, seed: n)))).ToList();
+        foreach (var manifest in manifests)
+        {
+            await PutAsync(container, manifest);
+        }
+
+        // Two importers on their own connections, each taking every other manifest at the same time.
+        await Task.WhenAll(new[] { 0, 1 }.Select(half => Task.Run(async () =>
+        {
+            await using var other = Context(connection);
+            foreach (var manifest in manifests.Where((_, i) => i % 2 == half))
+            {
+                var result = await Importer(other).ImportOneAsync(container, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
+                Assert.Empty(result.Problems);
+            }
+        })));
+
+        var person = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal(9, person.FaceCount);
+        var expected = FaceMath.Centroid([face, .. manifests.Select((_, i) => SyntheticFaces.Near(face, seed: i + 2))])!;
+        Assert.True(FaceMath.Cosine(expected, person.Centroid!.ToArray()) > 0.99999);
+    }
+
+    [Fact]
+    public async Task Keeps_an_unnamed_person_whose_faces_were_all_excluded()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var manifest = WithFaces(1, Face(s_box, SyntheticFaces.Unit(seed: 1)));
+        await PutAsync(container, manifest);
+        await ImportAsync(db, container);
+        // The family said "not this person" (S-020): the face still names them, excluded.
+        await db.Faces.ExecuteUpdateAsync(set => set.SetProperty(f => f.Assignment, FaceAssignments.Excluded));
+
+        await ImportOneAsync(db, container, manifest);
+
+        var person = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal(0, person.FaceCount);
+        Assert.Null(person.Centroid);
+        var face = await db.Faces.AsNoTracking().SingleAsync();
+        Assert.Equal((person.Id, FaceAssignments.Excluded), (face.PersonId!.Value, face.Assignment));
     }
 
     [Fact]
@@ -322,6 +438,13 @@ public sealed class FaceImportTests(CatalogFixture fixture)
 
     private static Task<ImportResult> ImportOneAsync(CatalogDbContext db, BlobContainerClient container, Manifest manifest) =>
         Importer(db).ImportOneAsync(container, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
+
+    private static CatalogDbContext Context(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<CatalogDbContext>();
+        CatalogDbContext.Configure(options, connectionString);
+        return new CatalogDbContext(options.Options);
+    }
 
     private static ManifestImporter Importer(CatalogDbContext db, FaceAssignerOptions? options = null) =>
         new(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance, options);

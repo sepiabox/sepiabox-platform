@@ -299,7 +299,11 @@ Keep the extracted export on the PC and run `sepiabox-ingest process <folder> --
 
 Faces found by `process --faces` (S-018) are grouped into people when their manifests are imported (S-019, D-077): a face joins the person whose average face (centroid) is most similar, from a cosine similarity of 0.40 (D-016), or starts a new, unnamed person. The **People** page lists them, most faces first. Naming, merging and correcting people is S-020.
 
-- **After the deploy that brings S-019,** run `sepiabox-import-all` once (see "Automatic import"): its migration makes the import read every manifest again, so faces uploaded before it reach the catalog. Re-importing changes nothing else (D-032).
+- **After the deploy that brings S-019,** its migration makes the import read every manifest again, so faces uploaded before it reach the catalog (re-importing changes nothing else, D-032). Don't upload until this is done. Then:
+  1. Start `sepiabox-import-all` and check its execution (commands under "Automatic import"): `az containerapp job execution list --name sepiabox-import-all --resource-group rg-sepiabox --query "[0].{status:properties.status,start:properties.startTime,end:properties.endTime}" -o table`.
+  2. Expect it to take a while: every manifest is downloaded and imported once more. As a rough guess (not measured in Azure), count tens of manifests a second, so several minutes for 10,000 assets; a large library or a busy database can pass the execution's 30-minute limit.
+  3. If it ends `Failed` (a timeout included), start it again: it skips what is already imported and carries on. Repeat until one execution ends `Succeeded`; until then the library is only partly imported (the timeline is complete, but faces and people may be missing).
+  4. Check that the dead-letter count is `0` (see "Automatic import").
 - **The threshold** is `People:SameFaceThreshold` (0.40 unless set; above 0 and at most 1), an environment variable `People__SameFaceThreshold` of the import jobs. A higher value splits one person into several more often, a lower one merges different people. It applies to faces imported from then on; faces already grouped stay where they are.
 - **A manifest without faces looked for** (`process` without `--faces`) never removes faces already imported; a new `--faces` run replaces an asset's faces and keeps each face's person when it is found again in about the same place (D-047).
 

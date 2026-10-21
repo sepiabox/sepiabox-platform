@@ -25,17 +25,37 @@ public sealed record IncomingFace(double[] Box, double Score, float[] Embedding)
 
 /// <summary>
 /// Puts an asset's faces into people as it is imported (S-019, D-077): stores the manifest's faces in place of the
-/// asset's earlier ones, keeping the family's curation of each face found again, gives every new face the person whose
-/// centroid is nearest when it is similar enough or a new person otherwise, and recomputes the centroid and face count
-/// of every person it touched. It only changes the tracked context: the caller saves, so the asset and its faces commit
-/// together.
+/// asset's earlier ones, keeping the family's curation of each face found again, gives every new face the most similar
+/// person of its face version when similar enough (at most one face of an asset per person) or a new person otherwise,
+/// and recomputes the centroid and face count of every person it touched. It only changes the tracked context: the
+/// caller saves, inside the transaction that holds <see cref="LockAsync"/>, so the asset, its faces and its people
+/// commit together and no other import changes people meanwhile.
 /// </summary>
 public sealed class FaceAssigner(CatalogDbContext db, FaceAssignerOptions? options = null)
 {
     /// <summary>A stored face is the same face as an incoming one when their boxes overlap this much (D-047).</summary>
     public const double SameBoxIoU = 0.5;
 
+    /// <summary>The advisory lock every import takes before it assigns faces: one fixed key for all of people.</summary>
+    public const long PeopleLockKey = 0x5E91AB19;
+
     private readonly double _threshold = (options ?? new FaceAssignerOptions()).Threshold;
+
+    /// <summary>
+    /// Waits for, and takes until the end of the current transaction, the lock that serializes face assignment, so two
+    /// imports at once (the queue job and <c>import-all</c>) never lose a count or a centroid or make the same person
+    /// twice. The caller must have begun a transaction.
+    /// </summary>
+    public static async Task LockAsync(CatalogDbContext db, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("Face assignment is locked inside a transaction, which holds the lock until it ends.");
+        }
+
+        await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({PeopleLockKey})", cancellationToken);
+    }
 
     /// <summary>
     /// Replaces the faces of <paramref name="assetId"/> with <paramref name="incoming"/>, found by face pipeline
@@ -52,49 +72,33 @@ public sealed class FaceAssigner(CatalogDbContext db, FaceAssignerOptions? optio
         }
 
         var stored = await db.Faces.Where(f => f.AssetId == assetId).ToListAsync(cancellationToken);
-        var touchedIds = stored.Where(f => f.PersonId is not null).Select(f => f.PersonId!.Value).ToHashSet();
-        var created = new List<Person>();
-        var kept = new List<Face>();
+        var touched = new List<Person>();
+        foreach (var id in stored.Where(f => f.PersonId is not null).Select(f => f.PersonId!.Value).Distinct())
+        {
+            if (await db.People.FindAsync([id], cancellationToken) is { } person)
+            {
+                touched.Add(person);
+            }
+        }
 
+        var kept = new List<Face>();
+        var unmatched = new List<IncomingFace>();
         var matches = Match(stored.Select(f => f.Box).ToList(), incoming.Select(f => f.Box).ToList());
         for (var i = 0; i < incoming.Count; i++)
         {
-            var face = incoming[i];
             if (matches.TryGetValue(i, out var storedIndex))
             {
                 // The same face found again: new numbers, the same person and assignment.
                 var row = stored[storedIndex];
-                row.Box = face.Box;
-                row.Score = face.Score;
-                row.Embedding = new Vector(face.Embedding);
+                row.Box = incoming[i].Box;
+                row.Score = incoming[i].Score;
+                row.Embedding = new Vector(incoming[i].Embedding);
                 kept.Add(row);
-                continue;
             }
-
-            var person = await NearestAsync(face.Embedding, version, created, kept, cancellationToken);
-            if (person is null)
+            else
             {
-                person = new Person { FacesVersion = version };
-                db.People.Add(person);
-                created.Add(person);
+                unmatched.Add(incoming[i]);
             }
-            else if (person.Id != 0)
-            {
-                touchedIds.Add(person.Id);
-            }
-
-            var added = new Face
-            {
-                AssetId = assetId,
-                Box = face.Box,
-                Score = face.Score,
-                Embedding = new Vector(face.Embedding),
-                Person = person,
-                PersonId = person.Id == 0 ? null : person.Id,
-                Assignment = FaceAssignments.Auto,
-            };
-            db.Faces.Add(added);
-            kept.Add(added);
         }
 
         var matched = matches.Values.ToHashSet();
@@ -106,16 +110,43 @@ public sealed class FaceAssigner(CatalogDbContext db, FaceAssignerOptions? optio
             }
         }
 
-        foreach (var id in touchedIds)
+        // People this asset's kept faces already belong to: one face of an asset per person.
+        var used = kept.Where(f => f.PersonId is not null).Select(f => f.PersonId!.Value).ToHashSet();
+        var chosen = await ChooseExistingAsync(unmatched, version, used, cancellationToken);
+        for (var i = 0; i < unmatched.Count; i++)
         {
-            var person = await db.People.FindAsync([id], cancellationToken);
-            if (person is not null)
+            var face = unmatched[i];
+            Person person;
+            if (chosen.TryGetValue(i, out var id))
             {
-                await RecomputeAsync(person, assetId, version, kept, cancellationToken);
+                person = await db.People.FindAsync([id], cancellationToken)
+                    ?? throw new InvalidOperationException($"Person {id} disappeared while the people were locked.");
             }
+            else
+            {
+                person = new Person { FacesVersion = version };
+                db.People.Add(person);
+            }
+
+            if (!touched.Contains(person))
+            {
+                touched.Add(person);
+            }
+
+            var added = new Face
+            {
+                AssetId = assetId,
+                Box = face.Box,
+                Score = face.Score,
+                Embedding = new Vector(face.Embedding),
+                Person = person,
+                Assignment = FaceAssignments.Auto,
+            };
+            db.Faces.Add(added);
+            kept.Add(added);
         }
 
-        foreach (var person in created)
+        foreach (var person in touched)
         {
             await RecomputeAsync(person, assetId, version, kept, cancellationToken);
         }
@@ -130,19 +161,43 @@ public sealed class FaceAssigner(CatalogDbContext db, FaceAssignerOptions? optio
     public static int? Choose(IReadOnlyList<float[]> centroids, float[] embedding, double threshold)
     {
         ArgumentNullException.ThrowIfNull(centroids);
-        int? best = null;
-        var bestSimilarity = double.NegativeInfinity;
-        for (var i = 0; i < centroids.Count; i++)
+        var pairs = Assign([embedding], centroids, threshold);
+        return pairs.TryGetValue(0, out var best) ? best : null;
+    }
+
+    /// <summary>
+    /// Faces to people (face index to centroid index), greedily by similarity: the most similar pair first, each face
+    /// and each person once, and only pairs whose cosine similarity reaches <paramref name="threshold"/>. Faces left
+    /// out start new people, so two faces of one photo never become one person.
+    /// </summary>
+    public static Dictionary<int, int> Assign(IReadOnlyList<float[]> faces, IReadOnlyList<float[]> centroids, double threshold)
+    {
+        ArgumentNullException.ThrowIfNull(faces);
+        ArgumentNullException.ThrowIfNull(centroids);
+        var pairs = new List<(int Face, int Person, double Similarity)>();
+        for (var f = 0; f < faces.Count; f++)
         {
-            var similarity = FaceMath.Cosine(centroids[i], embedding);
-            if (similarity >= threshold && similarity > bestSimilarity)
+            for (var p = 0; p < centroids.Count; p++)
             {
-                best = i;
-                bestSimilarity = similarity;
+                var similarity = FaceMath.Cosine(centroids[p], faces[f]);
+                if (similarity >= threshold)
+                {
+                    pairs.Add((f, p, similarity));
+                }
             }
         }
 
-        return best;
+        var result = new Dictionary<int, int>();
+        var taken = new HashSet<int>();
+        foreach (var (f, p, _) in pairs.OrderByDescending(x => x.Similarity).ThenBy(x => x.Face).ThenBy(x => x.Person))
+        {
+            if (!result.ContainsKey(f) && taken.Add(p))
+            {
+                result[f] = p;
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -179,76 +234,104 @@ public sealed class FaceAssigner(CatalogDbContext db, FaceAssignerOptions? optio
         return result;
     }
 
-    // The nearest person of the same face version: in the catalog (by its index), or created for this asset just now.
-    private async Task<Person?> NearestAsync(
-        float[] embedding, int version, List<Person> created, List<Face> kept, CancellationToken cancellationToken)
+    /// <summary>
+    /// For each new face, the stored person it joins (by id), if any: each face's nearest people of the same face
+    /// version not already holding a face of this asset, ranked exactly (the people table is small, and the HNSW
+    /// index could skip the nearest one when the version filter applies after it, D-070), then <see cref="Assign"/>.
+    /// </summary>
+    private async Task<Dictionary<int, long>> ChooseExistingAsync(
+        List<IncomingFace> faces, int version, HashSet<long> used, CancellationToken cancellationToken)
     {
-        var vector = new Vector(embedding);
-        var stored = await db.People
-            .Where(p => p.Centroid != null && p.FacesVersion == version)
-            .OrderBy(p => p.Centroid!.CosineDistance(vector))
-            .Select(p => new { p.Id, Centroid = p.Centroid! })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var candidates = new List<(float[] Centroid, Func<Task<Person?>> Person)>();
-        if (stored is not null)
+        var candidates = new Dictionary<long, float[]>();
+        foreach (var face in faces)
         {
-            candidates.Add((stored.Centroid.ToArray(), async () => await db.People.FindAsync([stored.Id], cancellationToken)));
-        }
-
-        foreach (var person in created)
-        {
-            if (FaceMath.Centroid(kept.Where(f => ReferenceEquals(f.Person, person)).Select(f => f.Embedding.ToArray())) is { } centroid)
+            var vector = new Vector(face.Embedding);
+            // Adding zero keeps the order and rules the index out, so every person is compared.
+            var nearest = await db.People.AsNoTracking()
+                .Where(p => p.Centroid != null && p.FacesVersion == version && !used.Contains(p.Id))
+                .OrderBy(p => p.Centroid!.CosineDistance(vector) + 0.0).ThenBy(p => p.Id)
+                .Take(faces.Count)
+                .Select(p => new { p.Id, Centroid = p.Centroid! })
+                .ToListAsync(cancellationToken);
+            foreach (var person in nearest)
             {
-                candidates.Add((centroid, () => Task.FromResult<Person?>(person)));
+                candidates.TryAdd(person.Id, person.Centroid.ToArray());
             }
         }
 
-        return Choose([.. candidates.Select(c => c.Centroid)], embedding, _threshold) is { } best
-            ? await candidates[best].Person()
-            : null;
+        var ids = candidates.Keys.ToList();
+        return Assign([.. faces.Select(f => f.Embedding)], [.. ids.Select(id => candidates[id])], _threshold)
+            .ToDictionary(pair => pair.Key, pair => ids[pair.Value]);
     }
 
     /// <summary>
-    /// The person's face count (every face not excluded, of any version) and centroid (the faces of the newest version
-    /// it has, only). An unnamed person left with no face is removed; a named one is kept for the family to see.
+    /// The person's face count (every face not excluded, of any version) and centroid (the normalized mean of the faces
+    /// of the newest version it has, only), from the catalog's other assets, aggregated in the database, and this
+    /// asset's faces in memory. An unnamed person no face points to any more is removed; one with only excluded faces
+    /// left is kept (count 0, no centroid), so the family's exclusion stays, and so is a named one.
     /// </summary>
     private async Task RecomputeAsync(Person person, string assetId, int version, List<Face> kept, CancellationToken cancellationToken)
     {
-        var faces = new List<(float[] Embedding, int Version)>();
+        var groups = new List<FaceGroup>();
         if (person.Id != 0)
         {
-            var id = person.Id;
-            var elsewhere = await db.Faces.AsNoTracking()
-                .Where(f => f.PersonId == id && f.AssetId != assetId && f.Assignment != FaceAssignments.Excluded)
-                .Join(db.Assets, f => f.AssetId, a => a.Id, (f, a) => new { f.Embedding, Version = a.FacesVersion ?? 1 })
-                .ToListAsync(cancellationToken);
-            faces.AddRange(elsewhere.Select(f => (f.Embedding.ToArray(), f.Version)));
+            groups = await db.Database.SqlQuery<FaceGroup>($"""
+                SELECT coalesce(a.faces_version, 1) AS "Version",
+                       count(*) FILTER (WHERE f.assignment <> 'excluded')::int AS "Counted",
+                       count(*)::int AS "Rows",
+                       avg(f.embedding) FILTER (WHERE f.assignment <> 'excluded') AS "Mean"
+                FROM faces f JOIN assets a ON a.id = f.asset_id
+                WHERE f.person_id = {person.Id} AND f.asset_id <> {assetId}
+                GROUP BY 1
+                """).ToListAsync(cancellationToken);
         }
 
-        faces.AddRange(kept
-            .Where(f => f.Assignment != FaceAssignments.Excluded
-                && (ReferenceEquals(f.Person, person) || (person.Id != 0 && f.PersonId == person.Id)))
-            .Select(f => (f.Embedding.ToArray(), version)));
-
-        if (faces.Count == 0)
+        var mine = kept.Where(f => ReferenceEquals(f.Person, person) || (person.Id != 0 && f.PersonId == person.Id)).ToList();
+        var counted = mine.Where(f => f.Assignment != FaceAssignments.Excluded).ToList();
+        if (groups.Sum(g => g.Rows) + mine.Count == 0 && person.Name is null && person.UserEmail is null)
         {
-            if (person.Name is null && person.UserEmail is null)
-            {
-                db.People.Remove(person);
-                return;
-            }
+            db.People.Remove(person);
+            return;
+        }
 
-            person.FaceCount = 0;
+        person.FaceCount = groups.Sum(g => g.Counted) + counted.Count;
+        var versions = groups.Where(g => g.Counted > 0).Select(g => g.Version).ToList();
+        if (counted.Count > 0)
+        {
+            versions.Add(version);
+        }
+
+        if (versions.Count == 0)
+        {
             person.Centroid = null;
             return;
         }
 
-        var newest = faces.Max(f => f.Version);
-        person.FaceCount = faces.Count;
+        var newest = versions.Max();
+        double[]? sum = null;
+        if (groups.SingleOrDefault(g => g.Version == newest && g.Counted > 0) is { Mean: { } mean } group)
+        {
+            sum = [.. mean.ToArray().Select(v => (double)v * group.Counted)];
+        }
+
+        if (newest == version)
+        {
+            foreach (var face in counted)
+            {
+                var values = face.Embedding.ToArray();
+                sum ??= new double[values.Length];
+                for (var i = 0; i < values.Length; i++)
+                {
+                    sum[i] += values[i];
+                }
+            }
+        }
+
         person.FacesVersion = newest;
-        person.Centroid = FaceMath.Centroid(faces.Where(f => f.Version == newest).Select(f => f.Embedding)) is { } centroid
+        person.Centroid = sum is not null && FaceMath.Centroid([[.. sum.Select(v => (float)v)]]) is { } centroid
             ? new Vector(centroid)
             : null;
     }
+
+    private sealed record FaceGroup(int Version, int Counted, int Rows, Vector? Mean);
 }
