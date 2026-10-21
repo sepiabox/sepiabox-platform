@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepiabox.com/schemas/ingest-report.v1.json",
+  "title": "sepiabox-ingest report --json, v1",
+  "description": "Unique photos and videos in process work folders, counted as the catalog counts them (S-062, D-074): one per content, an asset in several work folders once, with the date and kind the cloud's merge gives it. What the MVP acceptance (S-054) compares the answers with.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "workFolders", "total", "years", "undated", "multipleSources", "problems"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "workFolders": {
+      "description": "The work folders read, as full paths, in the order given (upload order).",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "total": { "description": "Every counted asset: the years' totals plus the undated.", "type": "integer", "minimum": 0 },
+    "years": {
+      "description": "One entry per year with at least one dated asset, in increasing order. The year of capturedAt as stored (wall clock, D-037).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["year", "photos", "videos", "total"],
+        "properties": {
+          "year": { "type": "integer" },
+          "photos": { "type": "integer", "minimum": 0 },
+          "videos": { "type": "integer", "minimum": 0 },
+          "total": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "undated": {
+      "description": "Assets without capturedAt.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["photos", "videos", "total"],
+      "properties": {
+        "photos": { "type": "integer", "minimum": 0 },
+        "videos": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "multipleSources": { "description": "Assets found at more than one path.", "type": "integer", "minimum": 0 },
+    "problems": {
+      "description": "Manifests that failed validation and are not counted; the command then exits with 1.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "reason"],
+        "properties": {
+          "path": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    }
+  }
+}
