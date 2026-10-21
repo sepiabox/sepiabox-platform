@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Media;
+using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Ingest.Tests;
 
@@ -85,6 +86,33 @@ public class StateStoreTests
         // Opening again finds the column already there.
         using var reopened = new StateStore(database);
         Assert.Equal(NoVideoReason.NoStream, reopened.Get("/drive/b.mod")!.Reason);
+    }
+
+    [Fact]
+    public void Remembers_what_became_of_a_video_s_sound_and_reads_none_for_rows_of_an_earlier_build()
+    {
+        using var folder = new TempFolder();
+        var database = Path.Combine(folder.Path, "state.db");
+        using (var old = new SqliteConnection($"Data Source={database};Pooling=False"))
+        {
+            old.Open();
+            using var create = old.CreateCommand();
+            // A work folder written by a build with D-084, before the sound was recorded (D-087).
+            create.CommandText = """
+                CREATE TABLE files (path TEXT PRIMARY KEY, size INTEGER NOT NULL, modified_ticks INTEGER NOT NULL, sha256 TEXT, status TEXT NOT NULL, reason TEXT);
+                INSERT INTO files VALUES ('/drive/MOV001.MOD', 10, 20, NULL, 'Done', NULL);
+                """;
+            create.ExecuteNonQuery();
+        }
+
+        using (var store = new StateStore(database))
+        {
+            Assert.Null(store.Get("/drive/MOV001.MOD")!.Sound);
+            store.Save(new FileState("/drive/MOV002.MOD", 1, 1, null, FileStatus.Done, Sound: VideoSound.Undecodable));
+        }
+
+        using var reopened = new StateStore(database);
+        Assert.Equal(VideoSound.Undecodable, reopened.Get("/drive/MOV002.MOD")!.Sound);
     }
 
     [Theory]

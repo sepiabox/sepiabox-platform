@@ -60,6 +60,87 @@ public class VideoProcessorTests
         Assert.DoesNotContain("libx264", arguments);
     }
 
+    [Theory]
+    [InlineData(VideoEncoder.Software)]
+    [InlineData(VideoEncoder.Nvenc)]
+    public void Checks_the_encoder_with_a_generated_clip_and_exactly_the_720p_version_s_encoding(VideoEncoder encoder)
+    {
+        var check = FfmpegArguments.EncoderCheck(encoder, "check.mp4");
+        var proxy = FfmpegArguments.Proxy("clip.mod", 640, 360, encoder, 0, "check.mp4");
+
+        AssertSequence(check, "-f", "lavfi", "-i", "testsrc=size=640x360:rate=25:duration=0.5");
+        AssertSequence(check, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo");
+        AssertSequence(check, "-map", "0:v:0", "-map", "1:a:0", "-t", "0.5");
+        Assert.Equal(proxy.SkipWhile(a => a != "-map_metadata"), check.SkipWhile(a => a != "-map_metadata"));
+        AssertSequence(check, [.. FfmpegArguments.VideoCodec(encoder)]);
+    }
+
+    [Fact]
+    public void Uses_the_given_video_codec_arguments_instead_of_the_encoder_s()
+    {
+        var arguments = FfmpegArguments.Proxy("in.mov", 640, 360, VideoEncoder.Nvenc, 0, "out.mp4", videoCodec: ["-c:v", "libx264"]);
+
+        AssertSequence(arguments, "-c:v", "libx264", "-pix_fmt");
+        Assert.DoesNotContain("h264_nvenc", arguments);
+    }
+
+    [Fact]
+    public void Decodes_only_the_first_frame_of_the_first_sound_stream_to_see_whether_the_sound_decodes()
+    {
+        var arguments = FfmpegArguments.FirstSoundFrame("clip.mod");
+
+        AssertSequence(arguments, "-i", "clip.mod", "-map", "0:a:0", "-frames:a", "1", "-f", "framecrc", "-");
+        Assert.Equal(["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", "clip.mod"], FfmpegArguments.SoundStreams("clip.mod"));
+    }
+
+    [Theory]
+    [InlineData("#software: Lavf60.16.100\n#tb 0: 1/48000\n#media_type 0: audio\n0,          0,          0,     1536,     6144, 0x3cd42723\n", 1)]
+    [InlineData("#software: Lavf60.16.100\n#tb 0: 1/48000\n", 0)]
+    [InlineData("", 0)]
+    public void Counts_the_decoded_frames_without_the_header_lines(string framecrc, int frames)
+    {
+        Assert.Equal(frames, FfmpegArguments.CountFrames(framecrc));
+    }
+
+    [Theory]
+    [InlineData("1\n", 1)]
+    [InlineData("1\n2\n", 2)]
+    [InlineData("", 0)]
+    [InlineData("\n", 0)]
+    public void Counts_the_sound_streams_ffprobe_lists(string output, int streams)
+    {
+        Assert.Equal(streams, FfmpegArguments.CountStreams(output));
+    }
+
+    [Fact]
+    public void Keeps_every_line_of_ffmpeg_s_errors_so_the_cause_shows_and_not_only_its_consequence()
+    {
+        // The owner's NVENC failure (D-087): the last line alone reads like a sound problem.
+        const string Errors = """
+            [h264_nvenc @ 0x1] Driver does not support the required nvenc API version. Required: 13.1 Found: 13.0
+            [h264_nvenc @ 0x1] The minimum required Nvidia driver for nvenc is 610.00 or newer
+            [vost#0:0/h264_nvenc @ 0x2] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+            [out#0/mp4 @ 0x3] Nothing was written into output file, because at least one of its streams received no packets.
+
+            """;
+
+        var message = FfmpegArguments.Message(Errors);
+
+        Assert.StartsWith("[h264_nvenc @ 0x1] Driver does not support the required nvenc API version. Required: 13.1 Found: 13.0 | ", message, StringComparison.Ordinal);
+        Assert.EndsWith(" | [out#0/mp4 @ 0x3] Nothing was written into output file, because at least one of its streams received no packets.", message, StringComparison.Ordinal);
+        Assert.Equal(4, message.Split(" | ").Length);
+    }
+
+    [Fact]
+    public void Keeps_the_end_of_a_very_long_ffmpeg_message()
+    {
+        var message = FfmpegArguments.Message(string.Join('\n', Enumerable.Range(1, 500).Select(i => $"line {i}")));
+
+        Assert.Equal(FfmpegArguments.MaxMessageLength, message.Length);
+        Assert.StartsWith("…", message, StringComparison.Ordinal);
+        Assert.EndsWith("line 500", message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Takes_the_poster_frame_at_the_given_second_with_invariant_formatting()
     {

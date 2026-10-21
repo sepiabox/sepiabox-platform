@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Sepiabox.Pipeline.Media;
+using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Ingest.Processing;
 
@@ -23,7 +24,12 @@ public enum FileStatus
 /// <param name="Sha256">Its content hash, once read.</param>
 /// <param name="Status">What became of it.</param>
 /// <param name="Reason">Why it was left out, for <see cref="FileStatus.NotVideo"/>; null otherwise, or when not recorded.</param>
-public sealed record FileState(string Path, long Size, long ModifiedTicks, string? Sha256, FileStatus Status, NoVideoReason? Reason = null);
+/// <param name="Sound">
+/// For a video done by a build with D-087, what became of its sound in the 720p version. Null for photos and for videos
+/// done by earlier builds, whose 720p version may have lost working sound to D-084's fallback, so <c>process</c> checks it.
+/// </param>
+public sealed record FileState(
+    string Path, long Size, long ModifiedTicks, string? Sha256, FileStatus Status, NoVideoReason? Reason = null, VideoSound? Sound = null);
 
 /// <summary>
 /// Remembers which files were already processed, so an interrupted or repeated run only reads
@@ -56,19 +62,16 @@ public sealed class StateStore : IDisposable
             );
             """);
 
-        // Work folders made before the left-out reason was stored gain the column; their rows read as no reason.
-        using var hasReason = _connection.CreateCommand();
-        hasReason.CommandText = "SELECT COUNT(*) FROM pragma_table_info('files') WHERE name = 'reason'";
-        if (Convert.ToInt64(hasReason.ExecuteScalar(), CultureInfo.InvariantCulture) == 0)
-        {
-            Execute("ALTER TABLE files ADD COLUMN reason TEXT");
-        }
+        // Work folders made before the left-out reason, or the video's sound (D-087), was stored gain the column; their
+        // rows read as not recorded.
+        AddColumnIfMissing("reason");
+        AddColumnIfMissing("sound");
     }
 
     public FileState? Get(string path)
     {
         using var command = _connection.CreateCommand();
-        command.CommandText = "SELECT size, modified_ticks, sha256, status, reason FROM files WHERE path = $path";
+        command.CommandText = "SELECT size, modified_ticks, sha256, status, reason, sound FROM files WHERE path = $path";
         command.Parameters.AddWithValue("$path", path);
 
         using var reader = command.ExecuteReader();
@@ -83,18 +86,19 @@ public sealed class StateStore : IDisposable
             reader.GetInt64(1),
             reader.IsDBNull(2) ? null : reader.GetString(2),
             Enum.Parse<FileStatus>(reader.GetString(3)),
-            reader.IsDBNull(4) ? null : ParseReason(reader.GetString(4)));
+            reader.IsDBNull(4) ? null : ParseReason(reader.GetString(4)),
+            reader.IsDBNull(5) ? null : ParseSound(reader.GetString(5)));
     }
 
     public void Save(FileState state)
     {
         using var command = _connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO files (path, size, modified_ticks, sha256, status, reason)
-            VALUES ($path, $size, $modified, $sha256, $status, $reason)
+            INSERT INTO files (path, size, modified_ticks, sha256, status, reason, sound)
+            VALUES ($path, $size, $modified, $sha256, $status, $reason, $sound)
             ON CONFLICT (path) DO UPDATE SET
                 size = excluded.size, modified_ticks = excluded.modified_ticks,
-                sha256 = excluded.sha256, status = excluded.status, reason = excluded.reason
+                sha256 = excluded.sha256, status = excluded.status, reason = excluded.reason, sound = excluded.sound
             """;
         command.Parameters.AddWithValue("$path", state.Path);
         command.Parameters.AddWithValue("$size", state.Size);
@@ -102,6 +106,7 @@ public sealed class StateStore : IDisposable
         command.Parameters.AddWithValue("$sha256", (object?)state.Sha256 ?? DBNull.Value);
         command.Parameters.AddWithValue("$status", state.Status.ToString());
         command.Parameters.AddWithValue("$reason", (object?)state.Reason?.ToString() ?? DBNull.Value);
+        command.Parameters.AddWithValue("$sound", (object?)state.Sound?.ToString() ?? DBNull.Value);
         command.ExecuteNonQuery();
     }
 
@@ -114,6 +119,21 @@ public sealed class StateStore : IDisposable
         && Enum.Parse<NoVideoReason>(value) is var reason and not NoVideoReason.Unknown
             ? reason
             : null;
+
+    // A name from a later build reads as not recorded, so the 720p version is checked again.
+    private static VideoSound? ParseSound(string value) =>
+        Enum.GetNames<VideoSound>().Contains(value, StringComparer.Ordinal) ? Enum.Parse<VideoSound>(value) : null;
+
+    private void AddColumnIfMissing(string column)
+    {
+        using var exists = _connection.CreateCommand();
+        exists.CommandText = "SELECT COUNT(*) FROM pragma_table_info('files') WHERE name = $column";
+        exists.Parameters.AddWithValue("$column", column);
+        if (Convert.ToInt64(exists.ExecuteScalar(), CultureInfo.InvariantCulture) == 0)
+        {
+            Execute($"ALTER TABLE files ADD COLUMN {column} TEXT");
+        }
+    }
 
     private void Execute(string sql)
     {

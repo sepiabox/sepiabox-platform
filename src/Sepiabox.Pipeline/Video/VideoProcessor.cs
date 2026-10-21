@@ -94,11 +94,31 @@ public sealed record FfmpegTools(string Ffmpeg, string Ffprobe)
     }
 }
 
+/// <summary>What became of a video's sound in its 720p version (D-087).</summary>
+public enum VideoSound
+{
+    /// <summary>The 720p version has the source's first sound stream.</summary>
+    Kept,
+
+    /// <summary>The source has no sound stream, so neither has the 720p version.</summary>
+    NoStream,
+
+    /// <summary>
+    /// The source declares a sound stream that FFmpeg cannot decode a single frame of (D-084): the 720p version was made
+    /// without sound.
+    /// </summary>
+    Undecodable,
+}
+
 /// <summary>
-/// A video's derivatives. <see cref="WithoutSoundBecause"/> is set when its 720p version was made without sound after
-/// the transcode with sound failed (D-084): FFmpeg's message for that failure, so the run can show it.
+/// A video's derivatives and what became of its sound. <see cref="WithoutSoundBecause"/> is set when the 720p version
+/// was made without sound because its sound stream does not decode (<see cref="VideoSound.Undecodable"/>, D-087):
+/// FFmpeg's message for the transcode with sound, so the run can show it.
 /// </summary>
-public sealed record VideoDerivatives(IReadOnlyList<ManifestDerivative> Derivatives, string? WithoutSoundBecause = null);
+public sealed record VideoDerivatives(IReadOnlyList<ManifestDerivative> Derivatives, string? WithoutSoundBecause = null)
+{
+    public VideoSound Sound { get; init; } = WithoutSoundBecause is null ? VideoSound.Kept : VideoSound.Undecodable;
+}
 
 /// <summary>What <c>process</c> needs from a video processor; tests stand in for FFmpeg with it.</summary>
 public interface IVideoProcessor
@@ -107,14 +127,68 @@ public interface IVideoProcessor
 
     VideoDerivatives Generate(
         string sourcePath, string workFolder, string relativeFolder, VideoProbe probe, CancellationToken cancellationToken = default);
+
+    /// <summary>Whether <paramref name="path"/> (a 720p version in the work folder) has a sound stream.</summary>
+    bool HasSound(string path, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// The encoder <c>process</c> was asked to use cannot encode at all (D-087), found by encoding a generated half-second
+/// clip before any file is processed: an NVIDIA driver older than the NVENC API FFmpeg was built for, no NVIDIA GPU, or
+/// an FFmpeg without that encoder. <see cref="Exception.Message"/> holds FFmpeg's message.
+/// </summary>
+public sealed class VideoEncoderUnavailableException : Exception
+{
+    public VideoEncoderUnavailableException()
+    {
+    }
+
+    public VideoEncoderUnavailableException(string message)
+        : base(message)
+    {
+    }
+
+    public VideoEncoderUnavailableException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    public VideoEncoderUnavailableException(VideoEncoder encoder, string message, Exception innerException)
+        : base(message, innerException)
+    {
+        Encoder = encoder;
+    }
+
+    public VideoEncoder Encoder { get; }
 }
 
 /// <summary>
 /// Makes what the web shows for a video (D-015): a WebP poster and thumbnail taken at 10% of the
 /// duration, and a 720p H.264 version with metadata removed. Originals are only read.
 /// </summary>
-public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = VideoEncoder.Software) : IVideoProcessor
+public sealed class VideoProcessor : IVideoProcessor
 {
+    private readonly FfmpegTools tools;
+    private readonly VideoEncoder encoder;
+    private readonly IReadOnlyList<string>? videoCodec;
+
+    public VideoProcessor(FfmpegTools tools, VideoEncoder encoder = VideoEncoder.Software)
+        : this(tools, encoder, null)
+    {
+    }
+
+    /// <summary>For tests: <paramref name="videoCodec"/> replaces the encoder's arguments, such as an encoder that fails.</summary>
+    internal VideoProcessor(FfmpegTools tools, VideoEncoder encoder, IReadOnlyList<string>? videoCodec)
+    {
+        ArgumentNullException.ThrowIfNull(tools);
+        this.tools = tools;
+        this.encoder = encoder;
+        this.videoCodec = videoCodec;
+    }
+
+    /// <summary>The encoder the 720p versions are made with.</summary>
+    public VideoEncoder Encoder => encoder;
+
     public const string ProxyName = "proxy-720p";
     public const string ProxyContentType = "video/mp4";
 
@@ -188,6 +262,51 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
         }
     }
 
+    /// <summary>
+    /// Encodes a generated half-second clip with picture and sound exactly as a 720p version is encoded, into a
+    /// temporary file in <paramref name="workFolder"/> that is then deleted (D-087), so an encoder that cannot work stops
+    /// the run before any file, instead of failing every video. Throws <see cref="VideoEncoderUnavailableException"/>
+    /// with FFmpeg's message.
+    /// </summary>
+    public void CheckEncoder(string workFolder, CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(workFolder);
+        var output = Path.Combine(workFolder, $"encoder-check-{Guid.NewGuid():N}.tmp.mp4");
+        try
+        {
+            Run(tools.Ffmpeg, FfmpegArguments.EncoderCheck(encoder, output, videoCodec), cancellationToken);
+        }
+        catch (VideoProcessingException ex)
+        {
+            throw new VideoEncoderUnavailableException(encoder, ex.Message, ex);
+        }
+        finally
+        {
+            File.Delete(output);
+        }
+    }
+
+    public bool HasSound(string path, CancellationToken cancellationToken = default) =>
+        FfmpegArguments.CountStreams(Run(tools.Ffprobe, FfmpegArguments.SoundStreams(path), cancellationToken)) > 0;
+
+    /// <summary>
+    /// Whether the first sound stream of <paramref name="path"/> is the reason a transcode with sound failed: it is when
+    /// the file has one and FFmpeg decodes not a single frame of it (D-087). Decoding stops at the first frame, so a
+    /// file whose sound works is read only as far as that; one whose sound never decodes is read to its end, which
+    /// only happens after its transcode has already failed.
+    /// </summary>
+    public VideoSound CheckSound(string path, CancellationToken cancellationToken = default)
+    {
+        if (!HasSound(path, cancellationToken))
+        {
+            return VideoSound.NoStream;
+        }
+
+        // Its exit code says nothing here: FFmpeg fails when no frame decodes, and can fail after one did.
+        var (_, frames, _) = RunCapturing(tools.Ffmpeg, FfmpegArguments.FirstSoundFrame(path), cancellationToken);
+        return FfmpegArguments.CountFrames(frames) > 0 ? VideoSound.Kept : VideoSound.Undecodable;
+    }
+
     /// <summary>Writes the poster, thumbnail and 720p version into <paramref name="workFolder"/>/<paramref name="relativeFolder"/>.</summary>
     public VideoDerivatives Generate(
         string sourcePath, string workFolder, string relativeFolder, VideoProbe probe, CancellationToken cancellationToken = default)
@@ -245,20 +364,39 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
         var proxy = Path.Combine(workFolder, proxyPath);
         var temporary = proxy + ".tmp";
         string? withoutSoundBecause = null;
+        VideoSound sound;
         try
         {
-            Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary), cancellationToken);
+            Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, videoCodec: videoCodec), cancellationToken);
+            sound = HasSound(temporary, cancellationToken) ? VideoSound.Kept : VideoSound.NoStream;
         }
         catch (VideoProcessingException withSound)
         {
-            // A camcorder file can declare a sound stream that holds nothing FFmpeg can decode: it plays without
-            // sound, and FFmpeg writes no MP4 because that stream "received no packets" (D-084). Its 720p version
-            // is made without sound; when that fails too, the file still has a problem. Any failure leads here, so
-            // the run lists every file made without sound with FFmpeg's message: a one-off encoder error shows.
-            withoutSoundBecause = withSound.Message;
+            // Only a sound stream that decodes to nothing makes a 720p version without sound (D-087): a camcorder file
+            // can declare one that plays as silence (D-084). Any other failure, such as an encoder that cannot open
+            // (whose FFmpeg message also ends in "received no packets"), stays a failure with its full message, and
+            // the next run tries the file again.
+            VideoSound cause;
             try
             {
-                Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, withAudio: false), cancellationToken);
+                cause = CheckSound(sourcePath, cancellationToken);
+            }
+            catch (VideoProcessingException)
+            {
+                // The check itself failing proves nothing about the sound: the transcode's own failure is reported.
+                cause = VideoSound.Kept;
+            }
+
+            if (cause != VideoSound.Undecodable)
+            {
+                throw;
+            }
+
+            withoutSoundBecause = withSound.Message;
+            sound = VideoSound.Undecodable;
+            try
+            {
+                Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, withAudio: false, videoCodec), cancellationToken);
             }
             catch (VideoProcessingException withoutSound)
             {
@@ -270,10 +408,25 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
 
         File.Move(temporary, proxy, overwrite: true);
 
-        return new VideoDerivatives([.. posters, new ManifestDerivative(ProxyName, proxyPath, width, height, ProxyContentType)], withoutSoundBecause);
+        return new VideoDerivatives([.. posters, new ManifestDerivative(ProxyName, proxyPath, width, height, ProxyContentType)], withoutSoundBecause)
+        {
+            Sound = sound,
+        };
     }
 
     private static string Run(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    {
+        var (exitCode, output, errors) = RunCapturing(fileName, arguments, cancellationToken);
+        if (exitCode != 0)
+        {
+            throw new VideoProcessingException($"{Path.GetFileNameWithoutExtension(fileName)} failed: {FfmpegArguments.Message(errors)}");
+        }
+
+        return output;
+    }
+
+    private static (int ExitCode, string Output, string Errors) RunCapturing(
+        string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
         // Arguments go through ArgumentList, never a shell string, so file names cannot inject options.
         var info = new ProcessStartInfo(fileName)
@@ -305,14 +458,7 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
         var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
         cancellationToken.ThrowIfCancellationRequested();
-
-        if (process.ExitCode != 0)
-        {
-            var reason = errors.GetAwaiter().GetResult().Trim().Split('\n').LastOrDefault()?.Trim();
-            throw new VideoProcessingException($"{Path.GetFileNameWithoutExtension(fileName)} failed: {reason}");
-        }
-
-        return output;
+        return (process.ExitCode, output, errors.GetAwaiter().GetResult());
     }
 }
 
@@ -371,32 +517,92 @@ public static class FfmpegArguments
         output,
     ];
 
-    /// <summary>The 720p version; <paramref name="withAudio"/> false leaves out the sound (D-084).</summary>
-    public static IReadOnlyList<string> Proxy(string input, int width, int height, VideoEncoder encoder, int videoStream, string output, bool withAudio = true)
+    /// <summary>The longest message kept from FFmpeg's errors: a few lines, enough for the cause and its consequence.</summary>
+    public const int MaxMessageLength = 1000;
+
+    /// <summary>
+    /// The 720p version; <paramref name="withAudio"/> false leaves out the sound (D-084, D-087).
+    /// <paramref name="videoCodec"/> replaces the encoder's arguments, for tests.
+    /// </summary>
+    public static IReadOnlyList<string> Proxy(
+        string input, int width, int height, VideoEncoder encoder, int videoStream, string output, bool withAudio = true,
+        IReadOnlyList<string>? videoCodec = null) =>
+    [
+        "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+        "-i", input,
+        "-map", $"0:v:{videoStream}",
+        .. withAudio ? (string[])["-map", "0:a:0?"] : ["-an"],
+        .. Encoding(width, height, encoder, withAudio, output, videoCodec),
+    ];
+
+    /// <summary>
+    /// The preflight of D-087: a generated half-second 640x360 clip with picture and stereo sound at 48 kHz, encoded
+    /// with exactly the 720p version's encoding arguments into <paramref name="output"/>.
+    /// </summary>
+    public static IReadOnlyList<string> EncoderCheck(VideoEncoder encoder, string output, IReadOnlyList<string>? videoCodec = null) =>
+    [
+        "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+        "-f", "lavfi", "-i", "testsrc=size=640x360:rate=25:duration=0.5",
+        "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+        "-map", "0:v:0", "-map", "1:a:0", "-t", "0.5",
+        .. Encoding(640, 360, encoder, withAudio: true, output, videoCodec),
+    ];
+
+    /// <summary>The encoder's arguments: h264_nvenc on an NVIDIA GPU, otherwise libx264.</summary>
+    public static IReadOnlyList<string> VideoCodec(VideoEncoder encoder) => encoder == VideoEncoder.Nvenc
+        ? ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "28"]
+        : ["-c:v", "libx264", "-preset", "veryfast", "-crf", "28"];
+
+    /// <summary>The sound streams of a file, one line each.</summary>
+    public static IReadOnlyList<string> SoundStreams(string input) =>
+        ["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", input];
+
+    /// <summary>
+    /// Decodes the first frame of the first sound stream and writes one line for it (FFmpeg's <c>framecrc</c>) on the
+    /// standard output (D-087); no line when not a single frame decodes.
+    /// </summary>
+    public static IReadOnlyList<string> FirstSoundFrame(string input) =>
+    [
+        "-hide_banner", "-loglevel", "error", "-nostdin",
+        "-i", input,
+        "-map", "0:a:0", "-frames:a", "1",
+        "-f", "framecrc", "-",
+    ];
+
+    /// <summary>The lines of ffprobe's <c>csv=p=0</c> output: one per stream.</summary>
+    public static int CountStreams(string output) =>
+        (output ?? string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+
+    /// <summary>The frames in FFmpeg's <c>framecrc</c> output: every line that is not a <c>#</c> header.</summary>
+    public static int CountFrames(string framecrc) =>
+        (framecrc ?? string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Count(line => !line.StartsWith('#'));
+
+    /// <summary>
+    /// FFmpeg's errors as one line: every line it printed, in order, joined by " | ", at most
+    /// <see cref="MaxMessageLength"/> characters keeping the end. The last line alone is often only the consequence:
+    /// "Nothing was written into output file" after an encoder that could not open (D-087).
+    /// </summary>
+    public static string Message(string errors)
     {
-        List<string> arguments =
-        [
-            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
-            "-i", input,
-            "-map", $"0:v:{videoStream}",
-            .. withAudio ? (string[])["-map", "0:a:0?"] : ["-an"],
-            // Drops metadata such as the GPS position phones write into videos.
-            "-map_metadata", "-1",
-            "-vf", Filter(width, height),
-        ];
-        arguments.AddRange(encoder == VideoEncoder.Nvenc
-            ? ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "28"]
-            : ["-c:v", "libx264", "-preset", "veryfast", "-crf", "28"]);
-        arguments.AddRange(
-        [
-            "-pix_fmt", "yuv420p",
-            .. withAudio ? (string[])["-c:a", "aac", "-b:a", "96k"] : [],
-            "-movflags", "+faststart",
-            "-f", "mp4",
-            output,
-        ]);
-        return arguments;
+        var lines = (errors ?? string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var message = string.Join(" | ", lines);
+        return message.Length <= MaxMessageLength ? message : "…" + message[^(MaxMessageLength - 1)..];
     }
+
+    private static IEnumerable<string> Encoding(
+        int width, int height, VideoEncoder encoder, bool withAudio, string output, IReadOnlyList<string>? videoCodec) =>
+    [
+        // Drops metadata such as the GPS position phones write into videos.
+        "-map_metadata", "-1",
+        "-vf", Filter(width, height),
+        .. videoCodec ?? VideoCodec(encoder),
+        "-pix_fmt", "yuv420p",
+        .. withAudio ? (string[])["-c:a", "aac", "-b:a", "96k"] : [],
+        "-movflags", "+faststart",
+        "-f", "mp4",
+        output,
+    ];
 
     public static VideoProbe ParseProbe(string json)
     {

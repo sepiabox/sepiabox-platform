@@ -155,5 +155,7 @@ public sealed class ParallelProcessTests
 
             return new([]);
         }
+
+        public bool HasSound(string path, CancellationToken cancellationToken = default) => true;
     }
 }

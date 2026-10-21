@@ -4,6 +4,7 @@ using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Reporting;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Ingest.Uploading;
+using Sepiabox.Pipeline.Video;
 using Sepiabox.Search.Models;
 
 const string Usage = """
@@ -82,6 +83,11 @@ try
 catch (Exception ex) when (ex is DirectoryNotFoundException or ClockSkewException)
 {
     Console.Error.WriteLine(ex.Message);
+    return 1;
+}
+catch (VideoEncoderUnavailableException ex)
+{
+    Console.Error.WriteLine(EncoderCheckReport.Message(ex));
     return 1;
 }
 catch (OperationCanceledException)
