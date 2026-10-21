@@ -44,10 +44,11 @@ public static class QuestionPrompt
     private static readonly Lazy<string> s_schema = new(LoadSchema);
 
     /// <summary>
-    /// The DSL's filters a question cannot express, left out of the output format (D-086): <c>similarTo</c> names an
-    /// asset by its id, which only the photo detail page knows (S-017).
+    /// The DSL's filters a question cannot express, left out of the output format (D-086, D-092): <c>similarTo</c> names an
+    /// asset by its id, which only the photo detail page knows (S-017), and <c>eventIds</c> names occasions by ids, which
+    /// only the occasions pages know (S-023).
     /// </summary>
-    public static readonly IReadOnlyList<string> NotFromQuestions = ["similarTo"];
+    public static readonly IReadOnlyList<string> NotFromQuestions = ["similarTo", "eventIds"];
 
     /// <summary>
     /// The DSL schema (<c>docs/schemas/search.v1.json</c>, the same file) as the output format: unchanged apart from

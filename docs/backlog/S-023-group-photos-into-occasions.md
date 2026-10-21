@@ -17,11 +17,11 @@
 - Occasion type (S-024).
 
 ### Acceptance criteria
-- [ ] Given photos 7 h apart, when events are rebuilt, then they end up in different occasions.
-- [ ] Given photos 1 h and 60 km apart, when events are rebuilt, then they end up in different occasions.
-- [ ] Given `rebuild` run twice, when the results are compared, then they are identical.
-- [ ] Given undated assets, when events are rebuilt, then they belong to no occasion.
-- [ ] Given an occasion in Lisbon from 14 to 16/12/2024, when its title is rendered, then it shows the place and the date range in the current culture's format (English and pt-BR cases).
+- [x] Given photos 7 h apart, when events are rebuilt, then they end up in different occasions.
+- [x] Given photos 1 h and 60 km apart, when events are rebuilt, then they end up in different occasions.
+- [x] Given `rebuild` run twice, when the results are compared, then they are identical.
+- [x] Given undated assets, when events are rebuilt, then they belong to no occasion.
+- [x] Given an occasion in Lisbon from 14 to 16/12/2024, when its title is rendered, then it shows the place and the date range in the current culture's format (English and pt-BR cases).
 
 ### Technical notes
 - `Sepiabox.Catalog/Events/EventBuilder.cs` (pure, testable logic), with persistence kept separate.

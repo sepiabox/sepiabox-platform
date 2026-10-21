@@ -15,6 +15,8 @@ Knowing that an occasion is a wedding uses the CLIP embeddings already stored (z
 - Counting (S-026): `aggregate.count: "events"` and `groupBy: "eventType"` ("How many weddings did we go to this year?"), with the answer sentence in both cultures.
 - Questions (S-025): the translator's context gains the occasion types and its prompt examples map them ("casamentos" → `wedding`).
 
+- Classifies every occasion that has no type, including those whose type a rebuild cleared because their assets changed (`events rebuild` keeps a type only when an occasion's assets are exactly the same, S-023, D-092). Occasions that already have a type are left as they are.
+
 ### Out of scope
 - Counting photos (S-026, already there).
 
