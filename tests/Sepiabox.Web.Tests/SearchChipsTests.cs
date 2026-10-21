@@ -86,6 +86,45 @@ public sealed class SearchChipsTests
     public void A_search_with_no_filters_has_no_chips() =>
         Assert.Empty(SearchChips.For(new SearchQuery(), Cultures.Text()));
 
+    [Theory]
+    [InlineData(Cultures.English, "Similar to a photo")]
+    [InlineData(Cultures.BrazilianPortuguese, "Parecidas com uma foto")]
+    public void Labels_a_search_for_similar_photos_and_removes_only_it(string culture, string expected)
+    {
+        using var _ = Cultures.Use(culture);
+        var query = SearchLinks.Similar(Ids.Of(1)) with { Filters = SearchLinks.Similar(Ids.Of(1)).Filters with { Years = [2020] } };
+
+        var chip = SearchChips.For(query, Cultures.Text()).Single(c => c.Label == expected);
+
+        Assert.Equal(new SearchQuery { Filters = new SearchFilters { Years = [2020] } }, chip.Without);
+    }
+
+    [Fact]
+    public void Removing_similar_photos_after_show_more_also_drops_the_limit_it_raised_but_not_one_set_apart()
+    {
+        var shown = SimilarSearch.More(SimilarSearch.More(SearchLinks.Similar(Ids.Of(1)))!)!;
+        var setApart = SearchLinks.Similar(Ids.Of(1)) with { Limit = 500 };
+
+        var withoutShown = SearchChips.For(shown, Cultures.Text()).Single(c => c.Label == "Similar to a photo").Without;
+        var withoutSetApart = SearchChips.For(setApart, Cultures.Text()).Single(c => c.Label == "Similar to a photo").Without;
+
+        Assert.Equal(1000, shown.Limit);
+        Assert.Equal(new SearchQuery(), withoutShown);
+        Assert.DoesNotContain(SearchChips.For(withoutShown, Cultures.Text()), c => c.Label.StartsWith("First", StringComparison.Ordinal));
+        // A limit the similar search did not raise is the query's own, and stays.
+        Assert.Equal(new SearchQuery { Limit = 500 }, withoutSetApart);
+    }
+
+    [Fact]
+    public void Refuses_a_translated_answer_with_similar_to_since_a_question_cannot_name_an_asset()
+    {
+        var json = $$$$"""{"filters": {"similarTo": {"assetId": "{{{{Ids.Of(1)}}}}"}}}""";
+
+        Assert.True(SearchQueryJson.TryParse(json, out _, out _));
+        Assert.Contains("similarTo", QuestionService.Validate(json), StringComparison.Ordinal);
+        Assert.Null(QuestionService.Validate("""{"filters": {"years": [2020]}}"""));
+    }
+
     private static string Single(SearchFilters filters, Microsoft.Extensions.Localization.IStringLocalizer<SharedResource> text) =>
         Assert.Single(SearchChips.For(new SearchQuery { Filters = filters }, text)).Label;
 }

@@ -28,6 +28,13 @@ public sealed record SearchQuery
     /// <see cref="Limit"/> do not apply to a count.
     /// </summary>
     public SearchAggregate? Aggregate { get; init; }
+
+    /// <summary>
+    /// How many assets a search returns at most: <see cref="Limit"/>, or fewer when <see cref="SearchFilters.SimilarTo"/>
+    /// asks for fewer (S-017).
+    /// </summary>
+    [JsonIgnore]
+    public int ResultLimit => Filters.SimilarTo is { } similar ? Math.Min(Limit, similar.EffectiveLimit) : Limit;
 }
 
 /// <summary>What to count and how to group it (S-026). Later stories add <c>count: "events"</c> and other groupings.</summary>
@@ -121,6 +128,13 @@ public sealed record SearchFilters
     /// </summary>
     public VisualFilter? Visual { get; init; }
 
+    /// <summary>
+    /// The assets most similar to one asset by their stored CLIP embeddings (S-017, D-086), the asset itself left out;
+    /// results are ordered by similarity, most similar first, and <see cref="SearchQuery.Sort"/> is not used. Not
+    /// combined with <see cref="Visual"/> or <see cref="SearchQuery.Aggregate"/>; questions never produce it.
+    /// </summary>
+    public SimilarToFilter? SimilarTo { get; init; }
+
     /// <summary>Only assets with no capture date; cannot be combined with a time filter.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UndatedOnly { get; init; }
@@ -144,7 +158,7 @@ public sealed record SearchFilters
         && Same(Years, other.Years) && Same(Months, other.Months) && OnThisDay == other.OnThisDay
         && Equals(Places, other.Places) && Same(SavedPlaces, other.SavedPlaces) && DistanceFrom == other.DistanceFrom
         && Same(Sources, other.Sources) && Equals(People, other.People) && UndatedOnly == other.UndatedOnly
-        && Visual == other.Visual;
+        && Visual == other.Visual && SimilarTo == other.SimilarTo;
 
     public override int GetHashCode() => HashCode.Combine(DateFrom, DateTo, OnThisDay, Places, UndatedOnly);
 
@@ -199,6 +213,22 @@ public sealed record VisualFilter
     public double? MinScore { get; init; }
 
     public double EffectiveMinScore => MinScore ?? DefaultMinScore;
+}
+
+/// <summary>"More photos similar to this one" (S-017, D-086): the photo's own embedding, nothing recomputed.</summary>
+public sealed record SimilarToFilter
+{
+    /// <summary>How many similar assets come back when <see cref="Limit"/> is absent.</summary>
+    public const int DefaultLimit = 50;
+
+    /// <summary>The asset's id: the SHA-256 of its content, in lower-case hex (D-014).</summary>
+    [JsonRequired]
+    public string AssetId { get; init; } = string.Empty;
+
+    /// <summary>The most similar assets returned, 1 to <see cref="SearchQuery.MaxLimit"/>; and never more than the query's limit.</summary>
+    public int? Limit { get; init; }
+
+    public int EffectiveLimit => Limit ?? DefaultLimit;
 }
 
 /// <summary>
@@ -368,6 +398,7 @@ public static class SearchQueryJson
             ?? List("filters.people.all", filters.People?.All, Name)
             ?? (filters.People is { All: null, IncludeMe: false } ? "filters.people needs all, includeMe or both." : null)
             ?? Visual(filters.Visual)
+            ?? SimilarTo(query)
             ?? (filters.UndatedOnly && filters.HasTimeFilter
                 ? "filters.undatedOnly cannot be combined with dateFrom, dateTo, years, months or onThisDay."
                 : null);
@@ -419,6 +450,29 @@ public static class SearchQueryJson
 
         return visual.MinScore is { } score && !(score >= 0 && score <= 1)
             ? "filters.visual.minScore must be between 0 and 1."
+            : null;
+    }
+
+    private static string? SimilarTo(SearchQuery query)
+    {
+        if (query.Filters.SimilarTo is not { } similar)
+        {
+            return null;
+        }
+
+        if (similar.AssetId.Length != 64 || !similar.AssetId.All(c => char.IsAsciiDigit(c) || c is >= 'a' and <= 'f'))
+        {
+            return "filters.similarTo.assetId must be an asset id: 64 lower-case hexadecimal characters.";
+        }
+
+        if (similar.Limit is < 1 or > SearchQuery.MaxLimit)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"filters.similarTo.limit must be between 1 and {SearchQuery.MaxLimit}.");
+        }
+
+        // One order by similarity at a time; and the most similar few are a list, not a number to count.
+        return query.Filters.Visual is not null ? "filters.similarTo cannot be combined with filters.visual."
+            : query.Aggregate is not null ? "filters.similarTo cannot be combined with aggregate: it lists the most similar assets."
             : null;
     }
 

@@ -210,16 +210,16 @@ public sealed class SearchService(
 
     /// <summary>
     /// The assets the query matches, sorted by capture date (undated last, then by id), without its limit. A query with
-    /// <see cref="SearchFilters.Visual"/> needs its vector: use <see cref="RunAsync{T}"/>.
+    /// <see cref="SearchFilters.Visual"/> or <see cref="SearchFilters.SimilarTo"/> needs its vector: use <see cref="RunAsync{T}"/>.
     /// </summary>
     /// <param name="query">The search.</param>
     /// <param name="places">The saved places its filters name, from <see cref="ResolvePlacesAsync"/>; none when they name none.</param>
     public IQueryable<Asset> Query(SearchQuery query, ResolvedPlaces? places = null)
     {
         ArgumentNullException.ThrowIfNull(query);
-        if (query.Filters.Visual is not null)
+        if (query.Filters.Visual is not null || query.Filters.SimilarTo is not null)
         {
-            throw new InvalidOperationException("A search by description is run with RunAsync, which computes its vector.");
+            throw new InvalidOperationException("A search by similarity is run with RunAsync, which finds its vector.");
         }
 
         var assets = Filtered(query, places);
@@ -239,13 +239,15 @@ public sealed class SearchService(
                 s.Asset.Id, s.Asset.Kind, s.Asset.CapturedAt, s.Asset.DurationSeconds, s.Asset.PlaceCity, s.Asset.PlaceCountry, 1 - s.Distance)),
             similarity,
             cancellationToken);
-        return new SearchResult([.. hits.Take(query.Limit)], hits.Count > query.Limit);
+        return new SearchResult([.. hits.Take(query.ResultLimit)], hits.Count > query.ResultLimit);
     }
 
     /// <summary>
-    /// Runs the query and returns up to its limit plus one row (so a caller can tell whether more matched), projected
-    /// by <paramref name="byDate"/> for a plain search or <paramref name="bySimilarity"/> for a search by description,
-    /// whose vector comes from the embedder (throws <see cref="VisualSearchUnavailableException"/> without one).
+    /// Runs the query and returns up to its <see cref="SearchQuery.ResultLimit"/> plus one row (so a caller can tell
+    /// whether more matched), projected by <paramref name="byDate"/> for a plain search or <paramref name="bySimilarity"/>
+    /// for a search by similarity: by description, whose vector comes from the embedder (throws
+    /// <see cref="VisualSearchUnavailableException"/> without one), or to an asset, whose vector is its own stored
+    /// embedding (throws <see cref="AssetNotAnalysedException"/> without one, S-017).
     /// </summary>
     public async Task<List<T>> RunAsync<T>(
         SearchQuery query,
@@ -259,44 +261,59 @@ public sealed class SearchService(
         ArgumentNullException.ThrowIfNull(bySimilarity);
         await ResolvePeopleAsync(query.Filters, cancellationToken);
         var places = await ResolvePlacesAsync(query.Filters, cancellationToken);
-        if (query.Filters.Visual is not { } visual)
+        var limit = query.ResultLimit;
+        float[] vector;
+        double? minScore;
+        if (query.Filters.SimilarTo is { } similar)
         {
-            return await byDate(Query(query, places)).Take(query.Limit + 1).ToListAsync(cancellationToken);
+            // The photo's own embedding (S-017, D-086), with no threshold: the most similar come back however close.
+            vector = await PgvectorSimilarity.StoredEmbeddingAsync(db, similar.AssetId, cancellationToken);
+            minScore = null;
+        }
+        else if (query.Filters.Visual is { } visual)
+        {
+            if (embedder is not { IsAvailable: true })
+            {
+                throw new VisualSearchUnavailableException("Search by description is not available: the CLIP text model is not loaded.");
+            }
+
+            vector = embedder.Embed(visual.Text);
+            minScore = visual.EffectiveMinScore;
+        }
+        else
+        {
+            return await byDate(Query(query, places)).Take(limit + 1).ToListAsync(cancellationToken);
         }
 
-        if (embedder is not { IsAvailable: true })
-        {
-            throw new VisualSearchUnavailableException("Search by description is not available: the CLIP text model is not loaded.");
-        }
-
-        var vector = embedder.Embed(visual.Text);
         // The index walk only for top results without other filters, on a pgvector that can walk it iteratively; with
-        // filters, for counting, or on an older pgvector, every candidate is ranked exactly (D-070).
+        // filters, for counting, or on an older pgvector, every candidate is ranked exactly (D-070). Leaving the asset
+        // itself out of a search for similar ones is not a filter that can hide matches from the walk: it is one row.
         var walkIndex = similarity == SimilarityMode.Ranking
-            && (query.Filters with { Visual = null }).IsEmpty
+            && (query.Filters with { Visual = null, SimilarTo = null }).IsEmpty
             && await PgvectorSimilarity.CanWalkIndexAsync(db, cancellationToken);
-        var ranked = PgvectorSimilarity.Rank(db, Filtered(query, places), vector, visual.EffectiveMinScore, exact: !walkIndex);
+        var ranked = PgvectorSimilarity.Rank(db, Filtered(query, places), vector, minScore, exact: !walkIndex);
         if (!walkIndex)
         {
-            return await bySimilarity(ranked).Take(query.Limit + 1).ToListAsync(cancellationToken);
+            return await bySimilarity(ranked).Take(limit + 1).ToListAsync(cancellationToken);
         }
 
         // One transaction, so the index settings apply to this query only and leave the pooled connection as it was.
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await PgvectorSimilarity.PrepareIndexWalkAsync(db, cancellationToken);
-        var rows = await bySimilarity(ranked).Take(query.Limit + 1).ToListAsync(cancellationToken);
+        var rows = await bySimilarity(ranked).Take(limit + 1).ToListAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return rows;
     }
 
     /// <summary>
     /// Counts what the query matches (S-026, D-075), exactly, with plain EF Core grouping (D-051). Null for a query with
-    /// a description: its matches depend on a similarity threshold, so no number is given in the MVP (D-070).
+    /// a description: its matches depend on a similarity threshold, so no number is given in the MVP (D-070); and for
+    /// one for similar photos, which are the most similar few, not a set to count (S-017).
     /// </summary>
     public async Task<CountResult?> CountAsync(SearchQuery query, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
-        if (query.Filters.Visual is not null)
+        if (query.Filters.Visual is not null || query.Filters.SimilarTo is not null)
         {
             return null;
         }
@@ -439,6 +456,13 @@ public sealed class SearchService(
         if (filters.People is { } people)
         {
             assets = WithPeople(assets, people);
+        }
+
+        // "More like this one" never shows this one (S-017).
+        if (filters.SimilarTo is { } similar)
+        {
+            var self = similar.AssetId;
+            assets = assets.Where(a => a.Id != self);
         }
 
         return assets;

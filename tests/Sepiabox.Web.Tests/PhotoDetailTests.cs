@@ -171,6 +171,58 @@ public sealed class PhotoDetailTests : LocalizedContext
         Assert.Equal("./", page.Find("p.back a").GetAttribute("href"));
     }
 
+    [Fact]
+    public void Links_to_the_photos_similar_to_it_when_it_has_an_embedding()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(5), new DateTime(2019, 12, 1)) with { HasEmbedding = true });
+
+        var link = page.Find("p.similar a");
+        Assert.Equal("Similar", link.TextContent);
+        Assert.Equal(SearchLinks.Timeline(SearchLinks.Similar(Ids.Of(5))), link.GetAttribute("href"));
+        Assert.DoesNotContain("not been analysed", page.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_the_photo_has_not_been_analysed_yet_when_it_has_no_embedding()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(5), new DateTime(2019, 12, 1)));
+
+        Assert.Equal("This photo has not been analysed yet.", page.Find("p.similar[role=status]").TextContent);
+        Assert.Empty(page.FindAll("p.similar a"));
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "This video has not been analysed yet.")]
+    [InlineData(Cultures.BrazilianPortuguese, "Este vídeo ainda não foi analisado.")]
+    public void Says_the_video_has_not_been_analysed_yet_when_a_video_has_no_embedding(string culture, string expected)
+    {
+        using var language = Cultures.Use(culture);
+
+        var page = RenderDetail(Details.Video(Ids.Of(2)));
+
+        Assert.Equal(expected, page.Find("p.similar").TextContent);
+    }
+
+    [Fact]
+    public void Says_the_photo_has_not_been_analysed_yet_in_brazilian_portuguese_when_it_has_no_embedding()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var page = RenderDetail(Details.Photo(Ids.Of(5), new DateTime(2019, 12, 1)));
+
+        Assert.Equal("Esta foto ainda não foi analisada.", page.Find("p.similar").TextContent);
+    }
+
+    [Fact]
+    public void Names_the_link_parecidas_in_brazilian_portuguese()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var page = RenderDetail(Details.Photo(Ids.Of(5), new DateTime(2019, 12, 1)) with { HasEmbedding = true });
+
+        Assert.Equal("Parecidas", page.Find("p.similar a").TextContent);
+    }
+
     private IRenderedComponent<PhotoDetail> RenderDetail(AssetDetail asset, int? pageNumber = null, string? query = null)
     {
         var library = new FakeLibrary();
