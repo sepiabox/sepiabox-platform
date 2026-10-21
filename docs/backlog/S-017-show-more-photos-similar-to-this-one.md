@@ -15,12 +15,15 @@
 - Similarity by photo region (S-041).
 
 ### Acceptance criteria
-- [ ] Given synthetic embeddings, then results come in order of similarity and do not include the photo itself.
-- [ ] Given an asset without an embedding, then the UI shows "This photo has not been analysed yet" ("Esta foto ainda não foi analisada" in pt-BR).
-- [ ] Given `similarTo` with `years=[2020]`, then only assets from 2020 come back.
+- [x] Given synthetic embeddings, then results come in order of similarity and do not include the photo itself. (`SimilarPhotosTests`, ranked through the index walk and exactly.)
+- [x] Given an asset without an embedding, then the UI shows "This photo has not been analysed yet" ("Esta foto ainda não foi analisada" in pt-BR). (`PhotoDetailTests`, `TimelineFilterTests`, and the real page in `SimilarPhotosTests`.)
+- [x] Given `similarTo` with `years=[2020]`, then only assets from 2020 come back. (`SimilarPhotosTests`, the service, the page and `POST /api/search`.)
 
 ### Technical notes
 - pgvector `<=>` operator.
+
+### Status
+- `doing` (2026-10-21): implemented and tested (D-086). The translator's output format and prompt are unchanged, so no golden recording is needed.
 
 ### Expected tests
 - Integration (PostgreSQL): order, exclusion, filters. bUnit: message when there is no embedding.

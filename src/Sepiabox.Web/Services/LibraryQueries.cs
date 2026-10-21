@@ -36,6 +36,9 @@ public sealed record AssetDetail(
 
     /// <summary>Where it was taken, as latitude and longitude, for "Save this place" (S-014); null without a location.</summary>
     public (double Latitude, double Longitude)? Location { get; init; }
+
+    /// <summary>Whether it has a CLIP embedding, so "Similar" can find photos like it (S-017).</summary>
+    public bool HasEmbedding { get; init; }
 }
 
 /// <summary>A person in a photo; <see cref="Name"/> is null while they are unnamed.</summary>
@@ -124,7 +127,9 @@ public interface ILibraryQueries
 
     /// <summary>
     /// The assets a valid search DSL query matches (S-013), in its order and up to its limit; with
-    /// <c>filters.visual</c>, most similar first, or <see cref="VisualSearchUnavailableException"/> without the text model.
+    /// <c>filters.visual</c>, most similar first, or <see cref="VisualSearchUnavailableException"/> without the text model;
+    /// with <c>filters.similarTo</c>, most similar first, or <see cref="AssetNotAnalysedException"/> when that asset has
+    /// no embedding (S-017).
     /// </summary>
     Task<SearchPage> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default);
 
@@ -242,6 +247,7 @@ public sealed class LibraryQueries(
             .Select(f => new AssetPerson(f.PersonId!.Value, f.Person!.Name))
             .Distinct()
             .ToListAsync(cancellationToken);
+        var hasEmbedding = await db.AssetEmbeddings.AnyAsync(e => e.AssetId == id && e.Model == PgvectorSimilarity.ModelKey, cancellationToken);
         string[] previewOrder = [DerivativeNames.Preview, DerivativeNames.Poster];
         var preview = previewOrder.FirstOrDefault(name => asset.Derivatives.Any(d => d.Name == name));
 
@@ -261,6 +267,7 @@ public sealed class LibraryQueries(
         {
             People = [.. people.OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
             Location = asset.Location is { } point ? (point.Y, point.X) : null,
+            HasEmbedding = hasEmbedding,
         };
     }
 
@@ -303,7 +310,8 @@ public sealed class LibraryQueries(
     {
         ArgumentNullException.ThrowIfNull(query);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        // A search by description comes back most similar first (S-016); any other by capture date.
+        // A search by description (S-016) or for photos like one (S-017) comes back most similar first; any other by
+        // capture date.
         var rows = await Search(db).RunAsync(
             query,
             assets => assets.Select(a => new TimelineItem(
@@ -312,7 +320,7 @@ public sealed class LibraryQueries(
                 s.Asset.Id, s.Asset.Kind, s.Asset.CapturedAt, s.Asset.Derivatives.Any(d => d.Name == DerivativeNames.Thumbnail),
                 s.Asset.DurationSeconds)),
             cancellationToken: cancellationToken);
-        return new SearchPage([.. rows.Take(query.Limit)], rows.Count > query.Limit);
+        return new SearchPage([.. rows.Take(query.ResultLimit)], rows.Count > query.ResultLimit);
     }
 
     public async Task<IReadOnlyList<PersonSummary>> GetPeopleAsync(CancellationToken cancellationToken = default)

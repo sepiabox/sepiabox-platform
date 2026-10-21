@@ -834,4 +834,19 @@
   <data name="Places_CannotMove" xml:space="preserve">
     <value>Um lugar não pode ser movido: apague-o e salve-o de novo no lugar certo.</value>
   </data>
+  <data name="Detail_Similar" xml:space="preserve">
+    <value>Parecidas</value>
+  </data>
+  <data name="Similar_NotAnalysed" xml:space="preserve">
+    <value>Esta foto ainda não foi analisada.</value>
+  </data>
+  <data name="Similar_UnknownAsset" xml:space="preserve">
+    <value>Esta foto não está na biblioteca.</value>
+  </data>
+  <data name="Search_MostSimilarToPhoto" xml:space="preserve">
+    <value>Mais parecidas com a foto</value>
+  </data>
+  <data name="Chip_SimilarTo" xml:space="preserve">
+    <value>Parecidas com uma foto</value>
+  </data>
 </root>

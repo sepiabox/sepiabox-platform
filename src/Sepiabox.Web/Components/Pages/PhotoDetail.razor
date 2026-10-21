@@ -59,6 +59,16 @@
                 <p class="save-place"><a href="places?asset=@_asset.Id">@Text["Detail_SavePlace"]</a></p>
             }
 
+            @* "More photos similar to this one" (S-017) compares the photo's own embedding: until it has one, say so. *@
+            @if (_asset.HasEmbedding)
+            {
+                <p class="similar"><a href="@SearchLinks.Timeline(SearchLinks.Similar(_asset.Id))">@Text["Detail_Similar"]</a></p>
+            }
+            else
+            {
+                <p class="similar muted" role="status">@Text["Similar_NotAnalysed"]</p>
+            }
+
             @if (_asset.People.Count > 0)
             {
                 @* A named person links to their photos; an unnamed one to their page, to be named (S-021). *@

@@ -881,4 +881,22 @@
   <data name="Places_CannotMove" xml:space="preserve">
     <value>A place cannot be moved: delete it and save it again at the right spot.</value>
   </data>
+  <data name="Detail_Similar" xml:space="preserve">
+    <value>Similar</value>
+    <comment>Link on the photo detail to the photos most similar to it (S-017).</comment>
+  </data>
+  <data name="Similar_NotAnalysed" xml:space="preserve">
+    <value>This photo has not been analysed yet.</value>
+    <comment>Shown instead of "Similar" while the photo has no CLIP embedding, and on a search for photos similar to it.</comment>
+  </data>
+  <data name="Similar_UnknownAsset" xml:space="preserve">
+    <value>This photo is not in the library.</value>
+  </data>
+  <data name="Search_MostSimilarToPhoto" xml:space="preserve">
+    <value>Most similar to the photo</value>
+    <comment>Heading of the photos most similar to one photo, most similar first.</comment>
+  </data>
+  <data name="Chip_SimilarTo" xml:space="preserve">
+    <value>Similar to a photo</value>
+  </data>
 </root>

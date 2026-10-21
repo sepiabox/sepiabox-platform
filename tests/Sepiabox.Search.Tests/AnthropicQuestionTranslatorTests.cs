@@ -344,8 +344,26 @@ public sealed class AnthropicQuestionTranslatorTests
     public void Counts_the_29_optional_properties_the_api_reported_in_the_dsl_schema_itself()
     {
         using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
+        var schema = JsonNode.Parse(stream)!;
+        // The schema the API saw then, before S-017 added the filters a question cannot express.
+        foreach (var field in QuestionPrompt.NotFromQuestions)
+        {
+            schema["properties"]!["filters"]!["properties"]!.AsObject().Remove(field);
+        }
 
-        Assert.Equal(29, OptionalProperties(JsonNode.Parse(stream)));
+        Assert.Equal(29, OptionalProperties(schema));
+    }
+
+    [Fact]
+    public void Leaves_similar_to_out_of_the_output_format_when_the_dsl_has_it()
+    {
+        using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
+        var dsl = JsonNode.Parse(stream)!;
+        var output = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
+
+        Assert.NotNull(dsl["properties"]!["filters"]!["properties"]!["similarTo"]);
+        Assert.Null(output["properties"]!["filters"]!["properties"]!["similarTo"]);
+        Assert.Equal(["similarTo"], QuestionPrompt.NotFromQuestions);
     }
 
     [Fact]

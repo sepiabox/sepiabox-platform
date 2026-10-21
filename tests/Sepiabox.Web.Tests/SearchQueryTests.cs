@@ -65,6 +65,14 @@ public sealed class SearchQueryTests
         { """{"filters": {"visual": {"text": "snow", "model": "clip"}}}""", "model" },
         { """{"filters": {"visual": "snow"}}""", "visual" },
         { """{"filters": {"people": ["Ana"]}}""", "people" },
+        { """{"filters": {"similarTo": {}}}""", "similarTo" },
+        { """{"filters": {"similarTo": {"assetId": "ABC"}}}""", "similarTo.assetId" },
+        { """{"filters": {"similarTo": {"assetId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}}}""", "similarTo.assetId" },
+        { """{"filters": {"similarTo": {"assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "limit": 0}}}""", "similarTo.limit" },
+        { """{"filters": {"similarTo": {"assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "limit": 1001}}}""", "similarTo.limit" },
+        { """{"filters": {"similarTo": {"assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "minScore": 0.5}}}""", "minScore" },
+        { """{"filters": {"similarTo": {"assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "visual": {"text": "snow"}}}""", "filters.visual" },
+        { """{"filters": {"similarTo": {"assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, "aggregate": {"count": "assets"}}""", "aggregate" },
         { """{"filters": {"places": {"region": "Porto"}}}""", "region" },
         { """{"filters": {"onThisDay": {"days": 1}}}""", "days" },
         { """{"filters": {"months": [13]}}""", "filters.months" },
@@ -138,6 +146,23 @@ public sealed class SearchQueryTests
     }
 
     [Fact]
+    public void Parses_a_search_for_similar_photos_with_the_default_limit_when_none_is_given()
+    {
+        var id = new string('a', 64);
+        Assert.True(SearchQueryJson.TryParse($$$"""{"filters": {"similarTo": {"assetId": "{{{id}}}"}, "years": [2020]}}""", out var query, out var error), error);
+
+        Assert.Equal(id, query.Filters.SimilarTo!.AssetId);
+        Assert.Null(query.Filters.SimilarTo.Limit);
+        Assert.Equal(SimilarToFilter.DefaultLimit, query.ResultLimit);
+        Assert.True(SearchQueryJson.TryParse($$$"""{"filters": {"similarTo": {"assetId": "{{{id}}}", "limit": 500}}, "limit": 20}""", out var fewer, out _));
+        // The query's own limit still caps it.
+        Assert.Equal(20, fewer.ResultLimit);
+        Assert.True(SearchQueryJson.TryDecode(SearchQueryJson.Encode(query), out var decoded, out _));
+        Assert.Equal(query, decoded);
+        Assert.NotEqual(query, query with { Filters = query.Filters with { SimilarTo = new SimilarToFilter { AssetId = new string('b', 64) } } });
+    }
+
+    [Fact]
     public void Refuses_a_description_longer_than_the_limit()
     {
         var json = "{\"filters\": {\"visual\": {\"text\": \"" + new string('a', SearchQueryJson.MaxTextLength + 1) + "\"}}}";
@@ -190,6 +215,14 @@ public sealed class SearchQueryTests
         """{"filters": {"visual": {"text": "snow", "model": "clip"}}}""",
         """{"filter": {}}""",
         """{"filters": {"people": ["Ana"]}}""",
+        // Similar photos (S-017).
+        """{"filters": {"similarTo": {"assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "limit": 10}, "years": [2020]}}""",
+        """{"filters": {"similarTo": {"assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}""",
+        """{"filters": {"similarTo": {}}}""",
+        """{"filters": {"similarTo": {"assetId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}}}""",
+        """{"filters": {"similarTo": {"assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "limit": 0}}}""",
+        """{"filters": {"similarTo": {"assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "limit": 1001}}}""",
+        """{"filters": {"similarTo": {"assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "minScore": 0.5}}}""",
         """{"filters": {"places": {"region": "Porto"}}}""",
         """{"filters": {"months": [13]}}""",
         """{"filters": {"kinds": ["audio"]}}""",

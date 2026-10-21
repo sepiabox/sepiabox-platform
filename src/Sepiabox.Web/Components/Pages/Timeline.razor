@@ -67,11 +67,11 @@ else if (_filtered)
     {
         <p class="empty">@Text["Search_NoResults"] <a href="./">@Text["Filter_Clear"]</a></p>
     }
-    else if (_query?.Filters.Visual is not null)
+    else if (_query?.Filters.Visual is not null || _query?.Filters.SimilarTo is not null)
     {
-        @* Most similar first (S-016): grouping by month would hide that order. *@
+        @* Most similar first (S-016, S-017): grouping by month would hide that order. *@
         <section class="month">
-            <h2>@Text["Search_MostSimilar"]</h2>
+            <h2>@(_query.Filters.SimilarTo is null ? Text["Search_MostSimilar"] : Text["Search_MostSimilarToPhoto"])</h2>
             <ul class="grid">
                 @foreach (var item in _results.Items)
                 {
@@ -275,6 +275,11 @@ else
             {
                 // A saved place that is not there (any more), or "from home" with no home (S-014).
                 _peopleMessage = PlacesSearch.Message(unknown, Text);
+            }
+            catch (AssetNotAnalysedException missing)
+            {
+                // "Similar" on a photo without an embedding yet, or a link to one no longer in the catalog (S-017).
+                _peopleMessage = missing.Exists ? Text["Similar_NotAnalysed"] : Text["Similar_UnknownAsset"];
             }
         }
         else if (!_invalid)

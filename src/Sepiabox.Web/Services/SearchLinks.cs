@@ -27,6 +27,10 @@ public static class SearchLinks
     /// <summary>The "On this day" shortcut: today's day and month in every earlier year.</summary>
     public static SearchQuery OnThisDay { get; } = new() { Filters = new SearchFilters { OnThisDay = new OnThisDayFilter() } };
 
+    /// <summary>"More photos similar to this one" (S-017): the photo's own embedding, the default number of results.</summary>
+    public static SearchQuery Similar(string assetId) =>
+        new() { Filters = new SearchFilters { SimilarTo = new SimilarToFilter { AssetId = assetId } } };
+
     /// <summary>The timeline with these filters (or this count, S-026); the plain timeline when there are none.</summary>
     public static string Timeline(SearchQuery? query) =>
         query is null || (query.Filters.IsEmpty && query.Aggregate is null) ? "./" : "./?" + QueryParameter + "=" + SearchQueryJson.Encode(query);

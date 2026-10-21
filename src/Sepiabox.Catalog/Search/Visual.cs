@@ -24,6 +24,20 @@ public interface IQueryEmbedder
 public sealed class VisualSearchUnavailableException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
+/// A search for photos similar to an asset (S-017, D-086) cannot run: the asset has no stored CLIP embedding yet
+/// (<see cref="Exists"/>), or the catalog has no such asset.
+/// </summary>
+public sealed class AssetNotAnalysedException(string assetId, bool exists)
+    : Exception(exists
+        ? $"Asset {assetId} has not been analysed yet: it has no embedding to compare with."
+        : $"No asset has the id {assetId}.")
+{
+    public string AssetId { get; } = assetId;
+
+    public bool Exists { get; } = exists;
+}
+
+/// <summary>
 /// One asset and its cosine distance to a description (similarity is 1 − distance). Built with property initialisers,
 /// which EF Core can keep composing on, unlike a constructor.
 /// </summary>
@@ -56,30 +70,50 @@ public static class PgvectorSimilarity
     /// </summary>
     /// <param name="db">The catalog, for the embeddings.</param>
     /// <param name="assets">The candidates, already filtered.</param>
-    /// <param name="embedding">The description's embedding, L2-normalized.</param>
-    /// <param name="minScore">The least cosine similarity kept.</param>
+    /// <param name="embedding">The description's embedding, or a photo's own (S-017), L2-normalized.</param>
+    /// <param name="minScore">The least cosine similarity kept; null keeps every asset with an embedding.</param>
     /// <param name="exact">
     /// Order by the exact distance of every candidate, never through the HNSW index. For a search with other filters:
     /// the index walk can miss matches the filters keep, even with an iterative scan, because an HNSW graph does not
     /// reach every point from the others (D-070).
     /// </param>
-    public static IQueryable<ScoredAsset> Rank(CatalogDbContext db, IQueryable<Asset> assets, float[] embedding, double minScore, bool exact = false)
+    public static IQueryable<ScoredAsset> Rank(CatalogDbContext db, IQueryable<Asset> assets, float[] embedding, double? minScore, bool exact = false)
     {
         ArgumentNullException.ThrowIfNull(db);
         var vector = new Vector(embedding);
-        var maxDistance = 1 - minScore;
         var scored = assets
             .Join(
                 db.AssetEmbeddings.Where(e => e.Model == ModelKey),
                 a => a.Id,
                 e => e.AssetId,
-                (a, e) => new ScoredAsset { Asset = a, Distance = e.Embedding.CosineDistance(vector) })
-            .Where(s => s.Distance <= maxDistance);
+                (a, e) => new ScoredAsset { Asset = a, Distance = e.Embedding.CosineDistance(vector) });
+        if (minScore is { } least)
+        {
+            var maxDistance = 1 - least;
+            scored = scored.Where(s => s.Distance <= maxDistance);
+        }
+
         // The index serves only ORDER BY the distance expression itself; adding zero keeps the order and rules it out.
         // The id only breaks ties, so equal distances come back in the same order every time.
         return exact
             ? scored.OrderBy(s => s.Distance + 0.0).ThenBy(s => s.Asset.Id)
             : scored.OrderBy(s => s.Distance).ThenBy(s => s.Asset.Id);
+    }
+
+    /// <summary>
+    /// The asset's own stored CLIP embedding, for "more photos similar to this one" (S-017): nothing is recomputed.
+    /// Throws <see cref="AssetNotAnalysedException"/> when it has none, or there is no such asset.
+    /// </summary>
+    public static async Task<float[]> StoredEmbeddingAsync(CatalogDbContext db, string assetId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var stored = await db.AssetEmbeddings.AsNoTracking()
+            .Where(e => e.AssetId == assetId && e.Model == ModelKey)
+            .Select(e => e.Embedding)
+            .FirstOrDefaultAsync(cancellationToken);
+        return stored is not null
+            ? stored.ToArray()
+            : throw new AssetNotAnalysedException(assetId, await db.Assets.AnyAsync(a => a.Id == assetId, cancellationToken));
     }
 
     /// <summary>The first pgvector version with iterative index scans (<c>hnsw.iterative_scan</c>).</summary>

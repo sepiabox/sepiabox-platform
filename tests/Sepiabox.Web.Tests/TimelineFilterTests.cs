@@ -209,6 +209,43 @@ public sealed class TimelineFilterTests : LocalizedContext
         Assert.NotEmpty(page.FindAll("form.filters"));
     }
 
+    [Fact]
+    public void Shows_the_photos_similar_to_one_most_similar_first_without_month_groups()
+    {
+        var older = new TimelineItem(Ids.Of(32), AssetKinds.Photo, new DateTime(2018, 1, 1), true, null);
+        var library = Use(new FakeLibrary { SearchResults = new SearchPage([older, LisbonInDecember], HasMore: false) });
+        var query = SearchLinks.Similar(Ids.Of(30));
+
+        var page = RenderAt(SearchLinks.Timeline(query));
+
+        Assert.Equal(query, Assert.Single(library.Searches));
+        Assert.Equal(["Most similar to the photo"], page.FindAll("section.month h2").Select(h => h.TextContent));
+        // In the order the search gave, not by date.
+        Assert.Equal([$"photos/{Ids.Of(32)}", $"photos/{Ids.Of(31)}"], page.FindAll("ul.grid a").Select(a => a.GetAttribute("href")![..71]));
+        Assert.Contains("Similar to a photo", page.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_the_photo_has_not_been_analysed_yet_when_a_search_for_similar_ones_finds_no_embedding()
+    {
+        Use(new FakeLibrary { SearchFailure = new AssetNotAnalysedException(Ids.Of(30), exists: true) });
+
+        var page = RenderAt(SearchLinks.Timeline(SearchLinks.Similar(Ids.Of(30))));
+
+        Assert.Contains("This photo has not been analysed yet.", page.Find("[role=alert]").TextContent, StringComparison.Ordinal);
+        Assert.Empty(page.FindAll("ul.grid"));
+    }
+
+    [Fact]
+    public void Says_the_photo_is_not_in_the_library_when_a_search_for_similar_ones_names_no_asset()
+    {
+        Use(new FakeLibrary { SearchFailure = new AssetNotAnalysedException(Ids.Of(30), exists: false) });
+
+        var page = RenderAt(SearchLinks.Timeline(SearchLinks.Similar(Ids.Of(30))));
+
+        Assert.Contains("This photo is not in the library.", page.Find("[role=alert]").TextContent, StringComparison.Ordinal);
+    }
+
     private FakeLibrary Use(FakeLibrary library)
     {
         Services.AddSingleton<ILibraryQueries>(library);

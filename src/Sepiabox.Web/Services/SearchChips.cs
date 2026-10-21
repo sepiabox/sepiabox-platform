@@ -96,6 +96,11 @@ public static class SearchChips
             Add(text["Chip_Visual", visual.Text], f with { Visual = null });
         }
 
+        if (f.SimilarTo is not null)
+        {
+            Add(text["Chip_SimilarTo"], f with { SimilarTo = null });
+        }
+
         if (f.UndatedOnly)
         {
             Add(text["Chip_Undated"], f with { UndatedOnly = false });

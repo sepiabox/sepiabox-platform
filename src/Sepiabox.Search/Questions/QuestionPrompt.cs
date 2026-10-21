@@ -44,8 +44,15 @@ public static class QuestionPrompt
     private static readonly Lazy<string> s_schema = new(LoadSchema);
 
     /// <summary>
+    /// The DSL's filters a question cannot express, left out of the output format (D-086): <c>similarTo</c> names an
+    /// asset by its id, which only the photo detail page knows (S-017).
+    /// </summary>
+    public static readonly IReadOnlyList<string> NotFromQuestions = ["similarTo"];
+
+    /// <summary>
     /// The DSL schema (<c>docs/schemas/search.v1.json</c>, the same file) as the output format: unchanged apart from
-    /// the keywords structured outputs does not support, which <see cref="QueryValidator"/> checks afterwards; the
+    /// the keywords structured outputs does not support, which <see cref="QueryValidator"/> checks afterwards, and the
+    /// filters a question cannot express (<see cref="NotFromQuestions"/>); the
     /// date fields' pattern becomes <c>format: date</c>; and, to stay under <see cref="MaxOptionalProperties"/>, every
     /// object nested inside the root's objects (such as <c>filters.places</c>) has all its properties required but
     /// nullable, so an answer writes null where it would leave a field out and <see cref="WithoutNulls"/> removes them
@@ -256,13 +263,21 @@ public static class QuestionPrompt
     }
 
     /// <summary>
-    /// <paramref name="schema"/> as structured outputs takes it: supported keywords kept, the constraints the DSL checks
-    /// afterwards dropped, the date pattern turned into <c>format: date</c>; any other keyword, an unsupported format or
+    /// <paramref name="schema"/> as structured outputs takes it: the filters questions cannot express removed, supported
+    /// keywords kept, the constraints the DSL checks afterwards dropped, the date pattern turned into <c>format: date</c>; any other keyword, an unsupported format or
     /// an <c>additionalProperties</c> other than false throws, so a change to the schema fails a test, not production.
     /// </summary>
     internal static string OutputSchema(JsonNode schema)
     {
         ArgumentNullException.ThrowIfNull(schema);
+        if (schema["properties"]?["filters"]?["properties"] is JsonObject filters)
+        {
+            foreach (var field in NotFromQuestions)
+            {
+                filters.Remove(field);
+            }
+        }
+
         Simplify(schema);
         RequireNested(schema, depth: 0);
         return schema.ToJsonString();
