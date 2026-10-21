@@ -4,8 +4,9 @@ namespace Sepiabox.Web.Services;
 
 /// <summary>
 /// A place's coordinates as the family types or pastes them (S-014): latitude then longitude, such as "38.72, -9.13"
-/// from a map. With decimal points, a comma or semicolon separates the two; without, a decimal comma is allowed and a
-/// space or semicolon separates them ("38,72 -9,13").
+/// from a map. With decimal points, a comma, a semicolon or, when there is neither, a space separates the two
+/// ("38.72 -9.13"); without decimal points, a decimal comma is allowed and a space or semicolon separates them
+/// ("38,72 -9,13").
 /// </summary>
 public static class PlaceCoordinates
 {
@@ -17,7 +18,7 @@ public static class PlaceCoordinates
         }
 
         var value = text.Trim();
-        string[] parts = value.Contains('.', StringComparison.Ordinal)
+        string[] parts = value.Contains('.', StringComparison.Ordinal) && value.IndexOfAny([',', ';']) >= 0
             ? value.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             : value.Contains(';', StringComparison.Ordinal)
                 ? value.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)

@@ -87,6 +87,8 @@ public sealed class SavedPlacesFilterTests
     [InlineData(" 38.72,-9.13 ", 38.72, -9.13)]
     [InlineData("38.72; -9.13", 38.72, -9.13)]
     [InlineData("38,72 -9,13", 38.72, -9.13)]
+    [InlineData("38.72 -9.13", 38.72, -9.13)]
+    [InlineData("  38.72   -9.13 ", 38.72, -9.13)]
     [InlineData("38,72; -9,13", 38.72, -9.13)]
     [InlineData("-22.9068, -43.1729", -22.9068, -43.1729)]
     public void Reads_coordinates_typed_or_pasted_from_a_map(string text, double latitude, double longitude)
