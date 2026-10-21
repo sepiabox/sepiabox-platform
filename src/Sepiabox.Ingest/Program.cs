@@ -169,6 +169,11 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");
     }
 
+    foreach (var warning in result.Warnings)
+    {
+        Console.WriteLine($"  warning: {warning.Path}: {warning.Reason}");
+    }
+
     return result.Problems.Count == 0 ? 0 : 1;
 }
 

@@ -47,9 +47,17 @@ public static class ManifestMerge
 
     /// <summary>
     /// How far after its blob was written a manifest's <c>facesDetectedAt</c> may be (D-081): beyond it, the computer's
-    /// clock was ahead when it ran <c>process</c>, and the time is not trusted.
+    /// clock was ahead when it ran <c>process</c>, and the time is not trusted. More than <c>upload</c>'s 5-minute clock
+    /// check plus a second of rounding, so faces found by a clock it accepts are always trusted.
     /// </summary>
-    public static readonly TimeSpan DetectionTolerance = TimeSpan.FromMinutes(5);
+    public static readonly TimeSpan DetectionTolerance = TimeSpan.FromMinutes(6);
+
+    /// <summary>The manifest as if it had not looked for faces: no faces, version or detection time.</summary>
+    public static Manifest WithoutFaces(Manifest manifest)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        return manifest with { FacesProcessed = false, Faces = [], FacesVersion = null, FacesDetectedAt = null };
+    }
 
     /// <summary>Whether <paramref name="manifest"/>'s detection time is plausible for a blob written at <paramref name="writtenAt"/>.</summary>
     public static bool DetectionTrusted(Manifest manifest, DateTimeOffset? writtenAt)
@@ -70,7 +78,7 @@ public static class ManifestMerge
         if (!DetectionTrusted(stored, writtenAt))
         {
             // Found "in the future": a clock that was ahead, so these faces may be older than the erase.
-            stored = stored with { FacesProcessed = false, Faces = [], FacesVersion = null, FacesDetectedAt = null };
+            stored = WithoutFaces(stored);
         }
 
         return Merge(stored, stored with

@@ -43,7 +43,11 @@ public sealed class ManifestStore(IManifestValidator validator)
         return await WriteAsync(
             manifests,
             incoming.Id,
-            (stored, _) => stored is null ? ManifestMerge.Canonical(incoming) : ManifestMerge.Merge(stored, incoming),
+            // Stored faces said to be found after their blob was written are not trusted (D-081): dropped before the
+            // merge, so they cannot outlive an erase that has not reached this blob yet.
+            (stored, written) => stored is null
+                ? ManifestMerge.Canonical(incoming)
+                : ManifestMerge.Merge(ManifestMerge.DetectionTrusted(stored, written) ? stored : ManifestMerge.WithoutFaces(stored), incoming),
             cancellationToken);
     }
 

@@ -120,6 +120,23 @@ public sealed class FacesErasureMergeTests
         Assert.Single(ManifestMerge.EraseFaces(stored, ErasedAt).Faces);
     }
 
+    [Theory]
+    [InlineData(-60, true)]
+    [InlineData(0, true)]
+    [InlineData(5 * 60, true)]
+    [InlineData((6 * 60) - 1, true)]
+    [InlineData(6 * 60, true)]
+    [InlineData(7 * 60, false)]
+    [InlineData(24 * 60 * 60, false)]
+    public void Trusts_a_detection_time_up_to_six_minutes_after_the_blob_was_written(int secondsAfter, bool trusted)
+    {
+        var written = ErasedAt;
+        var manifest = WithFaces("HD da Ana", written.AddSeconds(secondsAfter));
+
+        Assert.Equal(trusted, ManifestMerge.DetectionTrusted(manifest, written));
+        Assert.True(ManifestMerge.DetectionTolerance > TimeSpan.FromMinutes(5).Add(TimeSpan.FromSeconds(1)));
+    }
+
     [Fact]
     public void Erases_faces_found_at_the_very_moment_of_the_erase()
     {

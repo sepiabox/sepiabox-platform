@@ -33,7 +33,11 @@ public sealed record UploadResult(
     int Skipped,
     long Bytes,
     TimeSpan Duration,
-    IReadOnlyList<ScanProblem> Problems);
+    IReadOnlyList<ScanProblem> Problems)
+{
+    /// <summary>Assets uploaded with something left out, such as faces stamped by a clock that was ahead (D-081).</summary>
+    public IReadOnlyList<ScanProblem> Warnings { get; init; } = [];
+}
 
 /// <summary>
 /// Sends a <c>process</c> work folder to Blob Storage (D-004, D-005): each asset's original, then its
@@ -103,7 +107,8 @@ public static class UploadCommand
             options.Destination == UploadDestination.Azure ? AccessTier.Cold : (AccessTier?)null,
             validator,
             new ManifestStore(validator),
-            bytesSent);
+            bytesSent,
+            clock ?? TimeProvider.System);
 
         var stopwatch = Stopwatch.StartNew();
         var manifestFiles = Directory.GetFiles(manifestFolder, "*.json");
@@ -113,7 +118,10 @@ public static class UploadCommand
             run.UploadAssetAsync);
 
         return new UploadResult(
-            manifestFiles.Length, run.Uploaded, run.Skipped, run.Bytes, stopwatch.Elapsed, [.. run.Problems.OrderBy(p => p.Path)]);
+            manifestFiles.Length, run.Uploaded, run.Skipped, run.Bytes, stopwatch.Elapsed, [.. run.Problems.OrderBy(p => p.Path)])
+        {
+            Warnings = [.. run.Warnings.OrderBy(p => p.Path)],
+        };
     }
 
     /// <summary>
@@ -186,7 +194,8 @@ public static class UploadCommand
         AccessTier? originalTier,
         IManifestValidator validator,
         ManifestStore manifestStore,
-        IProgress<long>? bytesSent)
+        IProgress<long>? bytesSent,
+        TimeProvider clock)
     {
         private int _uploaded;
         private int _skipped;
@@ -196,6 +205,7 @@ public static class UploadCommand
         public int Skipped => _skipped;
         public long Bytes => _bytes;
         public List<ScanProblem> Problems { get; } = [];
+        public List<ScanProblem> Warnings { get; } = [];
 
         public async ValueTask UploadAssetAsync(string manifestPath, CancellationToken cancellationToken)
         {
@@ -399,6 +409,17 @@ public static class UploadCommand
             {
                 Interlocked.Increment(ref _skipped);
                 return;
+            }
+
+            // The clock was checked at the start: faces "found" later than now were stamped by a clock that was ahead when
+            // process ran, so their time cannot be compared with an erase (D-081).
+            if (manifest.FacesDetectedAt is { } detected && detected > clock.GetUtcNow() + ManifestMerge.DetectionTolerance)
+            {
+                manifest = ManifestMerge.WithoutFaces(manifest);
+                lock (Warnings)
+                {
+                    Warnings.Add(new ScanProblem(path, $"its faces say they were found at {detected:u}, after now: this computer's clock was ahead when process ran, so they were left out (run process --faces into a fresh work folder)"));
+                }
             }
 
             var result = await manifestStore.WriteMergedAsync(containers.Manifests, manifest, cancellationToken);

@@ -79,6 +79,37 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.Empty(await BlobNames(BlobLayout.OriginalsContainer));
     }
 
+    [Theory]
+    [InlineData(7, false)]
+    [InlineData(24 * 60, false)]
+    [InlineData(5, true)]
+    public async Task Leaves_out_faces_found_later_than_now_with_a_warning(int minutesAhead, bool kept)
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        var manifest = Assert.Single(Process());
+        // process ran with the computer's clock ahead; it has been set right since.
+        var path = Path.Combine(_work.Path, "manifests", manifest.Id + ".json");
+        ManifestJson.WriteFile(path, manifest with
+        {
+            FacesProcessed = true,
+            FacesVersion = 1,
+            Faces = [Sepiabox.Tests.Shared.TestManifests.Face(0.9)],
+            FacesDetectedAt = DateTimeOffset.UtcNow.AddMinutes(minutesAhead),
+        });
+
+        var result = await Upload();
+
+        Assert.Empty(result.Problems);
+        var stored = ManifestJson.Deserialize((await Service.GetBlobContainerClient(BlobLayout.ManifestsContainer)
+            .GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id)).DownloadContentAsync()).Value.Content.ToString());
+        Assert.Equal(kept ? 1 : 0, stored.Faces.Count);
+        Assert.Equal(kept ? 0 : 1, result.Warnings.Count);
+        if (!kept)
+        {
+            Assert.Contains("this computer's clock was ahead when process ran", result.Warnings[0].Reason, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public async Task Uploads_with_a_clock_a_few_minutes_off()
     {

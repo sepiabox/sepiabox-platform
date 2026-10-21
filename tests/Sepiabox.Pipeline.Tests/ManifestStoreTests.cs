@@ -229,6 +229,33 @@ public sealed class ManifestStoreTests : IAsyncLifetime
         Assert.Equal(["HD da Ana"], stored.Sources.Select(s => s.Name));
     }
 
+    [Theory]
+    [InlineData(24 * 60, false)]
+    [InlineData(7, false)]
+    [InlineData(3, true)]
+    public async Task Drops_stored_faces_stamped_by_a_clock_ahead_when_another_upload_merges_before_the_sweep(int minutesAhead, bool kept)
+    {
+        // An older upload stored faces found by a computer whose clock was ahead when it ran process; then recognition
+        // was turned off, and another computer uploads the same photo before the sweep reaches the blob.
+        await _store.WriteMergedAsync(
+            _container,
+            Photo(Source("HD da Ana", "a.jpg")) with
+            {
+                FacesProcessed = true,
+                Faces = [Face(0.9)],
+                FacesDetectedAt = DateTimeOffset.UtcNow.AddMinutes(minutesAhead),
+            },
+            CancellationToken.None);
+
+        var result = await _store.WriteMergedAsync(_container, Photo(Source("HD do Jonathas", "b.jpg")), CancellationToken.None);
+
+        Assert.Equal(ManifestWriteStatus.Written, result.Status);
+        var stored = await StoredAsync();
+        Assert.Equal(kept, stored.FacesProcessed);
+        Assert.Equal(kept ? 1 : 0, stored.Faces.Count);
+        Assert.Equal(["HD da Ana", "HD do Jonathas"], stored.Sources.Select(s => s.Name));
+    }
+
     [Fact]
     public async Task Creates_nothing_when_erasing_a_manifest_that_is_not_stored()
     {
