@@ -14,6 +14,14 @@ public static class QuestionPrompt
     /// <summary>The longest question accepted; a question is a sentence or two.</summary>
     public const int MaxQuestionLength = 500;
 
+    /// <summary>
+    /// The most optional properties (not in their object's <c>required</c>) the output format may have, over every object:
+    /// beyond it the API refuses every request with 400 invalid_request_error, "Schemas contains too many optional
+    /// parameters (29), which would make grammar compilation inefficient. Reduce the number of optional parameters in your
+    /// tool schemas (limit: 24)." (the S-014 recording run, D-085).
+    /// </summary>
+    public const int MaxOptionalProperties = 24;
+
     // What structured outputs supports (Anthropic's JSON schema limitations): anything else in the DSL schema must be
     // either a constraint the DSL's own validation checks afterwards (dropped here) or a reason to fail at once, never
     // a keyword sent to the API, which would refuse every question.
@@ -32,7 +40,10 @@ public static class QuestionPrompt
     /// <summary>
     /// The DSL schema (<c>docs/schemas/search.v1.json</c>, the same file) as the output format: unchanged apart from
     /// the keywords structured outputs does not support, which <see cref="QueryValidator"/> checks afterwards; the
-    /// date fields' pattern becomes <c>format: date</c>.
+    /// date fields' pattern becomes <c>format: date</c>; and, to stay under <see cref="MaxOptionalProperties"/>, every
+    /// object nested inside the root's objects (such as <c>filters.places</c>) has all its properties required but
+    /// nullable, so an answer writes null where it would leave a field out and <see cref="WithoutNulls"/> removes them
+    /// (D-085). The root and its objects (<c>filters</c>, <c>aggregate</c>) keep their optional properties.
     /// </summary>
     public static string OutputSchemaJson => s_schema.Value;
 
@@ -45,7 +56,8 @@ public static class QuestionPrompt
         language of the app.
 
         Answer with one JSON object in the search DSL v1 and nothing else. Every filter you set must match (AND); the
-        values inside one list match when any of them does (OR). Leave out every field the question does not ask for.
+        values inside one list match when any of them does (OR). Leave out every field the question does not ask for;
+        inside a nested object (such as "places" or "distanceFrom"), write such a field as null.
 
         {
           "filters": {
@@ -246,7 +258,134 @@ public static class QuestionPrompt
     {
         ArgumentNullException.ThrowIfNull(schema);
         Simplify(schema);
+        RequireNested(schema, depth: 0);
         return schema.ToJsonString();
+    }
+
+    /// <summary>
+    /// The answer with every property whose value is null removed, at any depth: what the output format writes as null
+    /// (D-085) is what the DSL leaves out. An answer without nulls, and text that is not a JSON object (for the
+    /// validator to refuse), come back exactly as written.
+    /// </summary>
+    public static string WithoutNulls(string answer)
+    {
+        ArgumentNullException.ThrowIfNull(answer);
+        JsonNode? node;
+        try
+        {
+            node = JsonNode.Parse(answer);
+        }
+        catch (JsonException)
+        {
+            return answer;
+        }
+
+        if (node is not JsonObject)
+        {
+            return answer;
+        }
+
+        return RemoveNulls(node) ? node.ToJsonString() : answer;
+    }
+
+    // True when something was removed.
+    private static bool RemoveNulls(JsonNode? node)
+    {
+        var removed = false;
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var (key, child) in obj.ToList())
+                {
+                    if (child is null)
+                    {
+                        obj.Remove(key);
+                        removed = true;
+                    }
+                    else
+                    {
+                        removed |= RemoveNulls(child);
+                    }
+                }
+
+                break;
+            case JsonArray array:
+                foreach (var child in array)
+                {
+                    removed |= RemoveNulls(child);
+                }
+
+                break;
+        }
+
+        return removed;
+    }
+
+    // Objects (schemas with "properties") two levels down or deeper get every property required, and those that were
+    // optional become nullable: "type": [t, "null"], or anyOf with {"type": "null"} for a schema without a type. Only an
+    // object's own properties are made required; their nested objects are walked with one more level.
+    private static void RequireNested(JsonNode? node, int depth)
+    {
+        switch (node)
+        {
+            case JsonObject obj when obj["properties"] is JsonObject properties:
+                if (depth >= 2)
+                {
+                    var required = obj["required"] is JsonArray existing
+                        ? existing.Select(r => r!.GetValue<string>()).ToHashSet(StringComparer.Ordinal)
+                        : [];
+                    foreach (var (name, property) in properties.ToList())
+                    {
+                        if (!required.Contains(name) && property is JsonObject schema)
+                        {
+                            properties[name] = Nullable(schema);
+                        }
+                    }
+
+                    obj["required"] = new JsonArray([.. properties.Select(p => (JsonNode?)JsonValue.Create(p.Key))]);
+                }
+
+                foreach (var (_, property) in properties)
+                {
+                    RequireNested(property, depth + 1);
+                }
+
+                break;
+            case JsonObject obj:
+                foreach (var (key, child) in obj)
+                {
+                    if (key is "items" or "anyOf" or "allOf" or "$defs")
+                    {
+                        RequireNested(child, depth);
+                    }
+                }
+
+                break;
+            case JsonArray array:
+                foreach (var child in array)
+                {
+                    RequireNested(child, depth);
+                }
+
+                break;
+        }
+    }
+
+    private static JsonObject Nullable(JsonObject schema)
+    {
+        switch (schema["type"])
+        {
+            case JsonValue type:
+                schema["type"] = new JsonArray(type.GetValue<string>(), "null");
+                return schema;
+            case JsonArray types when !types.Any(t => t?.GetValue<string>() == "null"):
+                types.Add("null");
+                return schema;
+            case JsonArray:
+                return schema;
+            default:
+                return new JsonObject { ["anyOf"] = new JsonArray(schema, new JsonObject { ["type"] = "null" }) };
+        }
     }
 
     // A schema object is checked keyword by keyword; a "properties" or "$defs" map is walked without checking its keys,

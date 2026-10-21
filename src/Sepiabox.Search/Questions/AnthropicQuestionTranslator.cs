@@ -160,7 +160,8 @@ public sealed partial class AnthropicQuestionTranslator : IQuestionTranslator, I
                 var reply = await _client.Messages.Create(BuildRequest(cleaned, context, previous), cancellationToken);
                 usage = usage.Add(Usage(reply));
                 stopReason = reply.StopReason?.Raw();
-                answer = Text(reply);
+                // The output format writes null for what the DSL leaves out (D-085).
+                answer = Text(reply) is { } text ? QuestionPrompt.WithoutNulls(text) : null;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
