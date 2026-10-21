@@ -345,10 +345,15 @@ public sealed class AnthropicQuestionTranslatorTests
     {
         using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
         var schema = JsonNode.Parse(stream)!;
-        // The schema the API saw then, before S-017 added the filters a question cannot express.
+        // The schema the API saw then, before S-017 and S-028 added what a question cannot express.
         foreach (var field in QuestionPrompt.NotFromQuestions)
         {
             schema["properties"]!["filters"]!["properties"]!.AsObject().Remove(field);
+        }
+
+        foreach (var field in QuestionPrompt.AggregateNotFromQuestions)
+        {
+            schema["properties"]!["aggregate"]!["properties"]!.AsObject().Remove(field);
         }
 
         Assert.Equal(29, OptionalProperties(schema));
@@ -363,7 +368,21 @@ public sealed class AnthropicQuestionTranslatorTests
 
         Assert.NotNull(dsl["properties"]!["filters"]!["properties"]!["similarTo"]);
         Assert.Null(output["properties"]!["filters"]!["properties"]!["similarTo"]);
-        Assert.Equal(["similarTo"], QuestionPrompt.NotFromQuestions);
+        Assert.Equal(["similarTo", "sourceCount"], QuestionPrompt.NotFromQuestions);
+    }
+
+    [Fact]
+    public void Leaves_the_storage_filters_out_of_the_output_format_when_the_dsl_has_them()
+    {
+        using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
+        var dsl = JsonNode.Parse(stream)!;
+        var output = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
+
+        Assert.NotNull(dsl["properties"]!["filters"]!["properties"]!["sourceCount"]);
+        Assert.Null(output["properties"]!["filters"]!["properties"]!["sourceCount"]);
+        Assert.NotNull(dsl["properties"]!["aggregate"]!["properties"]!["sum"]);
+        Assert.Null(output["properties"]!["aggregate"]!["properties"]!["sum"]);
+        Assert.Equal(["sum"], QuestionPrompt.AggregateNotFromQuestions);
     }
 
     [Fact]

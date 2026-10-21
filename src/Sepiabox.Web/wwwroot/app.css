@@ -715,3 +715,41 @@ main {
     border-left: 3px solid var(--cyanotype);
     background: var(--white);
 }
+
+/* The storage page (S-028): tables like a count's ranking, and the assets under them in the timeline's grid. */
+.storage-totals table,
+.storage-totals th,
+.storage-totals td {
+    border-collapse: collapse;
+}
+
+.storage-totals th,
+.storage-totals td {
+    padding: 4px 16px 4px 0;
+    text-align: left;
+}
+
+.storage-totals td {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.storage-totals tfoot th,
+.storage-totals tfoot td {
+    border-top: 1px solid var(--mat);
+    font-weight: 700;
+}
+
+.storage-assets {
+    margin: 0 0 8px;
+    padding: 0;
+    list-style: none;
+}
+
+.storage-assets p {
+    margin: 4px 0 0;
+}
+
+.storage-assets .size {
+    font-variant-numeric: tabular-nums;
+}

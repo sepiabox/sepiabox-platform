@@ -86,7 +86,10 @@ public sealed record SearchHit(
 public sealed record SearchResult(IReadOnlyList<SearchHit> Hits, bool HasMore);
 
 /// <summary>One group of a count: its key (a year, a month 1-12, a kind, a city or a source; null for none) and its size.</summary>
-public sealed record CountGroup(string? Key, int Count);
+/// <param name="Key">The year, month, kind, city, source or person; null for none.</param>
+/// <param name="Count">How many assets.</param>
+/// <param name="Bytes">Their total size when the query asked for <see cref="SearchSum.Bytes"/>; otherwise null.</param>
+public sealed record CountGroup(string? Key, int Count, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] long? Bytes = null);
 
 /// <summary>
 /// A count (S-026): the matching assets' total, the groups shown when grouped, and, for a query with a time filter,
@@ -97,6 +100,9 @@ public sealed record CountResult(int Total, IReadOnlyList<CountGroup> Groups, in
 {
     /// <summary>Every group, shown or not.</summary>
     public int AllGroups => GroupCount ?? Groups.Count;
+
+    /// <summary>The matching assets' total size in bytes, when the query asked for <see cref="SearchSum.Bytes"/> (S-028).</summary>
+    public long? Bytes { get; init; }
 }
 
 /// <summary>
@@ -327,17 +333,21 @@ public sealed class SearchService(
         {
             null => [],
             SearchGroupBy.Year => Numbered(await assets.GroupBy(a => a.CapturedAt == null ? (int?)null : a.CapturedAt.Value.Year)
-                .Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken), g => (g.Key, g.Count)),
+                .Select(g => new { g.Key, Count = g.Count(), Bytes = g.Sum(a => a.SizeBytes) }).ToListAsync(cancellationToken),
+                g => (g.Key, g.Count, g.Bytes)),
             SearchGroupBy.Month => Numbered(await assets.GroupBy(a => a.CapturedAt == null ? (int?)null : a.CapturedAt.Value.Month)
-                .Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken), g => (g.Key, g.Count)),
-            SearchGroupBy.Kind => [.. (await assets.GroupBy(a => a.Kind).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
-                .Select(g => new CountGroup(g.Key, g.Count))],
-            SearchGroupBy.City => [.. (await assets.GroupBy(a => a.PlaceCity).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
-                .Select(g => new CountGroup(g.Key, g.Count))],
-            // An asset found on two drives counts once in each; twice on one drive, once.
-            SearchGroupBy.Source => [.. (await assets.SelectMany(a => a.Sources.Select(s => new { a.Id, s.Name })).Distinct()
-                .GroupBy(x => x.Name).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
-                .Select(g => new CountGroup(g.Key, g.Count))],
+                .Select(g => new { g.Key, Count = g.Count(), Bytes = g.Sum(a => a.SizeBytes) }).ToListAsync(cancellationToken),
+                g => (g.Key, g.Count, g.Bytes)),
+            SearchGroupBy.Kind => [.. (await assets.GroupBy(a => a.Kind)
+                .Select(g => new { g.Key, Count = g.Count(), Bytes = g.Sum(a => a.SizeBytes) }).ToListAsync(cancellationToken))
+                .Select(g => new CountGroup(g.Key, g.Count, g.Bytes))],
+            SearchGroupBy.City => [.. (await assets.GroupBy(a => a.PlaceCity)
+                .Select(g => new { g.Key, Count = g.Count(), Bytes = g.Sum(a => a.SizeBytes) }).ToListAsync(cancellationToken))
+                .Select(g => new CountGroup(g.Key, g.Count, g.Bytes))],
+            // An asset found on two drives counts once in each, with its whole size in each; twice on one drive, once.
+            SearchGroupBy.Source => [.. (await assets.SelectMany(a => a.Sources.Select(s => new { a.Id, a.SizeBytes, s.Name })).Distinct()
+                .GroupBy(x => x.Name).Select(g => new { g.Key, Count = g.Count(), Bytes = g.Sum(x => x.SizeBytes) }).ToListAsync(cancellationToken))
+                .Select(g => new CountGroup(g.Key, g.Count, g.Bytes))],
             // Named people only, once per photo; the people the filters name are in every photo, so they are left out
             // ("who did I take the most photos with" is never "me", D-080).
             SearchGroupBy.Person => [.. (await db.Faces.AsNoTracking()
@@ -351,6 +361,13 @@ public sealed class SearchService(
                 .Select(g => new CountGroup(g.Key, g.Count))],
             _ => throw new InvalidOperationException($"Unknown groupBy '{aggregate.GroupBy}'."),
         };
+        // Sizes are only given when asked for (S-028); the groups were summed in the same queries as their counts.
+        var summed = aggregate.Sum == SearchSum.Bytes;
+        if (!summed)
+        {
+            groups = [.. groups.Select(g => g with { Bytes = null })];
+        }
+
         int? undated = query.Filters.HasTimeFilter
             ? await Filter(db.Assets.AsNoTracking(), query.Filters.UndatedInstead, places).CountAsync(cancellationToken)
             : null;
@@ -359,7 +376,8 @@ public sealed class SearchService(
         var ordered = aggregate.Top is null && aggregate.GroupBy is SearchGroupBy.Year or SearchGroupBy.Month or SearchGroupBy.Kind
             ? InKeyOrder(groups).Take(SearchAggregate.MaxTop)
             : Largest(groups).Take(aggregate.EffectiveTop);
-        return new CountResult(total, [.. ordered], undated, groups.Count);
+        long? bytes = summed ? await assets.SumAsync(a => (long?)a.SizeBytes, cancellationToken) ?? 0 : null;
+        return new CountResult(total, [.. ordered], undated, groups.Count) { Bytes = bytes };
     }
 
     // Years and months in order, photos before videos, "no date" last.
@@ -368,8 +386,8 @@ public sealed class SearchService(
             .ThenBy(g => int.TryParse(g.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : int.MaxValue)
             .ThenBy(g => g.Key, StringComparer.Ordinal);
 
-    private static List<CountGroup> Numbered<T>(IEnumerable<T> groups, Func<T, (int? Key, int Count)> select) =>
-        [.. groups.Select(select).Select(g => new CountGroup(g.Key?.ToString(CultureInfo.InvariantCulture), g.Count))];
+    private static List<CountGroup> Numbered<T>(IEnumerable<T> groups, Func<T, (int? Key, int Count, long Bytes)> select) =>
+        [.. groups.Select(select).Select(g => new CountGroup(g.Key?.ToString(CultureInfo.InvariantCulture), g.Count, g.Bytes))];
 
     // Largest first; between equal counts, years and months in order and names alphabetically, "none" last.
     private static IEnumerable<CountGroup> Largest(IEnumerable<CountGroup> groups) =>
@@ -451,6 +469,19 @@ public sealed class SearchService(
         {
             var lowered = sources.Select(s => s.ToLowerInvariant()).ToList();
             assets = assets.Where(a => a.Sources.Any(s => lowered.Contains(s.Name.ToLower())));
+        }
+
+        if (filters.SourceCount is { } sourceCount)
+        {
+            // Different source names, so a file found twice on one drive is in one source (as groupBy source counts it).
+            if (sourceCount.Eq is { } exactly)
+            {
+                assets = assets.Where(a => a.Sources.Select(s => s.Name).Distinct().Count() == exactly);
+            }
+            else if (sourceCount.Gte is { } atLeast)
+            {
+                assets = assets.Where(a => a.Sources.Select(s => s.Name).Distinct().Count() >= atLeast);
+            }
         }
 
         if (filters.People is { } people)

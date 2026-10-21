@@ -1,0 +1,153 @@
+@page "/storage"
+@inject ILibraryQueries Library
+@using System.Globalization
+@using Sepiabox.Catalog.Search
+@* What the library takes up and where it comes from (S-028): static server rendering, plain tables and links. Totals are
+   the search DSL's counts with sizes (S-026); every number links to the items it counts. *@
+
+<PageTitle>@Text["Storage_Heading"] · Sepiabox</PageTitle>
+
+<h1 class="page-heading">@Text["Storage_Heading"]</h1>
+<p class="hint muted">@Text["Storage_Intro"]</p>
+
+@if (_report is null)
+{
+    <p class="muted">@Text["Timeline_Loading"]</p>
+}
+else if (_report.Rows.Count == 0)
+{
+    <p class="empty">@Text["Storage_Empty"]</p>
+}
+else
+{
+    <section class="storage-totals">
+        <h2>@Text["Storage_Totals"]</h2>
+        <table class="ranking">
+            <thead>
+                <tr>
+                    <th scope="col">@Text["Storage_Year"]</th>
+                    <th scope="col">@Text["Filter_Photos"]</th>
+                    <th scope="col">@Text["Storage_Size"]</th>
+                    <th scope="col">@Text["Filter_Videos"]</th>
+                    <th scope="col">@Text["Storage_Size"]</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var year in Years)
+                {
+                    var photos = Row(AssetKinds.Photo, year);
+                    var videos = Row(AssetKinds.Video, year);
+                    <tr>
+                        <th scope="row">
+                            @if (year is { } value)
+                            {
+                                <a href="@SearchLinks.Timeline(Items(null, value))">@value.ToString(CultureInfo.InvariantCulture)</a>
+                            }
+                            else
+                            {
+                                @Text["NoDate"]
+                            }
+                        </th>
+                        <td>@Number(photos?.Count)</td>
+                        <td>@Size(photos?.Bytes)</td>
+                        <td>@Number(videos?.Count)</td>
+                        <td>@Size(videos?.Bytes)</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th scope="row">@Text["Storage_Total"]</th>
+                    <td>@Number(Sum(AssetKinds.Photo, r => r.Count))</td>
+                    <td>@Size(Sum(AssetKinds.Photo, r => r.Bytes))</td>
+                    <td>@Number(Sum(AssetKinds.Video, r => r.Count))</td>
+                    <td>@Size(Sum(AssetKinds.Video, r => r.Bytes))</td>
+                </tr>
+            </tfoot>
+        </table>
+    </section>
+
+    <section class="storage-one-source">
+        <h2>@Text["Storage_OneSource"]</h2>
+        @if (_report.OneSource == 0)
+        {
+            <p class="muted">@Text["Storage_NoneOneSource"]</p>
+        }
+        else
+        {
+            <p>@Summary(_report.OneSource, _report.OneSourceBytes) <a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Eq = 1 }))">@Text["Storage_ShowThem"]</a></p>
+        }
+    </section>
+
+    <section class="storage-several-sources">
+        <h2>@Text["Storage_Several"]</h2>
+        @if (_report.SeveralSources == 0)
+        {
+            <p class="muted">@Text["Storage_NoneSeveral"]</p>
+        }
+        else
+        {
+            <p>@Summary(_report.SeveralSources, _report.SeveralSourcesBytes) <a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Gte = 2 }))">@Text["Storage_ShowThem"]</a></p>
+            <ul class="grid storage-assets">
+                @foreach (var asset in _report.InSeveralSources)
+                {
+                    <li>
+                        <MediaCard Item="asset.Item" Href="@($"photos/{asset.Id}")" />
+                        <p class="small muted">@Text["Storage_InSources", string.Join(", ", asset.Sources)]</p>
+                    </li>
+                }
+            </ul>
+            @if (_report.SeveralSources > _report.InSeveralSources.Count)
+            {
+                <p class="muted small shown">@Text["Storage_FirstShown", _report.InSeveralSources.Count.ToString("N0", CultureInfo.CurrentCulture)]</p>
+            }
+        }
+    </section>
+
+    <section class="storage-largest">
+        <h2>@Text["Storage_Largest"]</h2>
+        @if (_report.LargestVideos.Count == 0)
+        {
+            <p class="muted">@Text["Storage_NoVideos"]</p>
+        }
+        else
+        {
+            <ol class="grid storage-assets">
+                @foreach (var video in _report.LargestVideos)
+                {
+                    <li>
+                        <MediaCard Item="video.Item" Href="@($"photos/{video.Id}")" />
+                        <p class="small"><span class="size">@ByteSizes.Format(video.Bytes)</span> <span class="muted">@Text.DateOrNoDate(video.CapturedAt)</span></p>
+                    </li>
+                }
+            </ol>
+        }
+    </section>
+}
+
+@code {
+    private StorageReport? _report;
+
+    protected override async Task OnInitializedAsync() => _report = await Library.GetStorageAsync();
+
+    // Newest year first, the undated last.
+    private IEnumerable<int?> Years =>
+        _report!.Rows.Select(r => r.Year).Distinct().OrderBy(y => y is null).ThenByDescending(y => y);
+
+    private StorageRow? Row(string kind, int? year) => _report!.Rows.FirstOrDefault(r => r.Kind == kind && r.Year == year);
+
+    private long Sum(string kind, Func<StorageRow, long> select) => _report!.Rows.Where(r => r.Kind == kind).Sum(select);
+
+    private static string Number(long? count) => (count ?? 0).ToString("N0", CultureInfo.CurrentCulture);
+
+    private static string Size(long? bytes) => bytes is { } value ? ByteSizes.Format(value) : "–";
+
+    private string Summary(int count, long bytes) =>
+        Text[count == 1 ? "Storage_Summary_One" : "Storage_Summary_Other", count.ToString("N0", CultureInfo.CurrentCulture), ByteSizes.Format(bytes)];
+
+    private static SearchQuery Items(string? kind, int year) =>
+        new() { Filters = new SearchFilters { Years = [year], Kinds = kind is null ? null : [kind] } };
+
+    private static SearchQuery WithSourceCount(SourceCountFilter count) =>
+        new() { Filters = new SearchFilters { SourceCount = count } };
+}

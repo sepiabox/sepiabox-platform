@@ -6,7 +6,7 @@ using Sepiabox.Web.Localization;
 namespace Sepiabox.Web.Services;
 
 /// <summary>One row of a ranking: its label in the current culture, its count, and the search for its items (null when none).</summary>
-public sealed record CountRow(string Label, int Count, SearchQuery? Items);
+public sealed record CountRow(string Label, int Count, SearchQuery? Items, long? Bytes = null);
 
 /// <summary>
 /// The words of a counting answer (S-026) in the current culture (D-050): "312 videos in 2019" in English,
@@ -55,7 +55,7 @@ public static class CountAnswers
         ArgumentNullException.ThrowIfNull(text);
         var list = query with { Aggregate = null };
         var f = list.Filters;
-        return [.. count.Groups.Select(g => query.Aggregate?.GroupBy switch
+        return [.. count.Groups.Select(g => RowWith(g, query.Aggregate?.GroupBy switch
         {
             SearchGroupBy.Year when Number(g.Key) is { } year => new CountRow(g.Key!, g.Count, list with { Filters = f with { Years = [year] } }),
             SearchGroupBy.Month when Number(g.Key) is { } month => new CountRow(MonthName(month), g.Count, list with { Filters = f with { Months = [month] } }),
@@ -70,8 +70,15 @@ public static class CountAnswers
                 Filters = f with { People = (f.People ?? new PeopleFilter()) with { All = [.. f.People?.All ?? [], g.Key!] } },
             }),
             _ => new CountRow(g.Key ?? string.Empty, g.Count, list with { Filters = f with { Sources = [g.Key!] } }),
-        })];
+        }))];
     }
+
+    // The size comes with the group when the query asked for it (S-028).
+    private static CountRow RowWith(CountGroup group, CountRow row) => row with { Bytes = group.Bytes };
+
+    /// <summary>"Used by 312 videos in 2019": what the big size is the size of.</summary>
+    public static string SizeSentence(SearchQuery query, int count, IStringLocalizer<SharedResource> text) =>
+        text["Count_TakenBy", Sentence(query, count, text)];
 
     /// <summary>"3 items have no date and cannot match the dates asked."</summary>
     public static string Undated(int count, IStringLocalizer<SharedResource> text)

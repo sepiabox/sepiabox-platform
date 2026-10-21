@@ -1,0 +1,442 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
+using Json.Schema;
+using Microsoft.Extensions.DependencyInjection;
+using Sepiabox.Catalog;
+using Sepiabox.Catalog.Search;
+using Sepiabox.Web.Components.Pages;
+using Sepiabox.Web.Components.Search;
+using Sepiabox.Web.Services;
+
+namespace Sepiabox.Web.Tests;
+
+/// <summary>The storage DSL (S-028, D-093): <c>aggregate.sum</c> and <c>filters.sourceCount</c>, parsed, validated, and shown as chips.</summary>
+public sealed class StorageDslTests
+{
+    private static readonly Lazy<JsonSchema> s_schema = new(() =>
+        JsonSchema.FromText(File.ReadAllText(Path.Combine(SourceTree.Root, "docs", "schemas", "search.v1.json"))));
+
+    [Theory]
+    [InlineData("""{"filters":{"sourceCount":{"eq":1}}}""", null)]
+    [InlineData("""{"filters":{"sourceCount":{"gte":2}}}""", null)]
+    [InlineData("""{"filters":{"kinds":["video"],"years":[2019]},"aggregate":{"count":"assets","sum":"bytes"}}""", null)]
+    [InlineData("""{"filters":{},"aggregate":{"count":"assets","groupBy":"year","sum":"bytes"}}""", null)]
+    [InlineData("""{"filters":{"sourceCount":{}}}""", "filters.sourceCount needs exactly one of eq or gte.")]
+    [InlineData("""{"filters":{"sourceCount":{"eq":1,"gte":2}}}""", "filters.sourceCount needs exactly one of eq or gte.")]
+    [InlineData("""{"filters":{"sourceCount":{"eq":0}}}""", "filters.sourceCount.eq and gte must be between 1 and 1000.")]
+    [InlineData("""{"filters":{"sourceCount":{"gte":1001}}}""", "filters.sourceCount.eq and gte must be between 1 and 1000.")]
+    [InlineData("""{"filters":{"sourceCount":{"eq":null}}}""", "filters.sourceCount needs exactly one of eq or gte.")]
+    [InlineData("""{"filters":{"sourceCount":{"lte":2}}}""", "The search is not valid search DSL v1 JSON at $.filters.sourceCount.lte: an unknown or repeated field, a null, a value of the wrong type, or malformed JSON.")]
+    [InlineData("""{"filters":{},"aggregate":{"count":"assets","sum":"duration"}}""", "aggregate.sum must be 'bytes'.")]
+    [InlineData("""{"filters":{},"aggregate":{"count":"assets","groupBy":"person","sum":"bytes"}}""", "aggregate.sum cannot be added up per person: a photo with several people has one size.")]
+    public void Validates_the_source_count_and_the_sum(string json, string? expected)
+    {
+        var valid = SearchQueryJson.TryParse(json, out var query, out var error);
+
+        Assert.Equal(expected is null, valid);
+        if (expected is null)
+        {
+            Assert.True(SearchQueryJson.TryParse(SearchQueryJson.Serialize(query), out var again, out _));
+            Assert.Equal(query, again);
+            Assert.True(SearchQueryJson.TryDecode(SearchQueryJson.Encode(query), out var decoded, out _));
+            Assert.Equal(query, decoded);
+        }
+        else
+        {
+            Assert.Equal(expected, error);
+        }
+    }
+
+    [Theory]
+    [InlineData("""{"filters":{"sourceCount":{"eq":1}}}""", true)]
+    [InlineData("""{"filters":{"sourceCount":{"gte":2}}}""", true)]
+    [InlineData("""{"filters":{},"aggregate":{"count":"assets","sum":"bytes"}}""", true)]
+    [InlineData("""{"filters":{"sourceCount":{"eq":0}}}""", false)]
+    [InlineData("""{"filters":{"sourceCount":{"lte":2}}}""", false)]
+    [InlineData("""{"filters":{},"aggregate":{"count":"assets","sum":"duration"}}""", false)]
+    public void The_schema_file_agrees_on_the_new_fields(string json, bool valid)
+    {
+        var result = s_schema.Value.Evaluate(JsonNode.Parse(json), new EvaluationOptions { OutputFormat = OutputFormat.List });
+
+        Assert.Equal(valid, result.IsValid);
+    }
+
+    [Fact]
+    public void Queries_with_different_source_counts_are_different()
+    {
+        var one = new SearchFilters { SourceCount = new SourceCountFilter { Eq = 1 } };
+
+        Assert.NotEqual(one, new SearchFilters { SourceCount = new SourceCountFilter { Gte = 1 } });
+        Assert.Equal(one, new SearchFilters { SourceCount = new SourceCountFilter { Eq = 1 } });
+        Assert.False(one.IsEmpty);
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, 1, null, "In only one source")]
+    [InlineData(Cultures.English, 3, null, "In 3 sources")]
+    [InlineData(Cultures.English, null, 2, "In 2 or more sources")]
+    [InlineData(Cultures.BrazilianPortuguese, 1, null, "Em apenas uma fonte")]
+    [InlineData(Cultures.BrazilianPortuguese, 3, null, "Em 3 fontes")]
+    [InlineData(Cultures.BrazilianPortuguese, null, 2, "Em 2 ou mais fontes")]
+    public void Shows_the_source_count_as_a_removable_chip(string culture, int? eq, int? gte, string label)
+    {
+        using var language = Cultures.Use(culture);
+        var query = new SearchQuery
+        {
+            Filters = new SearchFilters { Kinds = ["video"], SourceCount = new SourceCountFilter { Eq = eq, Gte = gte } },
+        };
+
+        var chips = SearchChips.For(query, Cultures.Text());
+
+        Assert.Equal(label, chips[1].Label);
+        Assert.Null(chips[1].Without.Filters.SourceCount);
+        Assert.Equal(["video"], chips[1].Without.Filters.Kinds!);
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, null, "Size")]
+    [InlineData(Cultures.English, "year", "Size by year")]
+    [InlineData(Cultures.BrazilianPortuguese, "year", "Tamanho por ano")]
+    public void Names_a_size_count_in_its_chip(string culture, string? groupBy, string label)
+    {
+        using var language = Cultures.Use(culture);
+        var query = new SearchQuery { Aggregate = new SearchAggregate { GroupBy = groupBy, Sum = SearchSum.Bytes } };
+
+        Assert.Equal(label, Assert.Single(SearchChips.For(query, Cultures.Text())).Label);
+    }
+}
+
+public sealed class ByteSizesTests
+{
+    [Theory]
+    [InlineData(Cultures.English, 0L, "0 B")]
+    [InlineData(Cultures.English, 1023L, "1,023 B")]
+    [InlineData(Cultures.English, 1024L, "1 KB")]
+    [InlineData(Cultures.English, 1536L, "1.5 KB")]
+    [InlineData(Cultures.English, 5L * 1024 * 1024, "5 MB")]
+    [InlineData(Cultures.English, 2_576_980_378L, "2.4 GB")]
+    [InlineData(Cultures.BrazilianPortuguese, 2_576_980_378L, "2,4 GB")]
+    [InlineData(Cultures.English, 3L * 1024 * 1024 * 1024 * 1024, "3 TB")]
+    [InlineData(Cultures.English, -5L, "0 B")]
+    public void Formats_a_size_for_people_in_the_current_culture(string culture, long bytes, string expected)
+    {
+        using var language = Cultures.Use(culture);
+
+        Assert.Equal(expected, ByteSizes.Format(bytes));
+    }
+}
+
+/// <summary>A size count on the answer card (S-028).</summary>
+public sealed class SizeAnswerTests : LocalizedContext
+{
+    private static readonly SearchQuery Videos2019 = new()
+    {
+        Filters = new SearchFilters { Kinds = ["video"], Years = [2019] },
+        Aggregate = new SearchAggregate { Sum = SearchSum.Bytes },
+    };
+
+    [Theory]
+    [InlineData(Cultures.English, "2.4 GB", "Used by 312 videos in 2019")]
+    [InlineData(Cultures.BrazilianPortuguese, "2,4 GB", "Ocupado por 312 vídeos em 2019")]
+    public void Shows_the_size_as_the_number_and_what_it_is_the_size_of(string culture, string number, string sentence)
+    {
+        using var language = Cultures.Use(culture);
+
+        var card = Render<AnswerCard>(p => p.Add(c => c.Query, Videos2019).Add(c => c.Count, new CountResult(312, [], null) { Bytes = 2_576_980_378L }));
+
+        Assert.Equal(number, card.Find(".number").TextContent);
+        Assert.Equal(sentence, card.Find(".sentence").TextContent);
+    }
+
+    [Fact]
+    public void Adds_a_size_column_to_a_ranking_only_when_sizes_were_asked_for()
+    {
+        var query = Videos2019 with { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Year, Sum = SearchSum.Bytes } };
+        var count = new CountResult(5, [new CountGroup("2019", 3, 3000), new CountGroup("2020", 2, 2048)], null) { Bytes = 5048 };
+
+        var sized = Render<AnswerCard>(p => p.Add(c => c.Query, query).Add(c => c.Count, count));
+        var plain = Render<AnswerCard>(p => p
+            .Add(c => c.Query, query with { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Year } })
+            .Add(c => c.Count, new CountResult(5, [new CountGroup("2019", 3), new CountGroup("2020", 2)], null)));
+
+        Assert.Equal(["Group", "Count", "Size"], sized.FindAll("thead th").Select(h => h.TextContent));
+        Assert.Equal(["2019", "3", "2.9 KB"], sized.FindAll("tbody tr")[0].Children.Select(c => c.TextContent));
+        Assert.Equal(["2020", "2", "2 KB"], sized.FindAll("tbody tr")[1].Children.Select(c => c.TextContent));
+        Assert.Equal(["Group", "Count"], plain.FindAll("thead th").Select(h => h.TextContent));
+    }
+}
+
+/// <summary>The storage page (S-028) on a fake library.</summary>
+public sealed class StoragePageTests : LocalizedContext
+{
+    private static readonly StorageReport Report = new(
+        [
+            new StorageRow("photo", 2019, 12, 12_000),
+            new StorageRow("video", 2019, 2, 8 * 1024 * 1024),
+            new StorageRow("video", 2020, 1, 3 * 1024 * 1024),
+            new StorageRow("photo", null, 4, 4_000),
+        ],
+        OneSource: 15,
+        OneSourceBytes: 20_000,
+        SeveralSources: 4,
+        SeveralSourcesBytes: 5_000,
+        InSeveralSources: [new StorageAsset(Ids.Of(1), "photo", new DateTime(2019, 7, 14, 10, 0, 0), null, 1_000, true, ["HD da Ana", "Takeout 2026"])],
+        LargestVideos: [new StorageAsset(Ids.Of(2), "video", new DateTime(2019, 12, 24, 20, 0, 0), 62, 8 * 1024 * 1024, true, ["HD da Ana"])]);
+
+    [Fact]
+    public void Shows_the_totals_by_kind_and_year_newest_first_with_the_undated_last()
+    {
+        var page = RenderPage(Report);
+
+        var rows = page.FindAll(".storage-totals tbody tr").Select(r => r.Children.Select(c => c.TextContent.Trim()).ToArray()).ToList();
+        Assert.Equal(["2020", "0", "–", "1", "3 MB"], rows[0]);
+        Assert.Equal(["2019", "12", "11.7 KB", "2", "8 MB"], rows[1]);
+        Assert.Equal(["No date", "4", "3.9 KB", "0", "–"], rows[2]);
+        var total = page.Find(".storage-totals tfoot tr").Children.Select(c => c.TextContent.Trim()).ToArray();
+        Assert.Equal(["Total", "16", "15.6 KB", "3", "11 MB"], total);
+        Assert.Contains(page.FindAll(".storage-totals tbody a"), a => a.TextContent == "2019" && a.GetAttribute("href")!.StartsWith("./?q=", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Shows_the_assets_in_one_source_and_in_several_with_their_source_names_and_links()
+    {
+        var page = RenderPage(Report);
+
+        var one = page.Find(".storage-one-source");
+        Assert.Contains("15 items, 19.5 KB", one.TextContent, StringComparison.Ordinal);
+        var oneLink = one.QuerySelector("a")!.GetAttribute("href")!;
+        Assert.True(SearchQueryJson.TryDecode(oneLink["./?q=".Length..], out var oneQuery, out _));
+        Assert.Equal(new SourceCountFilter { Eq = 1 }, oneQuery.Filters.SourceCount);
+
+        var several = page.Find(".storage-several-sources");
+        Assert.Contains("4 items, 4.9 KB", several.TextContent, StringComparison.Ordinal);
+        Assert.True(SearchQueryJson.TryDecode(several.QuerySelector("p a")!.GetAttribute("href")!["./?q=".Length..], out var severalQuery, out _));
+        Assert.Equal(new SourceCountFilter { Gte = 2 }, severalQuery.Filters.SourceCount);
+        Assert.Equal("In: HD da Ana, Takeout 2026", several.QuerySelector(".storage-assets p")!.TextContent);
+        Assert.Equal($"photos/{Ids.Of(1)}", several.QuerySelector(".storage-assets a.thumb")!.GetAttribute("href"));
+        Assert.Contains("Showing the first 1.", several.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Lists_the_largest_videos_with_their_sizes()
+    {
+        var page = RenderPage(Report);
+
+        var largest = page.Find(".storage-largest");
+        Assert.Equal("The 20 largest videos", largest.QuerySelector("h2")!.TextContent);
+        Assert.Equal("8 MB", largest.QuerySelector(".size")!.TextContent);
+        Assert.Equal($"photos/{Ids.Of(2)}", largest.QuerySelector("a.thumb")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public void Says_so_when_nothing_is_in_one_source_or_in_several_and_when_there_are_no_videos()
+    {
+        var page = RenderPage(new StorageReport([new StorageRow("photo", 2019, 1, 100)], 0, 0, 0, 0, [], []));
+
+        Assert.Equal("Nothing is in only one source.", page.Find(".storage-one-source p").TextContent);
+        Assert.Equal("Nothing is in more than one source.", page.Find(".storage-several-sources p").TextContent);
+        Assert.Equal("There are no videos yet.", page.Find(".storage-largest p").TextContent);
+    }
+
+    [Fact]
+    public void Says_so_for_an_empty_library()
+    {
+        var page = RenderPage(new StorageReport([], 0, 0, 0, 0, [], []));
+
+        Assert.Equal("The library has no photos or videos yet.", page.Find("p.empty").TextContent);
+        Assert.Empty(page.FindAll("table"));
+    }
+
+    [Fact]
+    public void Is_in_brazilian_portuguese_with_its_number_formats()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var page = RenderPage(Report);
+
+        Assert.Equal("Armazenamento", page.Find("h1").TextContent);
+        Assert.Equal("Totais por tipo e ano", page.Find(".storage-totals h2").TextContent);
+        Assert.Equal("Em apenas uma fonte", page.Find(".storage-one-source h2").TextContent);
+        Assert.Contains("15 itens, 19,5 KB", page.Find(".storage-one-source").TextContent, StringComparison.Ordinal);
+        Assert.Equal("Em: HD da Ana, Takeout 2026", page.Find(".storage-several-sources .storage-assets p").TextContent);
+        Assert.Equal("Os 20 maiores vídeos", page.Find(".storage-largest h2").TextContent);
+        Assert.Equal("Sem data", page.Find(".storage-totals tbody tr:last-child th").TextContent.Trim());
+    }
+
+    private IRenderedComponent<Storage> RenderPage(StorageReport report)
+    {
+        Services.AddSingleton<ILibraryQueries>(new FakeLibrary { Storage = report });
+        return Render<Storage>();
+    }
+}
+
+/// <summary>The storage page and the DSL's new fields on a real PostgreSQL catalog (S-028).</summary>
+[Collection(CatalogGroup.Name)]
+[Trait("Category", "Integration")]
+public sealed class StorageCatalogTests(CatalogFixture catalog)
+{
+    private static readonly FixedTime s_clock = new(new DateTimeOffset(2026, 10, 19, 9, 30, 0, TimeSpan.Zero));
+
+    [Fact]
+    public async Task Filters_by_the_number_of_different_sources()
+    {
+        await using var db = await SeededAsync();
+
+        // 1: one source; 2: two; 3: the same source twice (one); 4: three; 5: one; 6 (video): one; 7 (video): two; 8 (video): one.
+        Assert.Equal([1, 3, 5, 6, 8], await IdsAsync(db, new SearchFilters { SourceCount = new SourceCountFilter { Eq = 1 } }));
+        Assert.Equal([2, 4, 7], await IdsAsync(db, new SearchFilters { SourceCount = new SourceCountFilter { Gte = 2 } }));
+        Assert.Equal([4], await IdsAsync(db, new SearchFilters { SourceCount = new SourceCountFilter { Eq = 3 } }));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8], await IdsAsync(db, new SearchFilters { SourceCount = new SourceCountFilter { Gte = 1 } }));
+        Assert.Empty(await IdsAsync(db, new SearchFilters { SourceCount = new SourceCountFilter { Gte = 4 } }));
+    }
+
+    [Fact]
+    public async Task Combines_the_source_count_with_the_other_filters()
+    {
+        await using var db = await SeededAsync();
+
+        Assert.Equal([7], await IdsAsync(db, new SearchFilters { Kinds = ["video"], SourceCount = new SourceCountFilter { Gte = 2 } }));
+        Assert.Equal([2, 7], await IdsAsync(db, new SearchFilters { Years = [2019], SourceCount = new SourceCountFilter { Eq = 2 } }));
+    }
+
+    [Fact]
+    public async Task Adds_up_the_sizes_of_the_videos_of_2019()
+    {
+        await using var db = await SeededAsync();
+        var query = new SearchQuery
+        {
+            Filters = new SearchFilters { Kinds = ["video"], Years = [2019] },
+            Aggregate = new SearchAggregate { Sum = SearchSum.Bytes },
+        };
+
+        var count = await new SearchService(db, s_clock).CountAsync(query);
+
+        Assert.Equal(2, count!.Total);
+        Assert.Equal(8_000, count.Bytes);
+    }
+
+    [Fact]
+    public async Task Gives_no_size_unless_asked_and_zero_for_nothing_found()
+    {
+        await using var db = await SeededAsync();
+        var service = new SearchService(db, s_clock);
+
+        var plain = await service.CountAsync(new SearchQuery { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Kind } });
+        var empty = await service.CountAsync(new SearchQuery
+        {
+            Filters = new SearchFilters { Years = [1999] },
+            Aggregate = new SearchAggregate { Sum = SearchSum.Bytes },
+        });
+
+        Assert.Null(plain!.Bytes);
+        Assert.All(plain.Groups, g => Assert.Null(g.Bytes));
+        Assert.Equal((0, 0L), (empty!.Total, empty.Bytes));
+    }
+
+    [Fact]
+    public async Task Adds_up_sizes_per_group()
+    {
+        await using var db = await SeededAsync();
+        var service = new SearchService(db, s_clock);
+
+        var byYear = await service.CountAsync(new SearchQuery { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Year, Sum = SearchSum.Bytes } });
+        var byKind = await service.CountAsync(new SearchQuery { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Kind, Sum = SearchSum.Bytes } });
+        var bySource = await service.CountAsync(new SearchQuery { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Source, Sum = SearchSum.Bytes } });
+
+        Assert.Equal(["2019:6:9700", "2020:1:7000", ":1:50"], byYear!.Groups.Select(g => $"{g.Key}:{g.Count}:{g.Bytes}"));
+        Assert.Equal(16_750, byYear.Bytes);
+        Assert.Equal(["photo:5:1750", "video:3:15000"], byKind!.Groups.Select(g => $"{g.Key}:{g.Count}:{g.Bytes}"));
+        // An asset with several sources counts in each with its whole size; one source twice counts once.
+        Assert.Equal(
+            ["HD:8:16750", "Takeout:3:6200", "iCloud:1:1000"],
+            bySource!.Groups.OrderByDescending(g => g.Count).ThenBy(g => g.Key, StringComparer.Ordinal).Select(g => $"{g.Key}:{g.Count}:{g.Bytes}"));
+    }
+
+    [Fact]
+    public async Task Reports_the_library_s_storage()
+    {
+        await using var db = await SeededAsync();
+
+        var report = await new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)), s_clock).GetStorageAsync();
+
+        Assert.Equal(
+            ["photo:2019:4:1700", "photo::1:50", "video:2019:2:8000", "video:2020:1:7000"],
+            report.Rows.OrderBy(r => r.Kind, StringComparer.Ordinal).ThenBy(r => r.Year is null).ThenBy(r => r.Year)
+                .Select(r => $"{r.Kind}:{r.Year}:{r.Count}:{r.Bytes}"));
+        Assert.Equal((5, 10_550L), (report.OneSource, report.OneSourceBytes));
+        Assert.Equal((3, 6_200L), (report.SeveralSources, report.SeveralSourcesBytes));
+        Assert.Equal([Ids.Of(7), Ids.Of(4), Ids.Of(2)], report.InSeveralSources.Select(a => a.Id));
+        Assert.Equal(["HD", "Takeout"], report.InSeveralSources.Single(a => a.Id == Ids.Of(2)).Sources);
+        Assert.Equal(["HD", "iCloud", "Takeout"], report.InSeveralSources.Single(a => a.Id == Ids.Of(4)).Sources);
+        Assert.Equal([Ids.Of(8), Ids.Of(7), Ids.Of(6)], report.LargestVideos.Select(a => a.Id));
+        Assert.Equal(7_000, report.LargestVideos[0].Bytes);
+        Assert.True(report.LargestVideos[0].HasThumbnail);
+    }
+
+    [Fact]
+    public async Task Lists_at_most_twenty_of_the_largest_videos_and_fifty_in_several_sources()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.AddRange(Enumerable.Range(1, 60).Select(n => Asset(n, "video", new DateTime(2020, 1, 1).AddDays(n), n * 10, "HD", "Takeout")));
+        await db.SaveChangesAsync();
+
+        var report = await new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)), s_clock).GetStorageAsync();
+
+        Assert.Equal(LibraryQueries.LargestVideosLength, report.LargestVideos.Count);
+        Assert.Equal(600, report.LargestVideos[0].Bytes);
+        Assert.Equal(LibraryQueries.StorageListLength, report.InSeveralSources.Count);
+        Assert.Equal(60, report.SeveralSources);
+        Assert.Equal(0, report.OneSource);
+    }
+
+    [Fact]
+    public async Task Reports_an_empty_library()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+
+        var report = await new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)), s_clock).GetStorageAsync();
+
+        Assert.Empty(report.Rows);
+        Assert.Equal((0, 0L, 0, 0L), (report.OneSource, report.OneSourceBytes, report.SeveralSources, report.SeveralSourcesBytes));
+        Assert.Empty(report.InSeveralSources);
+        Assert.Empty(report.LargestVideos);
+    }
+
+    // Photos 2019: 1 (100 B, HD), 2 (200 B, HD and Takeout), 3 (400 B, HD twice), 4 (1,000 B, three sources); 5, undated
+    // (50 B, HD). Videos: 6 (3,000 B, 2019, HD), 7 (5,000 B, 2019, HD and Takeout), 8 (7,000 B, 2020, HD).
+    private async Task<CatalogDbContext> SeededAsync()
+    {
+        var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.AddRange(
+            Asset(1, "photo", new DateTime(2019, 3, 1), 100, "HD"),
+            Asset(2, "photo", new DateTime(2019, 4, 1), 200, "HD", "Takeout"),
+            Asset(3, "photo", new DateTime(2019, 5, 1), 400, "HD", "HD"),
+            Asset(4, "photo", new DateTime(2019, 6, 1), 1_000, "HD", "Takeout", "iCloud"),
+            Asset(5, "photo", null, 50, "HD"),
+            Asset(6, "video", new DateTime(2019, 7, 1), 3_000, "HD"),
+            Asset(7, "video", new DateTime(2019, 8, 1), 5_000, "HD", "Takeout"),
+            Asset(8, "video", new DateTime(2020, 1, 1), 7_000, "HD"));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        return db;
+    }
+
+    private static async Task<List<int>> IdsAsync(CatalogDbContext db, SearchFilters filters)
+    {
+        var result = await new SearchService(db, s_clock).ExecuteAsync(new SearchQuery { Filters = filters, Sort = SearchSort.CapturedAtAsc });
+        return [.. result.Hits.Select(h => int.Parse(h.Id[^8..], NumberStyles.HexNumber, CultureInfo.InvariantCulture)).Order()];
+    }
+
+    private static Asset Asset(int n, string kind, DateTime? capturedAt, long bytes, params string[] sources) => new()
+    {
+        Id = Ids.Of(n),
+        Kind = kind,
+        ContentType = kind == "video" ? "video/mp4" : "image/jpeg",
+        SizeBytes = bytes,
+        CapturedAt = capturedAt,
+        ImportedAt = DateTimeOffset.UnixEpoch,
+        UpdatedAt = DateTimeOffset.UnixEpoch,
+        Sources = [.. sources.Select((name, i) => new AssetSource { AssetId = Ids.Of(n), Type = "local", Name = name, Path = $"{n}-{i}.dat" })],
+        Derivatives = [new Derivative { AssetId = Ids.Of(n), Name = "thumb-256", BlobPath = $"{Ids.Of(n)}/thumb-256.webp", Width = 256, Height = 192, ContentType = "image/webp" }],
+    };
+}

@@ -78,6 +78,11 @@ public static class SearchChips
             Add(text["Chip_Sources", string.Join(", ", sources)], f with { Sources = null });
         }
 
+        if (f.SourceCount is { } sourceCount)
+        {
+            Add(SourceCount(text, sourceCount), f with { SourceCount = null });
+        }
+
         if (f.People is { } people)
         {
             if (people.All is { } names)
@@ -118,9 +123,10 @@ public static class SearchChips
 
         if (query.Aggregate is { } aggregate)
         {
+            var size = aggregate.Sum is not null;
             var label = aggregate.GroupBy is { } groupBy
-                ? text["Chip_CountBy", text["Group_" + char.ToUpperInvariant(groupBy[0]) + groupBy[1..]]]
-                : text["Chip_Count"];
+                ? text[size ? "Chip_SizeBy" : "Chip_CountBy", text["Group_" + char.ToUpperInvariant(groupBy[0]) + groupBy[1..]]]
+                : text[size ? "Chip_Size" : "Chip_Count"];
             chips.Add(new SearchChip(label, query with { Aggregate = null }));
         }
 
@@ -132,6 +138,16 @@ public static class SearchChips
 
         return chips;
     }
+
+    // "In only one source", "In 3 sources", "In 2 or more sources".
+    private static string SourceCount(IStringLocalizer<SharedResource> text, SourceCountFilter count) =>
+        count switch
+        {
+            { Eq: 1 } => text["Chip_SourceOne"],
+            { Eq: { } eq } => text["Chip_SourceEq", eq],
+            { Gte: { } gte } => text["Chip_SourceAtLeast", gte],
+            _ => string.Empty,
+        };
 
     // "More than 100 km from home", "Up to 5 km from Beach house", "100–500 km from home".
     private static string Distance(IStringLocalizer<SharedResource> text, DistanceFilter distance)

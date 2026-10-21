@@ -855,4 +855,87 @@
   <data name="Chip_SimilarTo" xml:space="preserve">
     <value>Parecidas com uma foto</value>
   </data>
+  <data name="Layout_Storage" xml:space="preserve">
+    <value>Armazenamento</value>
+  </data>
+  <data name="Storage_Heading" xml:space="preserve">
+    <value>Armazenamento</value>
+  </data>
+  <data name="Storage_Intro" xml:space="preserve">
+    <value>O espaço que a biblioteca ocupa e de onde vêm as fotos e os vídeos. Os tamanhos são os dos originais.</value>
+  </data>
+  <data name="Storage_Empty" xml:space="preserve">
+    <value>A biblioteca ainda não tem fotos nem vídeos.</value>
+  </data>
+  <data name="Storage_Totals" xml:space="preserve">
+    <value>Totais por tipo e ano</value>
+  </data>
+  <data name="Storage_Year" xml:space="preserve">
+    <value>Ano</value>
+  </data>
+  <data name="Storage_Size" xml:space="preserve">
+    <value>Tamanho</value>
+  </data>
+  <data name="Storage_Total" xml:space="preserve">
+    <value>Total</value>
+  </data>
+  <data name="Storage_OneSource" xml:space="preserve">
+    <value>Em apenas uma fonte</value>
+  </data>
+  <data name="Storage_Summary_One" xml:space="preserve">
+    <value>{0} item, {1}</value>
+    <comment>{0} is the number of items, {1} their size.</comment>
+  </data>
+  <data name="Storage_Summary_Other" xml:space="preserve">
+    <value>{0} itens, {1}</value>
+    <comment>{0} is the number of items, {1} their size.</comment>
+  </data>
+  <data name="Storage_NoneOneSource" xml:space="preserve">
+    <value>Nada está em apenas uma fonte.</value>
+  </data>
+  <data name="Storage_Several" xml:space="preserve">
+    <value>Em várias fontes</value>
+  </data>
+  <data name="Storage_NoneSeveral" xml:space="preserve">
+    <value>Nada está em mais de uma fonte.</value>
+  </data>
+  <data name="Storage_ShowThem" xml:space="preserve">
+    <value>Mostrar</value>
+  </data>
+  <data name="Storage_FirstShown" xml:space="preserve">
+    <value>Mostrando os primeiros {0}.</value>
+  </data>
+  <data name="Storage_InSources" xml:space="preserve">
+    <value>Em: {0}</value>
+    <comment>{0} is a list of source names.</comment>
+  </data>
+  <data name="Storage_Largest" xml:space="preserve">
+    <value>Os 20 maiores vídeos</value>
+  </data>
+  <data name="Storage_NoVideos" xml:space="preserve">
+    <value>Ainda não há vídeos.</value>
+  </data>
+  <data name="Chip_SourceOne" xml:space="preserve">
+    <value>Em apenas uma fonte</value>
+  </data>
+  <data name="Chip_SourceEq" xml:space="preserve">
+    <value>Em {0} fontes</value>
+  </data>
+  <data name="Chip_SourceAtLeast" xml:space="preserve">
+    <value>Em {0} ou mais fontes</value>
+  </data>
+  <data name="Chip_Size" xml:space="preserve">
+    <value>Tamanho</value>
+  </data>
+  <data name="Chip_SizeBy" xml:space="preserve">
+    <value>Tamanho por {0}</value>
+    <comment>{0} is year, month, kind, city or source.</comment>
+  </data>
+  <data name="Count_Size" xml:space="preserve">
+    <value>Tamanho</value>
+  </data>
+  <data name="Count_TakenBy" xml:space="preserve">
+    <value>Ocupado por {0}</value>
+    <comment>{0} is a count such as "312 videos in 2019".</comment>
+  </data>
 </root>
