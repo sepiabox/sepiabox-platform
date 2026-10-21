@@ -479,12 +479,153 @@ public class VideoProcessingTests
         var checkedOnce = Process(drive, work);
         var after = Process(drive, work);
 
-        // The good one is checked and kept; the one whose sound does not decode is made again, without sound again.
-        Assert.Equal((1, 1), (checkedOnce.Processed, checkedOnce.Skipped));
-        Assert.Equal([empty], checkedOnce.WithoutSound.Select(v => v.Path));
+        // The good one is checked and kept; the one whose sound does not decode is recorded as it is, with no new encode.
+        Assert.Equal((0, 2), (checkedOnce.Processed, checkedOnce.Skipped));
+        Assert.Empty(checkedOnce.WithoutSound);
         Assert.Equal((VideoSound.Kept, VideoSound.Undecodable), (StateOf(work, good).Sound, StateOf(work, empty).Sound));
         Assert.Equal((0, 2), (after.Processed, after.Skipped));
         Assert.Empty(after.WithoutSound);
+    }
+
+    [Fact]
+    public void Records_without_making_again_a_silent_video_an_earlier_build_made_from_a_source_without_sound()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "silent.mp4");
+        MakeVideo(clip, 320, 180, seconds: 1, "-an");
+        Process(drive, work);
+        AsMadeWithoutSoundByAnEarlierBuild(work, proxy: null);
+
+        var again = Process(drive, work);
+
+        Assert.Equal((0, 1), (again.Processed, again.Skipped));
+        Assert.Equal(VideoSound.NoStream, StateOf(work, clip).Sound);
+    }
+
+    [UnixFact]
+    public void Fails_without_dropping_the_sound_when_only_the_transcode_with_sound_fails_and_the_sound_decodes()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV002.MOD");
+        MakeCamcorderFile(clip);
+        // The encoder fails only with sound, so a fallback that followed any failure (D-084) would succeed without it.
+        FakeFfmpeg(tools, """*"0:a:0?"*) echo '[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)' >&2; exit 1;;""");
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Empty(result.WithoutSound);
+        Assert.Equal(
+            "Could not make the poster and 720p version: ffmpeg failed: [h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)",
+            Assert.Single(result.Problems).Reason);
+        Assert.Equal(FileStatus.Failed, StateOf(work, clip).Status);
+    }
+
+    [UnixFact]
+    public void Fails_without_dropping_the_sound_when_the_file_cannot_be_read_to_check_its_sound()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV002.MOD");
+        MakeCamcorderFile(clip);
+        // The transcode with sound fails, then the drive drops out while the sound is checked.
+        FakeFfmpeg(tools, """
+            *framecrc*) echo 'Error opening input file MOV002.MOD.' >&2; echo 'Error opening input files: Input/output error' >&2; exit 254;;
+              *"0:a:0?"*) echo '[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)' >&2; exit 1;;
+            """);
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Empty(result.WithoutSound);
+        Assert.Contains("OpenEncodeSessionEx failed", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Equal(FileStatus.Failed, StateOf(work, clip).Status);
+    }
+
+    [UnixFact]
+    public void Keeps_the_old_720p_version_and_tries_again_next_run_when_making_it_again_fails()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV002.MOD");
+        MakeCamcorderFile(clip);
+        Process(drive, work);
+        var proxy = ProxyOf(work, Assert.Single(ReadManifests(work)));
+        AsMadeWithoutSoundByAnEarlierBuild(work, proxy);
+        FakeFfmpeg(tools, """*"0:a:0?"*) echo '[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)' >&2; exit 1;;""");
+
+        var failed = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Contains("OpenEncodeSessionEx failed", Assert.Single(failed.Problems).Reason, StringComparison.Ordinal);
+        var state = StateOf(work, clip);
+        Assert.Equal((FileStatus.Done, null), (state.Status, state.Sound));
+        Assert.Equal(proxy, ProxyOf(work, Assert.Single(ReadManifests(work))));
+        Assert.Equal(["video"], StreamTypes(proxy));
+
+        var again = Process(drive, work);
+
+        Assert.Equal(1, again.Processed);
+        Assert.Equal(["video", "audio"], StreamTypes(proxy));
+        Assert.Equal(VideoSound.Kept, StateOf(work, clip).Sound);
+    }
+
+    [Fact]
+    public void Makes_again_a_720p_version_ffprobe_cannot_read()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV002.MOD");
+        MakeCamcorderFile(clip);
+        Process(drive, work);
+        var proxy = ProxyOf(work, Assert.Single(ReadManifests(work)));
+        AsMadeWithoutSoundByAnEarlierBuild(work, proxy: null);
+        File.WriteAllBytes(proxy, new byte[4096]);
+
+        var again = Process(drive, work);
+
+        Assert.Equal(1, again.Processed);
+        Assert.Equal(["video", "audio"], StreamTypes(proxy));
+    }
+
+    [UnixFact]
+    public void Runs_at_most_four_nvenc_encodes_at_once_whatever_the_jobs()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        using var running = new TempFolder();
+        for (var i = 0; i < 10; i++)
+        {
+            // Different sizes, so each is its own content with its own 720p version.
+            MakeVideo(Path.Combine(drive.Path, $"clip{i}.mp4"), 160 + (2 * i), 90, seconds: 1);
+        }
+
+        var log = Path.Combine(tools.Path, "concurrent.log");
+        // Every encode (the 720p versions and the preflight) notes how many encodes are running as it starts.
+        var ffmpeg = TestTools.FakeTool(tools, "ffmpeg", $$"""
+            case "$*" in
+              *-movflags*) marker=$(mktemp -p '{{running.Path}}'); ls '{{running.Path}}' | wc -l >> '{{log}}'; sleep 2
+                '{{s_tools.Ffmpeg}}' "$@"; status=$?; rm -f "$marker"; exit $status;;
+            esac
+            exec '{{s_tools.Ffmpeg}}' "$@"
+            """);
+        // NVENC's session limit, with libx264's arguments: not every test machine has an NVIDIA GPU.
+        var nvenc = new VideoProcessor(new FfmpegTools(ffmpeg, s_tools.Ffprobe), VideoEncoder.Nvenc, FfmpegArguments.VideoCodec(VideoEncoder.Software));
+
+        var result = ProcessCommand.Run(
+            new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: s_ffmpegFolder, ModelFolder: TestModels.None, Jobs: 8, VideoJobs: 8),
+            embedder: null,
+            embedderWarning: null,
+            hooks: new ProcessCommand.ProcessHooks(Video: nvenc));
+
+        Assert.Empty(result.Problems);
+        Assert.Equal(10, result.Processed);
+        var counts = File.ReadAllLines(log).Select(line => int.Parse(line.Trim(), CultureInfo.InvariantCulture)).ToList();
+        Assert.Equal(11, counts.Count);
+        Assert.InRange(counts.Max(), 2, VideoProcessor.MaxNvencSessions);
     }
 
     [UnixFact]
@@ -815,6 +956,18 @@ public class VideoProcessingTests
         using var forget = state.CreateCommand();
         forget.CommandText = "UPDATE files SET sound = NULL";
         forget.ExecuteNonQuery();
+    }
+
+    // The real tools, except for ffmpeg calls matching the given shell case branches (quote a literal "?" in a pattern).
+    private static void FakeFfmpeg(TempFolder tools, string branches)
+    {
+        TestTools.FakeTool(tools, "ffprobe", $"exec '{s_tools.Ffprobe}' \"$@\"");
+        TestTools.FakeTool(tools, "ffmpeg", $$"""
+            case "$*" in
+              {{branches}}
+            esac
+            exec '{{s_tools.Ffmpeg}}' "$@"
+            """);
     }
 
     private static FileState StateOf(TempFolder work, string path)

@@ -400,7 +400,8 @@ public static class ProcessCommand
                     : null;
             }
 
-            // Checked once: a 720p version with sound is recorded as kept, so it is not checked again.
+            // Checked once: what is found is recorded, so it is not checked again. The source is only read when its 720p
+            // version has no sound: its header, and up to its first sound frame (to its end only when no frame decodes).
             bool LostSound(FileState done, string sha256)
             {
                 var proxy = Path.Combine(output, DerivativeFolder(sha256), VideoProcessor.ProxyName + ".mp4");
@@ -423,9 +424,28 @@ public static class ProcessCommand
                 if (hasSound)
                 {
                     SaveState(done with { Sound = VideoSound.Kept });
+                    return false;
                 }
 
-                return !hasSound;
+                // A silent 720p version lost something only when the source's sound decodes: a source without sound,
+                // or whose sound does not decode, is recorded as it is, without making the same silent version again.
+                VideoSound source;
+                try
+                {
+                    source = video.CheckSound(file.Path, stop.Token);
+                }
+                catch (VideoProcessingException)
+                {
+                    // Unreadable right now: nothing is recorded, and the next run checks again.
+                    return false;
+                }
+
+                if (source != VideoSound.Kept)
+                {
+                    SaveState(done with { Sound = source });
+                }
+
+                return source == VideoSound.Kept;
             }
 
             // Nothing about an unchanged file can make a video stream appear, short of a newer FFmpeg: that is

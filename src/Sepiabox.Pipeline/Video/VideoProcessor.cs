@@ -128,8 +128,15 @@ public interface IVideoProcessor
     VideoDerivatives Generate(
         string sourcePath, string workFolder, string relativeFolder, VideoProbe probe, CancellationToken cancellationToken = default);
 
-    /// <summary>Whether <paramref name="path"/> (a 720p version in the work folder) has a sound stream.</summary>
+    /// <summary>Whether <paramref name="path"/> has a sound stream, from its header (ffprobe).</summary>
     bool HasSound(string path, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What a 720p version of <paramref name="path"/> can keep of its sound: none to keep, sound that decodes, or a sound
+    /// stream that does not decode a single frame (D-087). Throws <see cref="VideoProcessingException"/> when the file
+    /// cannot be read at the moment.
+    /// </summary>
+    VideoSound CheckSound(string path, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -274,7 +281,7 @@ public sealed class VideoProcessor : IVideoProcessor
         var output = Path.Combine(workFolder, $"encoder-check-{Guid.NewGuid():N}.tmp.mp4");
         try
         {
-            Run(tools.Ffmpeg, FfmpegArguments.EncoderCheck(encoder, output, videoCodec), cancellationToken);
+            Encode(FfmpegArguments.EncoderCheck(encoder, output, videoCodec), cancellationToken);
         }
         catch (VideoProcessingException ex)
         {
@@ -282,7 +289,14 @@ public sealed class VideoProcessor : IVideoProcessor
         }
         finally
         {
-            File.Delete(output);
+            try
+            {
+                File.Delete(output);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A file left behind (held by an antivirus scan, say) must not hide the encoder's own outcome.
+            }
         }
     }
 
@@ -302,9 +316,17 @@ public sealed class VideoProcessor : IVideoProcessor
             return VideoSound.NoStream;
         }
 
-        // Its exit code says nothing here: FFmpeg fails when no frame decodes, and can fail after one did.
-        var (_, frames, _) = RunCapturing(tools.Ffmpeg, FfmpegArguments.FirstSoundFrame(path), cancellationToken);
-        return FfmpegArguments.CountFrames(frames) > 0 ? VideoSound.Kept : VideoSound.Undecodable;
+        // Its exit code alone says little: FFmpeg fails when no frame decodes, and can fail after one did. But a file it
+        // could not open or read at that moment (a USB drive that dropped out) proves nothing about the sound.
+        var (exitCode, frames, errors) = RunCapturing(tools.Ffmpeg, FfmpegArguments.FirstSoundFrame(path), cancellationToken);
+        if (FfmpegArguments.CountFrames(frames) > 0)
+        {
+            return VideoSound.Kept;
+        }
+
+        return exitCode != 0 && FfmpegArguments.IsInputFailure(errors)
+            ? throw new VideoProcessingException($"ffmpeg could not read the file to check its sound: {FfmpegArguments.Message(errors)}")
+            : VideoSound.Undecodable;
     }
 
     /// <summary>Writes the poster, thumbnail and 720p version into <paramref name="workFolder"/>/<paramref name="relativeFolder"/>.</summary>
@@ -367,7 +389,7 @@ public sealed class VideoProcessor : IVideoProcessor
         VideoSound sound;
         try
         {
-            Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, videoCodec: videoCodec), cancellationToken);
+            Encode(FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, videoCodec: videoCodec), cancellationToken);
             sound = HasSound(temporary, cancellationToken) ? VideoSound.Kept : VideoSound.NoStream;
         }
         catch (VideoProcessingException withSound)
@@ -396,7 +418,7 @@ public sealed class VideoProcessor : IVideoProcessor
             sound = VideoSound.Undecodable;
             try
             {
-                Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, withAudio: false, videoCodec), cancellationToken);
+                Encode(FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, withAudio: false, videoCodec), cancellationToken);
             }
             catch (VideoProcessingException withoutSound)
             {
@@ -412,6 +434,36 @@ public sealed class VideoProcessor : IVideoProcessor
         {
             Sound = sound,
         };
+    }
+
+    /// <summary>
+    /// The most NVENC encodes this process runs at once (D-087). Consumer NVIDIA drivers allow about 8 encoding sessions
+    /// per system, and <c>--jobs</c> defaults to half the logical processors (8 on a 16-thread computer), so every video
+    /// job encoding at once could open more sessions than the driver allows and fail; 4 leaves room for anything else
+    /// using the GPU, and a GPU is rarely faster with more sessions than that anyway.
+    /// </summary>
+    public const int MaxNvencSessions = 4;
+
+    private static readonly SemaphoreSlim s_nvencSessions = new(MaxNvencSessions, MaxNvencSessions);
+
+    // A transcode with the chosen encoder: NVENC encodes wait for one of the process's sessions.
+    private void Encode(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    {
+        if (encoder != VideoEncoder.Nvenc)
+        {
+            Run(tools.Ffmpeg, arguments, cancellationToken);
+            return;
+        }
+
+        s_nvencSessions.Wait(cancellationToken);
+        try
+        {
+            Run(tools.Ffmpeg, arguments, cancellationToken);
+        }
+        finally
+        {
+            s_nvencSessions.Release();
+        }
     }
 
     private static string Run(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
@@ -580,15 +632,32 @@ public static class FfmpegArguments
 
     /// <summary>
     /// FFmpeg's errors as one line: every line it printed, in order, joined by " | ", at most
-    /// <see cref="MaxMessageLength"/> characters keeping the end. The last line alone is often only the consequence:
-    /// "Nothing was written into output file" after an encoder that could not open (D-087).
+    /// <see cref="MaxMessageLength"/> characters keeping its first 300 and its end. The last line alone is often only the
+    /// consequence: "Nothing was written into output file" after an encoder that could not open (D-087).
     /// </summary>
     public static string Message(string errors)
     {
         var lines = (errors ?? string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var message = string.Join(" | ", lines);
-        return message.Length <= MaxMessageLength ? message : "…" + message[^(MaxMessageLength - 1)..];
+        // Both ends: the cause is usually the first line, and the outcome the last.
+        return message.Length <= MaxMessageLength
+            ? message
+            : message[..MessageStart] + "…" + message[^(MaxMessageLength - MessageStart - 1)..];
     }
+
+    /// <summary>
+    /// Whether FFmpeg's errors say it could not open or read its input, rather than decode it: then a check of the
+    /// sound proves nothing (D-087).
+    /// </summary>
+    public static bool IsInputFailure(string errors) =>
+        s_inputFailures.Any(phrase => (errors ?? string.Empty).Contains(phrase, StringComparison.OrdinalIgnoreCase));
+
+    // FFmpeg's own words for an input it cannot open or read (its "Error opening input" and the system's errors).
+    private static readonly string[] s_inputFailures =
+        ["Error opening input", "Input/output error", "No such file or directory", "Permission denied", "I/O error"];
+
+    // The start kept from a long message; the rest of MaxMessageLength comes from its end.
+    private const int MessageStart = 300;
 
     private static IEnumerable<string> Encoding(
         int width, int height, VideoEncoder encoder, bool withAudio, string output, IReadOnlyList<string>? videoCodec) =>

@@ -157,5 +157,7 @@ public sealed class ParallelProcessTests
         }
 
         public bool HasSound(string path, CancellationToken cancellationToken = default) => true;
+
+        public VideoSound CheckSound(string path, CancellationToken cancellationToken = default) => VideoSound.Kept;
     }
 }

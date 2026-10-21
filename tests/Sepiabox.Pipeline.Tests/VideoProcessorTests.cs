@@ -132,13 +132,32 @@ public class VideoProcessorTests
     }
 
     [Fact]
-    public void Keeps_the_end_of_a_very_long_ffmpeg_message()
+    public void Keeps_both_ends_of_a_very_long_ffmpeg_message()
     {
         var message = FfmpegArguments.Message(string.Join('\n', Enumerable.Range(1, 500).Select(i => $"line {i}")));
 
         Assert.Equal(FfmpegArguments.MaxMessageLength, message.Length);
-        Assert.StartsWith("…", message, StringComparison.Ordinal);
-        Assert.EndsWith("line 500", message, StringComparison.Ordinal);
+        // The cause is usually the first line, the outcome the last.
+        Assert.StartsWith("line 1 | line 2 | ", message, StringComparison.Ordinal);
+        Assert.Equal('…', message[300]);
+        Assert.EndsWith(" | line 500", message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Error opening input file /media/HD/MOV001.MOD.\nError opening input files: Input/output error", true)]
+    [InlineData("[in#0 @ 0x1] Error opening input: No such file or directory", true)]
+    [InlineData("/media/HD/MOV001.MOD: Permission denied", true)]
+    [InlineData("[aist#0:1/ac3 @ 0x1] Error submitting packet to decoder: Invalid data found when processing input\n[out#0/framecrc @ 0x2] Nothing was written into output file, because at least one of its streams received no packets.", false)]
+    [InlineData("", false)]
+    public void Tells_a_file_that_could_not_be_read_from_sound_that_does_not_decode(string errors, bool inputFailure)
+    {
+        Assert.Equal(inputFailure, FfmpegArguments.IsInputFailure(errors));
+    }
+
+    [Fact]
+    public void Allows_fewer_nvenc_sessions_than_a_consumer_driver_does()
+    {
+        Assert.InRange(VideoProcessor.MaxNvencSessions, 1, 7);
     }
 
     [Fact]
