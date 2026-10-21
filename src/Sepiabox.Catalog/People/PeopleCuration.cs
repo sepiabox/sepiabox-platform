@@ -321,8 +321,8 @@ public sealed class PeopleCuration(CatalogDbContext db)
         }, cancellationToken);
 
     /// <summary>
-    /// A name as stored (D-079): NFC, without zero-width characters, every run of white space one space, trimmed; null
-    /// for a blank one. Returns why it is refused, or null: control characters, or more than
+    /// A name as stored (D-079): NFC, without invisible formatting characters (Unicode category Cf), every run of white
+    /// space one space, trimmed; null for a blank one. Returns why it is refused, or null: control characters, or more than
     /// <see cref="MaxNameLength"/> characters.
     /// </summary>
     public static CurationOutcome? CleanName(string? name, out string? clean)
@@ -337,7 +337,9 @@ public sealed class PeopleCuration(CatalogDbContext db)
         var space = false;
         foreach (var c in name)
         {
-            if (c is '\u200B' or '\u200C' or '\u200D' or '\u2060' or '\uFEFF')
+            // Invisible formatting (zero-width spaces and joiners, the soft hyphen, bidirectional overrides such as
+            // U+202E): never part of a name, and able to make two names look alike or a name read backwards.
+            if (char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format)
             {
                 continue;
             }

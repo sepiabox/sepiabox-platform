@@ -8,10 +8,13 @@ public sealed class PersonNameTests
     [Theory]
     [InlineData("  Ana   Maria  ", "Ana Maria")]
     [InlineData("Ana\tMaria\nSilva", "Ana Maria Silva")]
-    [InlineData("A​na﻿", "Ana")]
-    [InlineData("José", "José")]
+    [InlineData("A\u200Bna\uFEFF", "Ana")]
+    [InlineData("\u202EanA", "anA")]
+    [InlineData("Ana\u00ADMaria", "AnaMaria")]
+    [InlineData("\u2066Ana\u2069 \u200EMaria", "Ana Maria")]
+    [InlineData("Jose\u0301", "Jos\u00E9")]
     [InlineData("   ", null)]
-    [InlineData("​", null)]
+    [InlineData("\u200B", null)]
     [InlineData(null, null)]
     public void Stores_names_composed_without_invisible_characters_and_with_single_spaces(string? typed, string? stored)
     {
