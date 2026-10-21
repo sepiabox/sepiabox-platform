@@ -289,5 +289,5 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 - **Epics:** 14
 - **Sprints:** 22
 - **Stories:** 64
-- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (36 stories), with the external drive as the only source; Sprints 10–22 (28 stories) come after it. What is left of the MVP (18 stories): S-044, S-055, S-053, S-032, S-058, S-033, S-034, S-035, S-012, S-059, S-061, S-013, S-016, S-056, S-025, S-062, S-026, S-054; its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
+- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (36 stories), with the external drive as the only source; Sprints 10–22 (28 stories) come after it. The MVP is done (all 36 stories); its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
 - **Critical path (13 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-032 → S-058 → S-033 → S-050 → S-036 → S-038, and others as long: the same chain ending in S-036 → S-039, or in S-050 → S-051 → S-040. Index-only mode (S-063, S-064) depends only on done stories, so it adds nothing to it (D-088).
