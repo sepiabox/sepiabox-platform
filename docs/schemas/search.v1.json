@@ -92,7 +92,7 @@
           "items": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
         },
         "sourceCount": {
-          "description": "How many different sources the item was found in (S-028, D-093): eq is exactly that many (1 is \"in only one source\"), gte at least that many (2 is \"in several\"). Exactly one of eq and gte. The same source name twice counts once. Never part of the question translator's output format.",
+          "description": "How many different sources the item was found in (S-028, D-093): eq is exactly that many (1 is \"in only one source\"), gte at least that many (2 is \"in several\"). Exactly one of eq and gte. The same source name twice counts once. Source names are compared exactly as stored, case-sensitively, unlike sources, which ignores case. Never part of the question translator's output format.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -113,6 +113,13 @@
             },
             "includeMe": { "type": "boolean" }
           }
+        },
+        "eventIds": {
+          "description": "Assets in any of these occasions (S-023, D-092), by id; an id no occasion has matches nothing, and undated assets are in no occasion. Never part of the question translator's output format: a question cannot name an occasion.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "type": "integer", "minimum": 1 }
         },
         "visual": {
           "description": "A description in English matched against the photos' CLIP embeddings (S-016, D-070); results are ordered by similarity, most similar first, and sort is not used.",

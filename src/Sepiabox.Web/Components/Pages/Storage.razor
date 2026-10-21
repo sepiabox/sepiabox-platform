@@ -20,16 +20,16 @@ else if (_report.Rows.Count == 0)
 }
 else
 {
-    <section class="storage-totals">
-        <h2>@Text["Storage_Totals"]</h2>
+    <section class="storage-totals" aria-labelledby="storage-totals-heading">
+        <h2 id="storage-totals-heading">@Text["Storage_Totals"]</h2>
         <table class="ranking">
             <thead>
                 <tr>
                     <th scope="col">@Text["Storage_Year"]</th>
-                    <th scope="col">@Text["Filter_Photos"]</th>
-                    <th scope="col">@Text["Storage_Size"]</th>
-                    <th scope="col">@Text["Filter_Videos"]</th>
-                    <th scope="col">@Text["Storage_Size"]</th>
+                    <th scope="col">@Text["Storage_PhotosHeader"]</th>
+                    <th scope="col">@Text["Storage_PhotosSize"]</th>
+                    <th scope="col">@Text["Storage_VideosHeader"]</th>
+                    <th scope="col">@Text["Storage_VideosSize"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -41,7 +41,7 @@ else
                         <th scope="row">
                             @if (year is { } value)
                             {
-                                <a href="@SearchLinks.Timeline(Items(null, value))">@value.ToString(CultureInfo.InvariantCulture)</a>
+                                <a href="@SearchLinks.Timeline(Items(null, value))" aria-label="@Text["Storage_YearLink", value.ToString(CultureInfo.InvariantCulture)]">@value.ToString(CultureInfo.InvariantCulture)</a>
                             }
                             else
                             {
@@ -67,33 +67,33 @@ else
         </table>
     </section>
 
-    <section class="storage-one-source">
-        <h2>@Text["Storage_OneSource"]</h2>
+    <section class="storage-one-source" aria-labelledby="storage-one-source-heading">
+        <h2 id="storage-one-source-heading">@Text["Storage_OneSource"]</h2>
         @if (_report.OneSource == 0)
         {
             <p class="muted">@Text["Storage_NoneOneSource"]</p>
         }
         else
         {
-            <p>@Summary(_report.OneSource, _report.OneSourceBytes) <a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Eq = 1 }))">@Text["Storage_ShowThem"]</a></p>
+            <p>@Summary(_report.OneSource, _report.OneSourceBytes) <a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Eq = 1 }))" aria-label="@Text["Storage_ShowOneSource"]">@Text["Storage_ShowThem"]</a></p>
         }
     </section>
 
-    <section class="storage-several-sources">
-        <h2>@Text["Storage_Several"]</h2>
+    <section class="storage-several-sources" aria-labelledby="storage-several-heading">
+        <h2 id="storage-several-heading">@Text["Storage_Several"]</h2>
         @if (_report.SeveralSources == 0)
         {
             <p class="muted">@Text["Storage_NoneSeveral"]</p>
         }
         else
         {
-            <p>@Summary(_report.SeveralSources, _report.SeveralSourcesBytes) <a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Gte = 2 }))">@Text["Storage_ShowThem"]</a></p>
+            <p>@Summary(_report.SeveralSources, _report.SeveralSourcesBytes) <a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Gte = 2 }))" aria-label="@Text["Storage_ShowSeveral"]">@Text["Storage_ShowThem"]</a></p>
             <ul class="grid storage-assets">
                 @foreach (var asset in _report.InSeveralSources)
                 {
                     <li>
                         <MediaCard Item="asset.Item" Href="@($"photos/{asset.Id}")" />
-                        <p class="small muted">@Text["Storage_InSources", string.Join(", ", asset.Sources)]</p>
+                        <p class="small muted clamp" title="@string.Join(", ", asset.Sources)">@Text["Storage_InSources", string.Join(", ", asset.Sources)]</p>
                     </li>
                 }
             </ul>
@@ -104,8 +104,8 @@ else
         }
     </section>
 
-    <section class="storage-largest">
-        <h2>@Text["Storage_Largest"]</h2>
+    <section class="storage-largest" aria-labelledby="storage-largest-heading">
+        <h2 id="storage-largest-heading">@Text["Storage_Largest"]</h2>
         @if (_report.LargestVideos.Count == 0)
         {
             <p class="muted">@Text["Storage_NoVideos"]</p>
@@ -117,7 +117,7 @@ else
                 {
                     <li>
                         <MediaCard Item="video.Item" Href="@($"photos/{video.Id}")" />
-                        <p class="small"><span class="size">@ByteSizes.Format(video.Bytes)</span> <span class="muted">@Text.DateOrNoDate(video.CapturedAt)</span></p>
+                        <p class="small clamp" title="@Text.DateOrNoDate(video.CapturedAt)"><span class="size">@ByteSizes.Format(video.Bytes)</span> <span class="muted">@Text.DateOrNoDate(video.CapturedAt)</span></p>
                     </li>
                 }
             </ol>

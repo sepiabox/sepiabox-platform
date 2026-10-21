@@ -139,6 +139,13 @@ public sealed record SearchFilters
     public PeopleFilter? People { get; init; }
 
     /// <summary>
+    /// The occasions (S-023, D-092) whose assets match, by id: an asset in any of them. An id no occasion has matches
+    /// nothing. Undated assets are in no occasion, so they never match. Only the occasions pages and links produce it;
+    /// questions never do.
+    /// </summary>
+    public IReadOnlyList<long>? EventIds { get; init; }
+
+    /// <summary>
     /// A description in English matched against the photos' CLIP embeddings (S-016); results are then ordered by
     /// similarity, most similar first, and <see cref="SearchQuery.Sort"/> is not used.
     /// </summary>
@@ -173,7 +180,7 @@ public sealed record SearchFilters
         && Same(Kinds, other.Kinds) && DateFrom == other.DateFrom && DateTo == other.DateTo
         && Same(Years, other.Years) && Same(Months, other.Months) && OnThisDay == other.OnThisDay
         && Equals(Places, other.Places) && Same(SavedPlaces, other.SavedPlaces) && DistanceFrom == other.DistanceFrom
-        && Same(Sources, other.Sources) && SourceCount == other.SourceCount && Equals(People, other.People) && UndatedOnly == other.UndatedOnly
+        && Same(Sources, other.Sources) && SourceCount == other.SourceCount && Equals(People, other.People) && Same(EventIds, other.EventIds) && UndatedOnly == other.UndatedOnly
         && Visual == other.Visual && SimilarTo == other.SimilarTo;
 
     public override int GetHashCode() => HashCode.Combine(DateFrom, DateTo, OnThisDay, Places, UndatedOnly);
@@ -435,6 +442,7 @@ public static class SearchQueryJson
             ?? Distance(filters.DistanceFrom)
             ?? List("filters.sources", filters.Sources, Name)
             ?? SourceCount(filters.SourceCount)
+            ?? List("filters.eventIds", filters.EventIds, id => id >= 1 ? null : "must be an occasion id, 1 or more")
             ?? List("filters.people.all", filters.People?.All, Name)
             ?? (filters.People is { All: null, IncludeMe: false } ? "filters.people needs all, includeMe or both." : null)
             ?? Visual(filters.Visual)

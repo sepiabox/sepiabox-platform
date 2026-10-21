@@ -45,6 +45,23 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
         return Task.FromResult(new TimelinePage(page, slice, items.Length > page * PageSize));
     }
 
+    /// <summary>The occasions, newest first as the real query returns them (S-023); split into pages of <see cref="OccasionPageSize"/>.</summary>
+    public List<OccasionSummary> Occasions { get; } = [];
+
+    public int OccasionPageSize { get; init; } = LibraryQueries.OccasionsPageSize;
+
+    public int? RequestedOccasionsPage { get; private set; }
+
+    public Task<OccasionsPage> GetOccasionsPageAsync(int page, CancellationToken cancellationToken = default)
+    {
+        RequestedOccasionsPage = page;
+        var slice = Occasions.Skip((page - 1) * OccasionPageSize).Take(OccasionPageSize).ToList();
+        return Task.FromResult(new OccasionsPage(page, slice, Occasions.Count > page * OccasionPageSize));
+    }
+
+    public Task<OccasionSummary?> GetOccasionAsync(long id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Occasions.FirstOrDefault(o => o.Id == id));
+
     public Task<AssetDetail?> GetAssetAsync(string id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Assets.GetValueOrDefault(id));
 

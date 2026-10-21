@@ -360,15 +360,19 @@ public sealed class AnthropicQuestionTranslatorTests
     }
 
     [Fact]
-    public void Leaves_similar_to_out_of_the_output_format_when_the_dsl_has_it()
+    public void Leaves_the_filters_a_question_cannot_express_out_of_the_output_format_when_the_dsl_has_them()
     {
         using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
         var dsl = JsonNode.Parse(stream)!;
         var output = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
 
-        Assert.NotNull(dsl["properties"]!["filters"]!["properties"]!["similarTo"]);
-        Assert.Null(output["properties"]!["filters"]!["properties"]!["similarTo"]);
-        Assert.Equal(["similarTo", "sourceCount"], QuestionPrompt.NotFromQuestions);
+        // similarTo names an asset (S-017, D-086) and eventIds names occasions (S-023, D-092): ids only the pages know.
+        Assert.Equal(["similarTo", "eventIds", "sourceCount"], QuestionPrompt.NotFromQuestions);
+        Assert.All(QuestionPrompt.NotFromQuestions, field =>
+        {
+            Assert.NotNull(dsl["properties"]!["filters"]!["properties"]![field]);
+            Assert.Null(output["properties"]!["filters"]!["properties"]![field]);
+        });
     }
 
     [Fact]

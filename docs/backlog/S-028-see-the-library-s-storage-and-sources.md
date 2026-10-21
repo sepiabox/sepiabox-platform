@@ -15,9 +15,9 @@
 - Automatic cleanup recommendations.
 
 ### Acceptance criteria
-- [ ] Given seeded assets, when the page is loaded, then the totals by kind and year are correct.
-- [ ] Given assets with 1 and 2 sources, when filtering with `sourceCount.eq=1`, then only the former are returned.
-- [ ] Given `aggregate.sum=bytes` with `kinds=[video]` and `years=[2019]`, when the query runs, then it returns the correct sum.
+- [x] Given seeded assets, when the page is loaded, then the totals by kind and year are correct.
+- [x] Given assets with 1 and 2 sources, when filtering with `sourceCount.eq=1`, then only the former are returned.
+- [x] Given `aggregate.sum=bytes` with `kinds=[video]` and `years=[2019]`, when the query runs, then it returns the correct sum.
 
 ### Technical notes
 - Reuses the aggregation executor from S-026.

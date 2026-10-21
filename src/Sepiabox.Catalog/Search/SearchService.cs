@@ -327,8 +327,21 @@ public sealed class SearchService(
         var named = await ResolvePeopleAsync(query.Filters, cancellationToken);
         var places = await ResolvePlacesAsync(query.Filters, cancellationToken);
         var assets = Filtered(query, places);
-        var total = await assets.CountAsync(cancellationToken);
         var aggregate = query.Aggregate ?? new SearchAggregate();
+        var summed = aggregate.Sum == SearchSum.Bytes;
+        // The count and the sum in one pass: a filter such as the number of sources is the costly part of the query.
+        int total;
+        long? bytes = null;
+        if (summed)
+        {
+            var totals = await assets.GroupBy(_ => 1).Select(g => new { Count = g.Count(), Bytes = g.Sum(a => a.SizeBytes) }).SingleOrDefaultAsync(cancellationToken);
+            (total, bytes) = (totals?.Count ?? 0, totals?.Bytes ?? 0);
+        }
+        else
+        {
+            total = await assets.CountAsync(cancellationToken);
+        }
+
         var groups = aggregate.GroupBy switch
         {
             null => [],
@@ -362,7 +375,6 @@ public sealed class SearchService(
             _ => throw new InvalidOperationException($"Unknown groupBy '{aggregate.GroupBy}'."),
         };
         // Sizes are only given when asked for (S-028); the groups were summed in the same queries as their counts.
-        var summed = aggregate.Sum == SearchSum.Bytes;
         if (!summed)
         {
             groups = [.. groups.Select(g => g with { Bytes = null })];
@@ -375,8 +387,7 @@ public sealed class SearchService(
         // months, in order); by city or source, the largest 10. With top, the largest that many (D-075).
         var ordered = aggregate.Top is null && aggregate.GroupBy is SearchGroupBy.Year or SearchGroupBy.Month or SearchGroupBy.Kind
             ? InKeyOrder(groups).Take(SearchAggregate.MaxTop)
-            : Largest(groups).Take(aggregate.EffectiveTop);
-        long? bytes = summed ? await assets.SumAsync(a => (long?)a.SizeBytes, cancellationToken) ?? 0 : null;
+            : Largest(groups, bySize: summed).Take(aggregate.EffectiveTop);
         return new CountResult(total, [.. ordered], undated, groups.Count) { Bytes = bytes };
     }
 
@@ -390,8 +401,9 @@ public sealed class SearchService(
         [.. groups.Select(select).Select(g => new CountGroup(g.Key?.ToString(CultureInfo.InvariantCulture), g.Count, g.Bytes))];
 
     // Largest first; between equal counts, years and months in order and names alphabetically, "none" last.
-    private static IEnumerable<CountGroup> Largest(IEnumerable<CountGroup> groups) =>
-        groups.OrderByDescending(g => g.Count)
+    // With sizes asked for (S-028), the largest is the one that takes up the most, then the one with the most items.
+    private static IEnumerable<CountGroup> Largest(IEnumerable<CountGroup> groups, bool bySize = false) =>
+        (bySize ? groups.OrderByDescending(g => g.Bytes ?? 0).ThenByDescending(g => g.Count) : groups.OrderByDescending(g => g.Count))
             .ThenBy(g => g.Key is null)
             .ThenBy(g => int.TryParse(g.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : int.MaxValue)
             .ThenBy(g => g.Key, StringComparer.Ordinal);
@@ -474,19 +486,23 @@ public sealed class SearchService(
         if (filters.SourceCount is { } sourceCount)
         {
             // Different source names, so a file found twice on one drive is in one source (as groupBy source counts it).
-            if (sourceCount.Eq is { } exactly)
-            {
-                assets = assets.Where(a => a.Sources.Select(s => s.Name).Distinct().Count() == exactly);
-            }
-            else if (sourceCount.Gte is { } atLeast)
-            {
-                assets = assets.Where(a => a.Sources.Select(s => s.Name).Distinct().Count() >= atLeast);
-            }
+            // One grouped pass over the sources, joined to the assets, not a count per asset: a count per asset took
+            // 1.6 s on 100,000 assets (D-093). An asset with no source has no row, and no count asks for 0.
+            var counted = db.AssetSources.GroupBy(s => s.AssetId);
+            var ids = sourceCount.Eq is { } exactly
+                ? counted.Where(g => g.Select(s => s.Name).Distinct().Count() == exactly).Select(g => g.Key)
+                : counted.Where(g => g.Select(s => s.Name).Distinct().Count() >= sourceCount.Gte!.Value).Select(g => g.Key);
+            assets = assets.Where(a => ids.Contains(a.Id));
         }
 
         if (filters.People is { } people)
         {
             assets = WithPeople(assets, people);
+        }
+
+        if (filters.EventIds is { } eventIds)
+        {
+            assets = assets.Where(a => db.OccasionAssets.Any(l => l.AssetId == a.Id && eventIds.Contains(l.EventId)));
         }
 
         // "More like this one" never shows this one (S-017).

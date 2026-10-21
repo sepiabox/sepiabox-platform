@@ -96,6 +96,12 @@ public static class SearchChips
             }
         }
 
+        if (f.EventIds is { } eventIds)
+        {
+            // The ids mean nothing to a reader, and a chip is no place to look up titles: how many occasions it is.
+            Add(eventIds.Count == 1 ? text["Chip_Occasion_One"].Value : text["Chip_Occasion_Other", eventIds.Count].Value, f with { EventIds = null });
+        }
+
         if (f.Visual is { } visual)
         {
             Add(text["Chip_Visual", visual.Text], f with { Visual = null });

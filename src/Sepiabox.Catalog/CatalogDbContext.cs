@@ -34,6 +34,10 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<SavedPlace> SavedPlaces => Set<SavedPlace>();
 
+    public DbSet<Occasion> Occasions => Set<Occasion>();
+
+    public DbSet<OccasionAsset> OccasionAssets => Set<OccasionAsset>();
+
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options
@@ -170,6 +174,30 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             // SQL; at most one home (S-014).
             place.HasIndex(p => p.IsHome).IsUnique().HasFilter("is_home").HasDatabaseName("ix_saved_places_home");
             place.ToTable(t => t.HasCheckConstraint("ck_saved_places_radius_m", "radius_m BETWEEN 10 AND 50000"));
+        });
+
+        modelBuilder.Entity<Occasion>(occasion =>
+        {
+            occasion.ToTable("events");
+            occasion.Property(o => o.StartsAt).HasColumnType("timestamp without time zone");
+            occasion.Property(o => o.EndsAt).HasColumnType("timestamp without time zone");
+            occasion.Property(o => o.Centroid).HasColumnType("geography (Point, 4326)");
+            occasion.Property(o => o.PlaceLabel).HasMaxLength(200);
+            occasion.Property(o => o.Type).HasMaxLength(32);
+            // The occasions page lists the newest first (S-023).
+            occasion.HasIndex(o => new { o.StartsAt, o.Id }).HasDatabaseName("ix_events_starts_at").IsDescending(true, false);
+            occasion.ToTable(t => t.HasCheckConstraint("ck_events_ends_at", "ends_at >= starts_at"));
+        });
+
+        modelBuilder.Entity<OccasionAsset>(link =>
+        {
+            link.ToTable("event_assets");
+            // An asset is in one occasion at most, so the asset alone is the key.
+            link.HasKey(l => l.AssetId);
+            link.Property(l => l.AssetId).HasMaxLength(64);
+            link.HasOne<Occasion>().WithMany().HasForeignKey(l => l.EventId).OnDelete(DeleteBehavior.Cascade);
+            link.HasOne<Asset>().WithMany().HasForeignKey(l => l.AssetId).OnDelete(DeleteBehavior.Cascade);
+            link.HasIndex(l => l.EventId);
         });
 
         modelBuilder.Entity<Setting>(setting =>

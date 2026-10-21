@@ -1,0 +1,61 @@
+@page "/occasions"
+@using Microsoft.AspNetCore.WebUtilities
+@using Sepiabox.Web.Components.Occasions
+@inject ILibraryQueries Library
+@inject NavigationManager Navigation
+@* Static server rendering, as the timeline: the occasions photos were grouped into (S-023), newest first. *@
+
+<PageTitle>@Text["Occasions_Heading"] · Sepiabox</PageTitle>
+
+<h1 class="page-heading">@Text["Occasions_Heading"]</h1>
+
+@if (_page is null)
+{
+    <p class="muted">@Text["Timeline_Loading"]</p>
+}
+else if (_page.Items.Count == 0 && _page.Page == 1)
+{
+    <p class="empty">@Text["Occasions_None"]</p>
+    <p class="muted">@Text["Occasions_NoneBefore"] <code>sepiabox-worker events rebuild</code>@Text["Occasions_NoneAfter"]</p>
+}
+else if (_page.Items.Count == 0)
+{
+    <p class="empty">@Text["Occasions_NoMore"] <a href="occasions">@Text["Timeline_BackToStart"]</a></p>
+}
+else
+{
+    <ul class="occasions">
+        @foreach (var occasion in _page.Items)
+        {
+            <li class="occasion"><OccasionCard Occasion="occasion" /></li>
+        }
+    </ul>
+
+    <nav class="pages" aria-label="@Text["Timeline_Pages"]">
+        @if (_page.Page > 1)
+        {
+            <a href="@PageLink(_page.Page - 1)">@Text["Timeline_Newer"]</a>
+        }
+        @if (_page.HasMore)
+        {
+            <a href="@PageLink(_page.Page + 1)">@Text["Timeline_Older"]</a>
+        }
+    </nav>
+}
+
+@code {
+    // Text, not int: a hand-typed "abc" must become a page, not a binding error.
+    [SupplyParameterFromQuery(Name = "page")]
+    public string? PageQuery { get; set; }
+
+    private OccasionsPage? _page;
+
+    protected override async Task OnParametersSetAsync() =>
+        _page = await Library.GetOccasionsPageAsync(LibraryQueries.ParsePage(PageQuery));
+
+    // Relative, so links work under whatever base path the app has.
+    private static string PageLink(int page) =>
+        page > 1
+            ? QueryHelpers.AddQueryString("occasions", "page", page.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            : "occasions";
+}

@@ -14,6 +14,25 @@
         }
     }
 
+    @foreach (var eventId in Fields.EventIds)
+    {
+        @* The bar narrows an occasion's photos (S-023): the occasions go with it. *@
+        <input type="hidden" name="@SearchLinks.EventParameter" value="@eventId.ToString(CultureInfo.InvariantCulture)" />
+    }
+
+    @if (Fields.SourceCount is { } sourceCount)
+    {
+        @* The bar narrows the items in one source or in several (S-028): the number of sources goes with it. *@
+        @if (sourceCount.Eq is { } eq)
+        {
+            <input type="hidden" name="@SearchLinks.SourceEqParameter" value="@eq.ToString(CultureInfo.InvariantCulture)" />
+        }
+        @if (sourceCount.Gte is { } gte)
+        {
+            <input type="hidden" name="@SearchLinks.SourceGteParameter" value="@gte.ToString(CultureInfo.InvariantCulture)" />
+        }
+    }
+
     <label>
         <span>@Text["Filter_Year"]</span>
         <select name="year">

@@ -873,9 +873,6 @@
   <data name="Storage_Year" xml:space="preserve">
     <value>Ano</value>
   </data>
-  <data name="Storage_Size" xml:space="preserve">
-    <value>Tamanho</value>
-  </data>
   <data name="Storage_Total" xml:space="preserve">
     <value>Total</value>
   </data>
@@ -891,19 +888,19 @@
     <comment>{0} is the number of items, {1} their size.</comment>
   </data>
   <data name="Storage_NoneOneSource" xml:space="preserve">
-    <value>Nada está em apenas uma fonte.</value>
+    <value>Nenhum item está em apenas uma fonte.</value>
   </data>
   <data name="Storage_Several" xml:space="preserve">
     <value>Em várias fontes</value>
   </data>
   <data name="Storage_NoneSeveral" xml:space="preserve">
-    <value>Nada está em mais de uma fonte.</value>
+    <value>Nenhum item está em várias fontes.</value>
   </data>
   <data name="Storage_ShowThem" xml:space="preserve">
-    <value>Mostrar</value>
+    <value>Mostrar esses itens</value>
   </data>
   <data name="Storage_FirstShown" xml:space="preserve">
-    <value>Mostrando os primeiros {0}.</value>
+    <value>Mostrando os primeiros {0} itens.</value>
   </data>
   <data name="Storage_InSources" xml:space="preserve">
     <value>Em: {0}</value>
@@ -925,17 +922,101 @@
     <value>Em {0} ou mais fontes</value>
   </data>
   <data name="Chip_Size" xml:space="preserve">
-    <value>Tamanho</value>
+    <value>Tamanho dos originais</value>
   </data>
   <data name="Chip_SizeBy" xml:space="preserve">
-    <value>Tamanho por {0}</value>
+    <value>Tamanho dos originais por {0}</value>
     <comment>{0} is year, month, kind, city or source.</comment>
   </data>
   <data name="Count_Size" xml:space="preserve">
-    <value>Tamanho</value>
+    <value>Tamanho dos originais</value>
   </data>
   <data name="Count_TakenBy" xml:space="preserve">
-    <value>Ocupado por {0}</value>
+    <value>Espaço ocupado por {0}</value>
     <comment>{0} is a count such as "312 videos in 2019".</comment>
+  </data>
+  <data name="Format_Occasion_Day" xml:space="preserve">
+    <value>d MMM yyyy</value>
+  </data>
+  <data name="Format_Occasion_MonthStart" xml:space="preserve">
+    <value>%d</value>
+  </data>
+  <data name="Format_Occasion_MonthEnd" xml:space="preserve">
+    <value>d MMM yyyy</value>
+  </data>
+  <data name="Format_Occasion_YearStart" xml:space="preserve">
+    <value>d MMM</value>
+  </data>
+  <data name="Layout_Occasions" xml:space="preserve">
+    <value>Ocasiões</value>
+  </data>
+  <data name="Occasions_Heading" xml:space="preserve">
+    <value>Ocasiões</value>
+  </data>
+  <data name="Occasions_None" xml:space="preserve">
+    <value>Ainda não há ocasiões.</value>
+  </data>
+  <data name="Occasions_Items_One" xml:space="preserve">
+    <value>1 item</value>
+  </data>
+  <data name="Occasions_Items_Other" xml:space="preserve">
+    <value>{0} itens</value>
+  </data>
+  <data name="Occasion_Back" xml:space="preserve">
+    <value>Todas as ocasiões</value>
+  </data>
+  <data name="Occasion_NotFound" xml:space="preserve">
+    <value>Ocasião não encontrada</value>
+  </data>
+  <data name="Occasion_OpenOnTimeline" xml:space="preserve">
+    <value>Abrir na linha do tempo</value>
+  </data>
+  <data name="Chip_Occasion_One" xml:space="preserve">
+    <value>Em uma ocasião</value>
+  </data>
+  <data name="Chip_Occasion_Other" xml:space="preserve">
+    <value>Em {0} ocasiões</value>
+  </data>
+  <data name="Occasions_NoneBefore" xml:space="preserve">
+    <value>Fotos tiradas em datas e lugares próximos são agrupadas em ocasiões quando o responsável pela biblioteca executa</value>
+  </data>
+  <data name="Occasions_NoneAfter" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="Occasion_Empty" xml:space="preserve">
+    <value>Esta ocasião não tem fotos nem vídeos.</value>
+  </data>
+  <data name="Occasion_NotFoundHint" xml:space="preserve">
+    <value>Ela pode ter sido substituída quando as fotos foram reagrupadas.</value>
+  </data>
+  <data name="Occasion_SeeAll" xml:space="preserve">
+    <value>Ver todas as ocasiões</value>
+  </data>
+  <data name="Occasions_NoMore" xml:space="preserve">
+    <value>Não há mais ocasiões.</value>
+  </data>
+  <data name="Occasions_NoThumbnail" xml:space="preserve">
+    <value>Sem miniaturas</value>
+  </data>
+  <data name="Storage_ShowOneSource" xml:space="preserve">
+    <value>Mostrar itens que estão em apenas uma fonte</value>
+  </data>
+  <data name="Storage_ShowSeveral" xml:space="preserve">
+    <value>Mostrar itens que estão em várias fontes</value>
+  </data>
+  <data name="Storage_YearLink" xml:space="preserve">
+    <value>Fotos e vídeos de {0}</value>
+  </data>
+  <data name="Storage_PhotosHeader" xml:space="preserve">
+    <value>Fotos</value>
+  </data>
+  <data name="Storage_PhotosSize" xml:space="preserve">
+    <value>Tamanho das fotos</value>
+  </data>
+  <data name="Storage_VideosHeader" xml:space="preserve">
+    <value>Vídeos</value>
+  </data>
+  <data name="Storage_VideosSize" xml:space="preserve">
+    <value>Tamanho dos vídeos</value>
   </data>
 </root>

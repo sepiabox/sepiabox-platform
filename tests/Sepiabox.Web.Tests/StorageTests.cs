@@ -62,6 +62,56 @@ public sealed class StorageDslTests
     }
 
     [Fact]
+    public void Refuses_the_storage_fields_in_a_translated_answer()
+    {
+        Assert.Equal(
+            "filters.sourceCount is not part of an answer yet: the storage page shows it.",
+            QuestionService.Validate("""{"filters":{"sourceCount":{"eq":1}}}"""));
+        Assert.Equal(
+            "aggregate.sum is not part of an answer yet: the storage page shows sizes.",
+            QuestionService.Validate("""{"filters":{},"aggregate":{"count":"assets","sum":"bytes"}}"""));
+        Assert.Null(QuestionService.Validate("""{"filters":{"years":[2019]},"aggregate":{"count":"assets"}}"""));
+    }
+
+    [Fact]
+    public void The_filter_bar_carries_the_source_count_through_to_the_next_search()
+    {
+        var narrowed = SearchLinks.FromFields("2019", null, null, null, null, sourceEq: "1");
+        var atLeast = SearchLinks.FromFields(null, null, "video", null, null, sourceGte: "2");
+
+        Assert.Equal(new SourceCountFilter { Eq = 1 }, narrowed.Filters.SourceCount);
+        Assert.Equal([2019], narrowed.Filters.Years!);
+        Assert.Equal(new SourceCountFilter { Gte = 2 }, atLeast.Filters.SourceCount);
+        Assert.Equal(new SourceCountFilter { Eq = 1 }, SearchLinks.ToFields(narrowed).SourceCount);
+        // Hand-edited addresses: nothing that the DSL would refuse, and the exact count wins over "at least".
+        Assert.Null(SearchLinks.FromFields(null, null, null, null, null, sourceEq: "0", sourceGte: "x").Filters.SourceCount);
+        Assert.Null(SearchLinks.FromFields(null, null, null, null, null, sourceEq: "1001").Filters.SourceCount);
+        Assert.Equal(new SourceCountFilter { Eq = 3 }, SearchLinks.FromFields(null, null, null, null, null, sourceEq: "3", sourceGte: "2").Filters.SourceCount);
+        Assert.Null(SearchLinks.FromFields(null, null, null, null, null).Filters.SourceCount);
+    }
+
+    [Fact]
+    public async Task Picking_a_year_on_a_source_count_search_keeps_the_source_count()
+    {
+        var library = new FakeLibrary();
+        await using var web = new WebFactory(library);
+        using var http = web.CreateSignedInClient(followRedirects: false);
+        var shown = SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { SourceCount = new SourceCountFilter { Eq = 1 } } });
+
+        // The bar on the page shows the filter in hidden fields...
+        var html = await http.GetStringAsync(new Uri(shown, UriKind.Relative));
+        Assert.Contains("name=\"source-eq\" value=\"1\"", html, StringComparison.Ordinal);
+
+        // ...so the form it sends, with a year picked, comes back to a search with both.
+        using var response = await http.GetAsync(new Uri("/?filter=1&source-eq=1&year=2019&month=&kind=&city=&source=", UriKind.Relative));
+        Assert.Equal(System.Net.HttpStatusCode.Redirect, response.StatusCode);
+        var location = response.Headers.Location!.ToString();
+        Assert.True(SearchQueryJson.TryDecode(location[(location.IndexOf("q=", StringComparison.Ordinal) + 2)..], out var query, out _));
+        Assert.Equal(new SourceCountFilter { Eq = 1 }, query.Filters.SourceCount);
+        Assert.Equal([2019], query.Filters.Years!);
+    }
+
+    [Fact]
     public void Queries_with_different_source_counts_are_different()
     {
         var one = new SearchFilters { SourceCount = new SourceCountFilter { Eq = 1 } };
@@ -94,9 +144,9 @@ public sealed class StorageDslTests
     }
 
     [Theory]
-    [InlineData(Cultures.English, null, "Size")]
-    [InlineData(Cultures.English, "year", "Size by year")]
-    [InlineData(Cultures.BrazilianPortuguese, "year", "Tamanho por ano")]
+    [InlineData(Cultures.English, null, "Size of originals")]
+    [InlineData(Cultures.English, "year", "Size of originals by year")]
+    [InlineData(Cultures.BrazilianPortuguese, "year", "Tamanho dos originais por ano")]
     public void Names_a_size_count_in_its_chip(string culture, string? groupBy, string label)
     {
         using var language = Cultures.Use(culture);
@@ -118,6 +168,9 @@ public sealed class ByteSizesTests
     [InlineData(Cultures.BrazilianPortuguese, 2_576_980_378L, "2,4 GB")]
     [InlineData(Cultures.English, 3L * 1024 * 1024 * 1024 * 1024, "3 TB")]
     [InlineData(Cultures.English, -5L, "0 B")]
+    [InlineData(Cultures.English, 1_048_575L, "1 MB")]
+    [InlineData(Cultures.English, 1_073_741_823L, "1 GB")]
+    [InlineData(Cultures.English, 1_048_064L, "1023.5 KB")]
     public void Formats_a_size_for_people_in_the_current_culture(string culture, long bytes, string expected)
     {
         using var language = Cultures.Use(culture);
@@ -136,8 +189,8 @@ public sealed class SizeAnswerTests : LocalizedContext
     };
 
     [Theory]
-    [InlineData(Cultures.English, "2.4 GB", "Used by 312 videos in 2019")]
-    [InlineData(Cultures.BrazilianPortuguese, "2,4 GB", "Ocupado por 312 vídeos em 2019")]
+    [InlineData(Cultures.English, "2.4 GB", "Space used by 312 videos in 2019")]
+    [InlineData(Cultures.BrazilianPortuguese, "2,4 GB", "Espaço ocupado por 312 vídeos em 2019")]
     public void Shows_the_size_as_the_number_and_what_it_is_the_size_of(string culture, string number, string sentence)
     {
         using var language = Cultures.Use(culture);
@@ -159,7 +212,7 @@ public sealed class SizeAnswerTests : LocalizedContext
             .Add(c => c.Query, query with { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Year } })
             .Add(c => c.Count, new CountResult(5, [new CountGroup("2019", 3), new CountGroup("2020", 2)], null)));
 
-        Assert.Equal(["Group", "Count", "Size"], sized.FindAll("thead th").Select(h => h.TextContent));
+        Assert.Equal(["Group", "Count", "Size of originals"], sized.FindAll("thead th").Select(h => h.TextContent));
         Assert.Equal(["2019", "3", "2.9 KB"], sized.FindAll("tbody tr")[0].Children.Select(c => c.TextContent));
         Assert.Equal(["2020", "2", "2 KB"], sized.FindAll("tbody tr")[1].Children.Select(c => c.TextContent));
         Assert.Equal(["Group", "Count"], plain.FindAll("thead th").Select(h => h.TextContent));
@@ -188,6 +241,11 @@ public sealed class StoragePageTests : LocalizedContext
     {
         var page = RenderPage(Report);
 
+        Assert.Equal(
+            ["Year", "Photos", "Photos size", "Videos", "Videos size"],
+            page.FindAll(".storage-totals thead th").Select(h => h.TextContent));
+        Assert.Equal("storage-totals-heading", page.Find(".storage-totals").GetAttribute("aria-labelledby"));
+        Assert.Equal("Photos and videos from 2019", page.FindAll(".storage-totals tbody a").Single(a => a.TextContent == "2019").GetAttribute("aria-label"));
         var rows = page.FindAll(".storage-totals tbody tr").Select(r => r.Children.Select(c => c.TextContent.Trim()).ToArray()).ToList();
         Assert.Equal(["2020", "0", "–", "1", "3 MB"], rows[0]);
         Assert.Equal(["2019", "12", "11.7 KB", "2", "8 MB"], rows[1]);
@@ -204,6 +262,8 @@ public sealed class StoragePageTests : LocalizedContext
 
         var one = page.Find(".storage-one-source");
         Assert.Contains("15 items, 19.5 KB", one.TextContent, StringComparison.Ordinal);
+        Assert.Equal("Show these items", one.QuerySelector("a")!.TextContent);
+        Assert.Equal("Show items that are only in one source", one.QuerySelector("a")!.GetAttribute("aria-label"));
         var oneLink = one.QuerySelector("a")!.GetAttribute("href")!;
         Assert.True(SearchQueryJson.TryDecode(oneLink["./?q=".Length..], out var oneQuery, out _));
         Assert.Equal(new SourceCountFilter { Eq = 1 }, oneQuery.Filters.SourceCount);
@@ -213,8 +273,10 @@ public sealed class StoragePageTests : LocalizedContext
         Assert.True(SearchQueryJson.TryDecode(several.QuerySelector("p a")!.GetAttribute("href")!["./?q=".Length..], out var severalQuery, out _));
         Assert.Equal(new SourceCountFilter { Gte = 2 }, severalQuery.Filters.SourceCount);
         Assert.Equal("In: HD da Ana, Takeout 2026", several.QuerySelector(".storage-assets p")!.TextContent);
+        Assert.Equal("HD da Ana, Takeout 2026", several.QuerySelector(".storage-assets p")!.GetAttribute("title"));
+        Assert.Equal("Show items that are in several sources", several.QuerySelector("p a")!.GetAttribute("aria-label"));
         Assert.Equal($"photos/{Ids.Of(1)}", several.QuerySelector(".storage-assets a.thumb")!.GetAttribute("href"));
-        Assert.Contains("Showing the first 1.", several.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Showing the first 1 items.", several.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -233,8 +295,8 @@ public sealed class StoragePageTests : LocalizedContext
     {
         var page = RenderPage(new StorageReport([new StorageRow("photo", 2019, 1, 100)], 0, 0, 0, 0, [], []));
 
-        Assert.Equal("Nothing is in only one source.", page.Find(".storage-one-source p").TextContent);
-        Assert.Equal("Nothing is in more than one source.", page.Find(".storage-several-sources p").TextContent);
+        Assert.Equal("No items are only in one source.", page.Find(".storage-one-source p").TextContent);
+        Assert.Equal("No items are in several sources.", page.Find(".storage-several-sources p").TextContent);
         Assert.Equal("There are no videos yet.", page.Find(".storage-largest p").TextContent);
     }
 
@@ -257,6 +319,9 @@ public sealed class StoragePageTests : LocalizedContext
         Assert.Equal("Armazenamento", page.Find("h1").TextContent);
         Assert.Equal("Totais por tipo e ano", page.Find(".storage-totals h2").TextContent);
         Assert.Equal("Em apenas uma fonte", page.Find(".storage-one-source h2").TextContent);
+        Assert.Equal(["Ano", "Fotos", "Tamanho das fotos", "Vídeos", "Tamanho dos vídeos"], page.FindAll(".storage-totals thead th").Select(h => h.TextContent));
+        Assert.Equal("Mostrar esses itens", page.Find(".storage-one-source a").TextContent);
+        Assert.Equal("Mostrar itens que estão em apenas uma fonte", page.Find(".storage-one-source a").GetAttribute("aria-label"));
         Assert.Contains("15 itens, 19,5 KB", page.Find(".storage-one-source").TextContent, StringComparison.Ordinal);
         Assert.Equal("Em: HD da Ana, Takeout 2026", page.Find(".storage-several-sources .storage-assets p").TextContent);
         Assert.Equal("Os 20 maiores vídeos", page.Find(".storage-largest h2").TextContent);
@@ -334,6 +399,32 @@ public sealed class StorageCatalogTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Ranks_sources_and_cities_by_size_when_sizes_are_asked_for()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.AddRange(
+            AssetIn(1, 10_000, "Big", city: "Porto"),
+            AssetIn(2, 100, "Small", city: "Lisbon"),
+            AssetIn(3, 100, "Small", city: "Lisbon"),
+            AssetIn(4, 100, "Small", city: "Lisbon"));
+        await db.SaveChangesAsync();
+        var service = new SearchService(db, s_clock);
+        SearchQuery By(string groupBy, string? sum) => new() { Aggregate = new SearchAggregate { GroupBy = groupBy, Top = 1, Sum = sum } };
+
+        var bigSource = await service.CountAsync(By(SearchGroupBy.Source, SearchSum.Bytes));
+        var bigCity = await service.CountAsync(By(SearchGroupBy.City, SearchSum.Bytes));
+        var mostItemsSource = await service.CountAsync(By(SearchGroupBy.Source, null));
+        var all = await service.CountAsync(new SearchQuery { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Source, Sum = SearchSum.Bytes } });
+
+        // The group that takes up the most, though it has fewer items; by count, as before, when no size was asked for.
+        Assert.Equal(["Big:1:10000"], bigSource!.Groups.Select(g => $"{g.Key}:{g.Count}:{g.Bytes}"));
+        Assert.Equal(["Porto:1:10000"], bigCity!.Groups.Select(g => $"{g.Key}:{g.Count}:{g.Bytes}"));
+        Assert.Equal(["Small"], mostItemsSource!.Groups.Select(g => g.Key));
+        Assert.Equal(["Big", "Small"], all!.Groups.Select(g => g.Key));
+        Assert.Equal(2, all.AllGroups);
+    }
+
+    [Fact]
     public async Task Adds_up_sizes_per_group()
     {
         await using var db = await SeededAsync();
@@ -377,15 +468,16 @@ public sealed class StorageCatalogTests(CatalogFixture catalog)
     public async Task Lists_at_most_twenty_of_the_largest_videos_and_fifty_in_several_sources()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();
-        db.Assets.AddRange(Enumerable.Range(1, 60).Select(n => Asset(n, "video", new DateTime(2020, 1, 1).AddDays(n), n * 10, "HD", "Takeout")));
+        db.Assets.AddRange(Enumerable.Range(1, 51).Select(n => Asset(n, "video", new DateTime(2020, 1, 1).AddDays(n), n * 10, "HD", "Takeout")));
         await db.SaveChangesAsync();
 
         var report = await new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)), s_clock).GetStorageAsync();
 
         Assert.Equal(LibraryQueries.LargestVideosLength, report.LargestVideos.Count);
-        Assert.Equal(600, report.LargestVideos[0].Bytes);
+        Assert.Equal(510, report.LargestVideos[0].Bytes);
+        Assert.Equal(Enumerable.Range(32, 20).Reverse().Select(n => n * 10L), report.LargestVideos.Select(v => v.Bytes));
         Assert.Equal(LibraryQueries.StorageListLength, report.InSeveralSources.Count);
-        Assert.Equal(60, report.SeveralSources);
+        Assert.Equal(51, report.SeveralSources);
         Assert.Equal(0, report.OneSource);
     }
 
@@ -425,6 +517,14 @@ public sealed class StorageCatalogTests(CatalogFixture catalog)
     {
         var result = await new SearchService(db, s_clock).ExecuteAsync(new SearchQuery { Filters = filters, Sort = SearchSort.CapturedAtAsc });
         return [.. result.Hits.Select(h => int.Parse(h.Id[^8..], NumberStyles.HexNumber, CultureInfo.InvariantCulture)).Order()];
+    }
+
+    private static Asset AssetIn(int n, long bytes, string source, string city)
+    {
+        var asset = Asset(n, "photo", new DateTime(2019, 1, 1), bytes, source);
+        asset.PlaceCity = city;
+        asset.PlaceCountry = "Portugal";
+        return asset;
     }
 
     private static Asset Asset(int n, string kind, DateTime? capturedAt, long bytes, params string[] sources) => new()

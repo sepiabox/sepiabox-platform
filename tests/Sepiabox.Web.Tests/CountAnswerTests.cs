@@ -220,6 +220,8 @@ public sealed partial class CountPageTests
         Assert.Equal(3, count.GetProperty("undated").GetInt32());
         Assert.Equal(2, count.GetProperty("groupCount").GetInt32());
         Assert.Equal("""[{"key":"2017","count":4},{"key":null,"count":2}]""", count.GetProperty("groups").GetRawText());
+        // No sizes were asked for: no "bytes" anywhere, so the answer keeps the shape it had.
+        Assert.False(count.TryGetProperty("bytes", out _));
         Assert.Empty(body.RootElement.GetProperty("items").EnumerateArray());
         Assert.Empty(library.Searches);
     }

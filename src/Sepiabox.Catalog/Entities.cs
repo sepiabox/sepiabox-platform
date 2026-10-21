@@ -315,3 +315,41 @@ public sealed class SavedPlace
 
     public bool IsHome { get; set; }
 }
+
+/// <summary>
+/// An occasion (S-023, D-019): photos and videos close together in time and place, such as a wedding or a trip. A
+/// table of its own, <c>events</c>, because "how many weddings" counts occasions, not photos. Rebuilt by
+/// <c>sepiabox-worker events rebuild</c>; its title is never stored, so it is written in the reader's language (D-050).
+/// </summary>
+public sealed class Occasion
+{
+    public long Id { get; set; }
+
+    /// <summary>The camera time of the occasion's first asset (wall clock, no time zone, as <see cref="Asset.CapturedAt"/>).</summary>
+    public DateTime StartsAt { get; set; }
+
+    /// <summary>The camera time of its last asset.</summary>
+    public DateTime EndsAt { get; set; }
+
+    /// <summary>The mean position of its geotagged assets; null when none has a location.</summary>
+    public NetTopologySuite.Geometries.Point? Centroid { get; set; }
+
+    /// <summary>
+    /// The city most of its geotagged assets are in, as GeoNames names it (D-066), or their country when no asset has
+    /// a city; null when no asset has a place. The title adds the dates to it.
+    /// </summary>
+    public string? PlaceLabel { get; set; }
+
+    public int AssetCount { get; set; }
+
+    /// <summary>What the occasion was, such as a wedding (S-024); null until it is classified.</summary>
+    public string? Type { get; set; }
+}
+
+/// <summary>An asset in an occasion; an asset is in at most one (S-023).</summary>
+public sealed class OccasionAsset
+{
+    public long EventId { get; set; }
+
+    public required string AssetId { get; set; }
+}
