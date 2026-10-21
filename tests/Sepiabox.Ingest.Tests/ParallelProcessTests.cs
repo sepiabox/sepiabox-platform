@@ -48,7 +48,8 @@ public sealed class ParallelProcessTests
                         Thread.Sleep(500);
                     }
                 })));
-        var first = await Task.WhenAny(photosDone.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        // Generous for a cold, shared CI runner (Windows took over 30 s once); a stall still never finishes before it.
+        var first = await Task.WhenAny(photosDone.Task, Task.Delay(TimeSpan.FromMinutes(3)));
         gate.Set();
         var result = await run;
 
