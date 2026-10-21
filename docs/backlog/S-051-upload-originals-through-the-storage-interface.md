@@ -1,6 +1,6 @@
 ## S-051 — Upload originals through the storage interface
 **Epic:** Foundation
-**Depends on:** S-050
+**Depends on:** S-050, S-063
 **Priority:** Medium
 **Size:** M
 

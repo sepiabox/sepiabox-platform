@@ -184,7 +184,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-050 | [Put blob storage behind the project's own interface](S-050-put-blob-storage-behind-the-project-s.md) | Foundation | S-007, S-008, S-009, S-033 | High | M | `todo` |
-| S-051 | [Upload originals through the storage interface](S-051-upload-originals-through-the-storage-interface.md) | Foundation | S-050 | Medium | M | `todo` |
+| S-051 | [Upload originals through the storage interface](S-051-upload-originals-through-the-storage-interface.md) | Foundation | S-050, S-063 | Medium | M | `todo` |
 
 ### Sprint 17 — Cloud sources I
 
