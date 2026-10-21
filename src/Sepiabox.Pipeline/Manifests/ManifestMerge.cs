@@ -37,6 +37,8 @@ public static class ManifestMerge
             Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
             Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
             Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),
+            // Stored once any side stores it (S-063, D-088), whichever side is the description.
+            OriginalStored = MergeOriginalStored(existing, incoming),
             FacesProcessed = faces.FacesProcessed,
             Faces = faces.Faces,
             FacesVersion = FacesVersionOf(faces, existingFaces, incomingFaces),
@@ -175,9 +177,15 @@ public static class ManifestMerge
         Sources = MergeSources(manifest.Sources),
         Derivatives = MergeDerivatives(manifest.Derivatives),
         Embeddings = MergeEmbeddings(manifest.Embeddings),
+        OriginalStored = manifest.IsOriginalStored ? null : false,
     };
 
-    // Later entries win for the same file, unless they are older.
+    // False only when both sides say so; written as absent when true, so equal manifests serialize equally.
+    private static bool? MergeOriginalStored(Manifest a, Manifest b) => a.IsOriginalStored || b.IsOriginalStored ? null : false;
+
+    // Later entries win for the same file, unless they are older. The url merges like the other fields (the newer
+    // modifiedAt wins) and a present one beats an absent one (S-063, D-091); on a tie the larger url wins, so the result
+    // does not depend on the order.
     private static List<ManifestSource> MergeSources(IEnumerable<ManifestSource> sources)
     {
         var merged = new List<ManifestSource>();
@@ -187,11 +195,15 @@ public static class ManifestMerge
             if (index < 0)
             {
                 merged.Add(source);
+                continue;
             }
-            else if (source.ModifiedAt > merged[index].ModifiedAt)
+
+            var kept = merged[index];
+            var (newer, older) = source.ModifiedAt > kept.ModifiedAt ? (source, kept) : (kept, source);
+            merged[index] = newer with
             {
-                merged[index] = source;
-            }
+                Url = source.ModifiedAt == kept.ModifiedAt ? LargerUrl(kept.Url, source.Url) : newer.Url ?? older.Url,
+            };
         }
 
         return [.. merged
@@ -199,6 +211,9 @@ public static class ManifestMerge
             .ThenBy(s => s.Name, StringComparer.Ordinal)
             .ThenBy(s => s.Path, StringComparer.Ordinal)];
     }
+
+    private static string? LargerUrl(string? a, string? b) =>
+        a is null ? b : b is null ? a : string.CompareOrdinal(a, b) >= 0 ? a : b;
 
     // Later entries win for the same name.
     private static List<ManifestDerivative> MergeDerivatives(IEnumerable<ManifestDerivative> derivatives)

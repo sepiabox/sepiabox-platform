@@ -68,6 +68,9 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             asset.ToTable("assets");
             asset.Property(a => a.Id).HasMaxLength(64);
             asset.Property(a => a.Kind).HasMaxLength(16);
+            // True for every asset before index-only mode (S-063). Never generated: with a default and a CLR default of
+            // false, EF would leave a false out of the insert and the column's default would make it true.
+            asset.Property(a => a.OriginalStored).HasDefaultValue(true).ValueGeneratedNever();
             // Camera clocks have no time zone, so the value is stored exactly as read.
             asset.Property(a => a.CapturedAt).HasColumnType("timestamp without time zone");
             asset.Property(a => a.Location).HasColumnType("geography (Point, 4326)");

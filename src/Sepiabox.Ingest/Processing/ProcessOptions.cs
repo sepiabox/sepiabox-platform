@@ -14,6 +14,10 @@ namespace Sepiabox.Ingest.Processing;
 /// <param name="Faces">Detect faces (S-018). Off by default: faces are biometric data, so the user opts in.</param>
 /// <param name="Jobs">Files processed at once (<c>--jobs</c>); null for <see cref="DefaultJobs"/>.</param>
 /// <param name="VideoJobs">Videos read from the drive at once (<c>--video-jobs</c>); null for 1.</param>
+/// <param name="IndexOnly">
+/// The originals stay where they are and are never uploaded (S-063, D-088); previews are larger. Belongs to the work
+/// folder: the first run records it, and a later run asking for the other mode is refused.
+/// </param>
 public sealed record ProcessOptions(
     string Root,
     string OutputPath,
@@ -25,8 +29,12 @@ public sealed record ProcessOptions(
     bool ListLeftOut = false,
     bool Faces = false,
     int? Jobs = null,
-    int? VideoJobs = null)
+    int? VideoJobs = null,
+    bool IndexOnly = false)
 {
+    /// <summary>The mode this run asks for.</summary>
+    public WorkFolderMode Mode => IndexOnly ? WorkFolderMode.IndexOnly : WorkFolderMode.KeepsOriginals;
+
     /// <summary>The most files <c>--jobs</c> may process at once.</summary>
     public const int MaxJobs = 64;
 
@@ -60,6 +68,7 @@ public sealed record ProcessOptions(
         var faces = false;
         int? jobs = null;
         int? videoJobs = null;
+        var indexOnly = false;
 
         for (var i = 0; i < args.Count; i++)
         {
@@ -95,6 +104,10 @@ public sealed record ProcessOptions(
 
                 case "--faces":
                     faces = true;
+                    break;
+
+                case "--index-only":
+                    indexOnly = true;
                     break;
 
                 case "--jobs" or "--video-jobs":
@@ -154,7 +167,7 @@ public sealed record ProcessOptions(
 
         options = new ProcessOptions(
             root, outputPath, string.IsNullOrWhiteSpace(sourceName) ? null : sourceName.Trim(), ffmpegFolder, encoder, modelFolder,
-            retryLeftOut, listLeftOut, faces, jobs, videoJobs);
+            retryLeftOut, listLeftOut, faces, jobs, videoJobs, indexOnly);
         error = null;
         return true;
     }

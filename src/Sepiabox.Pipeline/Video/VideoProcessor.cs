@@ -170,6 +170,20 @@ public sealed class VideoEncoderUnavailableException : Exception
 }
 
 /// <summary>
+/// The playable H.264 version of a video: its derivative name and the size it is fitted into, never upscaled. 720p in
+/// full mode, 1080p in an index-only work folder, where it stands in for the original on screen (S-063, D-088).
+/// </summary>
+/// <param name="Name">Derivative name, such as <c>proxy-720p</c>.</param>
+/// <param name="LongestSide">The longest side it may have, in either orientation.</param>
+/// <param name="ShortestSide">The shortest side it may have.</param>
+public sealed record VideoVersion(string Name, int LongestSide, int ShortestSide)
+{
+    public static readonly VideoVersion Hd720 = new(VideoProcessor.ProxyName, 1280, 720);
+
+    public static readonly VideoVersion Hd1080 = new(VideoProcessor.LargeProxyName, 1920, 1080);
+}
+
+/// <summary>
 /// Makes what the web shows for a video (D-015): a WebP poster and thumbnail taken at 10% of the
 /// duration, and a 720p H.264 version with metadata removed. Originals are only read.
 /// </summary>
@@ -178,25 +192,34 @@ public sealed class VideoProcessor : IVideoProcessor
     private readonly FfmpegTools tools;
     private readonly VideoEncoder encoder;
     private readonly IReadOnlyList<string>? videoCodec;
+    private readonly VideoVersion version;
 
-    public VideoProcessor(FfmpegTools tools, VideoEncoder encoder = VideoEncoder.Software)
-        : this(tools, encoder, null)
+    /// <param name="tools">FFmpeg and ffprobe.</param>
+    /// <param name="encoder">The H.264 encoder.</param>
+    /// <param name="version">The playable version to make: 720p by default (<see cref="VideoVersion.Hd720"/>).</param>
+    public VideoProcessor(FfmpegTools tools, VideoEncoder encoder = VideoEncoder.Software, VideoVersion? version = null)
+        : this(tools, encoder, null, version)
     {
     }
 
     /// <summary>For tests: <paramref name="videoCodec"/> replaces the encoder's arguments, such as an encoder that fails.</summary>
-    internal VideoProcessor(FfmpegTools tools, VideoEncoder encoder, IReadOnlyList<string>? videoCodec)
+    internal VideoProcessor(FfmpegTools tools, VideoEncoder encoder, IReadOnlyList<string>? videoCodec, VideoVersion? version = null)
     {
         ArgumentNullException.ThrowIfNull(tools);
         this.tools = tools;
         this.encoder = encoder;
         this.videoCodec = videoCodec;
+        this.version = version ?? VideoVersion.Hd720;
     }
 
     /// <summary>The encoder the 720p versions are made with.</summary>
     public VideoEncoder Encoder => encoder;
 
     public const string ProxyName = "proxy-720p";
+
+    /// <summary>The playable version of an index-only work folder (S-063).</summary>
+    public const string LargeProxyName = "proxy-1080p";
+
     public const string ProxyContentType = "video/mp4";
 
     /// <summary>The video's still, which is also what its CLIP embedding is computed from (S-015).</summary>
@@ -381,8 +404,8 @@ public sealed class VideoProcessor : IVideoProcessor
             File.Delete(frame);
         }
 
-        var (width, height) = VideoScale.Fit(probe.Width, probe.Height);
-        var proxyPath = $"{relativeFolder}/{ProxyName}.mp4";
+        var (width, height) = VideoScale.Fit(probe.Width, probe.Height, version.LongestSide, version.ShortestSide);
+        var proxyPath = $"{relativeFolder}/{version.Name}.mp4";
         var proxy = Path.Combine(workFolder, proxyPath);
         var temporary = proxy + ".tmp";
         string? withoutSoundBecause = null;
@@ -430,7 +453,7 @@ public sealed class VideoProcessor : IVideoProcessor
 
         File.Move(temporary, proxy, overwrite: true);
 
-        return new VideoDerivatives([.. posters, new ManifestDerivative(ProxyName, proxyPath, width, height, ProxyContentType)], withoutSoundBecause)
+        return new VideoDerivatives([.. posters, new ManifestDerivative(version.Name, proxyPath, width, height, ProxyContentType)], withoutSoundBecause)
         {
             Sound = sound,
         };
@@ -517,7 +540,7 @@ public sealed class VideoProcessor : IVideoProcessor
 public static class VideoScale
 {
     /// <summary>
-    /// Fits a video into 720p in either orientation (longest side 1280, shortest 720) without upscaling.
+    /// Fits a video into 720p (or the sides given, such as 1920 and 1080) in either orientation, without upscaling.
     /// H.264 with 4:2:0 chroma needs even dimensions, so both are rounded down to even.
     /// </summary>
     public static (int Width, int Height) Fit(int width, int height, int longest = 1280, int shortest = 720)
