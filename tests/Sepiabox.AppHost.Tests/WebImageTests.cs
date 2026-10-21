@@ -7,15 +7,20 @@ namespace Sepiabox.AppHost.Tests;
 /// <summary>
 /// The web's image as a deploy builds it (S-056, D-071), against a local registry instead of Azure's: the models image
 /// from scripts/web-models.sh with the real, verified model, then the web published twice on it as two releases.
-/// Needs Docker and the CLIP text model, which CI's integration job has.
+/// Needs Docker and the CLIP text model. CI runs it in its web-image job, on main and on a pull request that changes
+/// what goes into the image (D-082), so it is also in the category WebImage, which the integration job leaves out.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Category", "WebImage")]
 public sealed class WebImageTests
 {
     private const string WebRepository = "sepiabox-web-test";
 
     // Pinned: the test should not change because the registry image did.
     private const string Registry = "registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373";
+
+    // How long a command's output may stay open after it exits (D-082).
+    private static readonly TimeSpan s_outputGrace = TimeSpan.FromMinutes(1);
 
     [WebImageFact]
     public async Task Two_releases_share_the_model_layer_and_carry_the_pinned_model_readable_by_the_app()
@@ -123,6 +128,11 @@ public sealed class WebImageTests
             start.ArgumentList.Add(argument);
         }
 
+        // MSBuild worker nodes kept for reuse, and the MSBuild server, outlive a dotnet command yet inherit its
+        // redirected output, so reading that output to the end waited for their idle timeout: about 10 minutes for
+        // each of this test's three builds in CI (issue #55, D-082). Without them every build's processes end with it.
+        start.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        start.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
         foreach (var (name, value) in environment ?? [])
         {
             start.Environment[name] = value;
@@ -132,6 +142,20 @@ public sealed class WebImageTests
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
+
+        // The output ends when every process holding it does; bounded, so a process left behind fails the test
+        // within a minute instead of stalling CI for its idle timeout.
+        try
+        {
+            await Task.WhenAll(output, error).WaitAsync(s_outputGrace);
+        }
+        catch (TimeoutException)
+        {
+            Assert.Fail(
+                $"{fileName} {string.Join(' ', arguments)} exited, but its output was still open {s_outputGrace.TotalSeconds:F0} s later: "
+                + "a process it started (such as an MSBuild node or build server) outlived it holding the output (D-082).");
+        }
+
         Assert.True(!check || process.ExitCode == 0, $"{fileName} {string.Join(' ', arguments)} failed: {await error}");
         return await output;
     }
