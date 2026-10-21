@@ -52,6 +52,9 @@ public sealed record ProcessResult(
     /// </summary>
     public int Refreshed { get; init; }
 
+    /// <summary>Of <see cref="Refreshed"/>, the videos whose manifest gained a location (most gain nothing).</summary>
+    public int LocationsAdded { get; init; }
+
     /// <summary>Videos whose 720p version was made without sound in this run, with FFmpeg's message (D-084).</summary>
     public IReadOnlyList<ScanProblem> WithoutSound { get; init; } = WithoutSound ?? [];
 }
@@ -713,6 +716,7 @@ public static class ProcessCommand
                 if (manifest.Location is null)
                 {
                     ManifestJson.WriteFile(path, manifest with { Location = location });
+                    o.LocationsAdded++;
                 }
             }
 
@@ -865,6 +869,7 @@ public static class ProcessCommand
             facesChecked, facesFound, faceProblems, withoutSound)
         {
             Refreshed = outcomes.Sum(o => o.Refreshed),
+            LocationsAdded = outcomes.Sum(o => o.LocationsAdded),
         };
     }
 
@@ -1107,6 +1112,8 @@ public static class ProcessCommand
         public int Embedded { get; set; }
 
         public int Refreshed { get; set; }
+
+        public int LocationsAdded { get; set; }
 
         public int FacesChecked { get; set; }
 

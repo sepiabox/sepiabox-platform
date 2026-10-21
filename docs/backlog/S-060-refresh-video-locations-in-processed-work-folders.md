@@ -19,7 +19,7 @@ S-053 reads phone video locations from QuickTime metadata. It landed before the 
 - [x] Given an unchanged file already at the current version, then its headers are not read again.
 
 ### Status
-- `doing` (2026-10-21): implemented and tested (D-089).
+- `done` (2026-10-21): implemented and tested (D-089), with the review's fixes (the version and a failed read tested, locations added counted).
 
 ### Technical notes
 - Same "only what changed" approach as embeddings and faces (D-042, D-047): the work folder is the source of truth.
