@@ -1,6 +1,6 @@
 ## S-048 — Import an Instagram data download
 **Epic:** Import exports
-**Depends on:** S-004, S-043, S-045
+**Depends on:** S-004, S-043, S-045, S-063
 **Priority:** Medium
 **Size:** M
 
@@ -12,6 +12,7 @@ The Instagram API does not expose a person's own archive, so posts come from "Do
 - Date: `date_time_original` when present, otherwise `creation_timestamp` (the posting time, an approximation of the capture date) as the export candidate.
 - Caption: the post's or media's `title`. Albums: "Instagram" plus "Instagram stories" / "Instagram reels" for those lists, so the family can find them.
 - Text repair: Meta's JSON writes UTF-8 bytes as `\u00XX` escapes (mojibake such as "aniversÃ¡rio"); decode strings by reinterpreting them as Latin-1 bytes and then UTF-8, only when that round trip is valid.
+- **Link at the source (D-088):** the post's permalink (`https://www.instagram.com/p/<code>/`, or `/reel/<code>/`) becomes the source's `url` (S-063) **if the download provides it**. The post lists are believed to give only `uri` paths inside the download, so **confirm against a real download** which field, if any, carries the permalink. Never build an address from other fields. Without one, the source has no `url`, and in index-only mode the detail page says the original is in the Instagram download (S-064).
 - Media files not listed in any JSON (profile pictures, messages) are left out of this export kind and counted in one line.
 
 ### Out of scope
@@ -24,12 +25,14 @@ The Instagram API does not expose a person's own archive, so posts come from "Do
 - [ ] Given `exif_data` with latitude, longitude and `date_time_original`, then they are used for the location and date.
 - [ ] Given the escaped string "aniversÃ¡rio", then the caption is "aniversário"; a string that is not mojibake is left as it is.
 - [ ] Given a media file under `media/` that no JSON lists, then it produces no manifest and is counted in the summary.
+- [ ] Given a synthetic post with the permalink field found in the real download (if there is one), then the source's `url` is that permalink; given a post without it, then the source has none.
+- [ ] Given `process --export instagram --index-only`, then the manifests say `originalStored: false` and `upload` sends no original.
 
 ### Technical notes
 - **Format confirmation first:** Meta changes the folder layout and field names between versions. Before writing the reader, confirm them against a small real download the owner provides, and record the paths and fields found in the PR. Fixtures stay synthetic (tests write the JSON and tiny media), never real personal data.
 - Share the JSON helpers (timestamps, text repair, `exif_data`) with S-049 in one place (`MetaExport` in Sepiabox.Pipeline).
 - Source `type` `instagram` (D-053).
-- Decisions: D-037, D-046, D-053.
+- Decisions: D-037, D-046, D-053, D-088.
 
 ### Expected tests
 - Unit: post parsing variants, text repair, date choice.

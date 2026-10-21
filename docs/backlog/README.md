@@ -13,7 +13,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 **Sprints** ([D-054](../decisions.md)): a sprint is finished completely before the next one starts, and stories are taken in the order below, within the current sprint; there are no order overrides. A `todo` story whose dependency is `blocked` becomes `blocked` ("depends on S-XXX"). A story whose only open items are manual owner checks is `done` once its automated criteria pass; the manual checks go to [`operations.md`](../operations.md) as owner acceptance. Each sprint fits in about 4 hours of agent work including the Atlas + Spock reviews (2 stories M + M, or up to 3 when some are S). Sprints 1–2 were re-cut from the work already done.
 
-**MVP** ([D-053](../decisions.md)): Sprints 1–9. Take the data from the external drive to the cloud, ask questions about the imported photos and videos, and get correct answers. The only source in the MVP is the external drive (local folders and drives). Sprints 10–21 come after the MVP and do not start while an MVP story is `blocked`.
+**MVP** ([D-053](../decisions.md)): Sprints 1–9. Take the data from the external drive to the cloud, ask questions about the imported photos and videos, and get correct answers. The only source in the MVP is the external drive (local folders and drives). Sprints 10–22 come after the MVP and do not start while an MVP story is `blocked`.
 
 **UI text** ([D-050](../decisions.md)): from S-044 on, every story writes the text the user sees as resources in English and Brazilian Portuguese, and uses English routes. Portuguese strings quoted in stories are the `pt-BR` translation.
 
@@ -205,7 +205,16 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-057 | [Delete a source's assets from the library](S-057-delete-a-source-s-assets-from-the.md) | Cloud catalog | S-008, S-050, S-058 | Medium | M | `todo` |
 | S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `todo` |
 
-### Sprint 19 — Import exports I
+### Sprint 19 — Index-only mode
+
+**Demonstrable increment:** `sepiabox-ingest process --index-only` keeps the originals where they are: `upload` sends 2048 px previews, 1080p videos, embeddings, faces and manifests but no original; the detail page shows the larger preview and where the original lives, with a link when the source has one ([D-088](../decisions.md)).
+
+| Story | Title | Epic | Depends on | Priority | Size | Status |
+|---|---|---|---|---|---|---|
+| S-063 | [Process and upload a source in index-only mode](S-063-process-and-upload-a-source-in-index-only.md) | Local ingest | S-005, S-006, S-007, S-008, S-015, S-018, S-040, S-051 | Medium | M | `todo` |
+| S-064 | [Show where an index-only original lives](S-064-show-where-an-index-only-original-lives.md) | Web app | S-063, S-011, S-044, S-038, S-039 | Medium | S | `todo` |
+
+### Sprint 20 — Import exports I
 
 **Demonstrable increment:** `sepiabox-ingest process --export <kind>` reads an export's dates, places, captions and albums; the app shows captions and albums and filters by album ([D-053](../decisions.md)).
 
@@ -214,22 +223,22 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-045 | [Read metadata from photo exports during process](S-045-read-metadata-from-photo-exports-during-process.md) | Import exports | S-004, S-043 | Medium | M | `todo` |
 | S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` |
 
-### Sprint 20 — Import exports II
+### Sprint 21 — Import exports II
 
-**Demonstrable increment:** A Google Takeout and an Apple Photos / iCloud export show up in the timeline with their metadata.
+**Demonstrable increment:** A Google Takeout and an Apple Photos / iCloud export show up in the timeline with their metadata, in either mode; in index-only mode a Google Photos item links back to Google Photos.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045 | Medium | M | `todo` |
-| S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045 | Medium | M | `todo` |
+| S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` |
+| S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` |
 
-### Sprint 21 — Import exports III
+### Sprint 22 — Import exports III
 
 **Demonstrable increment:** Instagram and Facebook downloads show up in the timeline with their captions and albums.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045 | Medium | M | `todo` |
+| S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` |
 | S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `todo` |
 
 ## Epics
@@ -237,9 +246,9 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Epic | Stories |
 |---|---|
 | Foundation | S-001, S-003, S-050, S-051 |
-| Local ingest | S-002, S-004, S-005, S-006, S-007, S-043, S-053, S-060, S-062 |
+| Local ingest | S-002, S-004, S-005, S-006, S-007, S-043, S-053, S-060, S-062, S-063 |
 | Cloud catalog | S-008, S-012, S-057, S-059 |
-| Web app | S-009, S-010, S-011, S-044, S-055 |
+| Web app | S-009, S-010, S-011, S-044, S-055, S-064 |
 | Search | S-013, S-014, S-015, S-016, S-017, S-041, S-056 |
 | People | S-018, S-019, S-020, S-021, S-022 |
 | Occasions | S-023, S-024 |
@@ -253,9 +262,9 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 ## Validation
 
-- **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-062 were added with D-050, D-051, D-053 and the reviews of D-054; the sprints were re-cut by D-054); there are no cycles and no forward dependencies (checked by script when this index is generated).
-- **Size:** 21 stories S, 41 M, none L.
-- **Sprints:** 21 sprints. Sprints 3–21 hold 2 or 3 stories each (M + M, or up to 3 when some are S, D-054); Sprints 1 (11 stories) and 2 (7) gather the work done before D-054.
+- **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-062 were added with D-050, D-051, D-053 and the reviews of D-054, and S-063–S-064 with D-088; the sprints were re-cut by D-054, and D-088 inserted Sprint 19 before the import of exports); there are no cycles and no forward dependencies (checked by script when this index is generated).
+- **Size:** 22 stories S, 42 M, none L.
+- **Sprints:** 22 sprints. Sprints 3–22 hold 2 or 3 stories each (M + M, or up to 3 when some are S, D-054); Sprints 1 (11 stories) and 2 (7) gather the work done before D-054.
 - **Decisions covered:** D-001 to D-024 in [`decisions.md`](../decisions.md) are applied: each is cited in the technical notes of at least one story, except D-021, which this backlog itself applies.
 - Story status is kept up to date by each story's PR (see [How to use](#how-to-use)).
 
@@ -263,7 +272,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 | Topic | Reason |
 |---|---|
-| Dropbox | Not used by the family today; the source model (S-037 to S-039) allows adding it later. Google Photos, Apple Photos / iCloud, Instagram and Facebook are now covered by Sprints 19–21 through their exports (D-053). |
+| Dropbox | Not used by the family today; the source model (S-037 to S-039) allows adding it later. Google Photos, Apple Photos / iCloud, Instagram and Facebook are now covered by Sprints 20–22 through their exports (D-053), with index-only mode (Sprint 19, D-088) for keeping their originals where they are. |
 | A local UI for pre-processing (a future epic) | A nicer desktop interface for `scan`, `process --export` and `upload` (progress, problems, choosing folders). For now the `sepiabox-ingest` console is enough. |
 | Mobile apps and Sign in with Apple | Phase 3; Apple sign-in only makes sense with the iOS app (D-006). |
 | Dedicated object and clothing detection ("red dress") | In v1 covered by CLIP visual search (S-016, S-041); a dedicated detector is phase 3. |
@@ -278,7 +287,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 ## Summary
 
 - **Epics:** 14
-- **Sprints:** 21
-- **Stories:** 62
-- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (36 stories), with the external drive as the only source; Sprints 10–21 (26 stories) come after it. What is left of the MVP (18 stories): S-044, S-055, S-053, S-032, S-058, S-033, S-034, S-035, S-012, S-059, S-061, S-013, S-016, S-056, S-025, S-062, S-026, S-054; its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
-- **Critical path (13 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-032 → S-058 → S-033 → S-050 → S-036 → S-038, and others as long: the same chain ending in S-036 → S-039, or in S-050 → S-051 → S-040.
+- **Sprints:** 22
+- **Stories:** 64
+- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (36 stories), with the external drive as the only source; Sprints 10–22 (28 stories) come after it. What is left of the MVP (18 stories): S-044, S-055, S-053, S-032, S-058, S-033, S-034, S-035, S-012, S-059, S-061, S-013, S-016, S-056, S-025, S-062, S-026, S-054; its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
+- **Critical path (16 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-032 → S-058 → S-033 → S-050 → S-051 → S-040 → S-063 → S-048 → S-049; the same chain ending in S-063 → S-046, S-047, S-048 or S-064 is one story shorter (D-088 put index-only mode before the exports).

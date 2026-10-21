@@ -20,7 +20,7 @@ Users in v1: **two people** (a couple), sharing **one library**. There is no ope
 
 ```
 PC with the drive ──sepiabox-ingest──► Blob Storage ──Event Grid──► Service Bus ──► Worker (Container Apps job) ──► PostgreSQL
- (processes locally)                    originals (Cold)                              imports manifests                catalog + pgvector + PostGIS
+ (processes locally)                    originals (Cold; none in index-only mode)     imports manifests                catalog + pgvector + PostGIS
                                         derivatives (Hot)
                                         manifests                                                                           ▲
                                                                                                                             │ SQL + kNN
@@ -46,14 +46,14 @@ Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsof
 
 1. `sepiabox-ingest scan <folder>`: read-only; counts photos/videos, years, duplicates, unreadable files.
 2. `sepiabox-ingest process <folder> --out <workdir>`: for each file computes the SHA-256 (asset identity), reads EXIF/QuickTime (date, GPS or a phone video's ISO 6709 location (D-060), camera, dimensions; an undated file takes its date from its file or parent folder name, D-046), generates WebP thumbnails, video posters and 720p versions, the CLIP embedding and, only with `--faces`, faces (D-047). Writes **one JSON manifest per asset** (schema v1, `docs/schemas/manifest.v1.json`). State is kept in SQLite so runs can resume.
-3. `sepiabox-ingest upload <workdir>`: uploads originals (**Cold** tier), derivatives (**Hot**) and, last, the manifest. Resumes where it stopped.
+3. `sepiabox-ingest upload <workdir>`: uploads originals (**Cold** tier), derivatives (**Hot**) and, last, the manifest. Resumes where it stopped. A work folder made by `process --index-only` (D-088, S-063) uploads no originals: they stay at their source (the drive, an export folder), its previews are larger (photos 2048 px, videos 1080p), and the catalog records where each original lives.
 4. In the cloud, each new manifest triggers the import (Event Grid filtered to the `manifests` container → queue → worker job, one execution at a time).
 
-Originals are **never re-read** in the cloud during local ingest (reading the Cold tier costs ~US$ 0.03/GB). Files that arrive through the cloud (Drive, OneDrive) go through the same pipeline in the worker. Exports of Google Photos, Apple Photos / iCloud, Instagram and Facebook are extracted on the PC and read by `process --export <kind>`, which takes dates, places, captions and albums from the export's metadata files (D-053).
+Originals are **never re-read** in the cloud during local ingest (reading the Cold tier costs ~US$ 0.03/GB). Files that arrive through the cloud (Drive, OneDrive) go through the same pipeline in the worker, in reference mode (D-023): their originals stay in Drive or OneDrive. Exports of Google Photos, Apple Photos / iCloud, Instagram and Facebook are extracted on the PC and read by `process --export <kind>`, which takes dates, places, captions and albums from the export's metadata files (D-053).
 
 ## Data
 
-- **Blob Storage**: `originals` (Cold), `derivatives` (Hot), `manifests`, `incoming`, `exports`. Public access disabled; the browser only reads through short-lived SAS URLs issued after sign-in.
+- **Blob Storage**: `originals` (Cold; only for sources not in index-only or reference mode, D-023, D-088), `derivatives` (Hot), `manifests`, `incoming`, `exports`. Public access disabled; the browser only reads through short-lived SAS URLs issued after sign-in.
 - **PostgreSQL Flexible (B1ms)** with **pgvector** (512-d CLIP and 128-d face embeddings, HNSW indexes) and **PostGIS** (location, distance, places). Main tables: `assets`, `asset_sources`, `derivatives`, `asset_embeddings`, `faces`, `people`, `settings`, `events`, `saved_places`, `geonames`.
 - **Place names**: GeoNames `cities500` loaded into PostgreSQL (offline, no Azure Maps). Personal places ("Beach house", and one place flagged as home, S-014) are points with a radius saved by the user.
 
@@ -101,5 +101,5 @@ Colors: Sepia `#9A5A2C` (brand), Cyanotype `#1F4C74` (actions), Developer `#231A
 ## Phases
 
 - **MVP** (Sprints 1–9, D-053, D-054): take the data from the external drive (the only source) to the cloud, ask questions about the imported photos and videos and get correct answers: local processing with embeddings and opt-in faces, upload and automatic import, timeline, restricted sign-in, English and Brazilian Portuguese UI, place names (with phone video locations) and filters, search by description (the CLIP text model shipped with the web, D-055), natural-language questions and counting answers checked against a golden set, deployed to Azure with cost safeguards, and an end-to-end acceptance test from a generated folder to the answers, in CI, plus the owner's check of a few counts on the real data (D-056).
-- **Phase 2** (after the MVP, Sprints 10–21): people, undoing a wrong upload (S-057), personal places and "more like this", occasions and types, organization (blurry photos, bursts, storage), the portability refactor of existing code (D-051), Google Drive and OneDrive, full export, region search, and the official exports of Google Photos (Takeout), Apple Photos / iCloud, Instagram and Facebook processed locally by `sepiabox-ingest process --export` (D-053); later, a local UI for pre-processing.
+- **Phase 2** (after the MVP, Sprints 10–22): people, undoing a wrong upload (S-057), personal places and "more like this", occasions and types, organization (blurry photos, bursts, storage), the portability refactor of existing code (D-051), Google Drive and OneDrive, full export, region search, index-only mode for any source (D-088), and the official exports of Google Photos (Takeout), Apple Photos / iCloud, Instagram and Facebook processed locally by `sepiabox-ingest process --export` (D-053); later, a local UI for pre-processing.
 - **Phase 3 (outside this backlog)**: relationship graph between people, captions from a vision model, mobile apps, dedicated object/clothing detection, OCR and transcription.
