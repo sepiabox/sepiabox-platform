@@ -625,7 +625,9 @@ public class VideoProcessingTests
         Assert.Equal(10, result.Processed);
         var counts = File.ReadAllLines(log).Select(line => int.Parse(line.Trim(), CultureInfo.InvariantCulture)).ToList();
         Assert.Equal(11, counts.Count);
-        Assert.InRange(counts.Max(), 2, VideoProcessor.MaxNvencSessions);
+        // Only an upper bound: the session limit is process-wide, so another test's NVENC encode may hold slots meanwhile.
+        // Without the limit, 8 jobs reach 8 encodes at once here, so this still fails when the limit is gone.
+        Assert.InRange(counts.Max(), 1, VideoProcessor.MaxNvencSessions);
     }
 
     [UnixFact]
