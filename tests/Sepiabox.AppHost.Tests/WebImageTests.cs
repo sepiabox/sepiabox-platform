@@ -7,9 +7,11 @@ namespace Sepiabox.AppHost.Tests;
 /// <summary>
 /// The web's image as a deploy builds it (S-056, D-071), against a local registry instead of Azure's: the models image
 /// from scripts/web-models.sh with the real, verified model, then the web published twice on it as two releases.
-/// Needs Docker and the CLIP text model, which CI's integration job has.
+/// Needs Docker and the CLIP text model. CI runs it in its web-image job, on main and on a pull request that changes
+/// what goes into the image (D-090), so it is also in the category WebImage, which the integration job leaves out.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Category", "WebImage")]
 public sealed class WebImageTests
 {
     private const string WebRepository = "sepiabox-web-test";
@@ -123,6 +125,11 @@ public sealed class WebImageTests
             start.ArgumentList.Add(argument);
         }
 
+        // MSBuild worker nodes kept for reuse, and the MSBuild server, outlive a dotnet command yet inherit its
+        // redirected output, so reading that output to the end waited for their idle timeout: about 10 minutes for
+        // each of this test's three builds in CI (issue #55, D-090). Without them every build's processes end with it.
+        start.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        start.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
         foreach (var (name, value) in environment ?? [])
         {
             start.Environment[name] = value;
