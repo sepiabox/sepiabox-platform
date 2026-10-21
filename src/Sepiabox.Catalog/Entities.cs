@@ -137,3 +137,26 @@ public sealed class GeoName
     /// <summary>WGS 84 point (SRID 4326): X is longitude, Y is latitude.</summary>
     public required NetTopologySuite.Geometries.Point Location { get; set; }
 }
+
+/// <summary>
+/// One person's questions on one day (S-025): how many were asked, against the daily limit, and the tokens the
+/// provider billed for them. The person is a SHA-256 of their e-mail address, never the address (D-073).
+/// </summary>
+public sealed class QuestionUsage
+{
+    /// <summary>Lower-case hex SHA-256 of the signed-in e-mail address, lower-cased.</summary>
+    public required string UserKey { get; set; }
+
+    /// <summary>The day in the library's time zone (<c>Search:TimeZone</c>).</summary>
+    public DateOnly Day { get; set; }
+
+    public int Questions { get; set; }
+
+    public long InputTokens { get; set; }
+
+    public long OutputTokens { get; set; }
+
+    public long CacheReadInputTokens { get; set; }
+
+    public long CacheCreationInputTokens { get; set; }
+}

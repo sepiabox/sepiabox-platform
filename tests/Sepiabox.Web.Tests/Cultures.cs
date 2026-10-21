@@ -4,6 +4,7 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Sepiabox.Web.Localization;
+using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
 
@@ -50,6 +51,12 @@ public abstract class LocalizedContext : BunitContext
         Services.AddSepiaboxLocalization();
         // As a web without the CLIP text model; a test that needs one registers its own (the last one wins).
         Services.AddSingleton<Sepiabox.Catalog.Search.IQueryEmbedder>(new FakeQueryEmbedder(available: false));
+        // As a web without an Anthropic key; a test that asks questions registers a configured translator.
+        Services.AddSingleton<Sepiabox.Search.Questions.IQuestionTranslator>(new FakeTranslator { IsConfigured = false });
+        Services.AddSingleton<IQuestionQuota>(new FakeQuestionQuota());
+        Services.AddSingleton(new QuestionLimits());
+        Services.AddSingleton(TimeProvider.System);
+        Services.AddScoped<QuestionService>();
     }
 
     protected override void Dispose(bool disposing)

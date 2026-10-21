@@ -42,7 +42,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - run: dotnet test Sepiabox.slnx --configuration Release --filter "Category!=Integration"
+      - run: dotnet test Sepiabox.slnx --configuration Release --filter "Category!=Integration&Category!=LiveApi"
 
   # Tests that need Docker, FFmpeg or ML models. Linux only: Windows runners have no Linux Docker.
   integration:

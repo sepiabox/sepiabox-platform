@@ -15,8 +15,9 @@ Guidance for agents working in `sepiabox-platform`. Read [docs/architecture.md](
 | Task | Command |
 |---|---|
 | Build | `dotnet build Sepiabox.slnx` |
-| Unit tests | `dotnet test Sepiabox.slnx --filter "Category!=Integration"` |
+| Unit tests | `dotnet test Sepiabox.slnx --filter "Category!=Integration&Category!=LiveApi"` |
 | Integration tests (Docker, FFmpeg, models) | `dotnet test Sepiabox.slnx --filter "Category=Integration"` |
+| Live API tests (Anthropic key, Docker; never in CI) | `dotnet test Sepiabox.slnx --filter "Category=LiveApi"` |
 | Check formatting (what CI runs) | `dotnet format Sepiabox.slnx --verify-no-changes` |
 | Fix formatting | `dotnet format Sepiabox.slnx` |
 | Run the ingest CLI | `dotnet run --project src/Sepiabox.Ingest -- scan <folder>` |
@@ -72,6 +73,7 @@ New projects follow the names in `docs/architecture.md` and are added to `Sepiab
 - xUnit with `Assert`; bUnit for Blazor components; Testcontainers for PostgreSQL and Azurite.
 - Test names follow `Does_something_when_condition`.
 - Tests that need Docker, FFmpeg or ML models are marked `[Trait("Category", "Integration")]`; CI runs them on Linux only.
+- Tests that call a paid external API (the Anthropic golden run, S-025) are marked `[Trait("Category", "LiveApi")]`, skip without `SEPIABOX_ANTHROPIC_API_KEY` and never run in CI.
 - Small binary fixtures live in `tests/<Project>.Tests/TestData/`; generate larger media in the test instead of committing it.
 
 ## Backlog workflow

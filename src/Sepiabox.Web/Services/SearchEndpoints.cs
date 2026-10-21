@@ -41,7 +41,7 @@ public static class SearchEndpoints
             return Invalid($"The search is larger than {MaxBodyBytes} bytes.");
         }
 
-        var json = await ReadAsync(http.Request.Body, http.RequestAborted);
+        var json = await ReadBoundedAsync(http.Request.Body, MaxBodyBytes, http.RequestAborted);
         if (json is null)
         {
             return Invalid($"The search is larger than {MaxBodyBytes} bytes.");
@@ -75,15 +75,18 @@ public static class SearchEndpoints
     private static IResult Invalid(string message) =>
         Results.Problem(title: "Invalid search", detail: message, statusCode: StatusCodes.Status400BadRequest);
 
-    // Null when the body is longer than the limit (a chunked body has no Content-Length to check first).
-    private static async Task<string?> ReadAsync(Stream body, CancellationToken cancellationToken)
+    /// <summary>
+    /// The body as UTF-8 text, or null when it is longer than <paramref name="maxBytes"/>: read in chunks, so a
+    /// chunked body (which has no Content-Length to check first) is never read past the limit.
+    /// </summary>
+    internal static async Task<string?> ReadBoundedAsync(Stream body, int maxBytes, CancellationToken cancellationToken)
     {
         using var buffer = new MemoryStream();
         var chunk = new byte[8192];
         int read;
         while ((read = await body.ReadAsync(chunk, cancellationToken)) > 0)
         {
-            if (buffer.Length + read > MaxBodyBytes)
+            if (buffer.Length + read > maxBytes)
             {
                 return null;
             }

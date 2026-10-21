@@ -1,6 +1,7 @@
 using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Catalog.Search;
+using Sepiabox.Search.Questions;
 using Sepiabox.Web;
 using Sepiabox.Web.Auth;
 using Sepiabox.Web.Components;
@@ -36,6 +37,11 @@ if (SearchSetup.WarmUp(builder.Configuration, builder.Environment))
     builder.Services.AddHostedService<TextModelWarmUp>();
 }
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
+// Questions (S-025): Claude through the project's own interface (D-051), with a daily limit per person.
+builder.Services.AddSingleton<IQuestionTranslator, ConfiguredQuestionTranslator>();
+builder.Services.AddSingleton<IQuestionQuota, CatalogQuestionQuota>();
+builder.Services.AddSingleton(QuestionLimits.From(builder.Configuration));
+builder.Services.AddScoped<QuestionService>();
 
 builder.AddSepiaboxAuth();
 builder.AddSepiaboxKeyRing();
@@ -78,6 +84,7 @@ app.MapSepiaboxAuth();
 app.MapLanguageSwitch();
 app.MapMediaEndpoints();
 app.MapSearchEndpoints();
+app.MapQuestionEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
