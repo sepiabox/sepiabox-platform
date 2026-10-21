@@ -122,6 +122,9 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             person.ToTable("people");
             person.Property(p => p.Name).HasMaxLength(200);
             person.Property(p => p.UserEmail).HasMaxLength(320);
+            // One person per user (S-020); addresses are stored lower-cased. Names are unique ignoring case through an
+            // index on lower(name), which the PeopleUnique migration creates in SQL.
+            person.HasIndex(p => p.UserEmail).IsUnique().HasDatabaseName("ix_people_user_email");
             person.Property(p => p.Centroid).HasColumnType("vector(128)");
             // The people page lists the most photographed first (S-019).
             person.HasIndex(p => new { p.FaceCount, p.Id })
@@ -142,7 +145,7 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             face.Property(f => f.Box).HasColumnType("double precision[]");
             face.Property(f => f.Embedding).HasColumnType("vector(128)");
             face.Property(f => f.Assignment).HasMaxLength(16);
-            face.ToTable(t => t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded')"));
+            face.ToTable(t => t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded', 'not_face')"));
             face.HasOne<Asset>().WithMany().HasForeignKey(f => f.AssetId).OnDelete(DeleteBehavior.Cascade);
             face.HasIndex(f => f.AssetId);
             face.HasIndex(f => f.PersonId);

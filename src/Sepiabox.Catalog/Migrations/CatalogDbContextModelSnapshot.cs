@@ -270,7 +270,7 @@ namespace Sepiabox.Catalog.Migrations
 
                     b.ToTable("faces", null, t =>
                         {
-                            t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded')");
+                            t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded', 'not_face')");
                         });
                 });
 
@@ -388,6 +388,10 @@ namespace Sepiabox.Catalog.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Centroid"), "hnsw");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Centroid"), new[] { "vector_cosine_ops" });
+
+                    b.HasIndex("UserEmail")
+                        .IsUnique()
+                        .HasDatabaseName("ix_people_user_email");
 
                     b.HasIndex("FaceCount", "Id")
                         .IsDescending(true, false)

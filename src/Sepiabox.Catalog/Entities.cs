@@ -230,6 +230,18 @@ public static class FaceAssignments
     /// <summary>Put there by someone in the family (S-020); never changed by an import.</summary>
     public const string Manual = "manual";
 
-    /// <summary>Not a face of anyone the family wants grouped (S-020): no person, and in no centroid.</summary>
+    /// <summary>
+    /// Removed by the family from the person it still points to ("Not this person", S-020): counted for nobody, in no
+    /// centroid, kept through re-imports, and listed on that person's page to give back or move.
+    /// </summary>
     public const string Excluded = "excluded";
+
+    /// <summary>
+    /// Not a face at all, said by the family (S-020): like <see cref="Excluded"/> for counts, centroids and imports, but
+    /// shown as such, and still pointing to the person it was found under, so it can be given back.
+    /// </summary>
+    public const string NotFace = "not_face";
+
+    /// <summary>Whether a face with this assignment counts for its person and is in their centroid.</summary>
+    public static bool Counts(string assignment) => assignment is Auto or Manual;
 }

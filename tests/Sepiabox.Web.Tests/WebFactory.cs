@@ -67,6 +67,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>The daily question counter; unset, the catalog's (or an in-memory one with a fake library).</summary>
     public IQuestionQuota? QuestionQuota { get; init; }
 
+    /// <summary>The people editor; unset, the catalog's.</summary>
+    public IPeopleEditor? PeopleEditor { get; init; }
+
     /// <summary>Answers the Google handler's server-to-server calls (token and user info) instead of Google.</summary>
     public HttpMessageHandler? GoogleBackchannel { get; init; }
 
@@ -126,6 +129,11 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             if (QuestionTranslator is not null)
             {
                 services.AddSingleton(QuestionTranslator);
+            }
+
+            if (PeopleEditor is not null)
+            {
+                services.AddSingleton(PeopleEditor);
             }
 
             if (QuestionQuota is not null)
