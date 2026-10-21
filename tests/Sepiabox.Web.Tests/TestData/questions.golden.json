@@ -495,6 +495,9 @@
       "source": "HD da Ana",
       "concepts": [
         "cake"
+      ],
+      "people": [
+        "Ana"
       ]
     },
     {
@@ -1187,6 +1190,7 @@
       "id": "birthday-in-sintra",
       "covers": [
         "places",
+        "people",
         "unsupported filters"
       ],
       "en": "show me Ana's birthday in Sintra",
@@ -1196,6 +1200,11 @@
           "places": {
             "cities": [
               "Sintra"
+            ]
+          },
+          "people": {
+            "all": [
+              "Ana"
             ]
           }
         }
