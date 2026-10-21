@@ -34,6 +34,14 @@ public static class ThumbnailGenerator
         string sourcePath, string workFolder, string relativeFolder, IReadOnlyList<ThumbnailSize> sizes)
     {
         using var stream = MediaFile.OpenRead(sourcePath);
+        return Generate(stream, workFolder, relativeFolder, sizes);
+    }
+
+    /// <summary>The same from a stream, such as a photo already read into memory (D-078).</summary>
+    public static IReadOnlyList<ManifestDerivative> Generate(
+        Stream stream, string workFolder, string relativeFolder, IReadOnlyList<ThumbnailSize> sizes)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
         // No format hint and only the first image: a Canon CR2 is then read as a TIFF, giving the camera's
         // full-size JPEG in IFD0 instead of a slow demosaic of the sensor data (D-045).
         using var original = new MagickImage(stream);
@@ -41,25 +49,40 @@ public static class ThumbnailGenerator
         original.Strip();
 
         Directory.CreateDirectory(Path.Combine(workFolder, relativeFolder));
-        var derivatives = new List<ManifestDerivative>(sizes.Count);
-        foreach (var size in sizes)
+        // Largest first, each smaller size from the one before rather than from the original (D-078): shrinking a
+        // 24 MP photo is most of a photo's processing time, and the 256 thumbnail from the 1280 preview costs a
+        // twentieth of it. The largest size is made from the original exactly as before, so the preview, which the
+        // embeddings and faces are computed from, keeps its pixels.
+        var made = new Dictionary<string, ManifestDerivative>(StringComparer.Ordinal);
+        MagickImage? larger = null;
+        try
         {
-            using var image = original.Clone();
-            var side = (uint)size.LongestSide;
-            // Greater: only shrink, so a small photo is never blown up.
-            image.Resize(new MagickGeometry(side, side) { Greater = true });
-            image.Quality = Quality;
+            foreach (var size in sizes.OrderByDescending(s => s.LongestSide))
+            {
+                var image = (MagickImage)(larger ?? original).Clone();
+                larger?.Dispose();
+                larger = image;
+                var side = (uint)size.LongestSide;
+                // Greater: only shrink, so a small photo is never blown up.
+                image.Resize(new MagickGeometry(side, side) { Greater = true });
+                image.Quality = Quality;
 
-            var relativePath = $"{relativeFolder}/{size.Name}.webp";
-            Write(image, Path.Combine(workFolder, relativePath));
-            derivatives.Add(new ManifestDerivative(size.Name, relativePath, (int)image.Width, (int)image.Height, ContentType));
+                var relativePath = $"{relativeFolder}/{size.Name}.webp";
+                Write(image, Path.Combine(workFolder, relativePath));
+                made[size.Name] = new ManifestDerivative(size.Name, relativePath, (int)image.Width, (int)image.Height, ContentType);
+            }
+        }
+        finally
+        {
+            larger?.Dispose();
         }
 
-        return derivatives;
+        // In the order asked for, as the manifest lists them.
+        return [.. sizes.Select(size => made[size.Name])];
     }
 
     // Written to a temporary file first so an interrupted run never leaves half an image.
-    private static void Write(IMagickImage image, string path)
+    private static void Write(MagickImage image, string path)
     {
         var temporary = path + ".tmp";
         image.Write(temporary, MagickFormat.WebP);

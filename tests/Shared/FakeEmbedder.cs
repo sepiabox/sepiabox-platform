@@ -30,7 +30,12 @@ internal sealed class FakeEmbedder(string modelKey = ClipImageEmbedder.ModelKey,
             throw failure;
         }
 
-        Embedded.Add(path);
+        // process runs files in parallel (D-078).
+        lock (Embedded)
+        {
+            Embedded.Add(path);
+        }
+
         if (RawOutput is not null)
         {
             return RawOutput;

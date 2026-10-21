@@ -66,11 +66,35 @@ public static class ProcessCommand
         // A wrong folder fails before the model is checked, which can take seconds the first time.
         var (root, output) = Resolve(options);
         var models = options.ModelFolder ?? ModelFolder.Default();
-        using var embedder = ClipImageEmbedder.TryCreate(models, out var embedderWarning);
+        var threads = ThreadsFor(options.EffectiveJobs);
+        using var embedder = ClipImageEmbedder.TryCreate(models, out var embedderWarning, threads);
         string? facesWarning = null;
-        using var faces = options.Faces ? FaceDetector.TryCreate(models, out facesWarning) : null;
-        return Run(options, root, output, embedder, embedderWarning, faces, facesWarning, TimeProvider.System, filesDone, cancellationToken);
+        using var faces = options.Faces ? FaceDetector.TryCreate(models, out facesWarning, threads) : null;
+        // Each job resizes with its share of the processors, rather than every job with all of them (D-078); the
+        // pixels are the same whatever the thread count. Put back afterwards, for whatever runs next in this process.
+        var magickThreads = ResourceLimits.Thread;
+        if (threads is not null)
+        {
+            ResourceLimits.Thread = (ulong)threads.IntraOpThreads;
+        }
+
+        try
+        {
+            return Run(
+                options, root, output, embedder, embedderWarning, faces, facesWarning, TimeProvider.System, filesDone, null, cancellationToken);
+        }
+        finally
+        {
+            ResourceLimits.Thread = magickThreads;
+        }
     }
+
+    /// <summary>
+    /// With more than one job, each model session and each Magick step gets its share of the processors, and ONNX
+    /// Runtime's threads do not spin while they wait, which only burns the processors the other jobs need (D-078).
+    /// </summary>
+    internal static ModelThreads? ThreadsFor(int jobs) =>
+        jobs > 1 ? new ModelThreads(Math.Max(1, Environment.ProcessorCount / jobs), AllowSpinning: false) : null;
 
     /// <summary>
     /// The same with a given embedder, or none; <paramref name="embedderWarning"/> says why there is none.
@@ -86,11 +110,13 @@ public static class ProcessCommand
         TimeProvider? clock = null,
         IFaceDetector? faces = null,
         string? facesWarning = null,
+        ProcessHooks? hooks = null,
         CancellationToken cancellationToken = default)
     {
         var (root, output) = Resolve(options);
         return Run(
-            options, root, output, embedder, embedderWarning, faces, facesWarning, clock ?? TimeProvider.System, filesDone, cancellationToken);
+            options, root, output, embedder, embedderWarning, faces, facesWarning, clock ?? TimeProvider.System, filesDone, hooks,
+            cancellationToken);
     }
 
     /// <summary>The folder to read, which must exist, and the work folder, both as full paths.</summary>
@@ -107,6 +133,7 @@ public static class ProcessCommand
         string? facesWarning,
         TimeProvider clock,
         IProgress<int>? filesDone,
+        ProcessHooks? hooks,
         CancellationToken cancellationToken)
     {
         // Faces are biometric data: without --faces nothing looks for them, whatever detector was passed in.
@@ -120,19 +147,13 @@ public static class ProcessCommand
         var outputPrefix = Path.TrimEndingDirectorySeparator(output) + Path.DirectorySeparatorChar;
 
         var ffmpeg = FfmpegTools.Find(options.FfmpegFolder);
-        var video = ffmpeg is null ? null : new VideoProcessor(ffmpeg, options.Encoder);
+        var video = hooks?.Video ?? (ffmpeg is null ? null : new VideoProcessor(ffmpeg, options.Encoder));
 
         using var state = new StateStore(Path.Combine(output, "state.db"));
         var stopwatch = Stopwatch.StartNew();
-        var problems = new List<ScanProblem>();
-        var embeddingProblems = new List<EmbeddingProblem>();
-        var faceProblems = new List<EmbeddingProblem>();
-        int processed = 0, skipped = 0, pending = 0, embedded = 0, handled = 0, facesChecked = 0, facesFound = 0;
-        var leftOut = new List<LeftOutFile>();
-        // By asset, so the same photo in two folders counts once.
-        var withoutPreviewForEmbedding = new HashSet<string>(StringComparer.Ordinal);
-        var withoutPreviewForFaces = new HashSet<string>(StringComparer.Ordinal);
-        var withoutManifest = new HashSet<string>(StringComparer.Ordinal);
+        var jobs = options.EffectiveJobs;
+        // A file's outcome, in the order the files were found, so the result lists come out as a sequential run's.
+        var outcomes = new List<FileOutcome>();
 
         // An embedding or faces never decide a file's status: whatever goes wrong is a warning for that file, and the
         // next run tries again from the work folder.
@@ -141,23 +162,23 @@ public static class ProcessCommand
         const string UpdateFailed = "Could not update its manifest";
 
         // For a new file: Added is counted by the caller once the manifest is written.
-        EmbeddingOutcome? AddEmbedding(string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
-            Record(sourcePath, assetId, Try(sourcePath, embeddingProblems, EmbeddingFailed, add), embeddingProblems, withoutPreviewForEmbedding);
+        EmbeddingOutcome? AddEmbedding(FileOutcome o, string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
+            Record(o, sourcePath, assetId, Try(sourcePath, o.EmbeddingProblems, EmbeddingFailed, add), o.EmbeddingProblems, o.WithoutPreviewForEmbedding);
 
-        EmbeddingOutcome? AddFaces(string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
-            Record(sourcePath, assetId, Try(sourcePath, faceProblems, FacesFailed, add), faceProblems, withoutPreviewForFaces);
+        EmbeddingOutcome? AddFaces(FileOutcome o, string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
+            Record(o, sourcePath, assetId, Try(sourcePath, o.FaceProblems, FacesFailed, add), o.FaceProblems, o.WithoutPreviewForFaces);
 
         // An unchanged file: its manifest is read once, both are added in memory and it is written once.
-        void AddToUnchanged(string sourcePath, string assetId)
+        void AddToUnchanged(FileOutcome o, string sourcePath, string assetId)
         {
             var path = ManifestPath(manifestFolder, assetId);
             // Neither step in particular failed when this throws, so the message names the manifest, not a step.
             var outcome = Try(
-                sourcePath, embedder is not null ? embeddingProblems : faceProblems, UpdateFailed,
+                sourcePath, embedder is not null ? o.EmbeddingProblems : o.FaceProblems, UpdateFailed,
                 () => WorkFolderManifest.TryAdd(path, output, embedder, faces));
-            Record(sourcePath, assetId, outcome?.Embedding, embeddingProblems, withoutPreviewForEmbedding);
-            embedded += outcome?.Embedding?.Status == EmbeddingStatus.Added ? 1 : 0;
-            CountFaces(Record(sourcePath, assetId, outcome?.Faces, faceProblems, withoutPreviewForFaces));
+            Record(o, sourcePath, assetId, outcome?.Embedding, o.EmbeddingProblems, o.WithoutPreviewForEmbedding);
+            o.Embedded += outcome?.Embedding?.Status == EmbeddingStatus.Added ? 1 : 0;
+            CountFaces(o, Record(o, sourcePath, assetId, outcome?.Faces, o.FaceProblems, o.WithoutPreviewForFaces));
         }
 
         T? Try<T>(string sourcePath, List<EmbeddingProblem> optionalProblems, string what, Func<T> add)
@@ -175,7 +196,8 @@ public static class ProcessCommand
         }
 
         EmbeddingOutcome? Record(
-            string sourcePath, string assetId, EmbeddingOutcome? outcome, List<EmbeddingProblem> optionalProblems, HashSet<string> withoutPreview)
+            FileOutcome o, string sourcePath, string assetId, EmbeddingOutcome? outcome, List<EmbeddingProblem> optionalProblems,
+            HashSet<string> withoutPreview)
         {
             switch (outcome?.Status)
             {
@@ -183,7 +205,7 @@ public static class ProcessCommand
                     withoutPreview.Add(assetId);
                     break;
                 case EmbeddingStatus.ManifestMissing:
-                    withoutManifest.Add(assetId);
+                    o.WithoutManifest.Add(assetId);
                     break;
                 case EmbeddingStatus.Failed:
                     optionalProblems.Add(new EmbeddingProblem(sourcePath, outcome.Category!, outcome.Problem!));
@@ -193,53 +215,163 @@ public static class ProcessCommand
             return outcome;
         }
 
-        void CountFaces(EmbeddingOutcome? outcome)
+        static void CountFaces(FileOutcome o, EmbeddingOutcome? outcome)
         {
             if (outcome?.Status == EmbeddingStatus.Added)
             {
-                facesChecked++;
-                facesFound += outcome.Manifest!.Faces.Count;
+                o.FacesChecked++;
+                o.FacesFound += outcome.Manifest!.Faces.Count;
             }
         }
 
-        foreach (var file in FileTree.Enumerate(root))
+        // The state store is one SQLite connection: every read and write goes through this lock.
+        FileState? GetState(string path)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var kind = MediaTypes.Classify(file.Path);
-            if (kind == MediaKind.Other || file.Path.StartsWith(outputPrefix, StringComparison.OrdinalIgnoreCase))
+            lock (state)
             {
-                continue;
+                return state.Get(path);
             }
+        }
 
+        void SaveState(FileState fileState)
+        {
+            lock (state)
+            {
+                state.Save(fileState);
+            }
+        }
+
+        // A bounded pipeline (D-078). This thread finds the files, reads each one's state and, in the order the files
+        // were found, reads each photo to describe into memory (up to ReadAheadBytes waiting) or hashes a video (or a
+        // photo too large to hold) as a stream: the drive, often a USB hard disk, is read front to back by this one
+        // reader, and a photo only once, for its hash, its metadata and its thumbnails. Each file then goes to a task
+        // that waits its turn for its content: files are registered by content id in the order they were found, and a
+        // file waits for the files found before it with the same content (or the content it had before), so copies of
+        // the same bytes are described exactly as a sequential run describes them. At most `jobs` files are processed
+        // at once, and at most VideoJobs of them are videos (or large photos), which read the drive again to be
+        // described and transcoded; a file waits for that turn before it takes a job slot, so a long transcode never
+        // holds up photos that are ready. At most 4 × jobs files are in flight.
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var inFlight = new SemaphoreSlim(jobs * 4);
+        using var working = new SemaphoreSlim(jobs);
+        using var videoReads = new SemaphoreSlim(options.EffectiveVideoJobs);
+        var readAheadLimit = hooks?.ReadAheadBytes ?? ReadAheadBytes;
+        var readAhead = new ByteBudget(readAheadLimit);
+        var tails = new Dictionary<string, Task>(StringComparer.Ordinal);
+        var tasks = new List<Task>();
+        var progressLock = new object();
+        var handled = 0;
+        var previousRegistration = Task.CompletedTask;
+
+        try
+        {
+            foreach (var file in FileTree.Enumerate(root))
+            {
+                if (stop.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                var kind = MediaTypes.Classify(file.Path);
+                if (kind == MediaKind.Other || file.Path.StartsWith(outputPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    inFlight.Wait(stop.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
+                var outcome = new FileOutcome();
+                outcomes.Add(outcome);
+                var after = previousRegistration;
+                var registered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                previousRegistration = registered.Task;
+                Plan? plan;
+                try
+                {
+                    hooks?.BeforeRead?.Invoke(file.Path);
+                    plan = Decide(file, kind, outcome);
+                }
+                catch (Exception ex)
+                {
+                    registered.SetResult();
+                    inFlight.Release();
+                    if (ex is OperationCanceledException && stop.IsCancellationRequested)
+                    {
+                        // Stopped while waiting to read: by the user, or by a failure reported below.
+                        break;
+                    }
+
+                    throw;
+                }
+
+                tasks.Add(Task.Run(async () =>
+                {
+                    try
+                    {
+                        await HandleAsync(plan, outcome, after, registered);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // Not one file's problem (the state store, the work folder): the run stops, as a sequential one would.
+                        await stop.CancelAsync();
+                        throw;
+                    }
+                    finally
+                    {
+                        readAhead.Release(plan?.Content?.Length ?? 0);
+                        inFlight.Release();
+                        // Under a lock, so the count only goes up and the progress line is written by one thread at a time.
+                        lock (progressLock)
+                        {
+                            filesDone?.Report(++handled);
+                        }
+                    }
+                }, CancellationToken.None));
+            }
+        }
+        finally
+        {
+            // Every task finishes before the semaphores and the state store go, whatever stopped the loop.
             try
             {
-                ProcessFile(file, kind);
+                Task.WaitAll([.. tasks], CancellationToken.None);
             }
-            finally
+            catch (AggregateException)
             {
-                filesDone?.Report(++handled);
+                // Rethrown below, the first real failure first.
             }
         }
 
-        void ProcessFile(FoundFile file, MediaKind kind)
+        if (tasks.Select(t => t.Exception?.InnerException).FirstOrDefault(e => e is not null and not OperationCanceledException) is { } failure)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // On the finding thread: what the file needs, from its state, and the photo's bytes when it is to be described.
+        Plan? Decide(FoundFile file, MediaKind kind, FileOutcome o)
         {
             var modifiedTicks = file.ModifiedAt.UtcTicks;
-            var previous = state.Get(file.Path);
+            var previous = GetState(file.Path);
             var unchanged = previous is not null && previous.Size == file.Size && previous.ModifiedTicks == modifiedTicks;
             // A file whose manifest is gone is described again, or it would never be uploaded or catalogued.
             if (unchanged && previous!.Status == FileStatus.Done
                 && previous.Sha256 is { } doneSha256 && File.Exists(ManifestPath(manifestFolder, doneSha256)))
             {
-                skipped++;
+                o.Skipped++;
                 // The model may have been downloaded, or --faces given, after this file was processed: both come
                 // from the thumbnails in the work folder, so the drive is not read again.
-                if (embedder is not null || faces is not null)
-                {
-                    AddToUnchanged(file.Path, doneSha256);
-                }
-
-                return;
+                return embedder is not null || faces is not null
+                    ? new Plan(file, kind, previous, null, null, doneSha256)
+                    : null;
             }
 
             // Nothing about an unchanged file can make a video stream appear, short of a newer FFmpeg: that is
@@ -247,20 +379,165 @@ public static class ProcessCommand
             // is read again once.
             if (unchanged && previous!.Status == FileStatus.NotVideo && previous.Reason is not null && !options.RetryLeftOut)
             {
-                leftOut.Add(new LeftOutFile(file.Path, previous.Reason, Earlier: true));
-                return;
+                o.LeftOut.Add(new LeftOutFile(file.Path, previous.Reason, Earlier: true));
+                return null;
             }
 
             // Still no FFmpeg: re-reading a large unchanged video would change nothing.
             if (unchanged && previous!.Status == FileStatus.Pending && video is null)
             {
-                pending++;
-                return;
+                o.Pending++;
+                return null;
             }
 
+            // A video, or a photo larger than the whole read-ahead (a huge TIFF or PSB), is hashed here, streamed, so
+            // the drive is still hashed by this one reader in order, and read again in its task, streamed as before,
+            // never into one array. Hashing it here also means a long transcode never holds up the files after it.
+            if (kind != MediaKind.Photo || file.Size > readAheadLimit)
+            {
+                try
+                {
+                    return new Plan(file, kind, previous, null, null, null, MediaFile.Sha256Hex(file.Path));
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    return new Plan(file, kind, previous, null, ex, null);
+                }
+            }
+
+            // Waits while the photos already in memory and this one would pass the read-ahead budget.
+            readAhead.Wait(file.Size, stop.Token);
             try
             {
-                var sha256 = MediaFile.Sha256Hex(file.Path);
+                var content = ReadAll(file.Path);
+                readAhead.Adjust(file.Size, content.Length);
+                return new Plan(file, kind, previous, content, null, null);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                readAhead.Release(file.Size);
+                return new Plan(file, kind, previous, null, ex, null);
+            }
+        }
+
+        async Task HandleAsync(Plan? plan, FileOutcome o, Task after, TaskCompletionSource registered)
+        {
+            var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            try
+            {
+                IReadOnlyList<string> keys = [];
+                Action? work = null;
+                var waitFor = Array.Empty<Task>();
+                try
+                {
+                    if (plan is not null)
+                    {
+                        (keys, work) = Prepare(plan, o);
+                    }
+                }
+                finally
+                {
+                    // Registered in the order the files were found, even when preparing failed, so no later file waits forever.
+                    await after;
+                    if (keys.Count > 0)
+                    {
+                        lock (tails)
+                        {
+                            waitFor = [.. keys.Select(k => tails.GetValueOrDefault(k)).OfType<Task>()];
+                            foreach (var key in keys)
+                            {
+                                tails[key] = done.Task;
+                            }
+                        }
+                    }
+
+                    registered.SetResult();
+                }
+
+                if (work is not null)
+                {
+                    // The earlier files with this content finish first; their tasks never fail (done is always set).
+                    await Task.WhenAll(waitFor);
+                    if (stop.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    // A video, or a photo too large to read ahead, is read from the drive while it is described, probed
+                    // and transcoded. Its turn for that comes first: a job slot held while waiting for it would stop
+                    // photos that are ready.
+                    var streamed = plan!.Content is null && plan.UnchangedSha256 is null;
+                    if (streamed)
+                    {
+                        await videoReads.WaitAsync(stop.Token);
+                    }
+
+                    try
+                    {
+                        await working.WaitAsync(stop.Token);
+                        try
+                        {
+                            hooks?.BeforeWork?.Invoke(plan.File.Path);
+                            work();
+                        }
+                        finally
+                        {
+                            working.Release();
+                        }
+                    }
+                    finally
+                    {
+                        if (streamed)
+                        {
+                            videoReads.Release();
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                done.SetResult();
+            }
+        }
+
+        // In the task: the file's hash (from memory for a photo; a streamed file was hashed by the reader), then the
+        // content ids it touches and the work to do on them.
+        (IReadOnlyList<string> Keys, Action? Work) Prepare(Plan plan, FileOutcome o)
+        {
+            var file = plan.File;
+            if (plan.UnchangedSha256 is { } doneSha256)
+            {
+                return ([doneSha256], () => AddToUnchanged(o, file.Path, doneSha256));
+            }
+
+            string sha256;
+            try
+            {
+                if (plan.ReadError is { } readError)
+                {
+                    throw readError;
+                }
+
+                sha256 = plan.Content is { } content ? MediaFile.Sha256Hex(content) : plan.StreamedSha256!;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One damaged file must not stop a whole drive; it is retried on the next run.
+                o.Problems.Add(new ScanProblem(file.Path, ex.Message));
+                SaveState(new FileState(file.Path, file.Size, file.ModifiedAt.UtcTicks, plan.Previous?.Sha256, FileStatus.Failed));
+                return ([], null);
+            }
+
+            // A changed file also touches the content it had before, whose manifest loses this path.
+            List<string> keys = plan.Previous?.Sha256 is { } before && before != sha256 ? [sha256, before] : [sha256];
+            return (keys, () => ProcessFile(file, plan.Kind, o, plan.Previous, sha256, plan.Content));
+        }
+
+        void ProcessFile(FoundFile file, MediaKind kind, FileOutcome o, FileState? previous, string sha256, byte[]? content)
+        {
+            var modifiedTicks = file.ModifiedAt.UtcTicks;
+            try
+            {
                 var source = new ManifestSource(
                     LocalSourceType,
                     sourceName,
@@ -272,8 +549,8 @@ public static class ProcessCommand
                     RemoveSource(output, oldSha256, source);
                 }
 
-                var described = Describe(manifestFolder, sha256, kind, file, source, clock);
-                var (manifest, status, derivativeProblem, noVideo) = AddDerivatives(output, file, described, video, cancellationToken);
+                var described = Describe(manifestFolder, sha256, kind, file, source, clock, content);
+                var (manifest, status, derivativeProblem, noVideo) = AddDerivatives(output, file, described, content, video, stop.Token);
                 if (status == FileStatus.NotVideo)
                 {
                     // Not catalogued. A run without FFmpeg may have written a manifest for it already: this path
@@ -286,7 +563,7 @@ public static class ProcessCommand
                     if (embedder is not null && status == FileStatus.Done)
                     {
                         var withDerivatives = manifest;
-                        var outcome = AddEmbedding(file.Path, sha256, () => ManifestEmbeddings.TryAdd(withDerivatives, output, embedder));
+                        var outcome = AddEmbedding(o, file.Path, sha256, () => ManifestEmbeddings.TryAdd(withDerivatives, output, embedder));
                         embeddingAdded = outcome?.Status == EmbeddingStatus.Added;
                         manifest = outcome?.Manifest ?? manifest;
                     }
@@ -295,42 +572,54 @@ public static class ProcessCommand
                     if (faces is not null && status == FileStatus.Done)
                     {
                         var withDerivatives = manifest;
-                        facesOutcome = AddFaces(file.Path, sha256, () => ManifestFaces.TryAdd(withDerivatives, output, faces));
+                        facesOutcome = AddFaces(o, file.Path, sha256, () => ManifestFaces.TryAdd(withDerivatives, output, faces));
                         manifest = facesOutcome?.Manifest ?? manifest;
                     }
 
                     ManifestJson.WriteFile(ManifestPath(manifestFolder, sha256), manifest);
-                    embedded += embeddingAdded ? 1 : 0;
-                    CountFaces(facesOutcome);
+                    o.Embedded += embeddingAdded ? 1 : 0;
+                    CountFaces(o, facesOutcome);
                 }
 
                 // NotVideo is remembered too, with its reason, so an unchanged file is not read again.
-                state.Save(new FileState(file.Path, file.Size, modifiedTicks, sha256, status, noVideo));
+                SaveState(new FileState(file.Path, file.Size, modifiedTicks, sha256, status, noVideo));
 
                 switch (status)
                 {
                     case FileStatus.Done:
-                        processed++;
+                        o.Processed++;
                         break;
                     case FileStatus.Pending:
-                        pending++;
+                        o.Pending++;
                         break;
                     case FileStatus.NotVideo:
-                        leftOut.Add(new LeftOutFile(file.Path, noVideo, Earlier: false));
+                        o.LeftOut.Add(new LeftOutFile(file.Path, noVideo, Earlier: false));
                         break;
                     default:
                         // The manifest is kept so the file is still catalogued; the next run tries the derivatives again.
-                        problems.Add(new ScanProblem(file.Path, derivativeProblem ?? "Could not make its previews."));
+                        o.Problems.Add(new ScanProblem(file.Path, derivativeProblem ?? "Could not make its previews."));
                         break;
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // One damaged file must not stop a whole drive; it is retried on the next run.
-                problems.Add(new ScanProblem(file.Path, ex.Message));
-                state.Save(new FileState(file.Path, file.Size, modifiedTicks, previous?.Sha256, FileStatus.Failed));
+                o.Problems.Add(new ScanProblem(file.Path, ex.Message));
+                SaveState(new FileState(file.Path, file.Size, modifiedTicks, previous?.Sha256, FileStatus.Failed));
             }
         }
+
+        // The files' outcomes, in the order they were found.
+        var problems = outcomes.SelectMany(o => o.Problems).ToList();
+        var embeddingProblems = outcomes.SelectMany(o => o.EmbeddingProblems).ToList();
+        var faceProblems = outcomes.SelectMany(o => o.FaceProblems).ToList();
+        var leftOut = outcomes.SelectMany(o => o.LeftOut).ToList();
+        int processed = outcomes.Sum(o => o.Processed), skipped = outcomes.Sum(o => o.Skipped), pending = outcomes.Sum(o => o.Pending);
+        int embedded = outcomes.Sum(o => o.Embedded), facesChecked = outcomes.Sum(o => o.FacesChecked), facesFound = outcomes.Sum(o => o.FacesFound);
+        // By asset, so the same photo in two folders counts once.
+        var withoutPreviewForEmbedding = outcomes.SelectMany(o => o.WithoutPreviewForEmbedding).ToHashSet(StringComparer.Ordinal);
+        var withoutPreviewForFaces = outcomes.SelectMany(o => o.WithoutPreviewForFaces).ToHashSet(StringComparer.Ordinal);
+        var withoutManifest = outcomes.SelectMany(o => o.WithoutManifest).ToHashSet(StringComparer.Ordinal);
 
         var warnings = new List<string>();
         if (pending > 0)
@@ -402,7 +691,7 @@ public static class ProcessCommand
     }
 
     private static Manifest Describe(
-        string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source, TimeProvider clock)
+        string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source, TimeProvider clock, byte[]? content)
     {
         var path = ManifestPath(manifestFolder, sha256);
         if (File.Exists(path))
@@ -417,7 +706,17 @@ public static class ProcessCommand
             };
         }
 
-        var metadata = MetadataReader.Read(file.Path);
+        MediaMetadata metadata;
+        if (content is null)
+        {
+            metadata = MetadataReader.Read(file.Path);
+        }
+        else
+        {
+            using var stream = new MemoryStream(content, writable: false);
+            metadata = MetadataReader.Read(stream);
+        }
+
         return new Manifest
         {
             Id = sha256,
@@ -440,7 +739,7 @@ public static class ProcessCommand
     /// NoVideo when it is NotVideo.
     /// </summary>
     private static (Manifest Manifest, FileStatus Status, string? Problem, NoVideoReason? NoVideo) AddDerivatives(
-        string output, FoundFile file, Manifest manifest, VideoProcessor? video, CancellationToken cancellationToken)
+        string output, FoundFile file, Manifest manifest, byte[]? content, IVideoProcessor? video, CancellationToken cancellationToken)
     {
         if (manifest.Derivatives.Count > 0)
         {
@@ -452,7 +751,17 @@ public static class ProcessCommand
         {
             if (manifest.Kind == MediaKind.Photo)
             {
-                var thumbnails = ThumbnailGenerator.Generate(file.Path, output, folder, ThumbnailGenerator.PhotoSizes);
+                IReadOnlyList<ManifestDerivative> thumbnails;
+                if (content is null)
+                {
+                    thumbnails = ThumbnailGenerator.Generate(file.Path, output, folder, ThumbnailGenerator.PhotoSizes);
+                }
+                else
+                {
+                    using var stream = new MemoryStream(content, writable: false);
+                    thumbnails = ThumbnailGenerator.Generate(stream, output, folder, ThumbnailGenerator.PhotoSizes);
+                }
+
                 return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null, null);
             }
 
@@ -523,4 +832,115 @@ public static class ProcessCommand
     private static string DerivativeFolder(string sha256) => $"derivatives/{sha256}";
 
     private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
+
+    /// <summary>
+    /// Test seams: a stand-in for FFmpeg, a call before the reader reads a file, another before its work starts (after
+    /// its turn came), and another read-ahead budget.
+    /// </summary>
+    internal sealed record ProcessHooks(
+        IVideoProcessor? Video = null, Action<string>? BeforeWork = null, long? ReadAheadBytes = null, Action<string>? BeforeRead = null);
+
+    /// <summary>Photos read ahead and waiting in memory at most, so a slow step never lets the reader fill the memory.</summary>
+    internal const long ReadAheadBytes = 256L * 1024 * 1024;
+
+    // Read-only, like every read of the drive, in one pass from the start.
+    private static byte[] ReadAll(string path)
+    {
+        using var stream = MediaFile.OpenRead(path);
+        var length = stream.Length;
+        if (length > Array.MaxLength)
+        {
+            throw new IOException($"The photo is too large to read ({length:N0} bytes).");
+        }
+
+        var content = new byte[length];
+        stream.ReadExactly(content);
+        // A file that grew while it was read is read as it was found; the hash is of these bytes.
+        return content;
+    }
+
+    /// <summary>
+    /// A file to process and what is known of it before its task runs: its state, the photo's bytes (or why they could
+    /// not be read), or the content id of an unchanged file that only needs its embedding or faces.
+    /// </summary>
+    private sealed record Plan(
+        FoundFile File,
+        MediaKind Kind,
+        FileState? Previous,
+        byte[]? Content,
+        Exception? ReadError,
+        string? UnchangedSha256,
+        string? StreamedSha256 = null);
+
+    /// <summary>What one file added to the run's result, kept apart so the result is gathered in the order files were found.</summary>
+    private sealed class FileOutcome
+    {
+        public int Processed { get; set; }
+
+        public int Skipped { get; set; }
+
+        public int Pending { get; set; }
+
+        public int Embedded { get; set; }
+
+        public int FacesChecked { get; set; }
+
+        public int FacesFound { get; set; }
+
+        public List<ScanProblem> Problems { get; } = [];
+
+        public List<EmbeddingProblem> EmbeddingProblems { get; } = [];
+
+        public List<EmbeddingProblem> FaceProblems { get; } = [];
+
+        public List<LeftOutFile> LeftOut { get; } = [];
+
+        public HashSet<string> WithoutPreviewForEmbedding { get; } = new(StringComparer.Ordinal);
+
+        public HashSet<string> WithoutPreviewForFaces { get; } = new(StringComparer.Ordinal);
+
+        public HashSet<string> WithoutManifest { get; } = new(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Bytes of photos in memory: the reader waits while the budget is spent. Larger photos never come here: they are
+    /// streamed.
+    /// </summary>
+    private sealed class ByteBudget(long limit)
+    {
+        private readonly object _lock = new();
+        private long _held;
+
+        public void Wait(long bytes, CancellationToken cancellationToken)
+        {
+            lock (_lock)
+            {
+                while (_held > 0 && _held + bytes > limit)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    // Woken by every release; the timeout only lets a cancellation through.
+                    Monitor.Wait(_lock, TimeSpan.FromMilliseconds(200));
+                }
+
+                _held += bytes;
+            }
+        }
+
+        // The file's size when found and its length when read can differ when it changes meanwhile.
+        public void Adjust(long expected, long actual) => Release(expected - actual);
+
+        public void Release(long bytes)
+        {
+            if (bytes == 0)
+            {
+                return;
+            }
+
+            lock (_lock)
+            {
+                _held -= bytes;
+                Monitor.PulseAll(_lock);
+            }
+        }
+    }
 }

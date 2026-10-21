@@ -41,18 +41,22 @@ public static class MetadataReader
 {
     public static MediaMetadata Read(string path)
     {
+        // Opened outside the reading, so a path that cannot be opened is reported, never read as a file without metadata.
+        using var stream = MediaFile.OpenRead(path);
+        return Read(stream);
+    }
+
+    /// <summary>The same from a stream, such as a photo already read into memory (D-078).</summary>
+    public static MediaMetadata Read(Stream stream)
+    {
         IReadOnlyList<MetadataExtractor.Directory> directories;
-        // Opened outside the try, so a path that cannot be opened is reported, never read as a file without metadata.
-        using (var stream = MediaFile.OpenRead(path))
+        try
         {
-            try
-            {
-                directories = ImageMetadataReader.ReadMetadata(stream);
-            }
-            catch (Exception ex) when (IsMalformed(ex))
-            {
-                return MediaMetadata.Empty;
-            }
+            directories = ImageMetadataReader.ReadMetadata(stream);
+        }
+        catch (Exception ex) when (IsMalformed(ex))
+        {
+            return MediaMetadata.Empty;
         }
 
         var (width, height) = ReadDimensions(directories);
