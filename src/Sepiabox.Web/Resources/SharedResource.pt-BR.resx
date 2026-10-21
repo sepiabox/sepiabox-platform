@@ -438,6 +438,9 @@
   <data name="Count_WithoutDate" xml:space="preserve">
     <value> sem data</value>
   </data>
+  <data name="Count_Shown_One" xml:space="preserve">
+    <value>Mostrando o maior de {0}.</value>
+  </data>
   <data name="Count_Shown" xml:space="preserve">
     <value>Mostrando os {0} maiores de {1}.</value>
   </data>

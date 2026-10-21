@@ -119,6 +119,20 @@ public sealed class CountAnswerTests : LocalizedContext
     }
 
     [Theory]
+    [InlineData(Cultures.English, "Showing the largest of 15.")]
+    [InlineData(Cultures.BrazilianPortuguese, "Mostrando o maior de 15.")]
+    public void Says_the_largest_in_the_singular_when_only_one_group_is_shown(string culture, string note)
+    {
+        using var language = Cultures.Use(culture);
+        var query = new SearchQuery { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Year, Top = 1 } };
+
+        var cut = Render<AnswerCard>(p => p.Add(c => c.Query, query)
+            .Add(c => c.Count, new CountResult(40, [new CountGroup("2019", 9)], null, 15)));
+
+        Assert.Equal(note, cut.Find(".shown").TextContent);
+    }
+
+    [Theory]
     [InlineData(SearchGroupBy.Month, "December")]
     [InlineData(SearchGroupBy.Kind, "Videos")]
     [InlineData(SearchGroupBy.Source, "HD da Ana")]

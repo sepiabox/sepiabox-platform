@@ -25,7 +25,7 @@
 - [x] Given a counting answer, when it is displayed, then the card shows the number and the sentence, in English and in pt-BR. *(`CountAnswerTests`, bUnit.)*
 - [x] Given a count with a `visual` filter, when it is executed, then no number is returned and the UI shows the results with the explanation. *(`SearchCountTests`, `CountPageTests`; the APIs answer `notCounted` with the items.)*
 - [x] Given 3 undated assets and a count with `years=[2019]`, when it is displayed, then the card shows "3 items have no date" next to the number. *(`SearchCountTests` counts them; `CountAnswerTests` shows them, with a link.)*
-- [ ] Given the golden set of S-025, when at least 10 counting questions (English and Brazilian Portuguese: by year, kind, place, source, "on this day") with their expected DSL are added, then they pass in CI (recorded) and in the required live run before `done`, compared by meaning as in S-025: the expected and returned DSL are counted against the seeded fixture catalog and the numbers must be equal (one recorded retry per question). *(Not ticked: 12 counting questions are added (and `count-videos-2018` now expects a count), the CI replay passes on their expected queries (placeholders in `questions.recorded.json`); the recording run below is still to be made.)*
+- [x] Given the golden set of S-025, when at least 10 counting questions (English and Brazilian Portuguese: by year, kind, place, source, "on this day") with their expected DSL are added, then they pass in CI (recorded) and in the required live run before `done`, compared by meaning as in S-025: the expected and returned DSL are counted against the seeded fixture catalog and the numbers must be equal (one recorded retry per question). *(Recording run 2026-10-21: model claude-haiku-5-5, 88/88 passed, 1 after a retry (last-weekend-videos/pt); the CI replay passes on the recorded responses.)*
 
 ### Technical notes
 - Extends `search.v1.json`, the executor and the prompt.
@@ -53,7 +53,7 @@ In a session that has `SEPIABOX_ANTHROPIC_API_KEY` and Docker, on this story's b
 If the run fails, keep the story `blocked`, do not commit the recorded file, and report the misses: they are prompt or golden-set fixes for a review iteration.
 
 ### Status
-- `blocked` (2026-10-21): everything is implemented and tested (D-075) but the required live golden run with recording (D-054), above.
+- `done` (2026-10-21): implemented and tested (D-075); the required live golden run with recording (D-054) passed 88/88.
 
 ### Expected tests
 - Integration (PostgreSQL): counts and groupings. bUnit: answer card.
