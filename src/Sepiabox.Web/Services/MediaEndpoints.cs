@@ -35,7 +35,7 @@ public static partial class MediaEndpoints
 
         try
         {
-            var url = derivative == DerivativeNames.Proxy
+            var url = DerivativeNames.IsVideo(derivative)
                 ? await links.ForVideoAsync(blobPath, http.RequestAborted)
                 : await links.ForDerivativeAsync(blobPath, http.RequestAborted);
             // The link is stable for the rest of its window, so the browser may reuse it (and the image or video).

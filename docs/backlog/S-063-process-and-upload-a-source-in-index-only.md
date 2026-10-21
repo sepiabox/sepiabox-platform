@@ -49,20 +49,20 @@ The family wants to search libraries whose originals already live somewhere else
 - The Google Photos Picker, or any API access to Google Photos, iCloud or Instagram (D-053, D-088).
 
 ### Acceptance criteria
-- [ ] Given a generated folder with a 4000×3000 photo and a 1920×1080 video, when `process --index-only` runs, then the manifests list:
+- [x] Given a generated folder with a 4000×3000 photo and a 1920×1080 video, when `process --index-only` runs, then the manifests list:
   - for the photo, `thumb-256` and `preview-2048` at 2048×1536;
   - for the video, `poster`, `thumb-256` and `proxy-1080p` at 1920×1080;
   - no `preview-1280` and no `proxy-720p`;
   - `originalStored: false`;
 
   and the schema validates them.
-- [ ] Given a 1000×750 photo, then `preview-2048` is 1000×750 (no upscaling).
-- [ ] Given a work folder made before this story (its state has no recorded mode), when `process` runs on it without `--index-only`, then it carries on as before and records the mode as keeping originals; when it runs with `--index-only`, then it stops before reading any file, with the usage exit code and the message.
-- [ ] Given an index-only work folder, when `process` runs on it again without `--index-only`, then it stops before reading any file, with the usage exit code and the message, and the work folder is unchanged; and the same the other way round.
-- [ ] Given an index-only work folder, when `upload` runs with the source folder deleted, then derivatives and manifests are uploaded, nothing is written to `originals`, there is no problem, and the summary counts the originals left at their source.
-- [ ] Given an asset uploaded in full mode and the same bytes later uploaded from an index-only work folder (and the other order), then the stored manifest and the catalog say the original is stored, and the asset lists both sources.
-- [ ] Given a manifest with `originalStored: false` and a source `url`, when the worker's import (`sepiabox-worker import --once`) runs, then it accepts the manifest, `assets.original_stored` is false and `asset_sources.url` holds the url; a manifest without `originalStored` imports as stored.
-- [ ] Given a model folder and `--faces`, when `process --index-only` runs, then the embedding and the faces are computed from `preview-2048`.
+- [x] Given a 1000×750 photo, then `preview-2048` is 1000×750 (no upscaling).
+- [x] Given a work folder made before this story (its state has no recorded mode), when `process` runs on it without `--index-only`, then it carries on as before and records the mode as keeping originals; when it runs with `--index-only`, then it stops before reading any file, with the usage exit code and the message.
+- [x] Given an index-only work folder, when `process` runs on it again without `--index-only`, then it stops before reading any file, with the usage exit code and the message, and the work folder is unchanged; and the same the other way round.
+- [x] Given an index-only work folder, when `upload` runs with the source folder deleted, then derivatives and manifests are uploaded, nothing is written to `originals`, there is no problem, and the summary counts the originals left at their source.
+- [x] Given an asset uploaded in full mode and the same bytes later uploaded from an index-only work folder (and the other order), then the stored manifest and the catalog say the original is stored, and the asset lists both sources.
+- [x] Given a manifest with `originalStored: false` and a source `url`, when the worker's import (`sepiabox-worker import --once`) runs, then it accepts the manifest, `assets.original_stored` is false and `asset_sources.url` holds the url; a manifest without `originalStored` imports as stored.
+- [x] Given a model folder and `--faces`, when `process --index-only` runs, then the embedding and the faces are computed from `preview-2048`.
 
 ### Technical notes
 - **Names.** `ThumbnailGenerator` gains a size list for index-only (`preview-2048`). `VideoScale.Fit` already takes `longest`/`shortest` (1920/1080). `DerivativeNames` (web) learns the two new names; S-064 shows them.

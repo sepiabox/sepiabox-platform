@@ -76,6 +76,11 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("geography (Point, 4326)")
                         .HasColumnName("location");
 
+                    b.Property<bool>("OriginalStored")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("original_stored");
+
                     b.Property<string>("PlaceCity")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
@@ -180,6 +185,10 @@ namespace Sepiabox.Catalog.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("type");
+
+                    b.Property<string>("Url")
+                        .HasColumnType("text")
+                        .HasColumnName("url");
 
                     b.HasKey("Id")
                         .HasName("pk_asset_sources");

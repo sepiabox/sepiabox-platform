@@ -8,6 +8,7 @@ using Azure.Storage;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
+using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
@@ -37,6 +38,12 @@ public sealed record UploadResult(
 {
     /// <summary>Assets uploaded with something left out, such as faces stamped by a clock that was ahead (D-081).</summary>
     public IReadOnlyList<ScanProblem> Warnings { get; init; } = [];
+
+    /// <summary>Whether the work folder is index-only (S-063): its originals are never uploaded.</summary>
+    public bool IndexOnly { get; init; }
+
+    /// <summary>Assets whose original was left at its source, in an index-only work folder; the original is never opened.</summary>
+    public int OriginalsLeftAtSource { get; init; }
 }
 
 /// <summary>
@@ -108,7 +115,8 @@ public static class UploadCommand
             validator,
             new ManifestStore(validator),
             bytesSent,
-            clock ?? TimeProvider.System);
+            clock ?? TimeProvider.System,
+            state.Mode == WorkFolderMode.IndexOnly);
 
         var stopwatch = Stopwatch.StartNew();
         var manifestFiles = Directory.GetFiles(manifestFolder, "*.json");
@@ -121,6 +129,8 @@ public static class UploadCommand
             manifestFiles.Length, run.Uploaded, run.Skipped, run.Bytes, stopwatch.Elapsed, [.. run.Problems.OrderBy(p => p.Path)])
         {
             Warnings = [.. run.Warnings.OrderBy(p => p.Path)],
+            IndexOnly = run.IndexOnly,
+            OriginalsLeftAtSource = run.LeftAtSource,
         };
     }
 
@@ -195,12 +205,16 @@ public static class UploadCommand
         IManifestValidator validator,
         ManifestStore manifestStore,
         IProgress<long>? bytesSent,
-        TimeProvider clock)
+        TimeProvider clock,
+        bool indexOnly)
     {
         private int _uploaded;
+        private int _leftAtSource;
         private int _skipped;
         private long _bytes;
 
+        public bool IndexOnly => indexOnly;
+        public int LeftAtSource => _leftAtSource;
         public int Uploaded => _uploaded;
         public int Skipped => _skipped;
         public long Bytes => _bytes;
@@ -237,7 +251,13 @@ public static class UploadCommand
                 }
 
                 // Order matters: an asset's manifest is only sent once everything it points to is in storage.
-                if (!await UploadOriginalAsync(manifest, cancellationToken))
+                if (indexOnly)
+                {
+                    // The original stays at its source (S-063, D-088): it is never opened, and the drive or export
+                    // need not be connected.
+                    Interlocked.Increment(ref _leftAtSource);
+                }
+                else if (!await UploadOriginalAsync(manifest, cancellationToken))
                 {
                     return;
                 }

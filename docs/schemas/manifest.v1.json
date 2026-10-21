@@ -69,7 +69,13 @@
           "type": { "type": "string", "minLength": 1 },
           "name": { "type": "string", "minLength": 1 },
           "path": { "type": "string", "minLength": 1 },
-          "modifiedAt": { "type": "string", "format": "date-time" }
+          "modifiedAt": { "type": "string", "format": "date-time" },
+          "url": {
+            "description": "Optional (S-063): the original's address at its source, when the source gives one, such as a Google Photos link from a Takeout export. https only.",
+            "type": "string",
+            "pattern": "^https://",
+            "maxLength": 2000
+          }
         }
       }
     },
@@ -109,6 +115,10 @@
           "maxLength": 2732
         }
       }
+    },
+    "originalStored": {
+      "description": "Optional (S-063, D-088): false when the original stays at its source and is never uploaded (an index-only work folder). Absent means true, so manifests written before the field existed keep their meaning.",
+      "type": "boolean"
     },
     "facesProcessed": {
       "description": "Whether faces were looked for (process --faces, S-018). False means unknown, so faces is then empty.",

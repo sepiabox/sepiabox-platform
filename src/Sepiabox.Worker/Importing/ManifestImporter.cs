@@ -254,8 +254,13 @@ public sealed class ManifestImporter(
             .SingleOrDefaultAsync(a => a.Id == manifest.Id, cancellationToken);
         if (asset is null)
         {
-            asset = new Asset { Id = manifest.Id, Kind = kind, ContentType = manifest.ContentType, ImportedAt = now };
+            asset = new Asset { Id = manifest.Id, Kind = kind, ContentType = manifest.ContentType, ImportedAt = now, OriginalStored = manifest.IsOriginalStored };
             db.Assets.Add(asset);
+        }
+        else
+        {
+            // Stored once any manifest says so, and then it stays (S-063, D-088): an index-only manifest never takes it back.
+            asset.OriginalStored |= manifest.IsOriginalStored;
         }
 
         asset.Kind = kind;
@@ -288,11 +293,14 @@ public sealed class ManifestImporter(
                     Name = source.Name,
                     Path = ManifestSource.NormalizePath(source.Path),
                     ModifiedAt = modifiedAt,
+                    Url = source.Url,
                 });
             }
             else
             {
                 existing.ModifiedAt = modifiedAt;
+                // The merged manifest keeps a url that any side had, so an absent one only means none was ever given.
+                existing.Url = source.Url ?? existing.Url;
             }
         }
 

@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Pipeline.Embeddings;
@@ -33,15 +32,24 @@ public enum EmbeddingStatus
 public sealed record EmbeddingOutcome(EmbeddingStatus Status, Manifest? Manifest, string? Problem = null, string? Category = null);
 
 /// <summary>
-/// Adds a missing embedding to a manifest from the derivative the web shows: the 1280 px preview of a photo
-/// or the poster of a video (D-042). It never reads the original, so it also works on a work folder whose
+/// Adds a missing embedding to a manifest from the derivative the web shows: the largest preview of a photo
+/// or the poster of a video (D-042, S-063). It never reads the original, so it also works on a work folder whose
 /// drive is no longer connected. A failure is reported, never thrown (only cancellation is): an embedding is
 /// optional and retried on the next run.
 /// </summary>
 public static class ManifestEmbeddings
 {
-    public static string SourceDerivative(MediaKind kind) =>
-        kind == MediaKind.Video ? VideoProcessor.PosterName : ThumbnailGenerator.PreviewName;
+    /// <summary>
+    /// The derivative the embedding and the faces are computed from: the largest preview the manifest lists
+    /// (<c>preview-2048</c>, else <c>preview-1280</c>, else the video's poster), so both work in index-only mode (S-063)
+    /// and in full mode; null when it lists none.
+    /// </summary>
+    public static ManifestDerivative? SourceDerivative(Manifest manifest)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        string[] order = [ThumbnailGenerator.LargePreviewName, ThumbnailGenerator.PreviewName, VideoProcessor.PosterName];
+        return order.Select(name => manifest.Derivatives.FirstOrDefault(d => d.Name == name)).FirstOrDefault(d => d is not null);
+    }
 
     public static EmbeddingOutcome TryAdd(Manifest manifest, string workFolder, IImageEmbedder embedder)
     {
@@ -50,8 +58,7 @@ public static class ManifestEmbeddings
             return new EmbeddingOutcome(EmbeddingStatus.Present, manifest);
         }
 
-        var name = SourceDerivative(manifest.Kind);
-        var derivative = manifest.Derivatives.FirstOrDefault(d => d.Name == name);
+        var derivative = SourceDerivative(manifest);
         if (derivative is null)
         {
             return new EmbeddingOutcome(EmbeddingStatus.NotListed, manifest);

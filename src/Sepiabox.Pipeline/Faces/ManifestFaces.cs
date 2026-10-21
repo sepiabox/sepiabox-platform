@@ -4,8 +4,8 @@ using Sepiabox.Pipeline.Manifests;
 namespace Sepiabox.Pipeline.Faces;
 
 /// <summary>
-/// Adds faces to a manifest that has none yet, or only from an older face pipeline, from the same derivative as the CLIP embedding: the 1280 px preview
-/// of a photo or the poster of a video (D-042, D-047). Like an embedding, faces are optional data: a failure is
+/// Adds faces to a manifest that has none yet, or only from an older face pipeline, from the same derivative as the CLIP embedding: the largest preview
+/// of a photo or the poster of a video (D-042, D-047, S-063). Like an embedding, faces are optional data: a failure is
 /// reported, never thrown (only cancellation is), and the next run with <c>--faces</c> tries again.
 /// </summary>
 public static class ManifestFaces
@@ -32,8 +32,7 @@ public static class ManifestFaces
             return new EmbeddingOutcome(EmbeddingStatus.Present, manifest);
         }
 
-        var name = ManifestEmbeddings.SourceDerivative(manifest.Kind);
-        var derivative = manifest.Derivatives.FirstOrDefault(d => d.Name == name);
+        var derivative = ManifestEmbeddings.SourceDerivative(manifest);
         if (derivative is null)
         {
             return new EmbeddingOutcome(EmbeddingStatus.NotListed, manifest);
