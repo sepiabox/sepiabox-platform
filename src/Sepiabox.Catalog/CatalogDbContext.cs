@@ -122,6 +122,9 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             person.ToTable("people");
             person.Property(p => p.Name).HasMaxLength(200);
             person.Property(p => p.UserEmail).HasMaxLength(320);
+            // One person per user (S-020); addresses are stored lower-cased. Names are unique ignoring case through an
+            // index on lower(name), which the PeopleUnique migration creates in SQL.
+            person.HasIndex(p => p.UserEmail).IsUnique().HasDatabaseName("ix_people_user_email");
             person.Property(p => p.Centroid).HasColumnType("vector(128)");
             // The people page lists the most photographed first (S-019).
             person.HasIndex(p => new { p.FaceCount, p.Id })

@@ -50,6 +50,31 @@ public sealed class PeopleQueryTests(CatalogFixture catalog)
         Assert.Null(Assert.Single(people).Cover);
     }
 
+    [Fact]
+    public async Task Shows_a_person_s_faces_best_first_without_the_excluded_ones_and_who_they_can_be_merged_with()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.Add(CatalogData.Photo(Ids.Of(1), null));
+        var person = new Person { Name = "Ana", UserEmail = "ana@example.com", FaceCount = 2 };
+        var named = new Person { Name = "Bruno", FaceCount = 0 };
+        var unnamedEmpty = new Person { FaceCount = 0 };
+        var other = new Person { FaceCount = 1 };
+        db.People.AddRange(person, named, unnamedEmpty, other);
+        db.Faces.AddRange(
+            Face(Ids.Of(1), person, 0.80, [0.5, 0.5, 0.2, 0.2]),
+            Face(Ids.Of(1), person, 0.90, [0.1, 0.1, 0.2, 0.2]),
+            Face(Ids.Of(1), person, 0.99, [0.3, 0.3, 0.2, 0.2], FaceAssignments.Excluded),
+            Face(Ids.Of(1), other, 0.70, [0.7, 0.7, 0.2, 0.2]));
+        await db.SaveChangesAsync();
+
+        var detail = (await new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db))).GetPersonAsync(person.Id))!;
+
+        Assert.Equal(("Ana", "ana@example.com", 2), (detail.Name, detail.UserEmail, detail.FaceCount));
+        Assert.Equal([0.1, 0.5], detail.Faces.Select(f => f.Crop!.Box[0]));
+        Assert.Equal([other.Id, named.Id], detail.Others.Select(o => o.Id));
+        Assert.Null(await new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db))).GetPersonAsync(12345));
+    }
+
     private static Face Face(string assetId, Person person, double score, double[] box, string assignment = FaceAssignments.Auto)
     {
         var embedding = new float[128];

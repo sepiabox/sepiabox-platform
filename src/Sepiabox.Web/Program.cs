@@ -37,6 +37,7 @@ if (SearchSetup.WarmUp(builder.Configuration, builder.Environment))
     builder.Services.AddHostedService<TextModelWarmUp>();
 }
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
+builder.Services.AddScoped<IPeopleEditor, PeopleEditor>();
 // Questions (S-025): Claude through the project's own interface (D-051), with a daily limit per person.
 builder.Services.AddSingleton<IQuestionTranslator, ConfiguredQuestionTranslator>();
 builder.Services.AddSingleton<IQuestionQuota, CatalogQuestionQuota>();

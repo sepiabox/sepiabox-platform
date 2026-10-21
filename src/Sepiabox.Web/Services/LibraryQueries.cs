@@ -50,6 +50,16 @@ public sealed record OriginalFile(string FileName, string ContentType);
 /// </summary>
 public sealed record PersonSummary(long Id, string? Name, int FaceCount, FaceCrop? Cover);
 
+/// <summary>One face on a person's page (S-020): its id for the corrections, its photo, and its crop when there is a thumbnail.</summary>
+public sealed record PersonFace(long Id, string AssetId, FaceCrop? Crop);
+
+/// <summary>
+/// A person's page (S-020): their name, the user who said "This is me" (D-018), their faces (not excluded, best first,
+/// up to <see cref="LibraryQueries.MaxPersonFaces"/>), and the other people they can be merged with.
+/// </summary>
+public sealed record PersonDetail(
+    long Id, string? Name, string? UserEmail, int FaceCount, IReadOnlyList<PersonFace> Faces, IReadOnlyList<PersonSummary> Others);
+
 public interface ILibraryQueries
 {
     /// <summary>
@@ -57,6 +67,9 @@ public interface ILibraryQueries
     /// people left with no face are not listed.
     /// </summary>
     Task<IReadOnlyList<PersonSummary>> GetPeopleAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Null when the catalog has no person with that id.</summary>
+    Task<PersonDetail?> GetPersonAsync(long id, CancellationToken cancellationToken = default);
 
     /// <summary>Newest first; assets without a capture date come last. <paramref name="page"/> starts at 1.</summary>
     Task<TimelinePage> GetTimelinePageAsync(int page, CancellationToken cancellationToken = default);
@@ -96,6 +109,9 @@ public sealed class LibraryQueries(
 
     /// <summary>More people than a family has faces worth naming; the page shows the most photographed.</summary>
     public const int MaxPeople = 500;
+
+    /// <summary>Faces shown on a person's page, best first.</summary>
+    public const int MaxPersonFaces = 500;
 
     /// <summary>Far beyond any family library (20 million assets); keeps a hand-typed page number sane.</summary>
     public const int MaxPage = 100_000;
@@ -268,20 +284,56 @@ public sealed class LibraryQueries(
             })
             .ToListAsync(cancellationToken);
 
-        // Boxes are relative to the upright derivatives (D-047), so the thumbnail's own size maps them.
-        var assets = people.Where(p => p.Cover is not null).Select(p => p.Cover!.AssetId).Distinct().ToList();
-        var thumbnails = await db.Derivatives.AsNoTracking()
+        var thumbnails = await ThumbnailSizesAsync(db, [.. people.Where(p => p.Cover is not null).Select(p => p.Cover!.AssetId)], cancellationToken);
+        return [.. people.Select(p => new PersonSummary(
+            p.Id, p.Name, p.FaceCount, p.Cover is { } cover ? Crop(cover.AssetId, cover.Box, thumbnails) : null))];
+    }
+
+    public async Task<PersonDetail?> GetPersonAsync(long id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var person = await db.People.AsNoTracking().SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
+        if (person is null)
+        {
+            return null;
+        }
+
+        var faces = await db.Faces.AsNoTracking()
+            .Where(f => f.PersonId == id && f.Assignment != FaceAssignments.Excluded)
+            .OrderByDescending(f => f.Score).ThenBy(f => f.Id)
+            .Take(MaxPersonFaces)
+            .Select(f => new { f.Id, f.AssetId, f.Box })
+            .ToListAsync(cancellationToken);
+        var thumbnails = await ThumbnailSizesAsync(db, [.. faces.Select(f => f.AssetId)], cancellationToken);
+        // Anyone else with faces or a name can be the same person; most faces first, as on the people page.
+        var others = await db.People.AsNoTracking()
+            .Where(p => p.Id != id && (p.FaceCount > 0 || p.Name != null))
+            .OrderByDescending(p => p.FaceCount).ThenBy(p => p.Id)
+            .Take(MaxPeople)
+            .Select(p => new PersonSummary(p.Id, p.Name, p.FaceCount, null))
+            .ToListAsync(cancellationToken);
+
+        return new PersonDetail(
+            person.Id,
+            person.Name,
+            person.UserEmail,
+            person.FaceCount,
+            [.. faces.Select(f => new PersonFace(f.Id, f.AssetId, Crop(f.AssetId, f.Box, thumbnails)))],
+            others);
+    }
+
+    // Boxes are relative to the upright derivatives (D-047), so each thumbnail's own size maps them.
+    private static async Task<Dictionary<string, (int Width, int Height)>> ThumbnailSizesAsync(
+        CatalogDbContext db, List<string> assetIds, CancellationToken cancellationToken)
+    {
+        var assets = assetIds.Distinct().ToList();
+        return await db.Derivatives.AsNoTracking()
             .Where(d => assets.Contains(d.AssetId) && d.Name == DerivativeNames.Thumbnail && d.Width > 0 && d.Height > 0)
             .ToDictionaryAsync(d => d.AssetId, d => (d.Width, d.Height), StringComparer.Ordinal, cancellationToken);
-
-        return [.. people.Select(p => new PersonSummary(
-            p.Id,
-            p.Name,
-            p.FaceCount,
-            p.Cover is { } cover && thumbnails.TryGetValue(cover.AssetId, out var size) && cover.Box is { Length: 4 }
-                ? new FaceCrop(cover.AssetId, cover.Box, size.Width, size.Height)
-                : null))];
     }
+
+    private static FaceCrop? Crop(string assetId, double[]? box, Dictionary<string, (int Width, int Height)> thumbnails) =>
+        thumbnails.TryGetValue(assetId, out var size) && box is { Length: 4 } ? new FaceCrop(assetId, box, size.Width, size.Height) : null;
 
     public async Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default)
     {

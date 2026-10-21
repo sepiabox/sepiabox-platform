@@ -15,13 +15,17 @@ The model groups; only the family knows who is who. Manual corrections must neve
 - Relationships between people (phase 3).
 
 ### Acceptance criteria
-- [ ] Given two people merged, then the faces move to one and the counts add up.
-- [ ] Given a face removed from a person, when I re-import, then it does not go back to that person.
-- [ ] Given "This is me" by two users on the same person, then the second is rejected.
-- [ ] Given a name already used by another person, then the change is rejected with a message.
+- [x] Given two people merged, then the faces move to one and the counts add up. *(`PeopleCurationTests`: five faces from two people, one person with count 5, the centroid their normalized mean.)*
+- [x] Given a face removed from a person, when I re-import, then it does not go back to that person. *(`PeopleCurationTests`: re-imported with a moved box and new numbers, the face stays excluded with that person; "Not a face" stays with nobody.)*
+- [x] Given "This is me" by two users on the same person, then the second is rejected. *(`PeopleCurationTests`, and over HTTP in `PersonPagePostTests`.)*
+- [x] Given a name already used by another person, then the change is rejected with a message. *(`PeopleCurationTests`, ignoring case; the page shows the message, `PersonPageFormTests`.)*
 
 ### Technical notes
 - Operations in a transaction; recompute centroids.
+- Decisions: D-018, D-077, D-079.
+
+### Status
+- `done` (2026-10-21): implemented and tested (D-079).
 
 ### Expected tests
 - Integration (PostgreSQL): merge, exclude, uniqueness. bUnit: forms.

@@ -1,0 +1,198 @@
+@page "/people/{Id:long}"
+@inject ILibraryQueries Library
+@inject IPeopleEditor Editor
+@inject NavigationManager Navigation
+@using Sepiabox.Catalog.People
+@* Static server rendering with POST forms (S-020): each correction is answered with a redirect back here (post,
+   redirect, get), with a note saying what happened, so reloading never repeats it. *@
+
+<PageTitle>@Title · Sepiabox</PageTitle>
+
+<p class="back"><a href="people">@Text["Person_Back"]</a></p>
+
+@if (_person is null)
+{
+    <h1 class="page-heading">@Text["Person_NotFound"]</h1>
+}
+else
+{
+    <h1 class="page-heading">@Title</h1>
+    <p class="muted">@FaceCount(_person.FaceCount)</p>
+
+    @if (NoteText is { } note)
+    {
+        <p class="note" role="status">@note</p>
+    }
+
+    <section class="person-edit">
+        <form method="post" @formname="rename" @onsubmit="RenameAsync" class="rename">
+            <AntiforgeryToken />
+            <label>
+                <span>@Text["Person_Rename_Label"]</span>
+                <input type="text" name="Name" value="@_person.Name" maxlength="@PeopleCuration.MaxNameLength" placeholder="@Text["People_Unnamed"]" />
+            </label>
+            <button type="submit">@Text["Person_Rename_Submit"]</button>
+        </form>
+
+        <form method="post" @formname="me" @onsubmit="MeAsync" class="me">
+            <AntiforgeryToken />
+            @if (_person.UserEmail is null)
+            {
+                <button type="submit" name="Me" value="link">@Text["Person_Me_Submit"]</button>
+            }
+            else if (IsMe)
+            {
+                <span>@Text["Person_Me_Linked"]</span>
+                <button type="submit" name="Me" value="unlink">@Text["Person_NotMe_Submit"]</button>
+            }
+            else
+            {
+                <span class="muted">@Text["Person_Me_Other", _person.UserEmail]</span>
+            }
+        </form>
+
+        @if (_person.Others.Count > 0)
+        {
+            <form method="post" @formname="merge" @onsubmit="MergeAsync" class="merge">
+                <AntiforgeryToken />
+                <label>
+                    <span>@Text["Person_Merge_Label"]</span>
+                    <select name="Other">
+                        @foreach (var other in _person.Others)
+                        {
+                            <option value="@other.Id">@(other.Name ?? Text["People_Unnamed"]) (@FaceCount(other.FaceCount))</option>
+                        }
+                    </select>
+                </label>
+                <button type="submit">@Text["Person_Merge_Submit"]</button>
+                <p class="hint muted">@Text["Person_Merge_Hint"]</p>
+            </form>
+        }
+    </section>
+
+    <h2>@Text["Person_Faces_Heading"]</h2>
+    <form method="post" @formname="faces" @onsubmit="FaceAsync">
+        <AntiforgeryToken />
+        <ul class="people person-faces">
+            @foreach (var face in _person.Faces)
+            {
+                <li class="person">
+                    <a href="photos/@face.AssetId" class="face">
+                        @if (face.Crop is { } crop)
+                        {
+                            <img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" />
+                        }
+                    </a>
+                    <button type="submit" name="Face" value="@($"{NotThisPerson}:{face.Id}")" class="small">@Text["Person_Face_NotThis"]</button>
+                    <button type="submit" name="Face" value="@($"{NotAFace}:{face.Id}")" class="small">@Text["Person_Face_NotAFace"]</button>
+                </li>
+            }
+        </ul>
+    </form>
+}
+
+@code {
+    public const string NoteParameter = "note";
+    private const string NotThisPerson = "not-this-person";
+    private const string NotAFace = "not-a-face";
+
+    // What a note in the address may say, and its text: nothing else from the address is shown.
+    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    {
+        ["renamed"] = "Person_Done_Renamed",
+        ["linked"] = "Person_Done_Linked",
+        ["unlinked"] = "Person_Done_Unlinked",
+        ["merged"] = "Person_Done_Merged",
+        ["removed"] = "Person_Done_Removed",
+        ["not-a-face"] = "Person_Done_NotAFace",
+        [nameof(CurationOutcome.NotFound)] = "Person_Error_NotFound",
+        [nameof(CurationOutcome.NameTaken)] = "Person_Error_NameTaken",
+        [nameof(CurationOutcome.NameTooLong)] = "Person_Error_NameTooLong",
+        [nameof(CurationOutcome.ClaimedByAnother)] = "Person_Error_ClaimedByAnother",
+        [nameof(CurationOutcome.AlreadyLinked)] = "Person_Error_AlreadyLinked",
+        [nameof(CurationOutcome.SamePerson)] = "Person_Error_SamePerson",
+        [nameof(CurationOutcome.DifferentUsers)] = "Person_Error_DifferentUsers",
+    };
+
+    [Parameter]
+    public long Id { get; set; }
+
+    [SupplyParameterFromQuery(Name = NoteParameter)]
+    public string? Note { get; set; }
+
+    [SupplyParameterFromForm(FormName = "rename")]
+    public string? Name { get; set; }
+
+    [SupplyParameterFromForm(FormName = "me")]
+    public string? Me { get; set; }
+
+    [SupplyParameterFromForm(FormName = "merge")]
+    public long? Other { get; set; }
+
+    [SupplyParameterFromForm(FormName = "faces")]
+    public string? Face { get; set; }
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    private PersonDetail? _person;
+
+    private string Title => _person is null ? Text["Person_NotFound"].Value : _person.Name ?? Text["People_Unnamed"].Value;
+
+    private string FaceCount(int count) =>
+        count == 1 ? Text["People_Faces_One"] : Text["People_Faces_Other", count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)];
+
+    private string? Email => HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+
+    private bool IsMe => _person?.UserEmail is { } linked && string.Equals(linked, Email?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key)
+        ? (key == "Person_Error_NameTooLong" ? Text[key, PeopleCuration.MaxNameLength].Value : Text[key].Value)
+        : null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _person = await Library.GetPersonAsync(Id);
+        if (_person is null && HttpContext is not null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+    }
+
+    private Task RenameAsync() => AnswerAsync(Editor.RenameAsync(Id, Name), "renamed");
+
+    private Task MeAsync() => Email is not { } email
+        ? AnswerAsync(Task.FromResult(CurationOutcome.NotFound), string.Empty)
+        : Me == "unlink"
+            ? AnswerAsync(Editor.UnlinkUserAsync(Id, email), "unlinked")
+            : AnswerAsync(Editor.LinkUserAsync(Id, email), "linked");
+
+    private Task MergeAsync() => Other is { } other
+        ? AnswerAsync(Editor.MergeAsync(Id, other), "merged")
+        : AnswerAsync(Task.FromResult(CurationOutcome.SamePerson), string.Empty);
+
+    private Task FaceAsync()
+    {
+        var parts = Face?.Split(':', 2);
+        if (parts is not [var action, var idText] || !long.TryParse(idText, System.Globalization.CultureInfo.InvariantCulture, out var faceId))
+        {
+            return AnswerAsync(Task.FromResult(CurationOutcome.NotFound), string.Empty);
+        }
+
+        return action switch
+        {
+            NotThisPerson => AnswerAsync(Editor.NotThisPersonAsync(Id, faceId), "removed"),
+            NotAFace => AnswerAsync(Editor.NotAFaceAsync(Id, faceId), "not-a-face"),
+            _ => AnswerAsync(Task.FromResult(CurationOutcome.NotFound), string.Empty),
+        };
+    }
+
+    // Post, redirect, get: back here (or to the people page, when the person is gone) with what happened.
+    private async Task AnswerAsync(Task<CurationOutcome> change, string done)
+    {
+        var outcome = await change;
+        var note = outcome == CurationOutcome.Done ? done : outcome.ToString();
+        var stillThere = await Library.GetPersonAsync(Id) is not null;
+        Navigation.NavigateTo(stillThere ? $"people/{Id}?{NoteParameter}={Uri.EscapeDataString(note)}" : "people");
+    }
+}

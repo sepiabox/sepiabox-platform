@@ -4,14 +4,16 @@
     @foreach (var person in Ordered)
     {
         <li class="person">
-            <span class="face">
-                @if (person.Cover is { } cover)
-                {
-                    <img src="photos/@cover.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@cover.ImageStyle()" />
-                }
-            </span>
-            <span class="name">@(person.Name ?? Text["People_Unnamed"])</span>
-            <span class="count muted small">@FaceCount(person.FaceCount)</span>
+            <a href="people/@person.Id" class="person-link">
+                <span class="face">
+                    @if (person.Cover is { } cover)
+                    {
+                        <img src="photos/@cover.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@cover.ImageStyle()" />
+                    }
+                </span>
+                <span class="name">@(person.Name ?? Text["People_Unnamed"])</span>
+                <span class="count muted small">@FaceCount(person.FaceCount)</span>
+            </a>
         </li>
     }
 </ul>

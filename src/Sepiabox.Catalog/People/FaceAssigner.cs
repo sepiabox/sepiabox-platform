@@ -265,6 +265,18 @@ public sealed class FaceAssigner(CatalogDbContext db, FaceAssignerOptions? optio
     }
 
     /// <summary>
+    /// The person's count and centroid recomputed (as below) from the catalog as saved, for the family's edits (S-020):
+    /// called after their SaveChanges, inside the transaction that holds <see cref="LockAsync"/>, so imports and edits
+    /// never count over each other. An unnamed person no face points to any more is removed.
+    /// </summary>
+    public Task RecomputeAsync(Person person, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(person);
+        // No asset is being replaced: every face is read as saved (asset ids are never empty).
+        return RecomputeAsync(person, string.Empty, 0, [], cancellationToken);
+    }
+
+    /// <summary>
     /// The person's face count (every face not excluded, of any version) and centroid (the normalized mean of the faces
     /// of the newest version it has, only), from the catalog's other assets, aggregated in the database, and this
     /// asset's faces in memory. An unnamed person no face points to any more is removed; one with only excluded faces

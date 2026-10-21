@@ -612,3 +612,50 @@ main {
 .person .name {
     font-weight: 600;
 }
+
+/* A person's page (S-020): the corrections above the faces. */
+.person-link {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.person-edit {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 32px;
+    align-items: flex-end;
+    margin: 16px 0 24px;
+}
+
+.person-edit form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-end;
+    margin: 0;
+}
+
+.person-edit label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.person-faces button {
+    font: inherit;
+    padding: 2px 6px;
+    border: 1px solid var(--mat);
+    border-radius: 4px;
+    background: var(--white);
+    color: var(--developer);
+    cursor: pointer;
+}
+
+.note {
+    padding: 8px 12px;
+    border-left: 3px solid var(--cyanotype);
+    background: var(--white);
+}

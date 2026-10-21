@@ -512,4 +512,85 @@
   <data name="People_Faces_Other" xml:space="preserve">
     <value>{0} faces</value>
   </data>
+  <data name="Person_Back" xml:space="preserve">
+    <value>All people</value>
+  </data>
+  <data name="Person_NotFound" xml:space="preserve">
+    <value>Person not found</value>
+  </data>
+  <data name="Person_Rename_Label" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Person_Rename_Submit" xml:space="preserve">
+    <value>Save name</value>
+  </data>
+  <data name="Person_Me_Submit" xml:space="preserve">
+    <value>This is me</value>
+  </data>
+  <data name="Person_NotMe_Submit" xml:space="preserve">
+    <value>This is not me</value>
+  </data>
+  <data name="Person_Me_Linked" xml:space="preserve">
+    <value>This is you.</value>
+  </data>
+  <data name="Person_Me_Other" xml:space="preserve">
+    <value>Linked to {0}.</value>
+  </data>
+  <data name="Person_Merge_Label" xml:space="preserve">
+    <value>Same person as</value>
+  </data>
+  <data name="Person_Merge_Submit" xml:space="preserve">
+    <value>Merge</value>
+  </data>
+  <data name="Person_Merge_Hint" xml:space="preserve">
+    <value>The other person's faces move here, and the other person goes.</value>
+  </data>
+  <data name="Person_Faces_Heading" xml:space="preserve">
+    <value>Faces</value>
+  </data>
+  <data name="Person_Face_NotThis" xml:space="preserve">
+    <value>Not this person</value>
+  </data>
+  <data name="Person_Face_NotAFace" xml:space="preserve">
+    <value>Not a face</value>
+  </data>
+  <data name="Person_Done_Renamed" xml:space="preserve">
+    <value>Name saved.</value>
+  </data>
+  <data name="Person_Done_Linked" xml:space="preserve">
+    <value>This person is now linked to you.</value>
+  </data>
+  <data name="Person_Done_Unlinked" xml:space="preserve">
+    <value>This person is no longer linked to you.</value>
+  </data>
+  <data name="Person_Done_Merged" xml:space="preserve">
+    <value>The two people are now one.</value>
+  </data>
+  <data name="Person_Done_Removed" xml:space="preserve">
+    <value>The face was removed from this person and will not come back.</value>
+  </data>
+  <data name="Person_Done_NotAFace" xml:space="preserve">
+    <value>Marked as not a face.</value>
+  </data>
+  <data name="Person_Error_NotFound" xml:space="preserve">
+    <value>That person or face is no longer there.</value>
+  </data>
+  <data name="Person_Error_NameTaken" xml:space="preserve">
+    <value>Another person already has this name.</value>
+  </data>
+  <data name="Person_Error_NameTooLong" xml:space="preserve">
+    <value>The name is too long: at most {0} characters.</value>
+  </data>
+  <data name="Person_Error_ClaimedByAnother" xml:space="preserve">
+    <value>Someone else already said this person is them.</value>
+  </data>
+  <data name="Person_Error_AlreadyLinked" xml:space="preserve">
+    <value>You are already linked to another person. Undo that there first.</value>
+  </data>
+  <data name="Person_Error_SamePerson" xml:space="preserve">
+    <value>Choose another person.</value>
+  </data>
+  <data name="Person_Error_DifferentUsers" xml:space="preserve">
+    <value>These two people are linked to two different users, so they cannot be merged.</value>
+  </data>
 </root>

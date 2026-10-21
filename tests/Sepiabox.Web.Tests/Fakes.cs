@@ -90,6 +90,44 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
 
     public Task<IReadOnlyList<PersonSummary>> GetPeopleAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<PersonSummary>>(People);
+
+    /// <summary>The person pages, by id.</summary>
+    public Dictionary<long, PersonDetail> Persons { get; } = [];
+
+    public Task<PersonDetail?> GetPersonAsync(long id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Persons.GetValueOrDefault(id));
+}
+
+/// <summary>Records the corrections asked for and answers each with <see cref="Outcome"/>.</summary>
+internal sealed class FakePeopleEditor : IPeopleEditor
+{
+    public Sepiabox.Catalog.People.CurationOutcome Outcome { get; set; } = Sepiabox.Catalog.People.CurationOutcome.Done;
+
+    public List<string> Calls { get; } = [];
+
+    public Task<Sepiabox.Catalog.People.CurationOutcome> RenameAsync(long personId, string? name, CancellationToken cancellationToken = default) =>
+        Record($"rename {personId} {name}");
+
+    public Task<Sepiabox.Catalog.People.CurationOutcome> LinkUserAsync(long personId, string email, CancellationToken cancellationToken = default) =>
+        Record($"link {personId} {email}");
+
+    public Task<Sepiabox.Catalog.People.CurationOutcome> UnlinkUserAsync(long personId, string email, CancellationToken cancellationToken = default) =>
+        Record($"unlink {personId} {email}");
+
+    public Task<Sepiabox.Catalog.People.CurationOutcome> MergeAsync(long personId, long otherId, CancellationToken cancellationToken = default) =>
+        Record($"merge {personId} {otherId}");
+
+    public Task<Sepiabox.Catalog.People.CurationOutcome> NotThisPersonAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
+        Record($"not-this-person {personId} {faceId}");
+
+    public Task<Sepiabox.Catalog.People.CurationOutcome> NotAFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
+        Record($"not-a-face {personId} {faceId}");
+
+    private Task<Sepiabox.Catalog.People.CurationOutcome> Record(string call)
+    {
+        Calls.Add(call);
+        return Task.FromResult(Outcome);
+    }
 }
 
 /// <summary>

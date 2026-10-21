@@ -389,6 +389,10 @@ namespace Sepiabox.Catalog.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Centroid"), "hnsw");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Centroid"), new[] { "vector_cosine_ops" });
 
+                    b.HasIndex("UserEmail")
+                        .IsUnique()
+                        .HasDatabaseName("ix_people_user_email");
+
                     b.HasIndex("FaceCount", "Id")
                         .IsDescending(true, false)
                         .HasDatabaseName("ix_people_face_count");

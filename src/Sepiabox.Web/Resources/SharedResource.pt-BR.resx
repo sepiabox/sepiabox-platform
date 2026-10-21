@@ -465,4 +465,85 @@
   <data name="People_Faces_Other" xml:space="preserve">
     <value>{0} rostos</value>
   </data>
+  <data name="Person_Back" xml:space="preserve">
+    <value>Todas as pessoas</value>
+  </data>
+  <data name="Person_NotFound" xml:space="preserve">
+    <value>Pessoa não encontrada</value>
+  </data>
+  <data name="Person_Rename_Label" xml:space="preserve">
+    <value>Nome</value>
+  </data>
+  <data name="Person_Rename_Submit" xml:space="preserve">
+    <value>Salvar nome</value>
+  </data>
+  <data name="Person_Me_Submit" xml:space="preserve">
+    <value>Sou eu</value>
+  </data>
+  <data name="Person_NotMe_Submit" xml:space="preserve">
+    <value>Não sou eu</value>
+  </data>
+  <data name="Person_Me_Linked" xml:space="preserve">
+    <value>Esta pessoa é você.</value>
+  </data>
+  <data name="Person_Me_Other" xml:space="preserve">
+    <value>Vinculada a {0}.</value>
+  </data>
+  <data name="Person_Merge_Label" xml:space="preserve">
+    <value>Mesma pessoa que</value>
+  </data>
+  <data name="Person_Merge_Submit" xml:space="preserve">
+    <value>Juntar</value>
+  </data>
+  <data name="Person_Merge_Hint" xml:space="preserve">
+    <value>Os rostos da outra pessoa passam para cá, e a outra pessoa deixa de existir.</value>
+  </data>
+  <data name="Person_Faces_Heading" xml:space="preserve">
+    <value>Rostos</value>
+  </data>
+  <data name="Person_Face_NotThis" xml:space="preserve">
+    <value>Não é esta pessoa</value>
+  </data>
+  <data name="Person_Face_NotAFace" xml:space="preserve">
+    <value>Não é um rosto</value>
+  </data>
+  <data name="Person_Done_Renamed" xml:space="preserve">
+    <value>Nome salvo.</value>
+  </data>
+  <data name="Person_Done_Linked" xml:space="preserve">
+    <value>Esta pessoa agora está vinculada a você.</value>
+  </data>
+  <data name="Person_Done_Unlinked" xml:space="preserve">
+    <value>Esta pessoa não está mais vinculada a você.</value>
+  </data>
+  <data name="Person_Done_Merged" xml:space="preserve">
+    <value>As duas pessoas agora são uma só.</value>
+  </data>
+  <data name="Person_Done_Removed" xml:space="preserve">
+    <value>O rosto foi retirado desta pessoa e não volta mais.</value>
+  </data>
+  <data name="Person_Done_NotAFace" xml:space="preserve">
+    <value>Marcado como não sendo um rosto.</value>
+  </data>
+  <data name="Person_Error_NotFound" xml:space="preserve">
+    <value>Essa pessoa ou esse rosto não existe mais.</value>
+  </data>
+  <data name="Person_Error_NameTaken" xml:space="preserve">
+    <value>Outra pessoa já tem esse nome.</value>
+  </data>
+  <data name="Person_Error_NameTooLong" xml:space="preserve">
+    <value>O nome é longo demais: no máximo {0} caracteres.</value>
+  </data>
+  <data name="Person_Error_ClaimedByAnother" xml:space="preserve">
+    <value>Outra pessoa já disse que esta pessoa é ela.</value>
+  </data>
+  <data name="Person_Error_AlreadyLinked" xml:space="preserve">
+    <value>Você já está vinculado a outra pessoa. Desfaça isso lá primeiro.</value>
+  </data>
+  <data name="Person_Error_SamePerson" xml:space="preserve">
+    <value>Escolha outra pessoa.</value>
+  </data>
+  <data name="Person_Error_DifferentUsers" xml:space="preserve">
+    <value>Essas duas pessoas estão vinculadas a dois usuários diferentes, então não podem ser juntadas.</value>
+  </data>
 </root>
