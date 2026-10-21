@@ -28,6 +28,12 @@ public enum CurationOutcome
 
     /// <summary>The two people are linked to two different users, who cannot be one person.</summary>
     DifferentUsers,
+
+    /// <summary>The person already has a face in that photo: one face of a photo per person.</summary>
+    PhotoTaken,
+
+    /// <summary>The name has control characters.</summary>
+    NameInvalid,
 }
 
 /// <summary>
@@ -52,10 +58,9 @@ public sealed class PeopleCuration(CatalogDbContext db)
     /// <summary>Names the person, or clears the name for a blank one. Names are unique, ignoring case.</summary>
     public Task<CurationOutcome> RenameAsync(long personId, string? name, CancellationToken cancellationToken = default)
     {
-        var clean = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
-        if (clean?.Length > MaxNameLength)
+        if (CleanName(name, out var clean) is { } refused)
         {
-            return Task.FromResult(CurationOutcome.NameTooLong);
+            return Task.FromResult(refused);
         }
 
         return InTransactionAsync(async () =>
@@ -173,6 +178,22 @@ public sealed class PeopleCuration(CatalogDbContext db)
                 }
             }
 
+            // One face of a photo per person: where both had a face in the same photo, the one nearer the merged
+            // centroid stays and the other is excluded, still pointing here, to be moved where it belongs.
+            var ours = await db.Faces.Where(f => f.PersonId == personId).ToListAsync(cancellationToken);
+            var counted = ours.Concat(faces).Where(f => f.Assignment != FaceAssignments.Excluded).ToList();
+            if (FaceMath.Centroid(counted.Select(f => f.Embedding.ToArray())) is { } centroid)
+            {
+                foreach (var photo in counted.GroupBy(f => f.AssetId).Where(g => g.Count() > 1))
+                {
+                    var keep = photo.OrderByDescending(f => FaceMath.Cosine(centroid, f.Embedding.ToArray())).ThenBy(f => f.Id).First();
+                    foreach (var face in photo.Where(f => f != keep))
+                    {
+                        face.Assignment = FaceAssignments.Excluded;
+                    }
+                }
+            }
+
             var name = person.Name ?? other.Name;
             var user = person.UserEmail ?? other.UserEmail;
             db.People.Remove(other);
@@ -198,6 +219,90 @@ public sealed class PeopleCuration(CatalogDbContext db)
     public Task<CurationOutcome> NotAFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
         ExcludeAsync(personId, faceId, keepPerson: false, cancellationToken);
 
+    /// <summary>
+    /// "Give back": a face excluded from this person (still pointing to them) is theirs again, as the family's choice
+    /// (<c>manual</c>); refused when the person already has a face in that photo.
+    /// </summary>
+    public Task<CurationOutcome> ReturnFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
+        InTransactionAsync(async () =>
+        {
+            var face = await db.Faces.SingleOrDefaultAsync(
+                f => f.Id == faceId && f.PersonId == personId && f.Assignment == FaceAssignments.Excluded, cancellationToken);
+            if (face is null || await db.People.FindAsync([personId], cancellationToken) is not { } person)
+            {
+                return CurationOutcome.NotFound;
+            }
+
+            if (await HasFaceInPhotoAsync(personId, face, cancellationToken))
+            {
+                return CurationOutcome.PhotoTaken;
+            }
+
+            face.Assignment = FaceAssignments.Manual;
+            await db.SaveChangesAsync(cancellationToken);
+            await _assigner.RecomputeAsync(person, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            return CurationOutcome.Done;
+        }, cancellationToken);
+
+    /// <summary>
+    /// "Move to…": a face of this person (shown or excluded) goes to <paramref name="targetId"/>, or to a new unnamed
+    /// person when null, as the family's choice (<c>manual</c>). Refused when the target already has a face in that
+    /// photo. This person is recomputed, and goes when unnamed with no face row left (D-077).
+    /// </summary>
+    public Task<CurationOutcome> MoveFaceAsync(long personId, long faceId, long? targetId, CancellationToken cancellationToken = default)
+    {
+        if (targetId == personId)
+        {
+            return Task.FromResult(CurationOutcome.SamePerson);
+        }
+
+        return InTransactionAsync(async () =>
+        {
+            var face = await db.Faces.SingleOrDefaultAsync(f => f.Id == faceId && f.PersonId == personId, cancellationToken);
+            if (face is null || await db.People.FindAsync([personId], cancellationToken) is not { } person)
+            {
+                return CurationOutcome.NotFound;
+            }
+
+            Person target;
+            if (targetId is { } id)
+            {
+                if (await db.People.FindAsync([id], cancellationToken) is not { } existing)
+                {
+                    return CurationOutcome.NotFound;
+                }
+
+                if (await HasFaceInPhotoAsync(id, face, cancellationToken))
+                {
+                    return CurationOutcome.PhotoTaken;
+                }
+
+                target = existing;
+            }
+            else
+            {
+                target = new Person();
+                db.People.Add(target);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
+            face.PersonId = target.Id;
+            face.Assignment = FaceAssignments.Manual;
+            await db.SaveChangesAsync(cancellationToken);
+            await _assigner.RecomputeAsync(target, cancellationToken);
+            await _assigner.RecomputeAsync(person, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            return CurationOutcome.Done;
+        }, cancellationToken);
+    }
+
+    // Whether the person already has a counted face, other than this one, in this face's photo.
+    private Task<bool> HasFaceInPhotoAsync(long personId, Face face, CancellationToken cancellationToken) =>
+        db.Faces.AnyAsync(
+            f => f.PersonId == personId && f.AssetId == face.AssetId && f.Id != face.Id && f.Assignment != FaceAssignments.Excluded,
+            cancellationToken);
+
     private Task<CurationOutcome> ExcludeAsync(long personId, long faceId, bool keepPerson, CancellationToken cancellationToken) =>
         InTransactionAsync(async () =>
         {
@@ -214,6 +319,58 @@ public sealed class PeopleCuration(CatalogDbContext db)
             await db.SaveChangesAsync(cancellationToken);
             return CurationOutcome.Done;
         }, cancellationToken);
+
+    /// <summary>
+    /// A name as stored (D-079): NFC, without zero-width characters, every run of white space one space, trimmed; null
+    /// for a blank one. Returns why it is refused, or null: control characters, or more than
+    /// <see cref="MaxNameLength"/> characters.
+    /// </summary>
+    public static CurationOutcome? CleanName(string? name, out string? clean)
+    {
+        clean = null;
+        if (name is null)
+        {
+            return null;
+        }
+
+        var text = new System.Text.StringBuilder(name.Length);
+        var space = false;
+        foreach (var c in name)
+        {
+            if (c is '\u200B' or '\u200C' or '\u200D' or '\u2060' or '\uFEFF')
+            {
+                continue;
+            }
+
+            if (char.IsWhiteSpace(c))
+            {
+                space = true;
+                continue;
+            }
+
+            if (char.IsControl(c))
+            {
+                return CurationOutcome.NameInvalid;
+            }
+
+            if (space && text.Length > 0)
+            {
+                text.Append(' ');
+            }
+
+            space = false;
+            text.Append(c);
+        }
+
+        var normalized = text.ToString().Normalize(System.Text.NormalizationForm.FormC);
+        if (normalized.Length > MaxNameLength)
+        {
+            return CurationOutcome.NameTooLong;
+        }
+
+        clean = normalized.Length == 0 ? null : normalized;
+        return null;
+    }
 
     // Lower-cased and trimmed, as the access list compares addresses.
     private static string NormalizeEmail(string email)

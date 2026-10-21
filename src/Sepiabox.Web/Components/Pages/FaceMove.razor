@@ -1,0 +1,95 @@
+@page "/people/{Id:long}/faces/{FaceId:long}/move"
+@inject ILibraryQueries Library
+@inject IPeopleEditor Editor
+@inject NavigationManager Navigation
+@using Sepiabox.Catalog.People
+@* "Move to…" (S-020, D-079): one face of this person, shown or excluded, goes to someone else or to a new person. *@
+
+<PageTitle>@Text["Move_Title"] · Sepiabox</PageTitle>
+
+@if (_person is null || _face is null)
+{
+    <p class="back"><a href="people/@Id">@Text["Person_Back"]</a></p>
+    <h1 class="page-heading">@Text["Person_Error_NotFound"]</h1>
+}
+else
+{
+    <p class="back"><a href="people/@_person.Id">@(_person.Name ?? Text["People_Unnamed"])</a></p>
+    <h1 class="page-heading">@Text["Move_Title"]</h1>
+    <ul class="people">
+        <li class="person">
+            <a href="photos/@_face.AssetId" class="face">
+                @if (_face.Crop is { } crop)
+                {
+                    <img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" />
+                }
+            </a>
+        </li>
+    </ul>
+    <form method="post" @formname="move" @onsubmit="MoveAsync" class="move">
+        <AntiforgeryToken />
+        <label>
+            <span>@Text["Move_Label"]</span>
+            <select name="Target">
+                @foreach (var other in _person.Others)
+                {
+                    <option value="@other.Id">@(other.Name ?? Text["People_Unnamed"]) (@FaceCount(other.FaceCount))</option>
+                }
+                <option value="@NewPerson">@Text["Move_NewPerson"]</option>
+            </select>
+        </label>
+        <button type="submit">@Text["Move_Submit"]</button>
+        <a href="people/@_person.Id">@Text["Merge_Cancel"]</a>
+    </form>
+}
+
+@code {
+    private const string NewPerson = "new";
+
+    [Parameter]
+    public long Id { get; set; }
+
+    [Parameter]
+    public long FaceId { get; set; }
+
+    [SupplyParameterFromForm(FormName = "move")]
+    public string? Target { get; set; }
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    private PersonDetail? _person;
+    private PersonFace? _face;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _person = await Library.GetPersonAsync(Id);
+        _face = _person?.FindFace(FaceId);
+        if (_face is null && HttpContext is not null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+    }
+
+    private string FaceCount(int count) =>
+        count == 1 ? Text["People_Faces_One"] : Text["People_Faces_Other", count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)];
+
+    private async Task MoveAsync()
+    {
+        CurationOutcome outcome;
+        if (Target == NewPerson)
+        {
+            outcome = await Editor.MoveFaceAsync(Id, FaceId, targetId: null);
+        }
+        else if (long.TryParse(Target, System.Globalization.CultureInfo.InvariantCulture, out var target))
+        {
+            outcome = await Editor.MoveFaceAsync(Id, FaceId, target);
+        }
+        else
+        {
+            outcome = CurationOutcome.NotFound;
+        }
+
+        Navigation.NavigateTo(await PersonLinks.AfterAsync(Library, Id, outcome, "moved"));
+    }
+}

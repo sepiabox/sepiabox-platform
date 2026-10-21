@@ -8,8 +8,8 @@
 The model groups; only the family knows who is who. Manual corrections must never be undone by automatic assignment.
 
 ### Scope
-- `/people/{id}`: rename (names unique case-insensitively), "This is me" ("Sou eu" in pt-BR; links the current user's e-mail; one per user), merge with another person, remove a face ("Not this person"; marks `excluded` for this person), mark "Not a face".
-- Automatic assignment ignores excluded face/person pairs and `manual` faces.
+- `/people/{id}`: rename (names unique case-insensitively), "This is me" ("Sou eu" in pt-BR; links the current user's e-mail; one per user), merge with another person (after a confirmation that shows both), remove a face ("Not this person"; marks `excluded` for this person), mark "Not a face", give an excluded face back, and move a face to another person or a new one.
+- Automatic assignment never changes a face the family touched: `manual` and `excluded` faces keep their person and choice on every re-import (D-077's carry-over), and an excluded face keeps pointing to the person it was removed from, so it never goes back to them; it can be given back ("Devolver") or moved ("Mover para…"). There is no table of excluded (face, person) pairs: moving the face covers the sibling case (D-079).
 
 ### Out of scope
 - Relationships between people (phase 3).

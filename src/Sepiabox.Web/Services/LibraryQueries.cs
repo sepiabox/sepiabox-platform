@@ -55,10 +55,23 @@ public sealed record PersonFace(long Id, string AssetId, FaceCrop? Crop);
 
 /// <summary>
 /// A person's page (S-020): their name, the user who said "This is me" (D-018), their faces (not excluded, best first,
-/// up to <see cref="LibraryQueries.MaxPersonFaces"/>), and the other people they can be merged with.
+/// up to <see cref="LibraryQueries.MaxPersonFaces"/>), the faces excluded from them (to give back or move), and the
+/// other people they can be merged with or faces moved to.
 /// </summary>
 public sealed record PersonDetail(
-    long Id, string? Name, string? UserEmail, int FaceCount, IReadOnlyList<PersonFace> Faces, IReadOnlyList<PersonSummary> Others);
+    long Id,
+    string? Name,
+    string? UserEmail,
+    int FaceCount,
+    IReadOnlyList<PersonFace> Faces,
+    IReadOnlyList<PersonSummary> Others,
+    IReadOnlyList<PersonFace>? ExcludedFaces = null)
+{
+    public IReadOnlyList<PersonFace> ExcludedFaces { get; init; } = ExcludedFaces ?? [];
+
+    /// <summary>A face of this person, shown or excluded; null when it is not theirs.</summary>
+    public PersonFace? FindFace(long faceId) => Faces.Concat(ExcludedFaces).FirstOrDefault(f => f.Id == faceId);
+}
 
 public interface ILibraryQueries
 {
@@ -304,7 +317,13 @@ public sealed class LibraryQueries(
             .Take(MaxPersonFaces)
             .Select(f => new { f.Id, f.AssetId, f.Box })
             .ToListAsync(cancellationToken);
-        var thumbnails = await ThumbnailSizesAsync(db, [.. faces.Select(f => f.AssetId)], cancellationToken);
+        var excluded = await db.Faces.AsNoTracking()
+            .Where(f => f.PersonId == id && f.Assignment == FaceAssignments.Excluded)
+            .OrderByDescending(f => f.Score).ThenBy(f => f.Id)
+            .Take(MaxPersonFaces)
+            .Select(f => new { f.Id, f.AssetId, f.Box })
+            .ToListAsync(cancellationToken);
+        var thumbnails = await ThumbnailSizesAsync(db, [.. faces.Concat(excluded).Select(f => f.AssetId)], cancellationToken);
         // Anyone else with faces or a name can be the same person; most faces first, as on the people page.
         var others = await db.People.AsNoTracking()
             .Where(p => p.Id != id && (p.FaceCount > 0 || p.Name != null))
@@ -319,7 +338,8 @@ public sealed class LibraryQueries(
             person.UserEmail,
             person.FaceCount,
             [.. faces.Select(f => new PersonFace(f.Id, f.AssetId, Crop(f.AssetId, f.Box, thumbnails)))],
-            others);
+            others,
+            [.. excluded.Select(f => new PersonFace(f.Id, f.AssetId, Crop(f.AssetId, f.Box, thumbnails)))]);
     }
 
     // Boxes are relative to the upright derivatives (D-047), so each thumbnail's own size maps them.

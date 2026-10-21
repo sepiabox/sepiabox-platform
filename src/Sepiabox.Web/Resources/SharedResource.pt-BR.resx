@@ -493,10 +493,10 @@
     <value>Mesma pessoa que</value>
   </data>
   <data name="Person_Merge_Submit" xml:space="preserve">
-    <value>Juntar</value>
+    <value>Juntar…</value>
   </data>
   <data name="Person_Merge_Hint" xml:space="preserve">
-    <value>Os rostos da outra pessoa passam para cá, e a outra pessoa deixa de existir.</value>
+    <value>As duas pessoas aparecem antes de qualquer mudança.</value>
   </data>
   <data name="Person_Faces_Heading" xml:space="preserve">
     <value>Rostos</value>
@@ -520,7 +520,7 @@
     <value>As duas pessoas agora são uma só.</value>
   </data>
   <data name="Person_Done_Removed" xml:space="preserve">
-    <value>O rosto foi retirado desta pessoa e não volta mais.</value>
+    <value>O rosto foi retirado desta pessoa e está em Rostos excluídos.</value>
   </data>
   <data name="Person_Done_NotAFace" xml:space="preserve">
     <value>Marcado como não sendo um rosto.</value>
@@ -535,15 +535,69 @@
     <value>O nome é longo demais: no máximo {0} caracteres.</value>
   </data>
   <data name="Person_Error_ClaimedByAnother" xml:space="preserve">
-    <value>Outra pessoa já disse que esta pessoa é ela.</value>
+    <value>Outro usuário já disse que esta pessoa é ele.</value>
   </data>
   <data name="Person_Error_AlreadyLinked" xml:space="preserve">
-    <value>Você já está vinculado a outra pessoa. Desfaça isso lá primeiro.</value>
+    <value>Sua conta já está vinculada a outra pessoa. Desfaça isso lá primeiro.</value>
   </data>
   <data name="Person_Error_SamePerson" xml:space="preserve">
     <value>Escolha outra pessoa.</value>
   </data>
   <data name="Person_Error_DifferentUsers" xml:space="preserve">
     <value>Essas duas pessoas estão vinculadas a dois usuários diferentes, então não podem ser juntadas.</value>
+  </data>
+  <data name="Person_Face_Move" xml:space="preserve">
+    <value>Mover para…</value>
+  </data>
+  <data name="Person_Face_GiveBack" xml:space="preserve">
+    <value>Devolver</value>
+  </data>
+  <data name="Person_Excluded_Heading" xml:space="preserve">
+    <value>Rostos excluídos</value>
+  </data>
+  <data name="Person_Excluded_Hint" xml:space="preserve">
+    <value>Rostos retirados desta pessoa. Devolva um rosto ou mova-o para a pessoa certa.</value>
+  </data>
+  <data name="Person_Done_GivenBack" xml:space="preserve">
+    <value>O rosto voltou para esta pessoa.</value>
+  </data>
+  <data name="Person_Done_Moved" xml:space="preserve">
+    <value>O rosto foi movido.</value>
+  </data>
+  <data name="Person_Error_PhotoTaken" xml:space="preserve">
+    <value>Essa pessoa já tem um rosto nesta foto.</value>
+  </data>
+  <data name="Person_Error_NameInvalid" xml:space="preserve">
+    <value>O nome tem caracteres que não podem ser usados.</value>
+  </data>
+  <data name="Merge_Title" xml:space="preserve">
+    <value>Juntar duas pessoas</value>
+  </data>
+  <data name="Merge_Explain" xml:space="preserve">
+    <value>Os rostos de {0} passam para {1}; {0} deixa de existir.</value>
+  </data>
+  <data name="Merge_Confirm" xml:space="preserve">
+    <value>Juntar</value>
+  </data>
+  <data name="Merge_Cancel" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="Merge_Goes" xml:space="preserve">
+    <value>Deixa de existir</value>
+  </data>
+  <data name="Merge_Stays" xml:space="preserve">
+    <value>Fica</value>
+  </data>
+  <data name="Move_Title" xml:space="preserve">
+    <value>Mover um rosto</value>
+  </data>
+  <data name="Move_Label" xml:space="preserve">
+    <value>Para</value>
+  </data>
+  <data name="Move_NewPerson" xml:space="preserve">
+    <value>Uma pessoa nova</value>
+  </data>
+  <data name="Move_Submit" xml:space="preserve">
+    <value>Mover</value>
   </data>
 </root>

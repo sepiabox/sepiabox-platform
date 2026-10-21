@@ -28,11 +28,16 @@ public sealed class PersonPageFormTests : LocalizedContext
         Assert.Equal("Ana", page.Find("h1").TextContent);
         Assert.Equal("Ana", page.Find("form.rename input[name=Name]").GetAttribute("value"));
         Assert.Equal("This is me", page.Find("form.me button").TextContent);
-        // Everyone else can be merged in, not the person themselves.
+        // Everyone else can be merged in, not the person themselves; the GET form only opens the confirmation.
         Assert.Equal(["8", "9"], page.FindAll("form.merge option").Select(o => o.GetAttribute("value")));
+        Assert.Equal(("get", "people/7/merge"), (page.Find("form.merge").GetAttribute("method"), page.Find("form.merge").GetAttribute("action")));
         Assert.Equal(
-            ["not-this-person:70", "not-a-face:70", "not-this-person:71", "not-a-face:71"],
+            ["not-this-person:70", "not-a-face:70", "not-this-person:71", "not-a-face:71", "give-back:72"],
             page.FindAll(".person-faces button").Select(b => b.GetAttribute("value")));
+        Assert.Equal(
+            ["people/7/faces/70/move", "people/7/faces/71/move", "people/7/faces/72/move"],
+            page.FindAll(".person-faces a.small").Select(a => a.GetAttribute("href")));
+        Assert.Equal("Excluded faces", page.FindAll("h2")[1].TextContent);
     }
 
     [Fact]
@@ -45,7 +50,7 @@ public sealed class PersonPageFormTests : LocalizedContext
 
         Assert.Equal("Sem nome", page.Find("h1").TextContent);
         Assert.Equal("Sou eu", page.Find("form.me button").TextContent);
-        Assert.Equal(["Não é esta pessoa", "Não é um rosto"], page.FindAll(".person-faces li:first-child button").Select(b => b.TextContent));
+        Assert.Equal(["Não é esta pessoa", "Não é um rosto"], page.FindAll(".person-faces:not(.excluded-faces) li:first-child button").Select(b => b.TextContent));
     }
 
     [Fact]
@@ -71,6 +76,21 @@ public sealed class PersonPageFormTests : LocalizedContext
         var page = Render<Person>(p => p.Add(x => x.Id, 7L));
 
         Assert.Equal(expected, page.Find(".note").TextContent);
+    }
+
+    [Fact]
+    public void Shows_both_people_and_which_one_stays_before_a_merge_in_brazilian_portuguese()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+        _library.Persons[8] = PersonPages.Person(8, name: "Bruno", user: null);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("people/7/merge?other=8");
+
+        var page = Render<PersonMerge>(p => p.Add(x => x.Id, 7L));
+
+        Assert.Equal(["Deixa de existir", "Fica"], page.FindAll(".merge-people .caption").Select(c => c.TextContent));
+        Assert.Equal(["Bruno", "Ana"], page.FindAll(".merge-people .name").Select(c => c.TextContent));
+        Assert.Equal("Os rostos de Bruno passam para Ana; Bruno deixa de existir.", page.Find(".note").TextContent);
+        Assert.Equal("Juntar", page.Find("form.confirm button").TextContent);
     }
 
     [Fact]
@@ -119,7 +139,7 @@ public sealed partial class PersonPagePostTests
     [Theory]
     [InlineData("faces", "Face", "not-this-person:70", "not-this-person 7 70")]
     [InlineData("faces", "Face", "not-a-face:71", "not-a-face 7 71")]
-    [InlineData("merge", "Other", "9", "merge 7 9")]
+    [InlineData("faces", "Face", "give-back:72", "return 7 72")]
     public async Task Sends_each_correction_to_the_editor(string form, string field, string value, string call)
     {
         var (web, editor) = Web();
@@ -130,6 +150,51 @@ public sealed partial class PersonPagePostTests
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal([call], editor.Calls);
+    }
+
+    [Fact]
+    public async Task Merges_only_from_the_confirmation_page()
+    {
+        var (web, editor) = Web();
+        await using var _ = web;
+        using var http = web.CreateSignedInClient(Ana, followRedirects: false);
+
+        var confirmation = await http.GetStringAsync(new Uri("/people/7/merge?other=9", UriKind.Relative));
+        Assert.Empty(editor.Calls);
+        Assert.Contains("The faces of Unnamed move to Unnamed; Unnamed no longer exists.", WebUtility.HtmlDecode(confirmation), StringComparison.Ordinal);
+        using var response = await PostAsync(http, "/people/7/merge?other=9", "confirm", new() { ["Confirmed"] = "yes" });
+
+        Assert.Equal("/people/7?note=merged", response.Headers.Location?.PathAndQuery);
+        Assert.Equal(["merge 7 9"], editor.Calls);
+    }
+
+    [Theory]
+    [InlineData("9", "move 7 70 9")]
+    [InlineData("new", "move 7 70 new")]
+    public async Task Moves_a_face_from_its_page(string target, string call)
+    {
+        var (web, editor) = Web(CurationOutcome.PhotoTaken);
+        await using var _ = web;
+        using var http = web.CreateSignedInClient(Ana, followRedirects: false);
+
+        using var response = await PostAsync(http, "/people/7/faces/70/move", "move", new() { ["Target"] = target });
+
+        Assert.Equal("/people/7?note=PhotoTaken", response.Headers.Location?.PathAndQuery);
+        Assert.Equal([call], editor.Calls);
+    }
+
+    [Theory]
+    [InlineData("/people/7/merge?other=12345")]
+    [InlineData("/people/7/faces/12345/move")]
+    public async Task Answers_404_for_a_merge_or_a_move_of_something_not_there(string address)
+    {
+        var (web, _) = Web();
+        await using var __ = web;
+        using var http = web.CreateSignedInClient(Ana);
+
+        using var response = await http.GetAsync(new Uri(address, UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -148,20 +213,24 @@ public sealed partial class PersonPagePostTests
     {
         var library = new FakeLibrary();
         library.Persons[7] = PersonPages.Person(7, name: null, user: null);
+        library.Persons[9] = PersonPages.Person(9, name: null, user: null);
         var editor = new FakePeopleEditor { Outcome = outcome };
         return (new WebFactory(library) { AccessEmails = Ana, PeopleEditor = editor }, editor);
     }
 
     // As a browser: the page's antiforgery token, then the form with it.
-    private static async Task<HttpResponseMessage> PostAsync(HttpClient http, string form, Dictionary<string, string> fields)
+    private static Task<HttpResponseMessage> PostAsync(HttpClient http, string form, Dictionary<string, string> fields) =>
+        PostAsync(http, "/people/7", form, fields);
+
+    private static async Task<HttpResponseMessage> PostAsync(HttpClient http, string address, string form, Dictionary<string, string> fields)
     {
-        var page = await http.GetStringAsync(new Uri("/people/7", UriKind.Relative));
+        var page = await http.GetStringAsync(new Uri(address, UriKind.Relative));
         var match = TokenField().Match(page);
         Assert.True(match.Success, page[..Math.Min(page.Length, 4000)]);
         var token = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
         fields["_handler"] = form;
         fields["__RequestVerificationToken"] = WebUtility.HtmlDecode(token);
-        return await http.PostAsync(new Uri("/people/7", UriKind.Relative), new FormUrlEncodedContent(fields));
+        return await http.PostAsync(new Uri(address, UriKind.Relative), new FormUrlEncodedContent(fields));
     }
 
     [GeneratedRegex("name=\"__RequestVerificationToken\" type=\"hidden\" value=\"([^\"]+)\"|type=\"hidden\" name=\"__RequestVerificationToken\" value=\"([^\"]+)\"")]
@@ -176,5 +245,6 @@ internal static class PersonPages
         user,
         2,
         [new PersonFace(70, Ids.Of(1), new FaceCrop(Ids.Of(1), [0.1, 0.1, 0.2, 0.2], 256, 192)), new PersonFace(71, Ids.Of(2), null)],
-        [new PersonSummary(8, "Bruno", 3, null), new PersonSummary(9, null, 1, null)]);
+        [new PersonSummary(8, "Bruno", 3, null), new PersonSummary(9, null, 1, null)],
+        [new PersonFace(72, Ids.Of(3), null)]);
 }

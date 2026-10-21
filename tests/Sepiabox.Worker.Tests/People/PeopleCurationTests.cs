@@ -159,6 +159,115 @@ public sealed class PeopleCurationTests(CatalogFixture fixture)
         Assert.Equal(CurationOutcome.Done, await rename);
     }
 
+    [Fact]
+    public async Task Keeps_the_nearer_face_and_excludes_the_other_when_merged_people_share_a_photo()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var ana = SyntheticFaces.Unit(seed: 1);
+        var stranger = SyntheticFaces.Unit(seed: 9);
+        // Photo 1 has both faces; photos 2 and 3 have Ana alone.
+        await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, ana), FaceImportTests.Face([0.6, 0.2, 0.3, 0.4], stranger)));
+        await PutAsync(container, FaceImportTests.WithFaces(2, FaceImportTests.Face(s_box, SyntheticFaces.Near(ana, seed: 2))));
+        await PutAsync(container, FaceImportTests.WithFaces(3, FaceImportTests.Face(s_box, SyntheticFaces.Near(ana, seed: 3))));
+        await ImportAsync(db, container);
+        var anaFace = await db.Faces.AsNoTracking().SingleAsync(f => f.AssetId == FaceImportTests.WithFaces(1).Id && f.Box[0] == 0.1);
+        var strangerFace = await db.Faces.AsNoTracking().SingleAsync(f => f.AssetId == FaceImportTests.WithFaces(1).Id && f.Box[0] == 0.6);
+
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MergeAsync(anaFace.PersonId!.Value, strangerFace.PersonId!.Value));
+
+        var person = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal((anaFace.PersonId, 3), (person.Id, person.FaceCount));
+        var excluded = await db.Faces.AsNoTracking().SingleAsync(f => f.Id == strangerFace.Id);
+        Assert.Equal((FaceAssignments.Excluded, (long?)person.Id), (excluded.Assignment, excluded.PersonId));
+    }
+
+    [Fact]
+    public async Task Gives_back_an_excluded_face_as_the_family_s_choice()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var face = SyntheticFaces.Unit(seed: 1);
+        await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, face)));
+        await PutAsync(container, FaceImportTests.WithFaces(2, FaceImportTests.Face(s_box, SyntheticFaces.Near(face, seed: 2))));
+        await ImportAsync(db, container);
+        var person = await db.People.AsNoTracking().SingleAsync();
+        var removed = await db.Faces.AsNoTracking().OrderBy(f => f.Id).FirstAsync();
+        await Curation(db).NotThisPersonAsync(person.Id, removed.Id);
+
+        Assert.Equal(CurationOutcome.Done, await Curation(db).ReturnFaceAsync(person.Id, removed.Id));
+
+        var back = await db.Faces.AsNoTracking().SingleAsync(f => f.Id == removed.Id);
+        Assert.Equal((FaceAssignments.Manual, (long?)person.Id), (back.Assignment, back.PersonId));
+        Assert.Equal(2, (await db.People.AsNoTracking().SingleAsync()).FaceCount);
+        // A face that is not excluded has nothing to give back.
+        Assert.Equal(CurationOutcome.NotFound, await Curation(db).ReturnFaceAsync(person.Id, removed.Id));
+    }
+
+    [Fact]
+    public async Task Moves_a_face_to_another_person_or_a_new_one_and_removes_a_person_left_with_nothing()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 1))));
+        await PutAsync(container, FaceImportTests.WithFaces(2, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 3))));
+        await ImportAsync(db, container);
+        var (first, second) = await TwoPeopleAsync(db);
+        var face = await db.Faces.AsNoTracking().SingleAsync(f => f.PersonId == first.Id);
+
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MoveFaceAsync(first.Id, face.Id, second.Id));
+
+        var moved = await db.Faces.AsNoTracking().SingleAsync(f => f.Id == face.Id);
+        Assert.Equal((FaceAssignments.Manual, (long?)second.Id), (moved.Assignment, moved.PersonId));
+        var people = await db.People.AsNoTracking().ToListAsync();
+        Assert.Equal((second.Id, 2), (Assert.Single(people).Id, people[0].FaceCount));
+
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MoveFaceAsync(second.Id, face.Id, targetId: null));
+        var made = await db.People.AsNoTracking().SingleAsync(p => p.Id != second.Id);
+        Assert.Equal((null, 1), (made.Name, made.FaceCount));
+        Assert.Equal(1, (await db.People.AsNoTracking().SingleAsync(p => p.Id == second.Id)).FaceCount);
+    }
+
+    [Fact]
+    public async Task Refuses_to_give_a_person_two_faces_of_one_photo()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 1)), FaceImportTests.Face([0.6, 0.2, 0.3, 0.4], SyntheticFaces.Unit(seed: 3))));
+        await ImportAsync(db, container);
+        var (first, second) = await TwoPeopleAsync(db);
+        var face = await db.Faces.AsNoTracking().SingleAsync(f => f.PersonId == first.Id);
+        var theirs = await db.Faces.AsNoTracking().SingleAsync(f => f.PersonId == second.Id);
+
+        Assert.Equal(CurationOutcome.PhotoTaken, await Curation(db).MoveFaceAsync(first.Id, face.Id, second.Id));
+        await Curation(db).NotThisPersonAsync(second.Id, theirs.Id);
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MoveFaceAsync(first.Id, face.Id, second.Id));
+        Assert.Equal(CurationOutcome.PhotoTaken, await Curation(db).ReturnFaceAsync(second.Id, theirs.Id));
+    }
+
+    [Fact]
+    public async Task Changes_nothing_when_the_face_belongs_to_another_person()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 1))));
+        await PutAsync(container, FaceImportTests.WithFaces(2, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 3))));
+        await ImportAsync(db, container);
+        var (first, second) = await TwoPeopleAsync(db);
+        var theirs = await db.Faces.AsNoTracking().SingleAsync(f => f.PersonId == second.Id);
+        await Curation(db).NotThisPersonAsync(second.Id, theirs.Id);
+        var before = await db.Faces.AsNoTracking().SingleAsync(f => f.Id == theirs.Id);
+
+        Assert.Equal(CurationOutcome.NotFound, await Curation(db).NotThisPersonAsync(first.Id, theirs.Id));
+        Assert.Equal(CurationOutcome.NotFound, await Curation(db).NotAFaceAsync(first.Id, theirs.Id));
+        Assert.Equal(CurationOutcome.NotFound, await Curation(db).ReturnFaceAsync(first.Id, theirs.Id));
+        Assert.Equal(CurationOutcome.NotFound, await Curation(db).MoveFaceAsync(first.Id, theirs.Id, targetId: null));
+
+        var after = await db.Faces.AsNoTracking().SingleAsync(f => f.Id == theirs.Id);
+        Assert.Equal((before.Assignment, before.PersonId), (after.Assignment, after.PersonId));
+        Assert.Equal(2, await db.People.CountAsync());
+    }
+
     private static PeopleCuration Curation(CatalogDbContext db) => new(db);
 
     // Two people, either from imported faces or made directly, oldest first.

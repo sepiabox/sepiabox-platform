@@ -18,6 +18,11 @@ public interface IPeopleEditor
     Task<CurationOutcome> NotThisPersonAsync(long personId, long faceId, CancellationToken cancellationToken = default);
 
     Task<CurationOutcome> NotAFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default);
+
+    Task<CurationOutcome> ReturnFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default);
+
+    /// <summary>Moves the face to <paramref name="targetId"/>, or to a new unnamed person when null.</summary>
+    Task<CurationOutcome> MoveFaceAsync(long personId, long faceId, long? targetId, CancellationToken cancellationToken = default);
 }
 
 /// <summary><see cref="PeopleCuration"/> on the catalog, which takes the same lock as the importer (D-079).</summary>
@@ -40,6 +45,12 @@ public sealed class PeopleEditor(IDbContextFactory<CatalogDbContext> contexts) :
 
     public Task<CurationOutcome> NotAFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
         WithAsync(c => c.NotAFaceAsync(personId, faceId, cancellationToken), cancellationToken);
+
+    public Task<CurationOutcome> ReturnFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
+        WithAsync(c => c.ReturnFaceAsync(personId, faceId, cancellationToken), cancellationToken);
+
+    public Task<CurationOutcome> MoveFaceAsync(long personId, long faceId, long? targetId, CancellationToken cancellationToken = default) =>
+        WithAsync(c => c.MoveFaceAsync(personId, faceId, targetId, cancellationToken), cancellationToken);
 
     private async Task<CurationOutcome> WithAsync(Func<PeopleCuration, Task<CurationOutcome>> change, CancellationToken cancellationToken)
     {

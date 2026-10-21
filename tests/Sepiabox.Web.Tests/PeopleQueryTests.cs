@@ -71,6 +71,7 @@ public sealed class PeopleQueryTests(CatalogFixture catalog)
 
         Assert.Equal(("Ana", "ana@example.com", 2), (detail.Name, detail.UserEmail, detail.FaceCount));
         Assert.Equal([0.1, 0.5], detail.Faces.Select(f => f.Crop!.Box[0]));
+        Assert.Equal([0.3], detail.ExcludedFaces.Select(f => f.Crop!.Box[0]));
         Assert.Equal([other.Id, named.Id], detail.Others.Select(o => o.Id));
         Assert.Null(await new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db))).GetPersonAsync(12345));
     }

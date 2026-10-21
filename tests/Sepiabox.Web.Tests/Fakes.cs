@@ -123,6 +123,12 @@ internal sealed class FakePeopleEditor : IPeopleEditor
     public Task<Sepiabox.Catalog.People.CurationOutcome> NotAFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
         Record($"not-a-face {personId} {faceId}");
 
+    public Task<Sepiabox.Catalog.People.CurationOutcome> ReturnFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
+        Record($"return {personId} {faceId}");
+
+    public Task<Sepiabox.Catalog.People.CurationOutcome> MoveFaceAsync(long personId, long faceId, long? targetId, CancellationToken cancellationToken = default) =>
+        Record($"move {personId} {faceId} {targetId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "new"}");
+
     private Task<Sepiabox.Catalog.People.CurationOutcome> Record(string call)
     {
         Calls.Add(call);
