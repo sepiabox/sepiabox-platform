@@ -4,7 +4,14 @@ using Sepiabox.Catalog.Search;
 namespace Sepiabox.Web.Services;
 
 /// <summary>What the filter bar shows: one value per field, or null for any.</summary>
-public sealed record FilterFields(int? Year, int? Month, string? Kind, string? City, string? Source, string? Text = null);
+public sealed record FilterFields(int? Year, int? Month, string? Kind, string? City, string? Source, string? Text = null)
+{
+    /// <summary>The people chosen (S-021): everyone the query names, since a photo must have them all.</summary>
+    public IReadOnlyList<string> People { get; init; } = [];
+
+    /// <summary>"With me": the signed-in user's own person.</summary>
+    public bool Me { get; init; }
+}
 
 /// <summary>
 /// The filter bar and the URL (S-013): the bar's fields become a search DSL query, and every filtered view lives
@@ -25,8 +32,10 @@ public static class SearchLinks
     /// The query the bar's submitted fields describe; values that are not a year, a month or a kind are ignored, as
     /// a hand-edited URL may hold anything.
     /// </summary>
-    public static SearchQuery FromFields(string? year, string? month, string? kind, string? city, string? source, string? text = null)
+    public static SearchQuery FromFields(
+        string? year, string? month, string? kind, string? city, string? source, string? text = null, IEnumerable<string?>? people = null, bool me = false)
     {
+        var names = (people ?? []).Select(Name).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).Take(SearchQueryJson.MaxListLength).ToList();
         var filters = new SearchFilters
         {
             Years = Number(year, SearchQueryJson.MinYear, SearchQueryJson.MaxYear) is { } y ? [y] : null,
@@ -35,6 +44,7 @@ public static class SearchLinks
             Places = Name(city) is { } c ? new PlaceFilter { Cities = [c] } : null,
             Sources = Name(source) is { } s ? [s] : null,
             Visual = Description(text) is { } t ? new VisualFilter { Text = t } : null,
+            People = names.Count > 0 || me ? new PeopleFilter { All = names.Count > 0 ? names : null, IncludeMe = me } : null,
         };
         return new SearchQuery { Filters = filters };
     }
@@ -49,7 +59,11 @@ public static class SearchLinks
             Single(filters?.Kinds),
             filters?.Places?.Countries is null ? Single(filters?.Places?.Cities) : null,
             Single(filters?.Sources),
-            filters?.Visual?.Text);
+            filters?.Visual?.Text)
+        {
+            People = filters?.People?.All ?? [],
+            Me = filters?.People?.IncludeMe ?? false,
+        };
     }
 
     private static string? Single(IReadOnlyList<string>? values) => values is [var only] ? only : null;

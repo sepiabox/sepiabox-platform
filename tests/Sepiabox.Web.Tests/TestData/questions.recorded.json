@@ -3,6 +3,18 @@
   "source": "live",
   "model": "claude-haiku-5-5",
   "recordedAt": "2026-10-21",
+  "placeholders": [
+    "people-me-with-two/en",
+    "people-me-with-two/pt",
+    "people-videos-2026/en",
+    "people-videos-2026/pt",
+    "people-most-with-me/en",
+    "people-most-with-me/pt",
+    "people-top-three/en",
+    "people-top-three/pt",
+    "people-count-ana/en",
+    "people-count-ana/pt"
+  ],
   "responses": {
     "a-year-ago-today/en": "{\"filters\":{\"onThisDay\":{\"yearsAgo\":1}}}",
     "a-year-ago-today/pt": "{\"filters\":{\"onThisDay\":{\"yearsAgo\":1}}}",
@@ -91,6 +103,16 @@
     "videos-2015-2017/en": "{\"filters\":{\"kinds\":[\"video\"],\"dateFrom\":\"2015-01-01\",\"dateTo\":\"2017-12-31\"}}",
     "videos-2015-2017/pt": "{\"filters\":{\"kinds\":[\"video\"],\"dateFrom\":\"2015-01-01\",\"dateTo\":\"2017-12-31\"}}",
     "year-2019/en": "{\"filters\":{\"years\":[2019]}}",
-    "year-2019/pt": "{\"filters\":{\"years\":[2019]}}"
+    "year-2019/pt": "{\"filters\":{\"years\":[2019]}}",
+    "people-me-with-two/en": "{\"filters\":{\"kinds\":[\"photo\"],\"people\":{\"all\":[\"Ana\",\"Pedro\"],\"includeMe\":true}}}",
+    "people-me-with-two/pt": "{\"filters\":{\"kinds\":[\"photo\"],\"people\":{\"all\":[\"Ana\",\"Pedro\"],\"includeMe\":true}}}",
+    "people-videos-2026/en": "{\"filters\":{\"kinds\":[\"video\"],\"years\":[2026],\"people\":{\"all\":[\"Pedro\"]}}}",
+    "people-videos-2026/pt": "{\"filters\":{\"kinds\":[\"video\"],\"years\":[2026],\"people\":{\"all\":[\"Pedro\"]}}}",
+    "people-most-with-me/en": "{\"filters\":{\"kinds\":[\"photo\"],\"years\":[2025],\"people\":{\"includeMe\":true}},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"person\",\"top\":1}}",
+    "people-most-with-me/pt": "{\"filters\":{\"kinds\":[\"photo\"],\"years\":[2025],\"people\":{\"includeMe\":true}},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"person\",\"top\":1}}",
+    "people-top-three/en": "{\"filters\":{},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"person\",\"top\":3}}",
+    "people-top-three/pt": "{\"filters\":{},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"person\",\"top\":3}}",
+    "people-count-ana/en": "{\"filters\":{\"kinds\":[\"photo\"],\"people\":{\"all\":[\"Ana\"]}},\"aggregate\":{\"count\":\"assets\"}}",
+    "people-count-ana/pt": "{\"filters\":{\"kinds\":[\"photo\"],\"people\":{\"all\":[\"Ana\"]}},\"aggregate\":{\"count\":\"assets\"}}"
   }
 }

@@ -41,6 +41,7 @@ public static class CountAnswers
             SearchGroupBy.Month => "Count_ByMonth",
             SearchGroupBy.Kind => "Count_ByKind",
             SearchGroupBy.City => "Count_ByCity",
+            SearchGroupBy.Person => "Count_ByPerson",
             _ => "Count_BySource",
         };
         return text[key, noun] + About(query.Filters, text);
@@ -63,6 +64,11 @@ public static class CountAnswers
                 AssetKinds.IsVideo(g.Key ?? string.Empty) ? text["Filter_Videos"] : text["Filter_Photos"], g.Count, list with { Filters = f with { Kinds = [g.Key!] } }),
             SearchGroupBy.City when g.Key is not null => new CountRow(g.Key, g.Count, list with { Filters = f with { Places = new PlaceFilter { Cities = [g.Key] } } }),
             SearchGroupBy.City => new CountRow(text["Count_NoPlace"], g.Count, null),
+            // Each person's photos, with the people already asked for (S-021).
+            SearchGroupBy.Person => new CountRow(g.Key ?? string.Empty, g.Count, list with
+            {
+                Filters = f with { People = (f.People ?? new PeopleFilter()) with { All = [.. f.People?.All ?? [], g.Key!] } },
+            }),
             _ => new CountRow(g.Key ?? string.Empty, g.Count, list with { Filters = f with { Sources = [g.Key!] } }),
         })];
     }
@@ -102,6 +108,11 @@ public static class CountAnswers
         if (filters.Sources is [var source])
         {
             about += text["Count_FromSource", source];
+        }
+
+        if (filters.People?.All is { } people)
+        {
+            about += text["Count_WithPeople", string.Join(", ", people)];
         }
 
         if (filters.UndatedOnly)

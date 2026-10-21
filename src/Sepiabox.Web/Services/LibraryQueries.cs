@@ -29,7 +29,14 @@ public sealed record AssetDetail(
     IReadOnlyList<AssetSourceDetail> Sources,
     double? DurationSeconds,
     bool HasProxy,
-    string? Place = null);
+    string? Place = null)
+{
+    /// <summary>The people in it (S-021): those with a counted face, named ones first, by name.</summary>
+    public IReadOnlyList<AssetPerson> People { get; init; } = [];
+}
+
+/// <summary>A person in a photo; <see cref="Name"/> is null while they are unnamed.</summary>
+public sealed record AssetPerson(long Id, string? Name);
 
 /// <summary>The assets a search found, up to its limit; <see cref="HasMore"/> says whether more matched.</summary>
 public sealed record SearchPage(IReadOnlyList<TimelineItem> Items, bool HasMore);
@@ -39,7 +46,14 @@ public sealed record SearchPage(IReadOnlyList<TimelineItem> Items, bool HasMore)
 /// the ISO codes of the countries the catalog's places are in, for the question translator (S-025).
 /// </summary>
 public sealed record FilterOptions(
-    IReadOnlyList<int> Years, IReadOnlyList<string> Cities, IReadOnlyList<string> Sources, IReadOnlyList<string>? Countries = null);
+    IReadOnlyList<int> Years, IReadOnlyList<string> Cities, IReadOnlyList<string> Sources, IReadOnlyList<string>? Countries = null)
+{
+    /// <summary>The named people with faces, in display order (S-021); read on every request, since names change.</summary>
+    public IReadOnlyList<string> People { get; init; } = [];
+
+    /// <summary>Whether the signed-in user said "This is me" for someone, so "me" can be filtered on.</summary>
+    public bool MeLinked { get; init; }
+}
 
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
 public sealed record OriginalFile(string FileName, string ContentType);
@@ -119,7 +133,8 @@ public sealed class LibraryQueries(
     TimeProvider? clock = null,
     SearchOptions? searchOptions = null,
     FilterOptionsCache? filterOptions = null,
-    IQueryEmbedder? embedder = null) : ILibraryQueries
+    IQueryEmbedder? embedder = null,
+    ICurrentUser? user = null) : ILibraryQueries
 {
     public const int PageSize = 200;
 
@@ -211,6 +226,13 @@ public sealed class LibraryQueries(
             return null;
         }
 
+        // Only counted faces put someone in a photo (D-077, D-079).
+        var people = await db.Faces.AsNoTracking()
+            .Where(f => f.AssetId == id && f.PersonId != null
+                && (f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual))
+            .Select(f => new AssetPerson(f.PersonId!.Value, f.Person!.Name))
+            .Distinct()
+            .ToListAsync(cancellationToken);
         string[] previewOrder = [DerivativeNames.Preview, DerivativeNames.Poster];
         var preview = previewOrder.FirstOrDefault(name => asset.Derivatives.Any(d => d.Name == name));
 
@@ -226,7 +248,10 @@ public sealed class LibraryQueries(
             [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path))],
             asset.DurationSeconds,
             asset.Derivatives.Any(d => d.Name == DerivativeNames.Proxy),
-            PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry));
+            PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry))
+        {
+            People = [.. people.OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
+        };
     }
 
     public async Task<string?> GetDerivativeBlobPathAsync(string id, string name, CancellationToken cancellationToken = default)
@@ -261,7 +286,7 @@ public sealed class LibraryQueries(
     {
         ArgumentNullException.ThrowIfNull(query);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        return await new SearchService(db, clock ?? TimeProvider.System, searchOptions, embedder).CountAsync(query, cancellationToken);
+        return await Search(db).CountAsync(query, cancellationToken);
     }
 
     public async Task<SearchPage> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
@@ -269,7 +294,7 @@ public sealed class LibraryQueries(
         ArgumentNullException.ThrowIfNull(query);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         // A search by description comes back most similar first (S-016); any other by capture date.
-        var rows = await new SearchService(db, clock ?? TimeProvider.System, searchOptions, embedder).RunAsync(
+        var rows = await Search(db).RunAsync(
             query,
             assets => assets.Select(a => new TimelineItem(
                 a.Id, a.Kind, a.CapturedAt, a.Derivatives.Any(d => d.Name == DerivativeNames.Thumbnail), a.DurationSeconds)),
@@ -364,8 +389,25 @@ public sealed class LibraryQueries(
         var options = await (filterOptions?.GetAsync(() => LoadFilterOptionsAsync(CancellationToken.None))
             ?? LoadFilterOptionsAsync(cancellationToken));
         var byName = StringComparer.Create(System.Globalization.CultureInfo.CurrentCulture, ignoreCase: true);
-        return options with { Cities = [.. options.Cities.Order(byName)], Sources = [.. options.Sources.Order(byName)] };
+        // People are renamed and merged at any time (S-020), so they are read now rather than cached.
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var people = await db.People.AsNoTracking().Where(p => p.Name != null && p.FaceCount > 0).Select(p => p.Name!)
+            .ToListAsync(cancellationToken);
+        var me = Me();
+        var meLinked = me is not null && await db.People.AsNoTracking().AnyAsync(p => p.UserEmail == me, cancellationToken);
+        return options with
+        {
+            Cities = [.. options.Cities.Order(byName)],
+            Sources = [.. options.Sources.Order(byName)],
+            People = [.. people.Order(byName)],
+            MeLinked = meLinked,
+        };
     }
+
+    // The signed-in user's address as "This is me" stores it (lower-cased, S-020).
+    private string? Me() => user?.Email is { } email && !string.IsNullOrWhiteSpace(email) ? email.Trim().ToLowerInvariant() : null;
+
+    private SearchService Search(CatalogDbContext db) => new(db, clock ?? TimeProvider.System, searchOptions, embedder, user?.Email);
 
     private async Task<FilterOptions> LoadFilterOptionsAsync(CancellationToken cancellationToken)
     {

@@ -1,7 +1,11 @@
 {
-  "description": "S-025 golden questions. Each question, in English and in Brazilian Portuguese, with the search DSL it means on the fixed day below. Results are compared on the fixture catalog in this file, not as JSON text. Visual concepts stand for CLIP embeddings: the tests' embedder maps English descriptions to them by keyword.",
+  "description": "S-025 golden questions. Each question, in English and in Brazilian Portuguese, with the search DSL it means on the fixed day below. Results are compared on the fixture catalog in this file, not as JSON text. Visual concepts stand for CLIP embeddings: the tests' embedder maps English descriptions to them by keyword. People (S-021) are faces of named people in the assets; \"me\" is the signed-in user, linked to one of them (\"This is me\").",
   "today": "2026-10-20",
   "timeZone": "Europe/Lisbon",
+  "me": {
+    "name": "Carla",
+    "email": "carla@example.com"
+  },
   "visualConcepts": {
     "snow": [
       "snow"
@@ -60,7 +64,10 @@
       "city": "Lisbon",
       "country": "Portugal",
       "source": "Celular do Bruno",
-      "concepts": []
+      "concepts": [],
+      "people": [
+        "Bruno"
+      ]
     },
     {
       "n": 4,
@@ -89,6 +96,11 @@
       "source": "HD da Ana",
       "concepts": [
         "sunset"
+      ],
+      "people": [
+        "Carla",
+        "Ana",
+        "Pedro"
       ]
     },
     {
@@ -98,7 +110,11 @@
       "city": "Porto",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "people": [
+        "Carla",
+        "Pedro"
+      ]
     },
     {
       "n": 8,
@@ -107,7 +123,11 @@
       "city": "Porto",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "people": [
+        "Ana",
+        "Pedro"
+      ]
     },
     {
       "n": 9,
@@ -116,7 +136,10 @@
       "city": "Porto",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "people": [
+        "Ana"
+      ]
     },
     {
       "n": 10,
@@ -145,6 +168,10 @@
       "source": "HD da Ana",
       "concepts": [
         "snow"
+      ],
+      "people": [
+        "Carla",
+        "Ana"
       ]
     },
     {
@@ -176,7 +203,10 @@
       "city": null,
       "country": null,
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "people": [
+        "Pedro"
+      ]
     },
     {
       "n": 16,
@@ -187,6 +217,11 @@
       "source": "HD da Ana",
       "concepts": [
         "snow"
+      ],
+      "people": [
+        "Carla",
+        "Ana",
+        "Pedro"
       ]
     },
     {
@@ -320,7 +355,11 @@
       "city": "Porto",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "people": [
+        "Carla",
+        "Bruno"
+      ]
     },
     {
       "n": 31,
@@ -412,7 +451,11 @@
       "city": null,
       "country": null,
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "people": [
+        "Pedro",
+        "Ana"
+      ]
     },
     {
       "n": 41,
@@ -1413,6 +1456,124 @@
       "pt": "quantos itens temos ao todo?",
       "expected": {
         "filters": {},
+        "aggregate": {
+          "count": "assets"
+        }
+      }
+    },
+    {
+      "id": "people-me-with-two",
+      "covers": [
+        "people",
+        "me"
+      ],
+      "en": "pictures where I'm with both Ana and Pedro",
+      "pt": "fotos em que eu apareço com a Ana e o Pedro",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ],
+          "people": {
+            "all": [
+              "Ana",
+              "Pedro"
+            ],
+            "includeMe": true
+          }
+        }
+      }
+    },
+    {
+      "id": "people-videos-2026",
+      "covers": [
+        "people",
+        "dates"
+      ],
+      "en": "videos of Pedro from 2026",
+      "pt": "vídeos do Pedro de 2026",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "video"
+          ],
+          "years": [
+            2026
+          ],
+          "people": {
+            "all": [
+              "Pedro"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "people-most-with-me",
+      "covers": [
+        "people",
+        "me",
+        "counting",
+        "by person"
+      ],
+      "en": "who appears with me in the most photos in 2025?",
+      "pt": "quem aparece comigo em mais fotos em 2025?",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ],
+          "years": [
+            2025
+          ],
+          "people": {
+            "includeMe": true
+          }
+        },
+        "aggregate": {
+          "count": "assets",
+          "groupBy": "person",
+          "top": 1
+        }
+      }
+    },
+    {
+      "id": "people-top-three",
+      "covers": [
+        "people",
+        "counting",
+        "by person"
+      ],
+      "en": "the three people who appear in the most items",
+      "pt": "as três pessoas que aparecem em mais itens",
+      "expected": {
+        "filters": {},
+        "aggregate": {
+          "count": "assets",
+          "groupBy": "person",
+          "top": 3
+        }
+      }
+    },
+    {
+      "id": "people-count-ana",
+      "covers": [
+        "people",
+        "counting"
+      ],
+      "en": "how many photos of Ana do we have?",
+      "pt": "quantas fotos da Ana nós temos?",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ],
+          "people": {
+            "all": [
+              "Ana"
+            ]
+          }
+        },
         "aggregate": {
           "count": "assets"
         }

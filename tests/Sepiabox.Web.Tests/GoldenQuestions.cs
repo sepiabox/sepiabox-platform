@@ -29,6 +29,8 @@ internal sealed class GoldenQuestions
     {
         Today = DateOnly.ParseExact(root["today"]!.GetValue<string>(), "yyyy-MM-dd", CultureInfo.InvariantCulture);
         TimeZone = root["timeZone"]!.GetValue<string>();
+        MeName = root["me"]!["name"]!.GetValue<string>();
+        MeEmail = root["me"]!["email"]!.GetValue<string>();
         Concepts = root["visualConcepts"]!.AsObject()
             .Select((p, i) => new Concept(p.Key, i, [.. p.Value!.AsArray().Select(k => k!.GetValue<string>())]))
             .ToList();
@@ -39,7 +41,8 @@ internal sealed class GoldenQuestions
             a["city"]?.GetValue<string>(),
             a["country"]?.GetValue<string>(),
             a["source"]!.GetValue<string>(),
-            [.. a["concepts"]!.AsArray().Select(c => c!.GetValue<string>())]))];
+            [.. a["concepts"]!.AsArray().Select(c => c!.GetValue<string>())],
+            a["people"] is JsonArray people ? [.. people.Select(p => p!.GetValue<string>())] : []))];
         Questions = [.. root["questions"]!.AsArray().Select(q => new GoldenQuestion(
             q!["id"]!.GetValue<string>(),
             q["en"]!.GetValue<string>(),
@@ -51,6 +54,11 @@ internal sealed class GoldenQuestions
     public DateOnly Today { get; }
 
     public string TimeZone { get; }
+
+    /// <summary>The signed-in user's person ("This is me", S-021) and address (example.com).</summary>
+    public string MeName { get; }
+
+    public string MeEmail { get; }
 
     public IReadOnlyList<Concept> Concepts { get; }
 
@@ -72,6 +80,7 @@ internal sealed class GoldenQuestions
         .Add("sources", "filters.sources", Catalog.Select(a => a.Source))
         .Add("cities", "filters.places.cities", Catalog.Where(a => a.City is not null).Select(a => a.City!))
         .Add("countries", "filters.places.countries", Catalog.Where(a => a.Country is not null).Select(a => s_countryCodes[a.Country!]))
+        .Add("people", "filters.people.all", Catalog.SelectMany(a => a.People))
         .Build();
 
     /// <summary>A migrated catalog holding the fixture's assets, their embeddings and the GeoNames rows of their places.</summary>
@@ -107,6 +116,29 @@ internal sealed class GoldenQuestions
             }
         }
 
+        // Each name a person, and the user's own linked to them; every face counted (auto), with a synthetic vector.
+        var people = Catalog.SelectMany(a => a.People).Distinct().ToDictionary(
+            name => name,
+            name => new Person { Name = name, UserEmail = name == MeName ? MeEmail : null, FaceCount = Catalog.Count(a => a.People.Contains(name)) });
+        db.People.AddRange(people.Values);
+        foreach (var asset in Catalog)
+        {
+            foreach (var (name, i) in asset.People.Select((name, i) => (name, i)))
+            {
+                var embedding = new float[128];
+                embedding[i] = 1;
+                db.Faces.Add(new Face
+                {
+                    AssetId = Ids.Of(asset.N),
+                    Box = [0.1 * i, 0.1, 0.1, 0.1],
+                    Score = 0.9,
+                    Embedding = new Pgvector.Vector(embedding),
+                    Person = people[name],
+                    Assignment = FaceAssignments.Auto,
+                });
+            }
+        }
+
         var id = 1L;
         foreach (var (city, country) in Catalog.Where(a => a.City is not null).Select(a => (a.City!, a.Country!)).Distinct())
         {
@@ -135,7 +167,7 @@ internal sealed class GoldenQuestions
             throw new InvalidOperationException($"Not a valid query: {error}");
         }
 
-        var search = new SearchService(db, Clock, new SearchOptions { TimeZone = Zone }, new ConceptEmbedder(Concepts));
+        var search = new SearchService(db, Clock, new SearchOptions { TimeZone = Zone }, new ConceptEmbedder(Concepts), MeEmail);
         // A count is compared by its numbers: the total, the undated it leaves out, and the groups in order (S-026).
         if (query.Aggregate is not null && await search.CountAsync(query) is { } count)
         {
@@ -166,7 +198,8 @@ internal sealed class GoldenQuestions
 
     public sealed record Concept(string Name, int Axis, IReadOnlyList<string> Keywords);
 
-    public sealed record GoldenAsset(int N, string Kind, DateOnly? Date, string? City, string? Country, string Source, IReadOnlyList<string> Concepts);
+    public sealed record GoldenAsset(
+        int N, string Kind, DateOnly? Date, string? City, string? Country, string Source, IReadOnlyList<string> Concepts, IReadOnlyList<string> People);
 
     public sealed record GoldenQuestion(string Id, string English, string Portuguese, string Expected, IReadOnlyList<string> Covers)
     {

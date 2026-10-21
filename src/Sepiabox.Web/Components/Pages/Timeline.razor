@@ -44,6 +44,10 @@ else if (_describeUnavailable)
 {
     <p class="empty" role="alert">@Text["Search_DescribeUnavailable"] <a href="./">@Text["Filter_Clear"]</a></p>
 }
+else if (_peopleMessage is not null)
+{
+    <p class="empty" role="alert">@_peopleMessage <a href="./">@Text["Filter_Clear"]</a></p>
+}
 else if (_filtered && _count is { } count)
 {
     <AnswerCard Query="_query!" Count="count" />
@@ -148,6 +152,13 @@ else
     [SupplyParameterFromQuery(Name = "text")]
     public string? Description { get; set; }
 
+    /// <summary>The people chosen in the filter bar (S-021), one "person" parameter each.</summary>
+    [SupplyParameterFromQuery(Name = "person")]
+    public string[]? People { get; set; }
+
+    [SupplyParameterFromQuery(Name = "me")]
+    public string? Me { get; set; }
+
     /// <summary>The question the search came from, shown again in the box (S-025).</summary>
     [SupplyParameterFromQuery(Name = AskedParameter)]
     public string? Asked { get; set; }
@@ -169,6 +180,7 @@ else
     private bool _filtered;
     private bool _invalid;
     private bool _describeUnavailable;
+    private string? _peopleMessage;
     private bool _asked;
     private string? _askMessage;
 
@@ -215,11 +227,12 @@ else
         if (FilterSubmitted is not null)
         {
             // One address per set of filters, so the URL can be copied and opened again.
-            Navigation.NavigateTo(SearchLinks.Timeline(SearchLinks.FromFields(Year, Month, Kind, City, Source, Description)));
+            Navigation.NavigateTo(SearchLinks.Timeline(SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1")));
             return;
         }
 
         (_page, _results, _query, _filtered, _invalid, _describeUnavailable, _count) = (null, null, null, false, false, false, null);
+        _peopleMessage = null;
         if (!string.IsNullOrEmpty(SearchQueryParameter))
         {
             if (SearchQueryJson.TryDecode(SearchQueryParameter, out var query, out _))
@@ -249,6 +262,11 @@ else
             {
                 // The text model is missing or failed to load: say so, and keep the bar's other filters usable.
                 _describeUnavailable = true;
+            }
+            catch (UnknownPeopleException unknown)
+            {
+                // A name that is no one's (any more), or "me" without "This is me" (S-021).
+                _peopleMessage = PeopleSearch.Message(unknown, Text);
             }
         }
         else if (!_invalid)

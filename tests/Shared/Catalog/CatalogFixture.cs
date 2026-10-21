@@ -41,7 +41,11 @@ public sealed class CatalogFixture : IAsyncLifetime
             image = built.FullName;
         }
 
-        _postgres = new PostgreSqlBuilder(image).Build();
+        _postgres = new PostgreSqlBuilder(image)
+            // Every test has its own database, and each keeps a pool of idle connections until the run ends: the
+            // default 100 runs out once a collection has about ninety tests.
+            .WithCommand("-c", "max_connections=500")
+            .Build();
         await Task.WhenAll(_postgres.StartAsync(), _azurite.StartAsync());
         Blobs = new BlobServiceClient(BlobConnectionString);
     }
