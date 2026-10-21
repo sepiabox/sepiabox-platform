@@ -156,7 +156,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-063 | [Process and upload a source in index-only mode](S-063-process-and-upload-a-source-in-index-only.md) | Local ingest | S-005, S-006, S-007, S-008, S-015, S-018 | Medium | M | `doing` |
+| S-063 | [Process and upload a source in index-only mode](S-063-process-and-upload-a-source-in-index-only.md) | Local ingest | S-005, S-006, S-007, S-008, S-015, S-018 | Medium | M | `done` |
 | S-064 | [Show where an index-only original lives](S-064-show-where-an-index-only-original-lives.md) | Web app | S-063, S-011, S-044 | Medium | S | `todo` |
 
 ### Sprint 14 — Occasions

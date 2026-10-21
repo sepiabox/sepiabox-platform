@@ -131,7 +131,7 @@ public sealed class IndexOnlyManifestTests
     }
 
     [Fact]
-    public void A_source_url_follows_the_newer_modified_time()
+    public void A_source_url_is_the_greatest_given_whichever_side_is_newer()
     {
         var older = Photo(Source("Takeout", hour: 10) with { Url = "https://photos.example.com/old" });
         var newer = Photo(Source("Takeout", hour: 12) with { Url = "https://photos.example.com/new" });
@@ -139,9 +139,51 @@ public sealed class IndexOnlyManifestTests
         foreach (var merged in new[] { ManifestMerge.Merge(older, newer), ManifestMerge.Merge(newer, older) })
         {
             var source = Assert.Single(merged.Sources);
-            Assert.Equal("https://photos.example.com/new", source.Url);
+            // "old" is the greater url, and the other fields are the newer entry's.
+            Assert.Equal("https://photos.example.com/old", source.Url);
             Assert.Equal(12, source.ModifiedAt.Hour);
         }
+    }
+
+    [Fact]
+    public void Merging_three_entries_of_one_source_gives_the_same_url_in_every_order_and_grouping()
+    {
+        var a = Photo(Source("Takeout", hour: 10) with { Url = "https://z.example.com/a" });
+        var b = Photo(Source("Takeout", hour: 12));
+        var c = Photo(Source("Takeout", hour: 12) with { Url = "https://a.example.com/c" });
+        var manifests = new[] { a, b, c };
+        var orders = new[] { new[] { 0, 1, 2 }, [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0] };
+
+        var results = orders.SelectMany(order => new[]
+        {
+            ManifestMerge.Merge(ManifestMerge.Merge(manifests[order[0]], manifests[order[1]]), manifests[order[2]]),
+            ManifestMerge.Merge(manifests[order[0]], ManifestMerge.Merge(manifests[order[1]], manifests[order[2]])),
+        }).Select(ManifestJson.Serialize).Distinct().ToList();
+
+        var json = Assert.Single(results);
+        Assert.Contains("https://z.example.com/a", json, StringComparison.Ordinal);
+        Assert.Equal(12, ManifestJson.Deserialize(json).Sources[0].ModifiedAt.Hour);
+    }
+
+    [Fact]
+    public void A_manifest_whose_originals_are_all_stored_has_no_original_stored_key_after_a_merge_or_canonical()
+    {
+        // Older builds reject properties they do not know, so a stored original is never written out.
+        var explicitTrue = Photo(Source("HD")) with { OriginalStored = true };
+        var indexOnly = Photo(Source("Takeout")) with { OriginalStored = false };
+
+        foreach (var manifest in new[]
+        {
+            ManifestMerge.Merge(explicitTrue, explicitTrue),
+            ManifestMerge.Merge(indexOnly, explicitTrue),
+            ManifestMerge.Merge(explicitTrue, indexOnly),
+            ManifestMerge.Canonical(explicitTrue),
+        })
+        {
+            Assert.False(JsonNode.Parse(ManifestJson.Serialize(manifest))!.AsObject().ContainsKey("originalStored"));
+        }
+
+        Assert.True(JsonNode.Parse(ManifestJson.Serialize(ManifestMerge.Merge(indexOnly, indexOnly)))!["originalStored"] is not null);
     }
 
     [Fact]

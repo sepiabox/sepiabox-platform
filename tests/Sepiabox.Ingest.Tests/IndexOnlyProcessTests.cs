@@ -320,3 +320,20 @@ public sealed class IndexOnlyProcessTests : IDisposable
             file => Path.GetRelativePath(folder, file),
             file => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))));
 }
+
+/// <summary>The address SQLite opens the mode check's read-only connection with (S-063).</summary>
+public sealed class WorkFolderModeUriTests
+{
+    [Theory]
+    [InlineData("/home/ana/work/state.db", true, "file:///home/ana/work/state.db?mode=ro&immutable=1")]
+    [InlineData("/home/ana/work/state.db", false, "file:///home/ana/work/state.db?mode=ro")]
+    [InlineData(@"C:\Users\Ana\work\state.db", true, "file:///C:/Users/Ana/work/state.db?mode=ro&immutable=1")]
+    [InlineData(@"\\nas\share\work\state.db", true, "file:////nas/share/work/state.db?mode=ro&immutable=1")]
+    [InlineData(@"\\nas\share\work\state.db", false, "file:////nas/share/work/state.db?mode=ro")]
+    [InlineData("/home/ana/fotos 2019/a#b/50%/c?d/são josé/state.db", true, "file:///home/ana/fotos%202019/a%23b/50%25/c%3Fd/s%C3%A3o%20jos%C3%A9/state.db?mode=ro&immutable=1")]
+    [InlineData(@"D:\Álbum #1\state.db", false, "file:///D:/%C3%81lbum%20%231/state.db?mode=ro")]
+    public void Builds_the_address_for_a_unix_path_a_drive_a_network_share_and_awkward_names(string path, bool immutable, string expected)
+    {
+        Assert.Equal(expected, WorkFolderModes.ReadOnlyUri(path, immutable));
+    }
+}

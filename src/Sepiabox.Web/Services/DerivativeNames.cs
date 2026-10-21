@@ -22,6 +22,6 @@ public static class DerivativeNames
 
     public static bool IsServed(string name) => Served.Contains(name, StringComparer.Ordinal);
 
-    /// <summary>Whether the derivative is a video the browser plays, which gets the video link rules (D-031).</summary>
+    /// <summary>Whether the derivative is a video the browser plays, which gets the video link rules (D-049).</summary>
     public static bool IsVideo(string name) => name is Proxy or LargeProxy;
 }

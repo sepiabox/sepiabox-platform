@@ -183,9 +183,10 @@ public static class ManifestMerge
     // False only when both sides say so; written as absent when true, so equal manifests serialize equally.
     private static bool? MergeOriginalStored(Manifest a, Manifest b) => a.IsOriginalStored || b.IsOriginalStored ? null : false;
 
-    // Later entries win for the same file, unless they are older. The url merges like the other fields (the newer
-    // modifiedAt wins) and a present one beats an absent one (S-063, D-091); on a tie the larger url wins, so the result
-    // does not depend on the order.
+    // Later entries win for the same file, unless they are older. The url is the greatest (ordinal) of the urls given: a
+    // merged source keeps one modifiedAt, so it cannot remember when its url was written, and any rule that compares
+    // those times gives another url for another grouping of the same entries; a maximum is the same in every order and
+    // grouping (S-063, D-091).
     private static List<ManifestSource> MergeSources(IEnumerable<ManifestSource> sources)
     {
         var merged = new List<ManifestSource>();
@@ -199,11 +200,8 @@ public static class ManifestMerge
             }
 
             var kept = merged[index];
-            var (newer, older) = source.ModifiedAt > kept.ModifiedAt ? (source, kept) : (kept, source);
-            merged[index] = newer with
-            {
-                Url = source.ModifiedAt == kept.ModifiedAt ? LargerUrl(kept.Url, source.Url) : newer.Url ?? older.Url,
-            };
+            var newer = source.ModifiedAt > kept.ModifiedAt ? source : kept;
+            merged[index] = newer with { Url = LargerUrl(kept.Url, source.Url) };
         }
 
         return [.. merged

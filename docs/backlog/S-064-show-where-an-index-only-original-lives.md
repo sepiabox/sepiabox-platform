@@ -20,7 +20,8 @@ An asset processed in index-only mode (S-063, D-088) has no original in Sepiabox
     - `apple-photos`: "Stored in Apple Photos / iCloud Photos; it can't be opened from here."
     - `facebook`: "Stored on Facebook; it can't be opened from here."
     - any other kind: "Stored in {export name}; it can't be opened from here."
-- **Download endpoint.** `GET photos/{id}/original` answers 404 with a problem body saying the original is kept at its source, rather than signing a link to a blob that does not exist.
+- **Download endpoint.** `GET photos/{id}/original` answers 404 with a problem body saying the original is kept at its source, rather than signing a link to a blob that does not exist. The endpoint itself must check `original_stored = false` and answer 404 (hiding the link on the page is not enough: S-063 left `MediaEndpoints.OriginalAsync` as it was).
+- **Choosing the derivatives.** S-063 only made the web serve `preview-2048` and `proxy-1080p` (`DerivativeNames`). `GetAssetAsync`'s `previewOrder` and `HasProxy` still look for `preview-1280`, `poster` and `proxy-720p`, so this story adds the larger names (largest first) there. The "Download the original" link and the preview choice change together.
 - **API.** The API's asset detail, if it shows sources, includes each source's `url` and the asset's `originalStored`.
 - **Text.** All new text in English and Brazilian Portuguese (D-050), for example:
 

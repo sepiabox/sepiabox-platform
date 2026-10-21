@@ -58,12 +58,7 @@ internal static class WorkFolderModes
             return;
         }
 
-        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-        {
-            DataSource = ReadOnlySource(databasePath),
-            Pooling = false,
-        }.ToString());
-        connection.Open();
+        using var connection = Open(databasePath);
         var recorded = Read(connection);
         if (recorded != requested)
         {
@@ -74,11 +69,46 @@ internal static class WorkFolderModes
     // A refused run must leave the work folder as it was, and even a read-only connection to a WAL database leaves an
     // empty -wal and -shm behind. When no -wal exists, everything committed is in the main file, so it is opened
     // immutable: no locks, no side files. A -wal left by an interrupted run may hold the mode, so then the file is opened
-    // normally, read-only, and nothing is missed.
-    private static string ReadOnlySource(string databasePath) =>
-        File.Exists(databasePath + "-wal")
-            ? new Uri(databasePath).AbsoluteUri + "?mode=ro"
-            : new Uri(databasePath).AbsoluteUri + "?mode=ro&immutable=1";
+    // normally, read-only, and nothing is missed. If SQLite refuses the address, the plain read-only open is the fallback.
+    private static SqliteConnection Open(string databasePath)
+    {
+        var immutable = !File.Exists(databasePath + "-wal");
+        var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = ReadOnlyUri(Path.GetFullPath(databasePath), immutable), Pooling = false }.ToString());
+        try
+        {
+            connection.Open();
+            return connection;
+        }
+        catch (SqliteException)
+        {
+            connection.Dispose();
+            var plain = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false,
+            }.ToString());
+            plain.Open();
+            return plain;
+        }
+    }
+
+    /// <summary>
+    /// SQLite's address for a file (https://www.sqlite.org/uri.html): <c>file:///tmp/a%20b/state.db</c>, a Windows drive as
+    /// <c>file:///C:/work/state.db</c> and a network share as <c>file:////host/share/state.db</c>; every other character
+    /// that is not plain is percent-encoded, so <c>#</c>, <c>?</c> and <c>%</c> in a folder name stay part of the path.
+    /// </summary>
+    internal static string ReadOnlyUri(string fullPath, bool immutable)
+    {
+        var path = fullPath.Replace('\\', '/');
+        var segments = path.Split('/');
+        var encoded = string.Join('/', segments.Select((segment, i) => i == 0 && IsDrive(segment) ? segment : Uri.EscapeDataString(segment)));
+        // "/tmp/x" and "C:/x" and "//host/share/x" all follow "file://", the drive after a third slash.
+        var address = "file://" + (encoded.StartsWith('/') ? string.Empty : "/") + encoded;
+        return address + (immutable ? "?mode=ro&immutable=1" : "?mode=ro");
+    }
+
+    private static bool IsDrive(string segment) => segment.Length == 2 && char.IsAsciiLetter(segment[0]) && segment[1] == ':';
 
     /// <summary>The recorded mode; <see cref="WorkFolderMode.KeepsOriginals"/> when none is, as for a work folder made before S-063.</summary>
     public static WorkFolderMode Read(SqliteConnection connection)

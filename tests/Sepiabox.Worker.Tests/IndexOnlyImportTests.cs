@@ -36,6 +36,23 @@ public sealed class IndexOnlyImportTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Keeps_a_source_url_when_a_later_manifest_has_none()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var withUrl = Photo(Source("Takeout 2026", "Google Photos/IMG_0001.jpg") with { Url = Url }) with { OriginalStored = false };
+        await PutAsync(container, withUrl);
+        await ImportAsync(db, container);
+
+        await PutAsync(container, Photo(Source("Takeout 2026", "Google Photos/IMG_0001.jpg", hour: 18)) with { OriginalStored = false });
+        await ImportAsync(db, container);
+
+        var source = await db.AssetSources.AsNoTracking().SingleAsync();
+        Assert.Equal(Url, source.Url);
+        Assert.Equal(new DateTimeOffset(2019, 7, 14, 17, 0, 0, TimeSpan.Zero), source.ModifiedAt);
+    }
+
+    [Fact]
     public async Task Imports_a_manifest_without_the_new_fields_as_stored_with_no_url()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
