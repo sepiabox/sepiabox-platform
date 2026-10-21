@@ -932,10 +932,6 @@
   <data name="Occasions_None" xml:space="preserve">
     <value>There are no occasions yet.</value>
   </data>
-  <data name="Occasions_NoneHint" xml:space="preserve">
-    <value>Photos taken close together in time and place are grouped into occasions by sepiabox-worker events rebuild.</value>
-    <comment>The command name stays as it is.</comment>
-  </data>
   <data name="Occasions_Items_One" xml:space="preserve">
     <value>1 item</value>
     <comment>One photo or video.</comment>
@@ -957,5 +953,28 @@
   </data>
   <data name="Chip_Occasion_Other" xml:space="preserve">
     <value>In {0} occasions</value>
+  </data>
+  <data name="Occasions_NoneBefore" xml:space="preserve">
+    <value>Photos taken close together in time and place are grouped into occasions when the library owner runs</value>
+    <comment>Before the command name, in a code element (D-058).</comment>
+  </data>
+  <data name="Occasions_NoneAfter" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="Occasion_Empty" xml:space="preserve">
+    <value>This occasion has no photos or videos.</value>
+  </data>
+  <data name="Occasion_NotFoundHint" xml:space="preserve">
+    <value>It may have been replaced when the photos were regrouped.</value>
+  </data>
+  <data name="Occasion_SeeAll" xml:space="preserve">
+    <value>See all occasions</value>
+  </data>
+  <data name="Occasions_NoMore" xml:space="preserve">
+    <value>No more occasions.</value>
+  </data>
+  <data name="Occasions_NoThumbnail" xml:space="preserve">
+    <value>No thumbnails</value>
+    <comment>Shown on an occasion's card when none of its photos has a thumbnail.</comment>
   </data>
 </root>

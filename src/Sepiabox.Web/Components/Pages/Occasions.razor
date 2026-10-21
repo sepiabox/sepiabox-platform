@@ -16,11 +16,11 @@
 else if (_page.Items.Count == 0 && _page.Page == 1)
 {
     <p class="empty">@Text["Occasions_None"]</p>
-    <p class="muted">@Text["Occasions_NoneHint"]</p>
+    <p class="muted">@Text["Occasions_NoneBefore"] <code>sepiabox-worker events rebuild</code>@Text["Occasions_NoneAfter"]</p>
 }
 else if (_page.Items.Count == 0)
 {
-    <p class="empty">@Text["Timeline_NoMore"] <a href="occasions">@Text["Timeline_BackToStart"]</a></p>
+    <p class="empty">@Text["Occasions_NoMore"] <a href="occasions">@Text["Timeline_BackToStart"]</a></p>
 }
 else
 {

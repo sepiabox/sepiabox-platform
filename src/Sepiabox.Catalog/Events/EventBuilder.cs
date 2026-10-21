@@ -37,7 +37,7 @@ public static class EventBuilder
             var hasLocation = asset.Latitude is not null && asset.Longitude is not null;
             var splits = previous is not null
                 && (asset.CapturedAt - previous.CapturedAt > MaxGap
-                    || (hasLocation && lastGeotagged is not null && DistanceKm(lastGeotagged, asset) > MaxDistanceKm));
+                    || (hasLocation && lastGeotagged is not null && TooFar(DistanceKm(lastGeotagged, asset))));
             if (splits)
             {
                 drafts.Add(Close(current));
@@ -60,6 +60,9 @@ public static class EventBuilder
 
         return drafts;
     }
+
+    /// <summary>Whether a distance starts another occasion: more than <see cref="MaxDistanceKm"/>, so exactly that stays.</summary>
+    public static bool TooFar(double kilometres) => kilometres > MaxDistanceKm;
 
     /// <summary>The great-circle distance between two geotagged assets, in kilometres (haversine).</summary>
     public static double DistanceKm(EventAsset a, EventAsset b)

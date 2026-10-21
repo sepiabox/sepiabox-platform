@@ -104,7 +104,10 @@ public sealed class OccasionsPageTests : LocalizedContext
         var page = RenderPage();
 
         Assert.Equal("There are no occasions yet.", page.Find("p.empty").TextContent);
-        Assert.Contains("sepiabox-worker events rebuild", page.Markup, StringComparison.Ordinal);
+        Assert.Equal("sepiabox-worker events rebuild", page.Find("p.muted code").TextContent);
+        Assert.Equal(
+            "Photos taken close together in time and place are grouped into occasions when the library owner runs sepiabox-worker events rebuild.",
+            page.Find("p.muted").TextContent);
     }
 
     [Fact]
@@ -168,7 +171,44 @@ public sealed class OccasionsPageTests : LocalizedContext
         var page = Render<Occasion>(p => p.Add(o => o.Id, 99));
 
         Assert.Equal("Occasion not found", page.Find("h1").TextContent);
+        Assert.Equal("It may have been replaced when the photos were regrouped.", page.Find("p.muted").FirstChild!.TextContent.Trim());
+        Assert.Equal("occasions", page.Find("p.muted a").GetAttribute("href"));
+        Assert.Equal("See all occasions", page.Find("p.muted a").TextContent);
         Assert.Empty(_library.Searches);
+    }
+
+    [Fact]
+    public void An_occasion_with_no_photos_or_videos_says_so()
+    {
+        _library.Occasions.Add(new OccasionSummary(7, new DateTime(2024, 12, 14), new DateTime(2024, 12, 14), null, 0, []));
+
+        var page = Render<Occasion>(p => p.Add(o => o.Id, 7));
+
+        Assert.Equal("This occasion has no photos or videos.", page.Find("p.empty").TextContent);
+        Assert.Empty(page.FindAll("ul.grid"));
+    }
+
+    [Theory]
+    [InlineData(200, true)]
+    [InlineData(201, false)]
+    public void The_link_to_the_timeline_is_offered_only_when_the_timeline_shows_all_of_them(int count, bool offered)
+    {
+        var library = new FakeLibrary { SearchResults = new SearchPage([], false) };
+        library.Occasions.Add(new OccasionSummary(7, new DateTime(2024, 12, 14), new DateTime(2024, 12, 14), null, count, []));
+        Services.AddSingleton<ILibraryQueries>(library);
+
+        var page = Render<Occasion>(p => p.Add(o => o.Id, 7));
+
+        Assert.Equal(offered, page.FindAll("p.muted a").Count == 1);
+    }
+
+    [Fact]
+    public void A_card_with_no_thumbnail_shows_a_placeholder_and_a_page_past_the_end_says_no_more_occasions()
+    {
+        _library.Occasions.Add(new OccasionSummary(1, new DateTime(2024, 1, 1), new DateTime(2024, 1, 1), null, 1, []));
+        Assert.Equal("No thumbnails", RenderPage().Find(".occasion-thumbs .placeholder").TextContent);
+
+        Assert.Equal("No more occasions. Back to the start", RenderPage(5).Find("p.empty").TextContent.Replace("  ", " "));
     }
 
     [Theory]

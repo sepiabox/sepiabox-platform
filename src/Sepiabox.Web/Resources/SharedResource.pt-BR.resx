@@ -876,9 +876,6 @@
   <data name="Occasions_None" xml:space="preserve">
     <value>Ainda não há ocasiões.</value>
   </data>
-  <data name="Occasions_NoneHint" xml:space="preserve">
-    <value>Fotos tiradas perto no tempo e no espaço são agrupadas em ocasiões por sepiabox-worker events rebuild.</value>
-  </data>
   <data name="Occasions_Items_One" xml:space="preserve">
     <value>1 item</value>
   </data>
@@ -899,5 +896,26 @@
   </data>
   <data name="Chip_Occasion_Other" xml:space="preserve">
     <value>Em {0} ocasiões</value>
+  </data>
+  <data name="Occasions_NoneBefore" xml:space="preserve">
+    <value>Fotos tiradas em datas e lugares próximos são agrupadas em ocasiões quando o responsável pela biblioteca executa</value>
+  </data>
+  <data name="Occasions_NoneAfter" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="Occasion_Empty" xml:space="preserve">
+    <value>Esta ocasião não tem fotos nem vídeos.</value>
+  </data>
+  <data name="Occasion_NotFoundHint" xml:space="preserve">
+    <value>Ela pode ter sido substituída quando as fotos foram reagrupadas.</value>
+  </data>
+  <data name="Occasion_SeeAll" xml:space="preserve">
+    <value>Ver todas as ocasiões</value>
+  </data>
+  <data name="Occasions_NoMore" xml:space="preserve">
+    <value>Não há mais ocasiões.</value>
+  </data>
+  <data name="Occasions_NoThumbnail" xml:space="preserve">
+    <value>Sem miniaturas</value>
   </data>
 </root>

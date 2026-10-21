@@ -54,6 +54,16 @@ public sealed class EventBuilderTests
     }
 
     [Fact]
+    public void Exactly_50_km_is_still_one_occasion_and_a_hair_more_is_not()
+    {
+        Assert.False(EventBuilder.TooFar(50.0));
+        Assert.True(EventBuilder.TooFar(50.0000001));
+        // The point 50 km due north by the same formula: measured as 50 km, give or take rounding, and not a split.
+        var north = Photo("b", 1, LisbonLatitude + 50 / 6371.0088 * 180 / Math.PI);
+        Assert.Equal(50.0, EventBuilder.DistanceKm(Photo("a", 0, LisbonLatitude), north), 6);
+    }
+
+    [Fact]
     public void The_distance_is_to_the_previous_geotagged_asset_not_to_the_previous_asset()
     {
         // b has no location: c is measured from a, 60 km away, so it starts another occasion.

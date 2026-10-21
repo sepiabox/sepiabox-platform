@@ -11,11 +11,13 @@ public sealed record OccasionRebuildResult(int Occasions, int Assets, int Create
 /// <c>events</c> and <c>event_assets</c> tables say so. Persistence only; the rules are in the builder.
 /// </summary>
 /// <remarks>
-/// The result depends only on the assets, so a second run changes nothing. An occasion keeps its id (the filter
-/// <c>eventIds</c> and the pages' links use it) as long as the first asset in it, in capture order, is still in an
-/// occasion that existed; its type (S-024) is kept only when its assets are exactly the same, since a changed occasion
-/// may be another kind. Undated assets are in no occasion. Runs in one transaction, under an advisory lock so two
-/// rebuilds never overlap; assets imported meanwhile are picked up by the next run.
+/// The result depends only on the assets, so a second run changes nothing. An occasion keeps the id (the filter
+/// <c>eventIds</c> and the pages' links use it) of the existing occasion that shares most assets with it, the lowest id
+/// when equally many, unless an earlier occasion already took that id, and then it gets a new one. Its type (S-024) is
+/// kept only when its assets are exactly the same, since a changed occasion may be another kind. Undated assets are in
+/// no occasion. Runs in one transaction, under an advisory lock so two rebuilds never overlap; assets imported
+/// meanwhile are picked up by the next run, and an asset deleted meanwhile fails the run on its foreign key and rolls
+/// it back, so running it again is the fix.
 /// </remarks>
 public sealed class OccasionRebuild(CatalogDbContext db)
 {
@@ -47,10 +49,10 @@ public sealed class OccasionRebuild(CatalogDbContext db)
         var occasions = new List<(Occasion Occasion, EventDraft Draft)>();
         foreach (var draft in drafts)
         {
-            var anchor = eventOfAsset.GetValueOrDefault(draft.AssetIds[0]);
+            var anchor = BestOverlap(draft, eventOfAsset);
             if (anchor != 0 && existing.TryGetValue(anchor, out var reused) && claimed.Add(anchor))
             {
-                // The occasion's first asset was in this one: the same occasion, with its type only if no asset came or went.
+                // The existing occasion with most of these assets: the same occasion, with its type only if no asset came or went.
                 updated += Apply(reused, draft, sameAssets: assetsOfEvent.GetValueOrDefault(anchor) == draft.AssetIds.Count
                     && draft.AssetIds.All(id => eventOfAsset.GetValueOrDefault(id) == anchor)) ? 1 : 0;
                 occasions.Add((reused, draft));
@@ -105,6 +107,16 @@ public sealed class OccasionRebuild(CatalogDbContext db)
         await transaction.CommitAsync(cancellationToken);
         return new OccasionRebuildResult(drafts.Count, wanted.Count, created, updated, removed);
     }
+
+    // The existing occasion holding most of the draft's assets, the lowest id when tied; 0 when none holds any.
+    private static long BestOverlap(EventDraft draft, Dictionary<string, long> eventOfAsset) =>
+        draft.AssetIds
+            .Select(id => eventOfAsset.GetValueOrDefault(id))
+            .Where(id => id != 0)
+            .GroupBy(id => id)
+            .OrderByDescending(g => g.Count()).ThenBy(g => g.Key)
+            .Select(g => g.Key)
+            .FirstOrDefault();
 
     // True when the occasion changed. The type survives only an occasion whose assets are exactly the same.
     private static bool Apply(Occasion occasion, EventDraft draft, bool sameAssets)

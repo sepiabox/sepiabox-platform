@@ -11,11 +11,19 @@
 @if (_occasion is null)
 {
     <h1 class="page-heading">@Text["Occasion_NotFound"]</h1>
+    <p class="muted">@Text["Occasion_NotFoundHint"] <a href="occasions">@Text["Occasion_SeeAll"]</a></p>
 }
 else
 {
     <h1 class="page-heading">@Title</h1>
-    <p class="muted">@Items(_occasion.AssetCount) · <a href="@SearchLinks.Timeline(Query)">@Text["Occasion_OpenOnTimeline"]</a></p>
+    <p class="muted">
+        @Items(_occasion.AssetCount)
+        @if (_occasion.AssetCount <= SearchQuery.DefaultLimit)
+        {
+            @* The timeline shows 200 at a time: past that, the link would show fewer than this page does. *@
+            <text>· </text><a href="@SearchLinks.Timeline(Query)">@Text["Occasion_OpenOnTimeline"]</a>
+        }
+    </p>
 
     @if (_results is { Items.Count: > 0 } results)
     {
@@ -29,6 +37,10 @@ else
         {
             <p class="more muted">@Text["Search_FirstResults", results.Items.Count]</p>
         }
+    }
+    else
+    {
+        <p class="empty">@Text["Occasion_Empty"]</p>
     }
 }
 
@@ -44,9 +56,17 @@ else
     // Oldest first: the order things happened in.
     private SearchQuery Query => new() { Filters = new SearchFilters { EventIds = [Id] }, Sort = SearchSort.CapturedAtAsc };
 
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
     protected override async Task OnParametersSetAsync()
     {
         _occasion = await Library.GetOccasionAsync(Id);
+        if (_occasion is null && HttpContext is not null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+
         _results = _occasion is null ? null : await Library.SearchAsync(Query with { Limit = SearchQuery.MaxLimit });
     }
 

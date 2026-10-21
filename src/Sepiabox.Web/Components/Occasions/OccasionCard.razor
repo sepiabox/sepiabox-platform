@@ -6,6 +6,10 @@
         {
             <img src="photos/@id/@DerivativeNames.Thumbnail" alt="" loading="lazy" width="256" height="256" />
         }
+        @if (Occasion.Thumbnails.Count == 0)
+        {
+            <span class="placeholder">@Text["Occasions_NoThumbnail"]</span>
+        }
     </span>
     <span class="occasion-title">@Text.OccasionTitle(Occasion.PlaceLabel, Occasion.StartsAt, Occasion.EndsAt)</span>
     <span class="count muted small">@Items</span>

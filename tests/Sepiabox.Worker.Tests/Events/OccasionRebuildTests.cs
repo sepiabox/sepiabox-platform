@@ -116,6 +116,65 @@ public sealed class OccasionRebuildTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task An_occasion_that_gains_an_earlier_asset_keeps_its_id_and_loses_its_type()
+    {
+        await using var db = await CatalogWithAsync(Asset(1, 1), Asset(2, 2), Asset(3, 20));
+        await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+        var first = await db.Occasions.OrderBy(o => o.StartsAt).FirstAsync();
+        first.Type = "wedding";
+        await db.SaveChangesAsync();
+        // Taken 4 hours before the first photo: the occasion now starts with a different asset.
+        db.Assets.Add(Asset(4, -3));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+
+        Assert.Equal((0, 1, 0), (result.Created, result.Updated, result.Removed));
+        var grown = await db.Occasions.AsNoTracking().SingleAsync(o => o.Id == first.Id);
+        Assert.Equal((3, null), (grown.AssetCount, grown.Type));
+        Assert.Equal(3, await db.OccasionAssets.CountAsync(l => l.EventId == first.Id));
+    }
+
+    [Fact]
+    public async Task An_occasion_where_one_asset_leaves_and_another_joins_loses_its_type_though_the_count_is_the_same()
+    {
+        await using var db = await CatalogWithAsync(Asset(1, 0), Asset(2, 1));
+        await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+        var occasion = await db.Occasions.SingleAsync();
+        occasion.Type = "wedding";
+        await db.SaveChangesAsync();
+        db.Assets.Remove(await db.Assets.SingleAsync(a => a.Id == Id(2)));
+        db.Assets.Add(Asset(3, 2));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+
+        var after = await db.Occasions.AsNoTracking().SingleAsync();
+        Assert.Equal((occasion.Id, 2, null), (after.Id, after.AssetCount, after.Type));
+        Assert.Equal([Id(1), Id(3)], await db.OccasionAssets.Select(l => l.AssetId).OrderBy(i => i).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Occasions_that_merge_keep_the_id_of_the_one_that_gives_most_of_the_assets()
+    {
+        // One photo alone, and three together 8 hours later; a photo between them joins all into one.
+        await using var db = await CatalogWithAsync(Asset(1, 0), Asset(2, 8), Asset(3, 9), Asset(4, 10));
+        await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+        var ids = await db.Occasions.OrderBy(o => o.StartsAt).Select(o => o.Id).ToListAsync();
+        db.Assets.Add(Asset(5, 4));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+
+        Assert.Equal((0, 1, 1), (result.Created, result.Updated, result.Removed));
+        Assert.Equal([ids[1]], await db.Occasions.Select(o => o.Id).ToListAsync());
+        Assert.Equal(5, await db.OccasionAssets.CountAsync(l => l.EventId == ids[1]));
+    }
+
+    [Fact]
     public async Task Two_occasions_that_merge_keep_the_first_ones_id_and_the_other_goes()
     {
         await using var db = await CatalogWithAsync(Asset(1, 0), Asset(2, 8));
