@@ -115,6 +115,34 @@ public class StateStoreTests
         Assert.Equal(VideoSound.Undecodable, reopened.Get("/drive/MOV002.MOD")!.Sound);
     }
 
+    [Fact]
+    public void Remembers_the_metadata_version_and_reads_none_for_rows_of_an_earlier_build()
+    {
+        using var folder = new TempFolder();
+        var database = Path.Combine(folder.Path, "state.db");
+        using (var old = new SqliteConnection($"Data Source={database};Pooling=False"))
+        {
+            old.Open();
+            using var create = old.CreateCommand();
+            // A work folder written by a build with D-087, before the metadata version was recorded (D-089).
+            create.CommandText = """
+                CREATE TABLE files (path TEXT PRIMARY KEY, size INTEGER NOT NULL, modified_ticks INTEGER NOT NULL, sha256 TEXT, status TEXT NOT NULL, reason TEXT, sound TEXT);
+                INSERT INTO files VALUES ('/drive/clip.mp4', 10, 20, NULL, 'Done', NULL, 'Kept');
+                """;
+            create.ExecuteNonQuery();
+        }
+
+        using (var store = new StateStore(database))
+        {
+            var earlier = store.Get("/drive/clip.mp4")!;
+            Assert.Equal((VideoSound.Kept, (int?)null), (earlier.Sound, earlier.MetadataVersion));
+            store.Save(earlier with { MetadataVersion = 2 });
+        }
+
+        using var reopened = new StateStore(database);
+        Assert.Equal(new FileState("/drive/clip.mp4", 10, 20, null, FileStatus.Done, Sound: VideoSound.Kept, MetadataVersion: 2), reopened.Get("/drive/clip.mp4"));
+    }
+
     [Theory]
     [InlineData("Unknown")]
     [InlineData("2")]

@@ -28,8 +28,19 @@ public enum FileStatus
 /// For a video done by a build with D-087, what became of its sound in the 720p version. Null for photos and for videos
 /// done by earlier builds, whose 720p version may have lost working sound to D-084's fallback, so <c>process</c> checks it.
 /// </param>
+/// <param name="MetadataVersion">
+/// Which <see cref="ProcessCommand.MetadataVersion"/> read the file's metadata (S-060, D-089). Null for rows written by
+/// earlier builds, which count as version 1: what a later version reads is read again from the file's header alone.
+/// </param>
 public sealed record FileState(
-    string Path, long Size, long ModifiedTicks, string? Sha256, FileStatus Status, NoVideoReason? Reason = null, VideoSound? Sound = null);
+    string Path,
+    long Size,
+    long ModifiedTicks,
+    string? Sha256,
+    FileStatus Status,
+    NoVideoReason? Reason = null,
+    VideoSound? Sound = null,
+    int? MetadataVersion = null);
 
 /// <summary>
 /// Remembers which files were already processed, so an interrupted or repeated run only reads
@@ -62,10 +73,11 @@ public sealed class StateStore : IDisposable
             );
             """);
 
-        // Work folders made before the left-out reason, or the video's sound (D-087), was stored gain the column; their
-        // rows read as not recorded.
-        AddColumnIfMissing("reason");
-        AddColumnIfMissing("sound");
+        // Work folders made before the left-out reason, the video's sound (D-087) or the metadata version (D-089) was
+        // stored gain the column; their rows read as not recorded.
+        AddColumnIfMissing("reason", "TEXT");
+        AddColumnIfMissing("sound", "TEXT");
+        AddColumnIfMissing("metadata_version", "INTEGER");
     }
 
     /// <summary>
@@ -80,7 +92,7 @@ public sealed class StateStore : IDisposable
     public FileState? Get(string path)
     {
         using var command = _connection.CreateCommand();
-        command.CommandText = "SELECT size, modified_ticks, sha256, status, reason, sound FROM files WHERE path = $path";
+        command.CommandText = "SELECT size, modified_ticks, sha256, status, reason, sound, metadata_version FROM files WHERE path = $path";
         command.Parameters.AddWithValue("$path", path);
 
         using var reader = command.ExecuteReader();
@@ -96,18 +108,20 @@ public sealed class StateStore : IDisposable
             reader.IsDBNull(2) ? null : reader.GetString(2),
             Enum.Parse<FileStatus>(reader.GetString(3)),
             reader.IsDBNull(4) ? null : ParseReason(reader.GetString(4)),
-            reader.IsDBNull(5) ? null : ParseSound(reader.GetString(5)));
+            reader.IsDBNull(5) ? null : ParseSound(reader.GetString(5)),
+            reader.IsDBNull(6) ? null : reader.GetInt32(6));
     }
 
     public void Save(FileState state)
     {
         using var command = _connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO files (path, size, modified_ticks, sha256, status, reason, sound)
-            VALUES ($path, $size, $modified, $sha256, $status, $reason, $sound)
+            INSERT INTO files (path, size, modified_ticks, sha256, status, reason, sound, metadata_version)
+            VALUES ($path, $size, $modified, $sha256, $status, $reason, $sound, $metadataVersion)
             ON CONFLICT (path) DO UPDATE SET
                 size = excluded.size, modified_ticks = excluded.modified_ticks,
-                sha256 = excluded.sha256, status = excluded.status, reason = excluded.reason, sound = excluded.sound
+                sha256 = excluded.sha256, status = excluded.status, reason = excluded.reason, sound = excluded.sound,
+                metadata_version = excluded.metadata_version
             """;
         command.Parameters.AddWithValue("$path", state.Path);
         command.Parameters.AddWithValue("$size", state.Size);
@@ -116,6 +130,7 @@ public sealed class StateStore : IDisposable
         command.Parameters.AddWithValue("$status", state.Status.ToString());
         command.Parameters.AddWithValue("$reason", (object?)state.Reason?.ToString() ?? DBNull.Value);
         command.Parameters.AddWithValue("$sound", (object?)state.Sound?.ToString() ?? DBNull.Value);
+        command.Parameters.AddWithValue("$metadataVersion", (object?)state.MetadataVersion ?? DBNull.Value);
         command.ExecuteNonQuery();
     }
 
@@ -133,14 +148,14 @@ public sealed class StateStore : IDisposable
     private static VideoSound? ParseSound(string value) =>
         Enum.GetNames<VideoSound>().Contains(value, StringComparer.Ordinal) ? Enum.Parse<VideoSound>(value) : null;
 
-    private void AddColumnIfMissing(string column)
+    private void AddColumnIfMissing(string column, string type)
     {
         using var exists = _connection.CreateCommand();
         exists.CommandText = "SELECT COUNT(*) FROM pragma_table_info('files') WHERE name = $column";
         exists.Parameters.AddWithValue("$column", column);
         if (Convert.ToInt64(exists.ExecuteScalar(), CultureInfo.InvariantCulture) == 0)
         {
-            Execute($"ALTER TABLE files ADD COLUMN {column} TEXT");
+            Execute($"ALTER TABLE files ADD COLUMN {column} {type}");
         }
     }
 

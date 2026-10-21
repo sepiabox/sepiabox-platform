@@ -46,6 +46,15 @@ public sealed record ProcessResult(
 
     public int NotVideo => LeftOut.Count;
 
+    /// <summary>
+    /// Unchanged videos whose header was read again in this run for what a newer metadata version reads, such as their
+    /// location (S-060, D-089); counted among <see cref="Skipped"/> too, since their content was not processed again.
+    /// </summary>
+    public int Refreshed { get; init; }
+
+    /// <summary>Of <see cref="Refreshed"/>, the videos whose manifest gained a location (most gain nothing).</summary>
+    public int LocationsAdded { get; init; }
+
     /// <summary>Videos whose 720p version was made without sound in this run, with FFmpeg's message (D-084).</summary>
     public IReadOnlyList<ScanProblem> WithoutSound { get; init; } = WithoutSound ?? [];
 }
@@ -75,6 +84,17 @@ public static class ProcessCommand
     }
 
     private static string StatePath(string output) => Path.Combine(output, "state.db");
+
+    /// <summary>
+    /// What <c>process</c> reads from each file's metadata, recorded per file in its state (S-060, D-089), so a newer
+    /// version reads again only what it adds. 1: everything until S-053 (rows without a version). 2: a video's location
+    /// in its container's tags (S-053, D-060).
+    /// </summary>
+    public const int MetadataVersion = 2;
+
+    // The containers whose tags can hold a video's location (QuickTime and MP4: the Apple key, ©xyz, the 3GPP loci box).
+    private static readonly HashSet<string> LocationContainers =
+        new(["video/mp4", "video/quicktime", "video/x-m4v", "video/3gpp"], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Processes <see cref="ProcessOptions.Root"/> with the CLIP model when it is downloaded, and the face models when
@@ -407,29 +427,88 @@ public static class ProcessCommand
             if (unchanged && previous!.Status == FileStatus.Done
                 && previous.Sha256 is { } doneSha256 && File.Exists(ManifestPath(manifestFolder, doneSha256)))
             {
+                // What is learned about the file here is saved once, at the end of these checks.
+                var done = previous;
+
                 // A video done by a build before D-087 may have lost working sound to D-084's fallback: when its 720p
-                // version has none, it is made again, from the hash already known, as a failed file is.
-                if (kind == MediaKind.Video && previous.Sound is null && video is not null && LostSound(previous, doneSha256))
+                // version has none, it is made again, from the hash already known, as a failed file is. Making it again
+                // probes the file, which reads its location too, so it also brings the metadata up to date (D-089).
+                if (kind == MediaKind.Video && done.Sound is null && video is not null)
                 {
-                    return new Plan(file, kind, previous, null, null, null, StreamedSha256: doneSha256) { RedoProxy = true };
+                    (var redo, done) = CheckLostSound(done, doneSha256);
+                    if (redo)
+                    {
+                        SaveIfChanged(previous, done);
+                        return new Plan(file, kind, done, null, null, null, StreamedSha256: doneSha256) { RedoProxy = true };
+                    }
                 }
 
+                // Metadata read by an older version (S-060, D-089): only what a later version reads is read again, from
+                // the file's header, never re-hashed and with no derivative made again; a file with nothing to read
+                // again is just recorded as current.
+                var refresh = false;
+                if (done.MetadataVersion is null or < MetadataVersion)
+                {
+                    switch (MetadataRefresh(kind, doneSha256))
+                    {
+                        case Refresh.Read:
+                            refresh = true;
+                            break;
+                        case Refresh.Nothing:
+                            done = done with { MetadataVersion = MetadataVersion };
+                            break;
+                    }
+                }
+
+                SaveIfChanged(previous, done);
                 o.Skipped++;
+                if (refresh)
+                {
+                    return new Plan(file, kind, done, null, null, doneSha256) { RefreshMetadata = true };
+                }
+
                 // The model may have been downloaded, or --faces given, after this file was processed: both come
                 // from the thumbnails in the work folder, so the drive is not read again.
                 return embedder is not null || faces is not null
-                    ? new Plan(file, kind, previous, null, null, doneSha256)
+                    ? new Plan(file, kind, done, null, null, doneSha256)
                     : null;
+            }
+
+            void SaveIfChanged(FileState before, FileState after)
+            {
+                if (after != before)
+                {
+                    SaveState(after);
+                }
+            }
+
+            // What version 2 reads that version 1 did not: a video's location in its container's tags (S-053, D-060),
+            // which only MP4-family containers hold. Read again only when the manifest has no location and FFmpeg is
+            // there to read it; without FFmpeg nothing is recorded, so a later run with it reads it.
+            Refresh MetadataRefresh(MediaKind kind, string sha256)
+            {
+                if (kind != MediaKind.Video)
+                {
+                    return Refresh.Nothing;
+                }
+
+                var manifest = ManifestJson.Deserialize(File.ReadAllText(ManifestPath(manifestFolder, sha256)));
+                if (manifest.Location is not null || !LocationContainers.Contains(manifest.ContentType))
+                {
+                    return Refresh.Nothing;
+                }
+
+                return video is null ? Refresh.Later : Refresh.Read;
             }
 
             // Checked once: what is found is recorded, so it is not checked again. The source is only read when its 720p
             // version has no sound: its header, and up to its first sound frame (to its end only when no frame decodes).
-            bool LostSound(FileState done, string sha256)
+            (bool Redo, FileState Done) CheckLostSound(FileState done, string sha256)
             {
                 var proxy = Path.Combine(output, DerivativeFolder(sha256), videoVersion.Name + ".mp4");
                 if (!File.Exists(proxy))
                 {
-                    return false;
+                    return (false, done);
                 }
 
                 bool hasSound;
@@ -440,13 +519,12 @@ public static class ProcessCommand
                 catch (VideoProcessingException)
                 {
                     // A 720p version ffprobe cannot read is made again too.
-                    return true;
+                    return (true, done);
                 }
 
                 if (hasSound)
                 {
-                    SaveState(done with { Sound = VideoSound.Kept });
-                    return false;
+                    return (false, done with { Sound = VideoSound.Kept });
                 }
 
                 // A silent 720p version lost something only when the source's sound decodes: a source without sound,
@@ -459,15 +537,10 @@ public static class ProcessCommand
                 catch (VideoProcessingException)
                 {
                     // Unreadable right now: nothing is recorded, and the next run checks again.
-                    return false;
+                    return (false, done);
                 }
 
-                if (source != VideoSound.Kept)
-                {
-                    SaveState(done with { Sound = source });
-                }
-
-                return source == VideoSound.Kept;
+                return source == VideoSound.Kept ? (true, done) : (false, done with { Sound = source });
             }
 
             // Nothing about an unchanged file can make a video stream appear, short of a newer FFmpeg: that is
@@ -603,7 +676,20 @@ public static class ProcessCommand
             var file = plan.File;
             if (plan.UnchangedSha256 is { } doneSha256)
             {
-                return ([doneSha256], () => AddToUnchanged(o, file.Path, doneSha256));
+                return ([doneSha256], Unchanged);
+
+                void Unchanged()
+                {
+                    if (plan.RefreshMetadata)
+                    {
+                        RefreshMetadata(o, file, doneSha256, plan.Previous!);
+                    }
+
+                    if (embedder is not null || faces is not null)
+                    {
+                        AddToUnchanged(o, file.Path, doneSha256);
+                    }
+                }
             }
 
             string sha256;
@@ -627,6 +713,36 @@ public static class ProcessCommand
             // A changed file also touches the content it had before, whose manifest loses this path.
             List<string> keys = plan.Previous?.Sha256 is { } before && before != sha256 ? [sha256, before] : [sha256];
             return (keys, () => ProcessFile(file, plan.Kind, o, plan.Previous, sha256, plan.Content, plan.RedoProxy));
+        }
+
+        // An unchanged video's header read again for what the current metadata version reads (D-089): its location, written
+        // into the work folder's manifest when it has none (the next upload merges it, D-036). A file that cannot be read
+        // now is left at its old version, so the next run tries again; it is never a failure of the file.
+        void RefreshMetadata(FileOutcome o, FoundFile file, string sha256, FileState done)
+        {
+            VideoProbe probe;
+            try
+            {
+                probe = video!.Probe(file.Path, stop.Token);
+            }
+            catch (Exception ex) when (ex is VideoProcessingException or NoVideoStreamException)
+            {
+                return;
+            }
+
+            o.Refreshed++;
+            if (probe.Location is { } location)
+            {
+                var path = ManifestPath(manifestFolder, sha256);
+                var manifest = ManifestJson.Deserialize(File.ReadAllText(path));
+                if (manifest.Location is null)
+                {
+                    ManifestJson.WriteFile(path, manifest with { Location = location });
+                    o.LocationsAdded++;
+                }
+            }
+
+            SaveState(done with { MetadataVersion = MetadataVersion });
         }
 
         void ProcessFile(FoundFile file, MediaKind kind, FileOutcome o, FileState? previous, string sha256, byte[]? content, bool redoProxy)
@@ -688,7 +804,9 @@ public static class ProcessCommand
                 // again (D-087).
                 SaveState(redoProxy && status == FileStatus.Failed
                     ? new FileState(file.Path, file.Size, modifiedTicks, sha256, FileStatus.Done)
-                    : new FileState(file.Path, file.Size, modifiedTicks, sha256, status, noVideo, sound));
+                    : new FileState(
+                        file.Path, file.Size, modifiedTicks, sha256, status, noVideo, sound,
+                        status == FileStatus.Done ? MetadataVersion : null));
 
                 switch (status)
                 {
@@ -770,7 +888,11 @@ public static class ProcessCommand
         var warning = warnings.Count == 0 ? null : string.Join(Environment.NewLine, warnings);
         return new ProcessResult(
             root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems, leftOut,
-            facesChecked, facesFound, faceProblems, withoutSound);
+            facesChecked, facesFound, faceProblems, withoutSound)
+        {
+            Refreshed = outcomes.Sum(o => o.Refreshed),
+            LocationsAdded = outcomes.Sum(o => o.LocationsAdded),
+        };
     }
 
     /// <summary>
@@ -989,6 +1111,22 @@ public static class ProcessCommand
     {
         /// <summary>A done video whose 720p version is made again, because an earlier build may have dropped its sound (D-087).</summary>
         public bool RedoProxy { get; init; }
+
+        /// <summary>An unchanged video whose header is read again for what a newer metadata version reads (D-089).</summary>
+        public bool RefreshMetadata { get; init; }
+    }
+
+    /// <summary>What an unchanged file's metadata needs under the current <see cref="MetadataVersion"/>.</summary>
+    private enum Refresh
+    {
+        /// <summary>Nothing more to read: the file is recorded as current.</summary>
+        Nothing,
+
+        /// <summary>Its header is read again.</summary>
+        Read,
+
+        /// <summary>Its header needs FFmpeg, which is missing: nothing is recorded, so a later run reads it.</summary>
+        Later,
     }
 
     /// <summary>What one file added to the run's result, kept apart so the result is gathered in the order files were found.</summary>
@@ -1001,6 +1139,10 @@ public static class ProcessCommand
         public int Pending { get; set; }
 
         public int Embedded { get; set; }
+
+        public int Refreshed { get; set; }
+
+        public int LocationsAdded { get; set; }
 
         public int FacesChecked { get; set; }
 
