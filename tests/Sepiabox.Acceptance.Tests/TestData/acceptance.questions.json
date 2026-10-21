@@ -1,0 +1,131 @@
+{
+  "description": "S-054's acceptance questions: each, in English and Brazilian Portuguese, is answered on the fixture library (S-061) after process, upload and import, and its numbers are compared with sepiabox-ingest report (years, kinds, undated) or the generator (cities). 'expect' names the reference; 'expected' is the query that means it, used as a placeholder until the live run records the model's answers.",
+  "questions": [
+    {
+      "id": "photos-by-year",
+      "expect": "photosByYear",
+      "en": "how many photos per year?",
+      "pt": "quantas fotos por ano?",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ]
+        },
+        "aggregate": {
+          "count": "assets",
+          "groupBy": "year"
+        }
+      }
+    },
+    {
+      "id": "videos-by-year",
+      "expect": "videosByYear",
+      "en": "how many videos per year?",
+      "pt": "quantos vídeos por ano?",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "video"
+          ]
+        },
+        "aggregate": {
+          "count": "assets",
+          "groupBy": "year"
+        }
+      }
+    },
+    {
+      "id": "undated",
+      "expect": "undated",
+      "en": "how many items have no date?",
+      "pt": "quantos itens estão sem data?",
+      "expected": {
+        "filters": {
+          "undatedOnly": true
+        },
+        "aggregate": {
+          "count": "assets"
+        }
+      }
+    },
+    {
+      "id": "photos-1901",
+      "expect": "photos1901",
+      "en": "how many photos are from 1901?",
+      "pt": "quantas fotos são de 1901?",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ],
+          "years": [
+            1901
+          ]
+        },
+        "aggregate": {
+          "count": "assets"
+        }
+      }
+    },
+    {
+      "id": "videos-lisbon",
+      "expect": "videosInLisbon",
+      "en": "how many videos were taken in Lisbon?",
+      "pt": "quantos vídeos foram feitos em Lisboa?",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "video"
+          ],
+          "places": {
+            "cities": [
+              "Lisbon"
+            ]
+          }
+        },
+        "aggregate": {
+          "count": "assets"
+        }
+      }
+    },
+    {
+      "id": "items-by-city",
+      "expect": "itemsByCity",
+      "en": "how many items per city?",
+      "pt": "quantos itens por cidade?",
+      "expected": {
+        "filters": {},
+        "aggregate": {
+          "count": "assets",
+          "groupBy": "city"
+        }
+      }
+    },
+    {
+      "id": "by-kind",
+      "expect": "byKind",
+      "en": "how many photos and how many videos do we have?",
+      "pt": "quantas fotos e quantos vídeos temos?",
+      "expected": {
+        "filters": {},
+        "aggregate": {
+          "count": "assets",
+          "groupBy": "kind"
+        }
+      }
+    },
+    {
+      "id": "total",
+      "expect": "total",
+      "en": "how many items do we have in total?",
+      "pt": "quantos itens temos ao todo?",
+      "expected": {
+        "filters": {},
+        "aggregate": {
+          "count": "assets"
+        }
+      }
+    }
+  ]
+}

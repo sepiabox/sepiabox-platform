@@ -47,7 +47,7 @@ Checks only a person can do. A story whose automated criteria pass is `done` and
 | After the first run of the GeoNames job (see "Place names (GeoNames)"): its execution `Succeeded`, its log shows a SHA-256, size and date for `cities500.zip`, `admin1CodesASCII.txt` and `countryInfo.txt` and "Loaded N GeoNames cities" with N above 150,000; then a photo taken in Lisbon, uploaded and imported, shows "Lisbon" on its detail page in Azure | S-059 |
 | After a deploy (S-056): (1) the web's log in the `sepiabox-logs` workspace (table `ContainerAppConsoleLogs_CL`, container `web`) has "CLIP text model ready in N ms; working set M MB" and no "Search by description is off" error; M should stay below about 800 MB (otherwise raise `AzureInfrastructure.WebMemory` to the next Container Apps step, 1.5 GiB with 0.75 vCPU). (2) `curl -s https://$host/health` prints `Healthy`. (3) The timeline shows "Describe (in English)"; after the web has scaled to zero (about 10 minutes idle), the first description search answers within 30 s and the next ones within 2 s. (4) pgvector is 0.8 or later: in the Azure portal → `sepiabox-pg` → Connect (or `psql` from Cloud Shell), `SELECT extversion FROM pg_extension WHERE extname = 'vector';` in the `catalog` database; below 0.8 description search still works but ranks exactly, more slowly. (5) After the next deploy of a different commit with the same `models.json`: `az acr repository show-tags --name <registry> --repository sepiabox-web-models -o tsv` still lists one tag (that two releases share the model layer and carry the pinned model is checked in CI by `WebImageTests` against a local registry) | S-056 |
 | The first description search after a cold start answers within 30 s, later ones within 2 s | S-056 |
-| MVP acceptance on the real data: after uploading the drive and the import finishing, ask in the web a few counting questions (photos per year, videos per year, items with no date) and compare each answer with `sepiabox-ingest report` on every work folder that was uploaded, in upload order; no test data is ever uploaded to Azure | S-054 |
+| MVP acceptance on the real data (see "MVP acceptance"): after uploading the drive and the import finishing, ask in the web, in Portuguese and English, photos per year, videos per year, items with no date and photos from one year, and compare each answer with `sepiabox-ingest report` on every work folder that was uploaded, in upload order; no test data is ever uploaded to Azure | S-054 |
 | After a deploy with `Anthropic--ApiKey` in Key Vault: on the timeline, ask "videos from Lisbon in December 2019" and "fotos na praia no verão passado"; each opens a search whose chips say what was understood, in the page's language. Then `SELECT questions, input_tokens, cache_read_input_tokens FROM question_usage;` shows them counted, with cache reads from the second question on | S-025 |
 | The video playback check in the table above | S-011 |
 | In Azure, with the browser set to English: the timeline's month headings read like "July 2019"; choose Português (Brasil) in the header: the same page comes back with "julho de 2019", and the detail page's date reads like "14 de julho de 2019, 10:32" (the container image has ICU, D-058) | S-044 |
@@ -161,9 +161,46 @@ When a secret applies: `Access--Emails` (and `Anthropic--ApiKey`, which the web 
 
 On the first deploy, and whenever the web's identity is new, its role on the vault takes a few minutes to propagate: until then the web cannot read Key Vault at start and fails, and Container Apps restarts it a few times before it starts normally. Do the owner checks only after that. Keep the values out of your shell history (for example, read them with `read -s`).
 
-## MVP acceptance on the real data
+## MVP acceptance
 
-`report` counts every valid manifest of the work folders, but the catalog only holds what was uploaded and imported, so compare only when both are complete: `upload` of every work folder ends with `problems 0` (run it again until it does; a file changed since it was processed is not uploaded until `process` runs again), and the import failed nothing: the queue's dead-letter count is `0` and after the last upload, start `sepiabox-import-all` (it skips what is already imported and retries anything that failed) and wait until that execution is `Succeeded` (both commands under "Automatic import"); an earlier execution may predate the last upload. Then run `sepiabox-ingest report <workdir>...` on every work folder you have uploaded, in the order you uploaded them (an asset in several folders counts once, with the date the cloud's merge gives it: the last folder's when both read it from the file's metadata, otherwise the stronger one, D-046; add `--json report.json` (outside the work folders) to keep the numbers; exit code 1 means some manifests were not valid and are listed, not counted): it counts unique assets per year and kind, and the undated ones, from its manifests, the same unit as the catalog (an exact duplicate counts once; `scan` counts files instead). Then open the app and ask, in English and in Portuguese: photos per year for three years, videos per year for two years, and how many items have no date. Each answer must equal `report`'s number. A difference is reported as an issue with the question, both numbers and the year. Cities are not part of this check (`report` has no place names). No test data is ever uploaded to Azure for this (S-054, D-056).
+The MVP is accepted when the web answers counting questions about the real library with the numbers `sepiabox-ingest report` gives for what was uploaded (S-054, D-053). The automated test does the same with a generated fixture library, Azurite and a test PostgreSQL (`tests/Sepiabox.Acceptance.Tests`); this check is on the real data in Azure, and no test data is ever uploaded there for it (D-056).
+
+1. **Process the drive** (see "Ingesting a drive"): `sepiabox-ingest process <drive> --out <work folder> --source-name "<name of the drive>"`, run again until it reports no problems you can fix.
+2. **Upload it** (see "Uploading the drive to Azure"): `sepiabox-ingest upload <work folder> --destination azure --account <storage account name>`, run again until it ends with `problems 0` (a file changed since it was processed is not uploaded until `process` runs again). Repeat steps 1 and 2 for every work folder you upload, and note their order.
+3. **Wait for the import** (see "Automatic import"). `report` counts every valid manifest of the work folders, but the catalog only holds what was uploaded and imported, so compare only when the import failed nothing: after the last upload, start `sepiabox-import-all` (it skips what is already imported and imports anything that failed) and wait until that execution, not an earlier one, is `Succeeded`; then the dead-letter count must be `0`:
+
+   ```bash
+   az containerapp job start --name sepiabox-import-all --resource-group rg-sepiabox
+   az containerapp job execution list --name sepiabox-import-all --resource-group rg-sepiabox --query "[0].{status:properties.status,start:properties.startTime}" -o table
+   az servicebus queue show --resource-group rg-sepiabox --namespace-name sepiabox-bus --name manifests --query countDetails.deadLetterMessageCount
+   ```
+
+4. **Count what was uploaded**: `sepiabox-ingest report <work folder>... --json <file outside the work folders>`, with every work folder you uploaded, in upload order. It prints unique photos and videos per year (rows `Year`, columns `Photos`, `Videos`, `Total`), an `Undated` row and a `Total` row, the same unit as the catalog: an exact duplicate counts once (`scan` counts files instead), and an asset in several folders counts once, with the date the cloud's merge gives it (the last folder's when both read it from the file's metadata, otherwise the stronger one, D-046). Exit code 1 means some manifests were not valid: they are listed and not counted, so fix them (`process` again, then upload) before comparing.
+5. **Ask the web** at https://app.sepiabox.com, on the timeline's question box, each question in Portuguese and in English (switch the language in the header). Pick for *Y* a year with both photos and videos in `report`.
+
+   | Question (pt-BR) | Question (English) | Compare with `report` |
+   |---|---|---|
+   | quantas fotos por ano? | how many photos per year? | each year's `Photos`; the "No date" ("Sem data") line with `Undated` `Photos` |
+   | quantos vídeos por ano? | how many videos per year? | each year's `Videos`; the "No date" ("Sem data") line with `Undated` `Videos` |
+   | quantos itens estão sem data? | how many items have no date? | `Undated` `Total` |
+   | quantas fotos são de *Y*? | how many photos are from *Y*? | *Y*'s `Photos`; the note "N items have no date" ("N itens não têm data") with `Undated` `Photos` |
+   | quantos itens temos ao todo? | how many items do we have in total? | `Total` `Total` |
+
+   The answers show the search they were understood as: if a chip shows something the question did not say (a place, a source), ask again with other words; that is a translation miss, not a wrong count, and is worth reporting too.
+6. **Compare** and fill in a table like this one for each language (a per-year answer has one line per year; copy the years where the numbers differ, or all of them for a small library):
+
+   | Question | Year or line | Web answer | `report` | Equal? |
+   |---|---|---|---|---|
+   | photos per year | 2015 | | | |
+   | photos per year | no date | | | |
+   | videos per year | 2015 | | | |
+   | videos per year | no date | | | |
+   | items with no date | | | | |
+   | photos from *Y* | *Y* | | | |
+   | photos from *Y* | no date | | | |
+   | total | | | | |
+
+Every answer must equal `report`'s number. Report a difference as an issue with the question, the language, the year and both numbers, and attach the `--json` file (it has counts only, no names or paths of your files). Cities are not part of this check: `report` has no place names (the automated test checks them against the generated library).
 
 ## Automatic import
 
@@ -268,6 +305,8 @@ The question box on the timeline (S-025, D-073; counting questions S-026, D-075,
 Each person may ask `Questions:DailyLimit` questions per day (200 unless set), counted in the library's time zone; after that the box says so and `POST /api/questions` answers 429. The table `question_usage` keeps, per person and day, the number of questions and the tokens Anthropic billed (input, output, cache reads and writes); a person is pseudonymous, the SHA-256 of their lower-cased e-mail address rather than the address. A question Anthropic never answered (busy, unreachable or refused before any token) does not count. The month's tokens, for comparison with the Anthropic Console: `SELECT sum(input_tokens), sum(output_tokens), sum(cache_read_input_tokens) FROM question_usage WHERE day >= date_trunc('month', now());` in the `catalog` database.
 
 **The live golden run** (required before S-025, S-026 and S-054 are done, D-054): with `SEPIABOX_ANTHROPIC_API_KEY` set (see the prerequisites) and Docker running, `dotnet test tests/Sepiabox.Web.Tests --filter "Category=LiveApi"` asks every question of `tests/Sepiabox.Web.Tests/TestData/questions.golden.json` in English and Portuguese and checks that each means its expected query on the file's fixture catalog; a miss is retried once and reported. It first asks the API for its models: a 401 or 403 fails the test with "missing or wrong", which leaves the story `blocked`. With `SEPIABOX_RECORD_GOLDEN=1` it also rewrites `questions.recorded.json`, the responses CI replays; commit that file with the run's result (pass count, retries, model, date) in the PR.
+
+**The live acceptance run** (S-054) is the same for the MVP's end-to-end test: `dotnet test tests/Sepiabox.Acceptance.Tests --filter "Category=LiveApi" --logger "console;verbosity=detailed"` also needs FFmpeg and ffprobe on the PATH. It builds the fixture library, processes, reports, uploads to Azurite and imports it, asks every question of `tests/Sepiabox.Acceptance.Tests/TestData/acceptance.questions.json` in both languages and compares each answer's numbers with `report` and the generator; with `SEPIABOX_RECORD_GOLDEN=1` it rewrites `acceptance.recorded.json`. The steps are in S-054's "Recording run".
 
 ## Sign-in configuration
 

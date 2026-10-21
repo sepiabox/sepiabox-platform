@@ -10,6 +10,7 @@
     <Project Path="src/Sepiabox.Worker/Sepiabox.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Sepiabox.Acceptance.Tests/Sepiabox.Acceptance.Tests.csproj" />
     <Project Path="tests/Sepiabox.AppHost.Tests/Sepiabox.AppHost.Tests.csproj" />
     <Project Path="tests/Sepiabox.Ingest.Tests/Sepiabox.Ingest.Tests.csproj" />
     <Project Path="tests/Sepiabox.Pipeline.Tests/Sepiabox.Pipeline.Tests.csproj" />

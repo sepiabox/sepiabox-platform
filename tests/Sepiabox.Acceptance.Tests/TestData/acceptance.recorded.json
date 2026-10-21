@@ -1,0 +1,42 @@
+{
+  "description": "Responses the acceptance test replays in CI (S-054). The live run (SEPIABOX_RECORD_GOLDEN=1) rewrites this file with the model's answers; until then every response is a placeholder, the expected query.",
+  "source": "expected",
+  "model": null,
+  "recordedAt": null,
+  "placeholders": [
+    "by-kind/en",
+    "by-kind/pt",
+    "items-by-city/en",
+    "items-by-city/pt",
+    "photos-1901/en",
+    "photos-1901/pt",
+    "photos-by-year/en",
+    "photos-by-year/pt",
+    "total/en",
+    "total/pt",
+    "undated/en",
+    "undated/pt",
+    "videos-by-year/en",
+    "videos-by-year/pt",
+    "videos-lisbon/en",
+    "videos-lisbon/pt"
+  ],
+  "responses": {
+    "by-kind/en": "{\"filters\":{},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"kind\"}}",
+    "by-kind/pt": "{\"filters\":{},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"kind\"}}",
+    "items-by-city/en": "{\"filters\":{},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"city\"}}",
+    "items-by-city/pt": "{\"filters\":{},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"city\"}}",
+    "photos-1901/en": "{\"filters\":{\"kinds\":[\"photo\"],\"years\":[1901]},\"aggregate\":{\"count\":\"assets\"}}",
+    "photos-1901/pt": "{\"filters\":{\"kinds\":[\"photo\"],\"years\":[1901]},\"aggregate\":{\"count\":\"assets\"}}",
+    "photos-by-year/en": "{\"filters\":{\"kinds\":[\"photo\"]},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"year\"}}",
+    "photos-by-year/pt": "{\"filters\":{\"kinds\":[\"photo\"]},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"year\"}}",
+    "total/en": "{\"filters\":{},\"aggregate\":{\"count\":\"assets\"}}",
+    "total/pt": "{\"filters\":{},\"aggregate\":{\"count\":\"assets\"}}",
+    "undated/en": "{\"filters\":{\"undatedOnly\":true},\"aggregate\":{\"count\":\"assets\"}}",
+    "undated/pt": "{\"filters\":{\"undatedOnly\":true},\"aggregate\":{\"count\":\"assets\"}}",
+    "videos-by-year/en": "{\"filters\":{\"kinds\":[\"video\"]},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"year\"}}",
+    "videos-by-year/pt": "{\"filters\":{\"kinds\":[\"video\"]},\"aggregate\":{\"count\":\"assets\",\"groupBy\":\"year\"}}",
+    "videos-lisbon/en": "{\"filters\":{\"kinds\":[\"video\"],\"places\":{\"cities\":[\"Lisbon\"]}},\"aggregate\":{\"count\":\"assets\"}}",
+    "videos-lisbon/pt": "{\"filters\":{\"kinds\":[\"video\"],\"places\":{\"cities\":[\"Lisbon\"]}},\"aggregate\":{\"count\":\"assets\"}}"
+  }
+}
