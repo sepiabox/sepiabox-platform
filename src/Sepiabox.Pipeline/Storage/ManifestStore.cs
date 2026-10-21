@@ -17,6 +17,9 @@ public enum ManifestWriteStatus
 /// <param name="Problem">Why the manifest was not written, when the status is <see cref="ManifestWriteStatus.Problem"/>.</param>
 public sealed record ManifestWriteResult(ManifestWriteStatus Status, long Bytes = 0, string? Problem = null);
 
+/// <summary>An erase of the faces in asset <paramref name="Id"/>'s stored manifest found at or before <paramref name="ErasedAt"/> (S-022, D-081).</summary>
+public sealed record FacesErasure(string Id, DateTimeOffset ErasedAt);
+
 /// <summary>
 /// The only way to write a manifest blob (D-036): reads what is stored, merges, and writes back only if
 /// nobody changed the blob in between. Every writer uses it, so two drives, two computers or the
@@ -37,7 +40,29 @@ public sealed class ManifestStore(IManifestValidator validator)
         }
 
         // Named here, from the validated id, so no caller can store a manifest under another asset's name.
-        var blob = manifests.GetBlobClient(BlobLayout.ManifestBlobName(incoming.Id));
+        return await WriteAsync(
+            manifests,
+            incoming.Id,
+            stored => stored is null ? ManifestMerge.Canonical(incoming) : ManifestMerge.Merge(stored, incoming),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Erases the faces of an asset's stored manifest (S-022, D-081) by merging the tombstone into it, with the same
+    /// read, merge and conditional write as any other writer, so an upload at the same moment is merged, not lost. A
+    /// manifest not in storage is left alone: there is nothing to erase.
+    /// </summary>
+    public Task<ManifestWriteResult> WriteMergedAsync(BlobContainerClient manifests, FacesErasure erasure, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(erasure);
+        return WriteAsync(manifests, erasure.Id, stored => stored is null ? null : ManifestMerge.EraseFaces(stored, erasure.ErasedAt), cancellationToken);
+    }
+
+    // merge gets the stored manifest (null when there is none) and returns what to store, or null to write nothing.
+    private async Task<ManifestWriteResult> WriteAsync(
+        BlobContainerClient manifests, string id, Func<Manifest?, Manifest?> merge, CancellationToken cancellationToken)
+    {
+        var blob = manifests.GetBlobClient(BlobLayout.ManifestBlobName(id));
 
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
@@ -59,22 +84,23 @@ public sealed class ManifestStore(IManifestValidator validator)
             {
             }
 
-            Manifest merged;
-            if (storedJson is null)
+            Manifest? stored = null;
+            if (storedJson is not null)
             {
-                merged = ManifestMerge.Canonical(incoming);
+                if (!validator.TryValidate(storedJson, out stored, out var error))
+                {
+                    return Problem($"the manifest in storage cannot be read: {error}");
+                }
+
+                if (stored.Id != id)
+                {
+                    return Problem($"the manifest in storage describes asset {stored.Id}, not {id}");
+                }
             }
-            else if (!validator.TryValidate(storedJson, out var stored, out var error))
+
+            if (merge(stored) is not { } merged)
             {
-                return Problem($"the manifest in storage cannot be read: {error}");
-            }
-            else if (stored.Id != incoming.Id)
-            {
-                return Problem($"the manifest in storage describes asset {stored.Id}, not {incoming.Id}");
-            }
-            else
-            {
-                merged = ManifestMerge.Merge(stored, incoming);
+                return new ManifestWriteResult(ManifestWriteStatus.Unchanged);
             }
 
             var json = ManifestJson.Serialize(merged);

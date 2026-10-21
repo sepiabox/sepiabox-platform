@@ -606,4 +606,85 @@
   <data name="Merge_ExplainCards" xml:space="preserve">
     <value>Os rostos da pessoa à esquerda passam para a da direita; a da esquerda deixa de existir.</value>
   </data>
+  <data name="Layout_Settings" xml:space="preserve">
+    <value>Configurações</value>
+  </data>
+  <data name="Settings_Heading" xml:space="preserve">
+    <value>Configurações</value>
+  </data>
+  <data name="Settings_Faces_Heading" xml:space="preserve">
+    <value>Reconhecimento facial</value>
+  </data>
+  <data name="Settings_Faces_IsOn" xml:space="preserve">
+    <value>O reconhecimento facial está ligado: os rostos das fotos processadas com --faces são agrupados em pessoas.</value>
+  </data>
+  <data name="Settings_Faces_OffHint" xml:space="preserve">
+    <value>Desligar apaga da biblioteca todos os rostos e todas as pessoas, com os nomes. As fotos ficam.</value>
+  </data>
+  <data name="Settings_Faces_Off" xml:space="preserve">
+    <value>Desligar e apagar os dados faciais</value>
+  </data>
+  <data name="Settings_Faces_OffExplain" xml:space="preserve">
+    <value>Desligar o reconhecimento facial? Todos os rostos e todas as pessoas, com os nomes e o “Sou eu”, são apagados agora, e isso não pode ser desfeito. As fotos e os vídeos ficam. Em até uma hora os rostos também são apagados dos manifestos guardados, e nenhum rosto é importado até o reconhecimento ser religado.</value>
+  </data>
+  <data name="Settings_Faces_OffConfirm" xml:space="preserve">
+    <value>Sim, desligar e apagar</value>
+  </data>
+  <data name="Settings_Cancel" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="Settings_Faces_IsOff" xml:space="preserve">
+    <value>O reconhecimento facial está desligado: nenhum rosto é importado.</value>
+  </data>
+  <data name="Settings_Faces_Pending" xml:space="preserve">
+    <value>Os rostos estão sendo apagados também dos manifestos guardados (em até uma hora). O reconhecimento pode ser religado quando isso terminar.</value>
+  </data>
+  <data name="Settings_Faces_Swept" xml:space="preserve">
+    <value>Os rostos também foram apagados dos manifestos guardados.</value>
+  </data>
+  <data name="Settings_Faces_On" xml:space="preserve">
+    <value>Ligar o reconhecimento facial</value>
+  </data>
+  <data name="Settings_Faces_WorkFolder" xml:space="preserve">
+    <value>Os rostos também ficam em cada computador que rodou process --faces, na pasta de trabalho. Enviá-la de novo não os traz de volta, mas para apagá-los também lá, apague a pasta de trabalho ou rode process numa pasta nova sem --faces.</value>
+  </data>
+  <data name="Settings_Faces_History" xml:space="preserve">
+    <value>Dados faciais apagados</value>
+  </data>
+  <data name="Settings_Faces_History_Library" xml:space="preserve">
+    <value>{0}, por {1}: reconhecimento desligado; rostos apagados: {2}, pessoas apagadas: {3}.</value>
+  </data>
+  <data name="Settings_Faces_History_Person" xml:space="preserve">
+    <value>{0}, por {1}: dados faciais de uma pessoa apagados; rostos: {2}.</value>
+  </data>
+  <data name="Settings_Done_Off" xml:space="preserve">
+    <value>O reconhecimento facial foi desligado e os dados faciais foram apagados.</value>
+  </data>
+  <data name="Settings_Done_On" xml:space="preserve">
+    <value>O reconhecimento facial foi ligado: os rostos encontrados a partir de agora são importados.</value>
+  </data>
+  <data name="Settings_Error_Pending" xml:space="preserve">
+    <value>Ainda não: os rostos ainda estão sendo apagados dos manifestos guardados.</value>
+  </data>
+  <data name="Settings_Error_NoEmail" xml:space="preserve">
+    <value>Seu login não tem endereço de e-mail, então nada foi alterado.</value>
+  </data>
+  <data name="Person_Delete" xml:space="preserve">
+    <value>Apagar dados faciais</value>
+  </data>
+  <data name="Delete_Title" xml:space="preserve">
+    <value>Apagar dados faciais</value>
+  </data>
+  <data name="Delete_Explain" xml:space="preserve">
+    <value>Esta pessoa, o nome e todos os rostos dela são apagados, e isso não pode ser desfeito. As fotos ficam, e os rostos dela não voltam quando as fotos forem importadas de novo. Para apagar todos os rostos também dos manifestos guardados, desligue o reconhecimento facial em Configurações.</value>
+  </data>
+  <data name="Delete_Confirm" xml:space="preserve">
+    <value>Apagar</value>
+  </data>
+  <data name="People_Done_Deleted" xml:space="preserve">
+    <value>Os dados faciais da pessoa foram apagados. As fotos ficam.</value>
+  </data>
+  <data name="People_FacesOff" xml:space="preserve">
+    <value>O reconhecimento facial está desligado, então não há pessoas.</value>
+  </data>
 </root>

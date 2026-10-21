@@ -39,6 +39,17 @@ public sealed class ManifestFacesTests : IDisposable
     }
 
     [Fact]
+    public void Writes_when_the_faces_were_found_to_the_second_in_utc()
+    {
+        var clock = new StoppedClock(new DateTimeOffset(2026, 10, 21, 11, 30, 15, 678, TimeSpan.FromHours(1)));
+
+        var outcome = ManifestFaces.TryAdd(WithDerivativeFiles(Photo()), _work.Path, new FakeFaceDetector { Faces = [] }, clock);
+
+        Assert.Equal(new DateTimeOffset(2026, 10, 21, 10, 30, 15, TimeSpan.Zero), outcome.Manifest!.FacesDetectedAt);
+        Assert.Equal(TimeSpan.Zero, outcome.Manifest.FacesDetectedAt!.Value.Offset);
+    }
+
+    [Fact]
     public void Adds_the_faces_of_a_video_from_its_poster()
     {
         var video = Photo() with
@@ -205,4 +216,9 @@ public sealed class ManifestFacesTests : IDisposable
 
         return manifest;
     }
+}
+
+internal sealed class StoppedClock(DateTimeOffset now) : TimeProvider
+{
+    public override DateTimeOffset GetUtcNow() => now.ToUniversalTime();
 }

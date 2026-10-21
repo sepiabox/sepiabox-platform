@@ -63,14 +63,20 @@ public sealed class ManifestValidatorTests
     }
 
     [Fact]
-    public void Enforces_date_time_only_on_source_times_and_a_local_time_pattern_on_capture_time()
+    public void Enforces_date_time_only_on_source_and_face_times_and_a_local_time_pattern_on_capture_time()
     {
         // Format validation is required (RequireFormatValidation), so every "format" is a hard rule.
         // capturedAt deliberately has no "format": date-time would demand an offset the camera never wrote.
         using var stream = typeof(ManifestValidator).Assembly.GetManifestResourceStream("manifest.v1.json")!;
         var schema = JsonNode.Parse(stream)!;
 
-        Assert.Equal(["/properties/sources/items/properties/modifiedAt: date-time"], Formats(schema, ""));
+        Assert.Equal(
+            [
+                "/properties/facesDetectedAt: date-time",
+                "/properties/facesErasedAt: date-time",
+                "/properties/sources/items/properties/modifiedAt: date-time",
+            ],
+            Formats(schema, "").Order(StringComparer.Ordinal));
         var capturedAt = schema["properties"]!["capturedAt"]!;
         Assert.Equal(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", (string?)capturedAt["pattern"]);
         Assert.Null(capturedAt["format"]);

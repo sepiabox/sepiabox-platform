@@ -68,6 +68,8 @@ else
                 <p class="hint muted">@Text["Person_Merge_Hint"]</p>
             </form>
         }
+        @* Only opens the confirmation, which deletes on its own POST (S-022). *@
+        <p class="delete-face-data"><a href="people/@_person.Id/delete">@Text["Person_Delete"]</a></p>
     </section>
 
     <h2>@Text["Person_Faces_Heading"]</h2>

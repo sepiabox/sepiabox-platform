@@ -289,3 +289,45 @@ internal sealed class FakeQuestionQuota : IQuestionQuota
         }
     }
 }
+
+internal sealed class FakeFaceSettings : IFaceSettings
+{
+    public Sepiabox.Catalog.People.FaceRecognitionState State { get; set; } = Sepiabox.Catalog.People.FaceRecognitionState.Default;
+
+    public List<Sepiabox.Catalog.FaceDataDeletion> History { get; } = [];
+
+    public bool PersonFound { get; set; } = true;
+
+    /// <summary>Refuses to turn on whatever the state says, as the catalog does when an erase began meanwhile.</summary>
+    public bool RefuseOn { get; set; }
+
+    public List<string> Calls { get; } = [];
+
+    public Task<FaceSettingsView> GetAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(new FaceSettingsView(State, History));
+
+    public Task TurnOffAsync(string email, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"off {email}");
+        State = new(false, DateTimeOffset.UnixEpoch, null);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> TurnOnAsync(CancellationToken cancellationToken = default)
+    {
+        Calls.Add("on");
+        if (RefuseOn || State.ManifestsPending)
+        {
+            return Task.FromResult(false);
+        }
+
+        State = State with { On = true };
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> DeletePersonAsync(long personId, string email, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"delete {personId} {email}");
+        return Task.FromResult(PersonFound);
+    }
+}

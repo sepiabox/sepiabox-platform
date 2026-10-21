@@ -70,6 +70,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>The people editor; unset, the catalog's.</summary>
     public IPeopleEditor? PeopleEditor { get; init; }
 
+    /// <summary>The face recognition switch; unset, the catalog's (or an in-memory one with a fake library).</summary>
+    public IFaceSettings? FaceSettings { get; init; }
+
     /// <summary>Answers the Google handler's server-to-server calls (token and user info) instead of Google.</summary>
     public HttpMessageHandler? GoogleBackchannel { get; init; }
 
@@ -134,6 +137,15 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             if (PeopleEditor is not null)
             {
                 services.AddSingleton(PeopleEditor);
+            }
+
+            if (FaceSettings is not null)
+            {
+                services.AddSingleton(FaceSettings);
+            }
+            else if (_library is not null)
+            {
+                services.AddSingleton<IFaceSettings>(new FakeFaceSettings());
             }
 
             if (QuestionQuota is not null)

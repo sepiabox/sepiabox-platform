@@ -1,5 +1,6 @@
 // Access Aspire's role helpers cannot scope (S-058, D-062): the web's write access to the data protection
-// container only, its use of the data protection key only, and the uploaders' write access to storage.
+// container only, its use of the data protection key only, the faces job's write access to the manifests container
+// only (S-022), and the uploaders' write access to storage.
 // The account-wide roles (the web's and the worker's Storage Blob Data Reader, the web's Key Vault Secrets
 // User) come from the AppHost's WithRoleAssignments.
 
@@ -12,6 +13,9 @@ param vaultName string
 
 @description('The web\'s managed identity.')
 param webPrincipalId string
+
+@description('The faces job\'s managed identity, which erases faces from the stored manifests (S-022).')
+param facesPrincipalId string
 
 @description('Comma-separated Entra object ids of the people who run `sepiabox-ingest upload --destination azure`. User object ids only (`az ad signed-in-user show --query id -o tsv`), not groups or service principals.')
 param uploaderPrincipalIds string = ''
@@ -32,6 +36,11 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2024-01-01'
 resource keyRingContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
   parent: blobService
   name: 'dataprotection'
+}
+
+resource manifestsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
+  parent: blobService
+  name: 'manifests'
 }
 
 resource vault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
@@ -70,6 +79,18 @@ resource webKeyUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     principalId: webPrincipalId
     // Key Vault Crypto User
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12338af0-0e69-4776-bea7-57ae8d297424')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Reads and rewrites manifests through ManifestStore, and nothing else in storage (S-022, D-081).
+resource facesManifestsWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(manifestsContainer.id, facesPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: manifestsContainer
+  properties: {
+    principalId: facesPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
     principalType: 'ServicePrincipal'
   }
 }

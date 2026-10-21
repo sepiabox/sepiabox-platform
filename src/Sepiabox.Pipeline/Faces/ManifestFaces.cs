@@ -19,7 +19,11 @@ public static class ManifestFaces
     /// </summary>
     public const int CurrentVersion = 1;
 
-    public static EmbeddingOutcome TryAdd(Manifest manifest, string workFolder, IFaceDetector detector)
+    /// <summary>
+    /// Looks for the faces of <paramref name="manifest"/> in its derivative under <paramref name="workFolder"/>; the time
+    /// they were found, from <paramref name="clock"/> (the system clock by default), is written to <c>facesDetectedAt</c> (D-081).
+    /// </summary>
+    public static EmbeddingOutcome TryAdd(Manifest manifest, string workFolder, IFaceDetector detector, TimeProvider? clock = null)
     {
         // Faces from an older face pipeline are looked for again and replaced, so a work folder catches up with a model
         // or preprocessing change without reading the drive; a newer version, from a newer build, is left alone.
@@ -46,13 +50,23 @@ public static class ManifestFaces
             // A vector that is not finite or has no length cannot be compared, so that face is left out (as D-043).
             var faces = detector.Detect(path).Where(HasDirection).Select(ToManifest).ToList();
             return new EmbeddingOutcome(
-                EmbeddingStatus.Added, manifest with { FacesProcessed = true, Faces = faces, FacesVersion = CurrentVersion });
+                EmbeddingStatus.Added, manifest with
+                {
+                    FacesProcessed = true,
+                    Faces = faces,
+                    FacesVersion = CurrentVersion,
+                    // To the second, UTC: what a merge compares with an erase (D-081), and readable in the file.
+                    FacesDetectedAt = Seconds((clock ?? TimeProvider.System).GetUtcNow()),
+                });
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
         {
             return Failed(manifest, "Could not detect faces", ex);
         }
     }
+
+    private static DateTimeOffset Seconds(DateTimeOffset time) =>
+        new(time.UtcTicks - (time.UtcTicks % TimeSpan.TicksPerSecond), TimeSpan.Zero);
 
     public static ManifestFace ToManifest(DetectedFace face)
     {

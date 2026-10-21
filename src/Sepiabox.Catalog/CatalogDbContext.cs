@@ -26,6 +26,12 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<Face> Faces => Set<Face>();
 
+    public DbSet<Setting> Settings => Set<Setting>();
+
+    public DbSet<ErasedFace> ErasedFaces => Set<ErasedFace>();
+
+    public DbSet<FaceDataDeletion> FaceDataDeletions => Set<FaceDataDeletion>();
+
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options
@@ -149,6 +155,31 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             face.HasOne<Asset>().WithMany().HasForeignKey(f => f.AssetId).OnDelete(DeleteBehavior.Cascade);
             face.HasIndex(f => f.AssetId);
             face.HasIndex(f => f.PersonId);
+        });
+
+        modelBuilder.Entity<Setting>(setting =>
+        {
+            setting.ToTable("settings");
+            setting.HasKey(x => x.Key);
+            setting.Property(x => x.Key).HasMaxLength(64);
+            setting.Property(x => x.Value).HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<ErasedFace>(erased =>
+        {
+            erased.ToTable("erased_faces");
+            erased.Property(f => f.AssetId).HasMaxLength(64);
+            erased.Property(f => f.Box).HasColumnType("double precision[]");
+            erased.HasOne<Asset>().WithMany().HasForeignKey(f => f.AssetId).OnDelete(DeleteBehavior.Cascade);
+            erased.HasIndex(f => f.AssetId);
+        });
+
+        modelBuilder.Entity<FaceDataDeletion>(deletion =>
+        {
+            deletion.ToTable("face_data_deletions");
+            deletion.Property(d => d.DeletedBy).HasMaxLength(320);
+            deletion.Property(d => d.Scope).HasMaxLength(16);
+            deletion.ToTable(t => t.HasCheckConstraint("ck_face_data_deletions_scope", "scope IN ('library', 'person')"));
         });
 
         modelBuilder.Entity<QuestionUsage>(usage =>

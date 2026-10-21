@@ -18,13 +18,17 @@ Faces are biometric data (LGPD/GDPR). The family must be able to turn it off and
 - Per-user encryption.
 
 ### Acceptance criteria
-- [ ] Given recognition turned off, then `faces` and `people` are empty.
-- [ ] Given recognition turned off, when I import a manifest with faces, then no face is stored.
-- [ ] Given "Delete face data" on a person, then their faces disappear and the photos remain.
+- [x] Given recognition turned off, then `faces` and `people` are empty. *(`FaceRecognitionTests`: faces, people and face versions gone, the photos kept, the deletion recorded with who; over HTTP from `/settings` in `FaceSettingsCatalogTests`.)*
+- [x] Given recognition turned off, when I import a manifest with faces, then no face is stored. *(`FaceRecognitionTests`; once it is back on, only faces found after the erase are stored. The stored manifests: `FacesErasureMergeTests`, `ManifestStoreTests` and the sweep in `FaceRecognitionTests`.)*
+- [x] Given "Delete face data" on a person, then their faces disappear and the photos remain. *(`FaceRecognitionTests`, including a re-import that does not bring them back; the confirmation in `FaceSettingsPageTests` and `FaceSettingsPostTests`.)*
 
 ### Technical notes
 - Table `settings` (key/value). The worker's face opt-in for files that arrive in the cloud (S-036) reads this setting; it is off by default (D-047).
 - `ManifestMerge` today keeps faces from the side with `facesProcessed: true` (D-047), so "off" cannot be expressed by an ordinary manifest: the tombstone or erase writer above amends that rule.
+- Decisions: D-036, D-047, D-077, D-081.
+
+### Status
+- `done` (2026-10-21): implemented and tested (D-081). The `sepiabox-faces` job is new infrastructure: the next deploy creates it, and the owner's check is in `docs/operations.md`.
 
 ### Expected tests
 - Integration (PostgreSQL): deletion and import with recognition off.

@@ -31,6 +31,8 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
             {
                 // The Container Apps environment's identity pulls the images.
                 "aca_mi.properties.principalId: AcrPull on registries registry",
+                // The faces job rewrites manifests, and nothing else in storage (S-022).
+                "faces-identity: Storage Blob Data Contributor on containers manifests",
                 // The uploaders, one assignment per id in uploaderPrincipalIds.
                 "id: Storage Blob Data Contributor on storageAccounts storage",
                 // The import jobs read blobs and the queue; KEDA reads its length with the Manage claim (D-063).
@@ -76,7 +78,7 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
     public void Owner_secrets_reach_only_the_web_and_only_from_key_vault_when_published()
     {
         var webEnvironment = Environment("web");
-        var jobKeys = new[] { "migrate", "import", "import-all", "geonames" }.SelectMany(job => Environment(job).Keys).ToList();
+        var jobKeys = new[] { "migrate", "import", "import-all", "geonames", "faces" }.SelectMany(job => Environment(job).Keys).ToList();
 
         // Key Vault is the web's configuration source: Auth--Google--ClientId is Auth:Google:ClientId (D-051).
         Assert.Equal("{vault.connectionString}", webEnvironment["ConnectionStrings__vault"]);

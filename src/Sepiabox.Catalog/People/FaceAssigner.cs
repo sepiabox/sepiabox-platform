@@ -71,6 +71,14 @@ public sealed class FaceAssigner(CatalogDbContext db, FaceAssignerOptions? optio
             return false;
         }
 
+        // Faces whose data the family deleted (S-022) are still in the manifest: the same box means the same face, so
+        // it is left out rather than found again.
+        var erased = await db.ErasedFaces.AsNoTracking().Where(f => f.AssetId == assetId).Select(f => f.Box).ToListAsync(cancellationToken);
+        if (erased.Count > 0)
+        {
+            incoming = [.. incoming.Where(face => !erased.Any(box => FaceMath.IoU(face.Box, box) >= SameBoxIoU))];
+        }
+
         var stored = await db.Faces.Where(f => f.AssetId == assetId).ToListAsync(cancellationToken);
         var touched = new List<Person>();
         foreach (var id in stored.Where(f => f.PersonId is not null).Select(f => f.PersonId!.Value).Distinct())

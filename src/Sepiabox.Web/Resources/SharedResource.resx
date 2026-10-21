@@ -653,4 +653,85 @@
   <data name="Merge_ExplainCards" xml:space="preserve">
     <value>The faces of the person on the left move to the one on the right; the one on the left no longer exists.</value>
   </data>
+  <data name="Layout_Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Settings_Heading" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Settings_Faces_Heading" xml:space="preserve">
+    <value>Face recognition</value>
+  </data>
+  <data name="Settings_Faces_IsOn" xml:space="preserve">
+    <value>Face recognition is on: the faces in photos processed with --faces are grouped into people.</value>
+  </data>
+  <data name="Settings_Faces_OffHint" xml:space="preserve">
+    <value>Turning it off deletes every face and every person, with their names, from the library. The photos stay.</value>
+  </data>
+  <data name="Settings_Faces_Off" xml:space="preserve">
+    <value>Turn off and delete face data</value>
+  </data>
+  <data name="Settings_Faces_OffExplain" xml:space="preserve">
+    <value>Turn face recognition off? Every face and every person, with their names and “This is me”, is deleted now, and this cannot be undone. The photos and videos stay. Within the hour the faces are erased from the stored manifests too, and no face is imported until recognition is turned back on.</value>
+  </data>
+  <data name="Settings_Faces_OffConfirm" xml:space="preserve">
+    <value>Yes, turn off and delete</value>
+  </data>
+  <data name="Settings_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Settings_Faces_IsOff" xml:space="preserve">
+    <value>Face recognition is off: no face is imported.</value>
+  </data>
+  <data name="Settings_Faces_Pending" xml:space="preserve">
+    <value>The faces are being erased from the stored manifests too (within the hour). Recognition can be turned back on once that is done.</value>
+  </data>
+  <data name="Settings_Faces_Swept" xml:space="preserve">
+    <value>The faces were erased from the stored manifests too.</value>
+  </data>
+  <data name="Settings_Faces_On" xml:space="preserve">
+    <value>Turn face recognition on</value>
+  </data>
+  <data name="Settings_Faces_WorkFolder" xml:space="preserve">
+    <value>Faces are also kept on each computer that ran process --faces, in its work folder. Uploading it again does not bring them back, but to delete them there too, delete the work folder, or run process into a new one without --faces.</value>
+  </data>
+  <data name="Settings_Faces_History" xml:space="preserve">
+    <value>Face data deleted</value>
+  </data>
+  <data name="Settings_Faces_History_Library" xml:space="preserve">
+    <value>{0}, by {1}: recognition turned off; faces deleted: {2}, people deleted: {3}.</value>
+  </data>
+  <data name="Settings_Faces_History_Person" xml:space="preserve">
+    <value>{0}, by {1}: one person's face data deleted; faces: {2}.</value>
+  </data>
+  <data name="Settings_Done_Off" xml:space="preserve">
+    <value>Face recognition is off and the face data was deleted.</value>
+  </data>
+  <data name="Settings_Done_On" xml:space="preserve">
+    <value>Face recognition is on: faces found from now on are imported.</value>
+  </data>
+  <data name="Settings_Error_Pending" xml:space="preserve">
+    <value>Not yet: the faces are still being erased from the stored manifests.</value>
+  </data>
+  <data name="Settings_Error_NoEmail" xml:space="preserve">
+    <value>Your sign-in has no e-mail address, so nothing was changed.</value>
+  </data>
+  <data name="Person_Delete" xml:space="preserve">
+    <value>Delete face data</value>
+  </data>
+  <data name="Delete_Title" xml:space="preserve">
+    <value>Delete face data</value>
+  </data>
+  <data name="Delete_Explain" xml:space="preserve">
+    <value>This person, their name and all their faces are deleted, and this cannot be undone. The photos stay, and their faces are not found again when the photos are imported again. To erase every face from the stored manifests too, turn face recognition off in Settings.</value>
+  </data>
+  <data name="Delete_Confirm" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="People_Done_Deleted" xml:space="preserve">
+    <value>The person's face data was deleted. The photos stay.</value>
+  </data>
+  <data name="People_FacesOff" xml:space="preserve">
+    <value>Face recognition is off, so there are no people.</value>
+  </data>
 </root>

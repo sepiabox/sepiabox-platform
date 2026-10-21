@@ -11,6 +11,7 @@ public enum WorkerAction
     GeoNamesDownload,
     GeoNamesUpdate,
     PlacesRefresh,
+    FacesSweep,
 }
 
 /// <summary>The three GeoNames dump files that <c>geonames load</c> reads (S-012).</summary>
@@ -43,6 +44,9 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                                      run places refresh. What the sepiabox-geonames job runs (S-059).
           places refresh [--all]     Name the place of assets that have a location but no place yet;
                                      --all names every asset with a location again (after a newer dump).
+          faces sweep                After face recognition was turned off, erase the faces found before
+                                     that from every manifest written since the last sweep (S-022); does
+                                     nothing while it was never turned off. What the sepiabox-faces job runs.
         """;
 
     public static bool TryParse(string[] args, [NotNullWhen(true)] out WorkerCommand? command, out string error)
@@ -80,6 +84,9 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                 return true;
             case ["places", "refresh", "--all"]:
                 command = new WorkerCommand(WorkerAction.PlacesRefresh, false, AllPlaces: true);
+                return true;
+            case ["faces", "sweep"]:
+                command = new WorkerCommand(WorkerAction.FacesSweep, false);
                 return true;
             case [_, ..]:
                 error = $"Unknown command or option in '{string.Join(' ', args)}'.";

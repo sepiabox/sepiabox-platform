@@ -200,6 +200,8 @@ migrated=true
 azd deploy import --no-prompt
 azd deploy import-all --no-prompt
 imports_deployed=true
+# Scheduled (S-022): after migrate, so it never runs an image older than the schema.
+azd deploy faces --no-prompt
 # Manual (S-059): started by hand only, but never with an image older than the schema. After the import
 # jobs, so that if this deploy fails the queue still receives again with the new import image.
 azd deploy geonames --no-prompt

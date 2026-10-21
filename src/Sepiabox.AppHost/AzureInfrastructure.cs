@@ -55,6 +55,20 @@ public static class AzureInfrastructure
     /// <summary>The AppHost resource behind <see cref="GeoNamesJobName"/>.</summary>
     public const string GeoNamesResourceName = "geonames";
 
+    /// <summary>
+    /// The scheduled job that sweeps a face recognition erase into the stored manifests (S-022, D-081): <c>faces sweep</c>.
+    /// </summary>
+    public const string FacesJobName = "sepiabox-faces";
+
+    /// <summary>The AppHost resource behind <see cref="FacesJobName"/>.</summary>
+    public const string FacesResourceName = "faces";
+
+    /// <summary>
+    /// When <see cref="FacesJobName"/> runs: hourly. While face recognition was never turned off a run is one query; after
+    /// an erase, the settings page says the stored manifests are cleaned "within the hour".
+    /// </summary>
+    public const string FacesSchedule = "17 * * * *";
+
     /// <summary>The Service Bus namespace; the shutdown runbook disables its queue (S-030).</summary>
     public const string ServiceBusName = "sepiabox-bus";
 
@@ -156,6 +170,9 @@ public static class AzureInfrastructure
     // Downloading about 10 MB, loading about 200,000 cities and naming the assets without a place take
     // minutes; half an hour bounds a stuck run.
     private const int GeoNamesTimeoutSeconds = 1800;
+
+    // Every manifest of a family library read and, the first time after an erase, written once: well within half an hour.
+    private const int FacesTimeoutSeconds = 1800;
 
     // PostgreSQL 17 needs an API version newer than the 2024-08-01 the provisioning library defaults to.
     private const string PostgresApiVersion = "2025-08-01";
@@ -439,6 +456,32 @@ public static class AzureInfrastructure
         var container = job.Template.Containers.Single().Value
             ?? throw new InvalidOperationException("The GeoNames job has no container.");
         container.Resources = new AppContainerResources { Cpu = 1.0, Memory = "2Gi" };
+    }
+
+    /// <summary>
+    /// <c>faces sweep</c> (S-022, D-081) every hour. A run that fails (the database stopped by the shutdown runbook, a
+    /// manifest it cannot read) is not repeated: the next hour's run tries again from where the last good one ended.
+    /// </summary>
+    public static void ConfigureFacesJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        job.Name = FacesJobName;
+        job.Location = Region;
+
+        var configuration = job.Configuration;
+        configuration.TriggerType = ContainerAppJobTriggerType.Schedule;
+        configuration.ScheduleTriggerConfig = new JobConfigurationScheduleTriggerConfig
+        {
+            CronExpression = FacesSchedule,
+            Parallelism = 1,
+            ReplicaCompletionCount = 1,
+        };
+        configuration.ReplicaTimeout = FacesTimeoutSeconds;
+        configuration.ReplicaRetryLimit = 0;
+        // Reading and merging small JSON blobs one at a time.
+        var container = job.Template.Containers.Single().Value
+            ?? throw new InvalidOperationException("The faces job has no container.");
+        container.Resources = new AppContainerResources { Cpu = 0.5, Memory = "1Gi" };
     }
 
     public static void ConfigureMigrateJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)

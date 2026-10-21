@@ -228,6 +228,13 @@ public sealed class ManifestImporter(
         if (transaction is not null)
         {
             await FaceAssigner.LockAsync(db, cancellationToken);
+            // Read under the lock, so turning recognition off (which takes it too) either happened before or waits
+            // (S-022, D-081): while it is off, and for faces found before the last erase, the manifest's faces are
+            // ignored as if it had not looked for them.
+            if (!(await FaceRecognition.ReadAsync(db, cancellationToken)).Accepts(manifest.FacesDetectedAt))
+            {
+                faces = null;
+            }
         }
 
         var now = clock.GetUtcNow();
