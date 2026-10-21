@@ -145,7 +145,7 @@ public sealed class ParallelProcessTests
 
         public VideoProbe Probe(string path, CancellationToken cancellationToken = default) => new(640, 480, 1.0);
 
-        public IReadOnlyList<ManifestDerivative> Generate(
+        public VideoDerivatives Generate(
             string sourcePath, string workFolder, string relativeFolder, VideoProbe probe, CancellationToken cancellationToken = default)
         {
             if (Interlocked.Increment(ref _transcodes) == 1)
@@ -153,7 +153,7 @@ public sealed class ParallelProcessTests
                 gate.Wait(TimeSpan.FromSeconds(60), cancellationToken);
             }
 
-            return [];
+            return new([]);
         }
     }
 }

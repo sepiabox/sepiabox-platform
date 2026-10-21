@@ -32,6 +32,26 @@ public class VideoProcessorTests
     }
 
     [Fact]
+    public void Builds_a_proxy_command_without_sound_when_asked()
+    {
+        var arguments = FfmpegArguments.Proxy("clip.mod", 640, 480, VideoEncoder.Software, 0, "out.mp4", withAudio: false);
+
+        AssertSequence(arguments, "-map", "0:v:0", "-an");
+        Assert.DoesNotContain("0:a:0?", arguments);
+        Assert.DoesNotContain("-c:a", arguments);
+        Assert.Equal("out.mp4", arguments[^1]);
+    }
+
+    [Fact]
+    public void Keeps_the_first_sound_stream_in_the_proxy_by_default()
+    {
+        var arguments = FfmpegArguments.Proxy("clip.mod", 640, 480, VideoEncoder.Software, 0, "out.mp4");
+
+        AssertSequence(arguments, "-map", "0:v:0", "-map", "0:a:0?");
+        Assert.DoesNotContain("-an", arguments);
+    }
+
+    [Fact]
     public void Uses_h264_nvenc_when_asked()
     {
         var arguments = FfmpegArguments.Proxy("in.mov", 1280, 720, VideoEncoder.Nvenc, 0, "out.mp4");

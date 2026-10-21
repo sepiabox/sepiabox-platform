@@ -31,6 +31,7 @@ public class VideoProcessingTests
         var result = Process(drive, work);
 
         Assert.Empty(result.Problems);
+        Assert.Empty(result.WithoutSound);
         var manifest = Assert.Single(ReadManifests(work));
         Assert.Equal((1920, 1080), (manifest.Width, manifest.Height));
         Assert.InRange(manifest.DurationSeconds!.Value, 2.9, 3.2);
@@ -339,6 +340,78 @@ public class VideoProcessingTests
     }
 
     [Fact]
+    public void Makes_a_silent_720p_version_of_a_camcorder_file_whose_sound_stream_holds_nothing_decodable()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        MakeCamcorderFileWithEmptySound(Path.Combine(drive.Path, "MOV001.MOD"));
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        var manifest = Assert.Single(ReadManifests(work));
+        Assert.Equal(["poster", "thumb-256", "proxy-720p"], manifest.Derivatives.Select(d => d.Name));
+        var proxy = Path.Combine(work.Path, Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p").Path);
+        Assert.Equal(["video"], StreamTypes(proxy));
+        // Shown in the run's output, since the fallback also follows failures that are not about sound.
+        var silent = Assert.Single(result.WithoutSound);
+        Assert.Equal(Path.Combine(drive.Path, "MOV001.MOD"), silent.Path);
+        Assert.Contains("received no packets", silent.Reason, StringComparison.Ordinal);
+    }
+
+    [UnixFact]
+    public void Lists_a_video_made_without_sound_after_a_failure_that_was_not_about_sound()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        MakeVideo(Path.Combine(drive.Path, "party.mp4"), 640, 360, seconds: 1);
+        // A one-off encoder error on the transcode with sound: the fallback must not drop good sound unseen.
+        TestTools.FakeTool(tools, "ffprobe", $"exec '{s_tools.Ffprobe}' \"$@\"");
+        TestTools.FakeTool(tools, "ffmpeg", $$"""
+            case "$*" in
+              *0:a:0?*) echo '[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)' >&2; exit 1;;
+            esac
+            exec '{{s_tools.Ffmpeg}}' "$@"
+            """);
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Empty(result.Problems);
+        var silent = Assert.Single(result.WithoutSound);
+        Assert.Equal(Path.Combine(drive.Path, "party.mp4"), silent.Path);
+        Assert.Equal("ffmpeg failed: [h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)", silent.Reason);
+    }
+
+    [UnixFact]
+    public void Redoes_only_the_videos_that_failed_when_the_same_process_command_runs_again()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        MakeVideo(Path.Combine(drive.Path, "fine.mp4"), 640, 360, seconds: 1);
+        MakeCamcorderFileWithEmptySound(Path.Combine(drive.Path, "MOV001.MOD"));
+        // The real tools, except that every 720p version of the camcorder file fails as it did before D-084.
+        TestTools.FakeTool(tools, "ffprobe", $"exec '{s_tools.Ffprobe}' \"$@\"");
+        TestTools.FakeTool(tools, "ffmpeg", $$"""
+            case "$*" in
+              *MOV001.MOD*libx264*) echo '[out#0/mp4 @ 0x1] Nothing was written into output file, because at least one of its streams received no packets.' >&2; exit 69;;
+            esac
+            exec '{{s_tools.Ffmpeg}}' "$@"
+            """);
+        var first = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+        Assert.Contains("received no packets", Assert.Single(first.Problems).Reason, StringComparison.Ordinal);
+
+        // After updating, the owner runs the same command on the same work folder.
+        var second = Process(drive, work);
+
+        Assert.Empty(second.Problems);
+        Assert.Equal((1, 1), (second.Processed, second.Skipped));
+        Assert.Equal([Path.Combine(drive.Path, "MOV001.MOD")], second.WithoutSound.Select(v => v.Path));
+        Assert.All(ReadManifests(work), manifest => Assert.Contains(manifest.Derivatives, d => d.Name == "proxy-720p"));
+    }
+
+    [Fact]
     public void Ignores_a_file_with_a_video_extension_but_no_video_stream()
     {
         using var drive = new TempFolder();
@@ -573,6 +646,48 @@ public class VideoProcessingTests
             path,
         ]);
     }
+
+    // As the owner's SD camcorder files (D-084): MPEG-2 video and a declared AC-3 stream that FFmpeg cannot decode, so
+    // the file plays without sound. Made by blanking every AC-3 frame in the program stream's private stream 1 packets.
+    private static void MakeCamcorderFileWithEmptySound(string path)
+    {
+        Run(s_tools.Ffmpeg,
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc=duration=1:size=176x144:rate=25",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+            "-c:v", "mpeg2video", "-c:a", "ac3", "-b:a", "64k", "-f", "vob", path,
+        ]);
+        var bytes = File.ReadAllBytes(path);
+        var blanked = 0;
+        for (var i = 0; i + 9 < bytes.Length; i++)
+        {
+            if (bytes[i] != 0 || bytes[i + 1] != 0 || bytes[i + 2] != 1 || bytes[i + 3] != 0xBD)
+            {
+                continue;
+            }
+
+            // After the PES header: the substream id, the frame count and the first access unit pointer, then AC-3.
+            var end = Math.Min(bytes.Length, i + 6 + ((bytes[i + 4] << 8) | bytes[i + 5]));
+            var start = i + 9 + bytes[i + 8] + 4;
+            if (start >= end)
+            {
+                continue;
+            }
+
+            Array.Clear(bytes, start, end - start);
+            blanked++;
+            i = end - 1;
+        }
+
+        Assert.True(blanked > 0, "The generated file has no AC-3 packets to blank.");
+        File.WriteAllBytes(path, bytes);
+        Assert.Equal(["video", "audio"], StreamTypes(path));
+    }
+
+    private static List<string> StreamTypes(string path) =>
+        [.. Run(s_tools.Ffprobe, ["-v", "error", "-show_entries", "stream=codec_type", "-of", "default=noprint_wrappers=1:nokey=1", path]).Output
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
 
     // Sound only, in MP4 rather than MPEG, so it can be left out (MPEG with no picture is reported as damaged).
     private static void MakeSoundOnly(string path) =>

@@ -94,12 +94,18 @@ public sealed record FfmpegTools(string Ffmpeg, string Ffprobe)
     }
 }
 
+/// <summary>
+/// A video's derivatives. <see cref="WithoutSoundBecause"/> is set when its 720p version was made without sound after
+/// the transcode with sound failed (D-084): FFmpeg's message for that failure, so the run can show it.
+/// </summary>
+public sealed record VideoDerivatives(IReadOnlyList<ManifestDerivative> Derivatives, string? WithoutSoundBecause = null);
+
 /// <summary>What <c>process</c> needs from a video processor; tests stand in for FFmpeg with it.</summary>
 public interface IVideoProcessor
 {
     VideoProbe Probe(string path, CancellationToken cancellationToken = default);
 
-    IReadOnlyList<ManifestDerivative> Generate(
+    VideoDerivatives Generate(
         string sourcePath, string workFolder, string relativeFolder, VideoProbe probe, CancellationToken cancellationToken = default);
 }
 
@@ -183,7 +189,7 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
     }
 
     /// <summary>Writes the poster, thumbnail and 720p version into <paramref name="workFolder"/>/<paramref name="relativeFolder"/>.</summary>
-    public IReadOnlyList<ManifestDerivative> Generate(
+    public VideoDerivatives Generate(
         string sourcePath, string workFolder, string relativeFolder, VideoProbe probe, CancellationToken cancellationToken = default)
     {
         var folder = Path.Combine(workFolder, relativeFolder);
@@ -238,10 +244,33 @@ public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = Vid
         var proxyPath = $"{relativeFolder}/{ProxyName}.mp4";
         var proxy = Path.Combine(workFolder, proxyPath);
         var temporary = proxy + ".tmp";
-        Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary), cancellationToken);
+        string? withoutSoundBecause = null;
+        try
+        {
+            Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary), cancellationToken);
+        }
+        catch (VideoProcessingException withSound)
+        {
+            // A camcorder file can declare a sound stream that holds nothing FFmpeg can decode: it plays without
+            // sound, and FFmpeg writes no MP4 because that stream "received no packets" (D-084). Its 720p version
+            // is made without sound; when that fails too, the file still has a problem. Any failure leads here, so
+            // the run lists every file made without sound with FFmpeg's message: a one-off encoder error shows.
+            withoutSoundBecause = withSound.Message;
+            try
+            {
+                Run(tools.Ffmpeg, FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, withAudio: false), cancellationToken);
+            }
+            catch (VideoProcessingException withoutSound)
+            {
+                throw withoutSound.Message == withSound.Message
+                    ? withSound
+                    : new VideoProcessingException($"{withSound.Message} Without sound: {withoutSound.Message}", withoutSound);
+            }
+        }
+
         File.Move(temporary, proxy, overwrite: true);
 
-        return [.. posters, new ManifestDerivative(ProxyName, proxyPath, width, height, ProxyContentType)];
+        return new VideoDerivatives([.. posters, new ManifestDerivative(ProxyName, proxyPath, width, height, ProxyContentType)], withoutSoundBecause);
     }
 
     private static string Run(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
@@ -342,13 +371,15 @@ public static class FfmpegArguments
         output,
     ];
 
-    public static IReadOnlyList<string> Proxy(string input, int width, int height, VideoEncoder encoder, int videoStream, string output)
+    /// <summary>The 720p version; <paramref name="withAudio"/> false leaves out the sound (D-084).</summary>
+    public static IReadOnlyList<string> Proxy(string input, int width, int height, VideoEncoder encoder, int videoStream, string output, bool withAudio = true)
     {
         List<string> arguments =
         [
             "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
             "-i", input,
-            "-map", $"0:v:{videoStream}", "-map", "0:a:0?",
+            "-map", $"0:v:{videoStream}",
+            .. withAudio ? (string[])["-map", "0:a:0?"] : ["-an"],
             // Drops metadata such as the GPS position phones write into videos.
             "-map_metadata", "-1",
             "-vf", Filter(width, height),
@@ -359,7 +390,7 @@ public static class FfmpegArguments
         arguments.AddRange(
         [
             "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "96k",
+            .. withAudio ? (string[])["-c:a", "aac", "-b:a", "96k"] : [],
             "-movflags", "+faststart",
             "-f", "mp4",
             output,
