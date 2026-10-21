@@ -154,6 +154,11 @@ h1:focus {
     text-decoration: none;
 }
 
+/* The logo keeps its colours: the links' hover would turn "box" blue. */
+.brand:hover {
+    color: var(--developer);
+}
+
 /* The wordmark (sepiabox-brand): lowercase, ExtraBold, tight, "sepia" in the brand colour and "box" in developer. */
 .wordmark {
     font-family: var(--font-display);
@@ -297,10 +302,17 @@ main {
     cursor: pointer;
 }
 
-.filters button:hover,
-.ask button:hover {
+.filters button:hover:not(:disabled),
+.ask button:hover:not(:disabled) {
     background: var(--cyanotype-hover);
     border-color: var(--cyanotype-hover);
+}
+
+.filters button:disabled,
+.ask button:disabled,
+.button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .filters .shortcut[aria-current="page"] {
@@ -503,7 +515,7 @@ main {
     cursor: pointer;
 }
 
-.button:hover {
+.button:hover:not(:disabled) {
     background: var(--cyanotype-hover);
     color: var(--white);
 }

@@ -1,9 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Sepiabox">
-  <path d="M4 4H24L4 24Z" fill="#231A14"/>
-  <path d="M60 4H40L60 24Z" fill="#231A14"/>
-  <path d="M4 60V40L24 60Z" fill="#231A14"/>
-  <path d="M60 60V40L40 60Z" fill="#231A14"/>
+  <style>
+    .corner { fill: #231A14; }
+    .print { fill: #9A5A2C; }
+    @media (prefers-color-scheme: dark) {
+      .corner { fill: #EEECE7; }
+      .print { fill: #C98A55; }
+    }
+  </style>
+  <path class="corner" d="M4 4H24L4 24Z"/>
+  <path class="corner" d="M60 4H40L60 24Z"/>
+  <path class="corner" d="M4 60V40L24 60Z"/>
+  <path class="corner" d="M60 60V40L40 60Z"/>
   <g transform="rotate(-6 32 32)">
-    <rect x="17" y="19" width="30" height="26" rx="1.5" fill="#9A5A2C"/>
+    <rect class="print" x="17" y="19" width="30" height="26" rx="1.5"/>
   </g>
 </svg>
