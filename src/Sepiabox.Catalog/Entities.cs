@@ -245,3 +245,54 @@ public static class FaceAssignments
     /// <summary>Whether a face with this assignment counts for its person and is in their centroid.</summary>
     public static bool Counts(string assignment) => assignment is Auto or Manual;
 }
+
+/// <summary>A library-wide setting (S-022): a key and its value, such as whether face recognition is on.</summary>
+public sealed class Setting
+{
+    public required string Key { get; set; }
+
+    public required string Value { get; set; }
+}
+
+/// <summary>
+/// Where a face whose data the family deleted was ("Delete face data" on a person, S-022, D-081): only its box, never
+/// its embedding, so a re-import of the asset's manifest, which still lists the face, does not bring it back.
+/// </summary>
+public sealed class ErasedFace
+{
+    public long Id { get; set; }
+
+    public required string AssetId { get; set; }
+
+    public required double[] Box { get; set; }
+
+    public DateTimeOffset ErasedAt { get; set; }
+}
+
+/// <summary>A record of face data deleted (S-022, D-081): when, by whom, and how much; never whose faces.</summary>
+public sealed class FaceDataDeletion
+{
+    public long Id { get; set; }
+
+    public DateTimeOffset DeletedAt { get; set; }
+
+    /// <summary>The signed-in user who asked, lower-cased.</summary>
+    public required string DeletedBy { get; set; }
+
+    /// <summary>One of <see cref="FaceDataDeletionScopes"/>.</summary>
+    public required string Scope { get; set; }
+
+    public int Faces { get; set; }
+
+    public int People { get; set; }
+}
+
+/// <summary>What a <see cref="FaceDataDeletion"/> deleted.</summary>
+public static class FaceDataDeletionScopes
+{
+    /// <summary>Face recognition turned off: every face and person.</summary>
+    public const string Library = "library";
+
+    /// <summary>"Delete face data" on one person: that person and their faces.</summary>
+    public const string Person = "person";
+}

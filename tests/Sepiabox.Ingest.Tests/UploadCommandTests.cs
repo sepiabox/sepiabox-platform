@@ -61,6 +61,68 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.Equal(manifests.Single(m => m.Id == ids[0]).SizeBytes, properties.ContentLength);
     }
 
+    [Theory]
+    [InlineData(10)]
+    [InlineData(-10)]
+    public async Task Refuses_to_upload_anything_when_the_computer_s_clock_is_minutes_off(int minutes)
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        Process();
+        var clock = new ShiftedClock(TimeSpan.FromMinutes(minutes));
+
+        var refused = await Assert.ThrowsAsync<ClockSkewException>(
+            () => UploadCommand.RunAsync(Options(), Service, null, new ManifestValidator(), CancellationToken.None, clock));
+
+        Assert.Contains(minutes > 0 ? "10 minutes ahead of the storage server's" : "10 minutes behind the storage server's", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Settings → Time & language → Date & time → Sync now", refused.Message, StringComparison.Ordinal);
+        Assert.Empty(await BlobNames(BlobLayout.ManifestsContainer));
+        Assert.Empty(await BlobNames(BlobLayout.OriginalsContainer));
+    }
+
+    [Theory]
+    [InlineData(7, false)]
+    [InlineData(24 * 60, false)]
+    [InlineData(5, true)]
+    public async Task Leaves_out_faces_found_later_than_now_with_a_warning(int minutesAhead, bool kept)
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        var manifest = Assert.Single(Process());
+        // process ran with the computer's clock ahead; it has been set right since.
+        var path = Path.Combine(_work.Path, "manifests", manifest.Id + ".json");
+        ManifestJson.WriteFile(path, manifest with
+        {
+            FacesProcessed = true,
+            FacesVersion = 1,
+            Faces = [Sepiabox.Tests.Shared.TestManifests.Face(0.9)],
+            FacesDetectedAt = DateTimeOffset.UtcNow.AddMinutes(minutesAhead),
+        });
+
+        var result = await Upload();
+
+        Assert.Empty(result.Problems);
+        var stored = ManifestJson.Deserialize((await Service.GetBlobContainerClient(BlobLayout.ManifestsContainer)
+            .GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id)).DownloadContentAsync()).Value.Content.ToString());
+        Assert.Equal(kept ? 1 : 0, stored.Faces.Count);
+        Assert.Equal(kept ? 0 : 1, result.Warnings.Count);
+        if (!kept)
+        {
+            Assert.Contains("this computer's clock was ahead when process ran", result.Warnings[0].Reason, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Uploads_with_a_clock_a_few_minutes_off()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        Process();
+
+        var result = await UploadCommand.RunAsync(
+            Options(), Service, null, new ManifestValidator(), CancellationToken.None, new ShiftedClock(TimeSpan.FromMinutes(-3)));
+
+        Assert.Equal(1, result.Assets);
+        Assert.Empty(result.Problems);
+    }
+
     [Fact]
     public async Task Uploads_nothing_again_when_run_twice()
     {
@@ -435,6 +497,11 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         var bytes = new byte[length];
         Random.Shared.NextBytes(bytes);
         return bytes;
+    }
+
+    private sealed class ShiftedClock(TimeSpan shift) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow + shift;
     }
 
     private sealed class SyncProgress(Action<long> report) : IProgress<long>

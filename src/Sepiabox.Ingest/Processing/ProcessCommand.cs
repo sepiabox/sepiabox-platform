@@ -61,7 +61,15 @@ public static class ProcessCommand
     /// <see cref="ProcessOptions.Faces"/> is set. <paramref name="filesDone"/>
     /// is called after each photo or video, processed or not, so a long run over unchanged files shows activity.
     /// </summary>
-    public static ProcessResult Run(ProcessOptions options, IProgress<int>? filesDone = null, CancellationToken cancellationToken = default)
+    public static ProcessResult Run(ProcessOptions options, IProgress<int>? filesDone = null, CancellationToken cancellationToken = default) =>
+        Run(options, TimeProvider.System, filesDone, cancellationToken);
+
+    /// <summary>
+    /// The same with a given clock: "now" for capture dates and for when faces were found (D-046, D-081), the system
+    /// clock when null, so two runs can write byte-identical manifests.
+    /// </summary>
+    public static ProcessResult Run(
+        ProcessOptions options, TimeProvider? clock, IProgress<int>? filesDone = null, CancellationToken cancellationToken = default)
     {
         // A wrong folder fails before the model is checked, which can take seconds the first time.
         var (root, output) = Resolve(options);
@@ -81,7 +89,7 @@ public static class ProcessCommand
         try
         {
             return Run(
-                options, root, output, embedder, embedderWarning, faces, facesWarning, TimeProvider.System, filesDone, null, cancellationToken);
+                options, root, output, embedder, embedderWarning, faces, facesWarning, clock ?? TimeProvider.System, filesDone, null, cancellationToken);
         }
         finally
         {
@@ -175,7 +183,7 @@ public static class ProcessCommand
             // Neither step in particular failed when this throws, so the message names the manifest, not a step.
             var outcome = Try(
                 sourcePath, embedder is not null ? o.EmbeddingProblems : o.FaceProblems, UpdateFailed,
-                () => WorkFolderManifest.TryAdd(path, output, embedder, faces));
+                () => WorkFolderManifest.TryAdd(path, output, embedder, faces, clock));
             Record(o, sourcePath, assetId, outcome?.Embedding, o.EmbeddingProblems, o.WithoutPreviewForEmbedding);
             o.Embedded += outcome?.Embedding?.Status == EmbeddingStatus.Added ? 1 : 0;
             CountFaces(o, Record(o, sourcePath, assetId, outcome?.Faces, o.FaceProblems, o.WithoutPreviewForFaces));
@@ -572,7 +580,7 @@ public static class ProcessCommand
                     if (faces is not null && status == FileStatus.Done)
                     {
                         var withDerivatives = manifest;
-                        facesOutcome = AddFaces(o, file.Path, sha256, () => ManifestFaces.TryAdd(withDerivatives, output, faces));
+                        facesOutcome = AddFaces(o, file.Path, sha256, () => ManifestFaces.TryAdd(withDerivatives, output, faces, clock));
                         manifest = facesOutcome?.Manifest ?? manifest;
                     }
 

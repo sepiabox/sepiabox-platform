@@ -15,7 +15,7 @@
   "if": { "properties": { "facesProcessed": { "const": false } } },
   "then": {
     "properties": { "faces": { "maxItems": 0 } },
-    "not": { "required": ["facesVersion"] }
+    "not": { "anyOf": [{ "required": ["facesVersion"] }, { "required": ["facesDetectedAt"] }] }
   },
   "properties": {
     "schemaVersion": { "const": 1 },
@@ -118,6 +118,16 @@
       "description": "Which face pipeline found the faces (D-047), bumped whenever the face models or their preprocessing change; the newer version wins a merge. Optional: only next to facesProcessed true, and absent from faces written before the field existed, which read as 1.",
       "type": "integer",
       "minimum": 1
+    },
+    "facesDetectedAt": {
+      "description": "When these faces were found (S-022, D-081), UTC. Optional: only next to facesProcessed true, and absent from faces found before the field existed, which count as found before any erase.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "facesErasedAt": {
+      "description": "When the family last turned face recognition off (S-022, D-081), UTC: faces found at or before it are erased by every merge; faces found after it are kept. Optional; the newer one wins a merge.",
+      "type": "string",
+      "format": "date-time"
     },
     "faces": {
       "description": "Faces found in the preview or poster (S-018), best first. Box: left, top, width and height relative to the upright derivative (0..1); map it with a derivative's width and height, never the manifest's, which describe the original as stored. Embedding: base64 of 128 float32 little-endian values (SFace), L2-normalized.",

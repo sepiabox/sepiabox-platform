@@ -15,13 +15,29 @@ using Sepiabox.Pipeline.Storage;
 
 namespace Sepiabox.Ingest.Uploading;
 
+/// <summary>This computer's clock is too far from the storage server's for face times to be trusted (S-022, D-081).</summary>
+public sealed class ClockSkewException(TimeSpan skew) : Exception(Describe(skew))
+{
+    public TimeSpan Skew { get; } = skew;
+
+    private static string Describe(TimeSpan skew) =>
+        $"This computer's clock is {Math.Abs(skew.TotalMinutes):N0} minutes {(skew > TimeSpan.Zero ? "ahead of" : "behind")} the storage server's. " +
+        $"Set it right (synchronize it with internet time; on Windows: Settings → Time & language → Date & time → Sync now) " +
+        $"and upload again: faces are kept or erased by the time they were found, " +
+        $"so upload refuses a clock more than {UploadCommand.MaxClockSkew.TotalMinutes:N0} minutes off.";
+}
+
 public sealed record UploadResult(
     int Assets,
     int Uploaded,
     int Skipped,
     long Bytes,
     TimeSpan Duration,
-    IReadOnlyList<ScanProblem> Problems);
+    IReadOnlyList<ScanProblem> Problems)
+{
+    /// <summary>Assets uploaded with something left out, such as faces stamped by a clock that was ahead (D-081).</summary>
+    public IReadOnlyList<ScanProblem> Warnings { get; init; } = [];
+}
 
 /// <summary>
 /// Sends a <c>process</c> work folder to Blob Storage (D-004, D-005): each asset's original, then its
@@ -33,6 +49,12 @@ public static class UploadCommand
 
     public const int BlockSize = 8 * 1024 * 1024;
     public const int ParallelUploads = 4;
+
+    /// <summary>
+    /// How far this computer's clock may be from the storage server's (S-022, D-081): <c>facesDetectedAt</c> comes from
+    /// it and is compared with the server's erase and switch-on times.
+    /// </summary>
+    public static readonly TimeSpan MaxClockSkew = TimeSpan.FromMinutes(5);
 
     public static BlobServiceClient CreateClient(UploadOptions options) => options.Destination switch
     {
@@ -54,7 +76,8 @@ public static class UploadCommand
         BlobServiceClient service,
         IProgress<long>? bytesSent,
         IManifestValidator validator,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeProvider? clock = null)
     {
         var workFolder = Path.GetFullPath(options.WorkFolder);
         var manifestFolder = Path.Combine(workFolder, "manifests");
@@ -73,6 +96,8 @@ public static class UploadCommand
             await container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
         }
 
+        await CheckClockAsync(containers.Manifests, clock ?? TimeProvider.System, cancellationToken);
+
         using var state = new UploadState(databasePath);
         var run = new Run(
             workFolder,
@@ -82,7 +107,8 @@ public static class UploadCommand
             options.Destination == UploadDestination.Azure ? AccessTier.Cold : (AccessTier?)null,
             validator,
             new ManifestStore(validator),
-            bytesSent);
+            bytesSent,
+            clock ?? TimeProvider.System);
 
         var stopwatch = Stopwatch.StartNew();
         var manifestFiles = Directory.GetFiles(manifestFolder, "*.json");
@@ -92,7 +118,32 @@ public static class UploadCommand
             run.UploadAssetAsync);
 
         return new UploadResult(
-            manifestFiles.Length, run.Uploaded, run.Skipped, run.Bytes, stopwatch.Elapsed, [.. run.Problems.OrderBy(p => p.Path)]);
+            manifestFiles.Length, run.Uploaded, run.Skipped, run.Bytes, stopwatch.Elapsed, [.. run.Problems.OrderBy(p => p.Path)])
+        {
+            Warnings = [.. run.Warnings.OrderBy(p => p.Path)],
+        };
+    }
+
+    /// <summary>
+    /// Refuses to upload when this computer's clock is more than <see cref="MaxClockSkew"/> from the storage server's,
+    /// read from the <c>Date</c> header of a request to it.
+    /// </summary>
+    internal static async Task CheckClockAsync(BlobContainerClient container, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        var before = clock.GetUtcNow();
+        var response = (await container.GetPropertiesAsync(cancellationToken: cancellationToken)).GetRawResponse();
+        var after = clock.GetUtcNow();
+        if (response.Headers.Date is not { } server)
+        {
+            return;
+        }
+
+        // The server wrote the header somewhere between our before and after, in whole seconds (rounded down): the clocks
+        // differ only when it falls more than MaxClockSkew outside that window, however slow the request was.
+        if (server < before - MaxClockSkew - TimeSpan.FromSeconds(1) || server > after + MaxClockSkew)
+        {
+            throw new ClockSkewException(before + ((after - before) / 2) - server);
+        }
     }
 
     /// <summary>
@@ -143,7 +194,8 @@ public static class UploadCommand
         AccessTier? originalTier,
         IManifestValidator validator,
         ManifestStore manifestStore,
-        IProgress<long>? bytesSent)
+        IProgress<long>? bytesSent,
+        TimeProvider clock)
     {
         private int _uploaded;
         private int _skipped;
@@ -153,6 +205,7 @@ public static class UploadCommand
         public int Skipped => _skipped;
         public long Bytes => _bytes;
         public List<ScanProblem> Problems { get; } = [];
+        public List<ScanProblem> Warnings { get; } = [];
 
         public async ValueTask UploadAssetAsync(string manifestPath, CancellationToken cancellationToken)
         {
@@ -356,6 +409,17 @@ public static class UploadCommand
             {
                 Interlocked.Increment(ref _skipped);
                 return;
+            }
+
+            // The clock was checked at the start: faces "found" later than now were stamped by a clock that was ahead when
+            // process ran, so their time cannot be compared with an erase (D-081).
+            if (manifest.FacesDetectedAt is { } detected && detected > clock.GetUtcNow() + ManifestMerge.DetectionTolerance)
+            {
+                manifest = ManifestMerge.WithoutFaces(manifest);
+                lock (Warnings)
+                {
+                    Warnings.Add(new ScanProblem(path, $"its faces say they were found at {detected:u}, after now: this computer's clock was ahead when process ran, so they were left out (run process --faces into a fresh work folder)"));
+                }
             }
 
             var result = await manifestStore.WriteMergedAsync(containers.Manifests, manifest, cancellationToken);

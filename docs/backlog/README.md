@@ -138,7 +138,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-021 | [Filter by people](S-021-filter-by-people.md) | People | S-020, S-013, S-026 | High | M | `done` |
-| S-022 | [Turn off face recognition and delete face data](S-022-turn-off-face-recognition-and-delete-face.md) | People | S-019 | Medium | S | `todo` |
+| S-022 | [Turn off face recognition and delete face data](S-022-turn-off-face-recognition-and-delete-face.md) | People | S-019 | Medium | S | `done` |
 
 ### Sprint 12 — Personal places, similar photos and video locations refresh
 

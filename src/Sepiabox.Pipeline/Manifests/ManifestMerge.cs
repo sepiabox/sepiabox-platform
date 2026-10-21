@@ -22,7 +22,11 @@ public static class ManifestMerge
             ? (existing, incoming)
             : (incoming, existing);
 
-        var faces = FacesOf(existing, incoming);
+        // The newer erase wins (D-081), and erases the faces of either side found at or before it, before the sides'
+        // faces are compared: faces found after it, on any computer, win over it whichever uploads last.
+        var erasedAt = Later(existing.FacesErasedAt, incoming.FacesErasedAt);
+        var (existingFaces, incomingFaces) = (Surviving(existing, erasedAt), Surviving(incoming, erasedAt));
+        var faces = FacesOf(existingFaces, incomingFaces);
 
         return description with
         {
@@ -35,8 +39,79 @@ public static class ManifestMerge
             Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),
             FacesProcessed = faces.FacesProcessed,
             Faces = faces.Faces,
-            FacesVersion = FacesVersionOf(faces, existing, incoming),
+            FacesVersion = FacesVersionOf(faces, existingFaces, incomingFaces),
+            FacesDetectedAt = FacesDetectedAtOf(faces, existingFaces, incomingFaces),
+            FacesErasedAt = erasedAt,
         };
+    }
+
+    /// <summary>
+    /// How far after its blob was written a manifest's <c>facesDetectedAt</c> may be (D-081): beyond it, the computer's
+    /// clock was ahead when it ran <c>process</c>, and the time is not trusted. More than <c>upload</c>'s 5-minute clock
+    /// check plus a second of rounding, so faces found by a clock it accepts are always trusted.
+    /// </summary>
+    public static readonly TimeSpan DetectionTolerance = TimeSpan.FromMinutes(6);
+
+    /// <summary>The manifest as if it had not looked for faces: no faces, version or detection time.</summary>
+    public static Manifest WithoutFaces(Manifest manifest)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        return manifest with { FacesProcessed = false, Faces = [], FacesVersion = null, FacesDetectedAt = null };
+    }
+
+    /// <summary>Whether <paramref name="manifest"/>'s detection time is plausible for a blob written at <paramref name="writtenAt"/>.</summary>
+    public static bool DetectionTrusted(Manifest manifest, DateTimeOffset? writtenAt)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        return manifest.FacesDetectedAt is not { } detected || writtenAt is not { } written || detected <= written + DetectionTolerance;
+    }
+
+    /// <summary>
+    /// The erase writer (S-022, D-081): <paramref name="stored"/> with the tombstone <paramref name="erasedAt"/> merged
+    /// in, so its faces found at or before it are gone and the newer of the two tombstones is kept. Everything else is
+    /// the stored manifest's own, so an erase never changes what the asset is. Faces said to be found more than
+    /// <see cref="DetectionTolerance"/> after the blob was written (<paramref name="writtenAt"/>) are erased too.
+    /// </summary>
+    public static Manifest EraseFaces(Manifest stored, DateTimeOffset erasedAt, DateTimeOffset? writtenAt = null)
+    {
+        ArgumentNullException.ThrowIfNull(stored);
+        if (!DetectionTrusted(stored, writtenAt))
+        {
+            // Found "in the future": a clock that was ahead, so these faces may be older than the erase.
+            stored = WithoutFaces(stored);
+        }
+
+        return Merge(stored, stored with
+        {
+            FacesProcessed = false,
+            Faces = [],
+            FacesVersion = null,
+            FacesDetectedAt = null,
+            FacesErasedAt = erasedAt.ToUniversalTime(),
+        });
+    }
+
+    private static DateTimeOffset? Later(DateTimeOffset? a, DateTimeOffset? b) =>
+        a is null ? b : b is null ? a : (a > b ? a : b);
+
+    // A side whose faces the tombstone erases counts as one that never looked for faces.
+    private static Manifest Surviving(Manifest side, DateTimeOffset? erasedAt) =>
+        !side.FacesProcessed || side.FacesSurvive(erasedAt)
+            ? side
+            : side with { FacesProcessed = false, Faces = [], FacesVersion = null, FacesDetectedAt = null };
+
+    // The detection time of the chosen faces, the same in either order: the latest of the sides that found those faces.
+    private static DateTimeOffset? FacesDetectedAtOf(Manifest chosen, Manifest existing, Manifest incoming)
+    {
+        if (!chosen.FacesProcessed)
+        {
+            return null;
+        }
+
+        return new[] { existing, incoming }
+            .Where(side => side.FacesProcessed && side.EffectiveFacesVersion == chosen.EffectiveFacesVersion && side.Faces.SequenceEqual(chosen.Faces))
+            .Select(side => side.FacesDetectedAt)
+            .Aggregate((DateTimeOffset?)null, Later);
     }
 
     /// <summary>

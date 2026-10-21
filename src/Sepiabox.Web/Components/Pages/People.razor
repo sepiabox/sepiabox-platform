@@ -1,12 +1,22 @@
 @page "/people"
 @inject ILibraryQueries Library
+@inject IFaceSettings Faces
 @* Static server rendering, as the timeline: the people faces were grouped into (S-019). Naming them is S-020. *@
 
 <PageTitle>@Text["People_Heading"] · Sepiabox</PageTitle>
 
 <h1 class="page-heading">@Text["People_Heading"]</h1>
 
-@if (_people is { Count: > 0 } people)
+@if (Note == "deleted")
+{
+    <p class="note" role="status">@Text["People_Done_Deleted"]</p>
+}
+
+@if (_off)
+{
+    <p class="note faces-off">@Text["People_FacesOff"] <a href="settings">@Text["Layout_Settings"]</a></p>
+}
+else if (_people is { Count: > 0 } people)
 {
     <PeopleGrid People="people" />
 }
@@ -17,6 +27,15 @@ else
 
 @code {
     private IReadOnlyList<PersonSummary>? _people;
+    private bool _off;
 
-    protected override async Task OnInitializedAsync() => _people = await Library.GetPeopleAsync();
+    // Only "deleted" is shown; nothing else from the address.
+    [SupplyParameterFromQuery(Name = PersonLinks.NoteParameter)]
+    public string? Note { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _off = !(await Faces.GetAsync()).State.On;
+        _people = _off ? [] : await Library.GetPeopleAsync();
+    }
 }

@@ -123,11 +123,13 @@ public sealed class ManifestImporter(
         BlobContainerClient manifests, string blobName, bool transientFailuresThrow, CancellationToken cancellationToken)
     {
         string json, etag;
+        DateTimeOffset writtenAt;
         try
         {
             var download = (await manifests.GetBlobClient(blobName).DownloadContentAsync(cancellationToken)).Value;
             json = download.Content.ToString();
             etag = Normalize(download.Details.ETag)!;
+            writtenAt = download.Details.LastModified;
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
@@ -158,6 +160,14 @@ public sealed class ManifestImporter(
 
         var (embeddings, embeddingProblem) = ReadEmbeddings(manifest);
         var (faces, faceProblem) = ReadFaces(manifest);
+        if (faces is not null && !ManifestMerge.DetectionTrusted(manifest, writtenAt))
+        {
+            // Found "after" the blob was written: the computer's clock was ahead when it ran process, so the time cannot
+            // be compared with an erase (D-081). Like a manifest that did not look for faces.
+            faces = null;
+            const string Ahead = "says its faces were found after it was uploaded (a clock ahead), so they were left out";
+            faceProblem = faceProblem is null ? Ahead : $"{faceProblem}; {Ahead}";
+        }
         var leftOut = embeddingProblem is null ? faceProblem : faceProblem is null ? embeddingProblem : $"{embeddingProblem}; {faceProblem}";
 
         // Only errors known to be about this manifest's data are reported and the import goes on;
@@ -228,6 +238,13 @@ public sealed class ManifestImporter(
         if (transaction is not null)
         {
             await FaceAssigner.LockAsync(db, cancellationToken);
+            // Read under the lock, so turning recognition off (which takes it too) either happened before or waits
+            // (S-022, D-081): while it is off, and for faces found before the last erase, the manifest's faces are
+            // ignored as if it had not looked for them.
+            if (!(await FaceRecognition.ReadAsync(db, cancellationToken)).Accepts(manifest.FacesDetectedAt))
+            {
+                faces = null;
+            }
         }
 
         var now = clock.GetUtcNow();

@@ -9,6 +9,7 @@
         <AuthorizeView>
             <Authorized>
                 <a href="people" class="nav-link">@Text["Layout_People"]</a>
+                <a href="settings" class="nav-link">@Text["Layout_Settings"]</a>
                 <span class="user">@context.User.FindFirst(ClaimTypes.Email)?.Value</span>
                 <SignOutButton />
             </Authorized>

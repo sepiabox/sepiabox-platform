@@ -19,6 +19,7 @@ public sealed class DeployScriptTests : IDisposable
     private const string DeployImport = "azd deploy import --no-prompt";
     private const string DeployImportAll = "azd deploy import-all --no-prompt";
     private const string DeployGeoNames = "azd deploy geonames --no-prompt";
+    private const string DeployFaces = "azd deploy faces --no-prompt";
     private const string PauseQueue =
         $"az servicebus queue update --resource-group {ShutdownRunbook.ResourceGroup} --namespace-name {ShutdownRunbook.ServiceBusNamespace} --name {ShutdownRunbook.Queue} --status ReceiveDisabled --output none";
     private const string ResumeQueue =
@@ -166,6 +167,8 @@ public sealed class DeployScriptTests : IDisposable
                 JobStatus,
                 DeployImport,
                 DeployImportAll,
+                // The scheduled faces job (S-022) never runs an image older than the schema either.
+                DeployFaces,
                 // The manual GeoNames job runs the new image too (S-059), before the queue receives again.
                 DeployGeoNames,
                 ResumeQueue,
@@ -175,7 +178,7 @@ public sealed class DeployScriptTests : IDisposable
                 && !call.StartsWith("az group", StringComparison.Ordinal)
                 && !call.StartsWith("az postgres", StringComparison.Ordinal)));
         // What azure.yaml's predeploy hook checks, so that only this script deploys.
-        Assert.Equal(["1", "1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
+        Assert.Equal(["1", "1", "1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
         Assert.Equal($"web sepiaboxacr.azurecr.io/sepiabox-web-models:{ModelsTag()}", File.ReadAllLines(_calls + ".base")[^1]);
         Assert.Contains("Migrations applied.", result.Output, StringComparison.Ordinal);
     }

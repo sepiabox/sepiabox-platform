@@ -82,6 +82,24 @@ public sealed record Manifest
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? FacesVersion { get; init; }
 
+    /// <summary>
+    /// When <see cref="Faces"/> were found (S-022, D-081), UTC. Written only next to <c>facesProcessed: true</c>; faces
+    /// found before the field existed have none and count as found before any <see cref="FacesErasedAt"/>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? FacesDetectedAt { get; init; }
+
+    /// <summary>
+    /// When the family last turned face recognition off (S-022, D-081), UTC: a tombstone every merge keeps (the newer
+    /// one wins) and that erases faces found at or before it, whichever side they come from.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? FacesErasedAt { get; init; }
+
+    /// <summary>Whether this manifest's faces survive <paramref name="erasedAt"/>: found strictly after it.</summary>
+    public bool FacesSurvive(DateTimeOffset? erasedAt) =>
+        FacesProcessed && (erasedAt is not { } erased || (FacesDetectedAt is { } detected && detected > erased));
+
     /// <summary><see cref="FacesVersion"/> with a missing value read as 1, the first face pipeline.</summary>
     [JsonIgnore]
     public int EffectiveFacesVersion => FacesVersion ?? 1;

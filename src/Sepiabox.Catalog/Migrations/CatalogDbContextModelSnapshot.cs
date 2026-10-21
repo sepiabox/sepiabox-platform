@@ -220,6 +220,39 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("derivatives", (string)null);
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.ErasedFace", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AssetId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("asset_id");
+
+                    b.PrimitiveCollection<double[]>("Box")
+                        .IsRequired()
+                        .HasColumnType("double precision[]")
+                        .HasColumnName("box");
+
+                    b.Property<DateTimeOffset>("ErasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erased_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_erased_faces");
+
+                    b.HasIndex("AssetId")
+                        .HasDatabaseName("ix_erased_faces_asset_id");
+
+                    b.ToTable("erased_faces", (string)null);
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.Face", b =>
                 {
                     b.Property<long>("Id")
@@ -271,6 +304,48 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("faces", null, t =>
                         {
                             t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded', 'not_face')");
+                        });
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.FaceDataDeletion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<int>("Faces")
+                        .HasColumnType("integer")
+                        .HasColumnName("faces");
+
+                    b.Property<int>("People")
+                        .HasColumnType("integer")
+                        .HasColumnName("people");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("scope");
+
+                    b.HasKey("Id")
+                        .HasName("pk_face_data_deletions");
+
+                    b.ToTable("face_data_deletions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_face_data_deletions_scope", "scope IN ('library', 'person')");
                         });
                 });
 
@@ -437,6 +512,24 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("question_usage", (string)null);
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.Setting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("value");
+
+                    b.HasKey("Key")
+                        .HasName("pk_settings");
+
+                    b.ToTable("settings", (string)null);
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.AssetEmbedding", b =>
                 {
                     b.HasOne("Sepiabox.Catalog.Asset", null)
@@ -465,6 +558,16 @@ namespace Sepiabox.Catalog.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_derivatives_assets_asset_id");
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.ErasedFace", b =>
+                {
+                    b.HasOne("Sepiabox.Catalog.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_erased_faces_assets_asset_id");
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.Face", b =>

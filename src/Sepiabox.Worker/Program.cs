@@ -14,6 +14,7 @@ using Sepiabox.Pipeline.Storage;
 using Sepiabox.Worker;
 using Sepiabox.Worker.Azure;
 using Sepiabox.Worker.Events;
+using Sepiabox.Worker.Faces;
 using Sepiabox.Worker.Importing;
 using Sepiabox.Worker.Places;
 
@@ -54,6 +55,12 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
         builder.Services.AddSingleton(FaceAssignerOptions.For(
             builder.Configuration.GetValue("People:SameFaceThreshold", FaceAssignerOptions.DefaultThreshold)));
         builder.Services.AddScoped<ManifestImporter>();
+    }
+
+    if (command.Action == WorkerAction.FacesSweep)
+    {
+        builder.AddAzureBlobServiceClient("blobs");
+        builder.Services.AddSingleton<ManifestValidator>();
     }
 
     if (command.Action is WorkerAction.ImportOnce or WorkerAction.ImportFromQueue or WorkerAction.PlacesRefresh or WorkerAction.GeoNamesUpdate)
@@ -132,6 +139,17 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
             .RunAsync(cancellationToken);
         Log.PlacesRefreshed(logger, named);
         return ExitCodes.Success;
+    }
+
+    if (command.Action == WorkerAction.FacesSweep)
+    {
+        var sweep = await new ManifestFacesSweep(
+                services.GetRequiredService<CatalogDbContext>(),
+                new ManifestStore(services.GetRequiredService<ManifestValidator>()),
+                services.GetRequiredService<TimeProvider>(),
+                logger)
+            .RunAsync(services.GetRequiredService<BlobServiceClient>().GetBlobContainerClient(BlobLayout.ManifestsContainer), cancellationToken);
+        return sweep.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }
 
     if (command.Action == WorkerAction.ImportFromQueue)

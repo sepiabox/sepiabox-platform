@@ -79,7 +79,7 @@ try
         _ => UsageError($"Unknown command '{args[0]}'."),
     };
 }
-catch (DirectoryNotFoundException ex)
+catch (Exception ex) when (ex is DirectoryNotFoundException or ClockSkewException)
 {
     Console.Error.WriteLine(ex.Message);
     return 1;
@@ -167,6 +167,11 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");
+    }
+
+    foreach (var warning in result.Warnings)
+    {
+        Console.WriteLine($"  warning: {warning.Path}: {warning.Reason}");
     }
 
     return result.Problems.Count == 0 ? 0 : 1;

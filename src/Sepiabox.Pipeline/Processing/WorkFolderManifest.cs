@@ -18,7 +18,13 @@ public sealed record WorkFolderOutcome(EmbeddingOutcome? Embedding, EmbeddingOut
 /// </summary>
 public static class WorkFolderManifest
 {
-    public static WorkFolderOutcome TryAdd(string manifestPath, string workFolder, IImageEmbedder? embedder, IFaceDetector? faces)
+    /// <param name="manifestPath">The work-folder manifest to add to.</param>
+    /// <param name="workFolder">The work folder its derivatives are in.</param>
+    /// <param name="embedder">The CLIP image model, or none.</param>
+    /// <param name="faces">The face detector, or none.</param>
+    /// <param name="clock">When faces are found (D-081); the system clock when null.</param>
+    public static WorkFolderOutcome TryAdd(
+        string manifestPath, string workFolder, IImageEmbedder? embedder, IFaceDetector? faces, TimeProvider? clock = null)
     {
         if (embedder is null && faces is null)
         {
@@ -43,7 +49,7 @@ public static class WorkFolderManifest
 
         var embedding = embedder is null ? null : ManifestEmbeddings.TryAdd(manifest, workFolder, embedder);
         var current = embedding?.Manifest ?? manifest;
-        var found = faces is null ? null : ManifestFaces.TryAdd(current, workFolder, faces);
+        var found = faces is null ? null : ManifestFaces.TryAdd(current, workFolder, faces, clock);
         current = found?.Manifest ?? current;
         if (!IsAdded(embedding) && !IsAdded(found))
         {

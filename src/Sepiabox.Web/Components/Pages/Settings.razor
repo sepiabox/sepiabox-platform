@@ -1,0 +1,141 @@
+@page "/settings"
+@inject IFaceSettings Faces
+@inject NavigationManager Navigation
+@inject IServiceProvider Services
+@using Sepiabox.Catalog
+@using Sepiabox.Catalog.Search
+@using Microsoft.Extensions.DependencyInjection
+@* Static server rendering with POST forms, as the person page (S-020): turning face recognition off asks first, on this
+   page itself (S-022, D-081), and every change is answered with a redirect back here with a note. *@
+
+<PageTitle>@Text["Settings_Heading"] · Sepiabox</PageTitle>
+
+<h1 class="page-heading">@Text["Settings_Heading"]</h1>
+
+@if (NoteText is { } note)
+{
+    <p class="note" role="status">@note</p>
+}
+
+@if (_view is { } view)
+{
+    <section class="settings-faces">
+        <h2>@Text["Settings_Faces_Heading"]</h2>
+        @if (view.State.On)
+        {
+            <p class="faces-status">@Text["Settings_Faces_IsOn"]</p>
+            @if (Confirm == ConfirmOff)
+            {
+                <div class="confirm-off">
+                    <p class="note">@Text["Settings_Faces_OffExplain"]</p>
+                    <form method="post" @formname="off" @onsubmit="TurnOffAsync" class="confirm">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="Off" value="yes" />
+                        <button type="submit">@Text["Settings_Faces_OffConfirm"]</button>
+                        <a href="settings">@Text["Settings_Cancel"]</a>
+                    </form>
+                </div>
+            }
+            else
+            {
+                <p class="hint muted">@Text["Settings_Faces_OffHint"]</p>
+                @* A GET form: it only opens the confirmation above, which turns recognition off on its own POST. *@
+                <form method="get" action="settings" class="ask-off">
+                    <input type="hidden" name="confirm" value="@ConfirmOff" />
+                    <button type="submit">@Text["Settings_Faces_Off"]</button>
+                </form>
+            }
+        }
+        else
+        {
+            <p class="faces-status">@Text["Settings_Faces_IsOff"]</p>
+            @if (view.State.ManifestsPending)
+            {
+                <p class="faces-sweep muted">@Text["Settings_Faces_Pending"]</p>
+            }
+            else
+            {
+                <p class="faces-sweep muted">@Text["Settings_Faces_Swept"]</p>
+                <form method="post" @formname="on" @onsubmit="TurnOnAsync" class="turn-on">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="On" value="yes" />
+                    <button type="submit">@Text["Settings_Faces_On"]</button>
+                </form>
+            }
+        }
+
+        <p class="hint muted work-folder">@Text["Settings_Faces_WorkFolder"]</p>
+        <p class="hint muted backups">@Text["Settings_Faces_Backups"]</p>
+
+        @if (view.History.Count > 0)
+        {
+            <h3>@Text["Settings_Faces_History"]</h3>
+            <ul class="face-deletions">
+                @foreach (var deletion in view.History)
+                {
+                    <li>@Describe(deletion)</li>
+                }
+            </ul>
+        }
+    </section>
+}
+
+@code {
+    private const string ConfirmOff = "faces-off";
+
+    // What a note in the address may say, and its text: nothing else from the address is shown.
+    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    {
+        ["faces-off"] = "Settings_Done_Off",
+        ["faces-on"] = "Settings_Done_On",
+        ["faces-pending"] = "Settings_Error_Pending",
+        ["signed-out"] = "Settings_Error_NoEmail",
+    };
+
+    [SupplyParameterFromQuery(Name = "confirm")]
+    public string? Confirm { get; set; }
+
+    [SupplyParameterFromQuery(Name = PersonLinks.NoteParameter)]
+    public string? Note { get; set; }
+
+    [SupplyParameterFromForm(FormName = "off")]
+    public string? Off { get; set; }
+
+    [SupplyParameterFromForm(FormName = "on")]
+    public string? On { get; set; }
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    private FaceSettingsView? _view;
+
+    private string? Email => HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+
+    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key) ? Text[key].Value : null;
+
+    protected override async Task OnInitializedAsync() => _view = await Faces.GetAsync();
+
+    private async Task TurnOffAsync()
+    {
+        if (Email is not { } email)
+        {
+            Navigation.NavigateTo($"settings?{PersonLinks.NoteParameter}=signed-out");
+            return;
+        }
+
+        await Faces.TurnOffAsync(email);
+        Navigation.NavigateTo($"settings?{PersonLinks.NoteParameter}=faces-off");
+    }
+
+    private async Task TurnOnAsync() =>
+        Navigation.NavigateTo($"settings?{PersonLinks.NoteParameter}={(await Faces.TurnOnAsync() ? "faces-on" : "faces-pending")}");
+
+    // In the library's time zone (Search:TimeZone), as "today" is for questions.
+    private string Describe(FaceDataDeletion deletion)
+    {
+        var zone = Services.GetService<SearchOptions>()?.TimeZone ?? TimeZoneInfo.Utc;
+        var when = TimeZoneInfo.ConvertTime(deletion.DeletedAt, zone).ToString("g", System.Globalization.CultureInfo.CurrentCulture);
+        var key = deletion.Scope == FaceDataDeletionScopes.Library ? "Settings_Faces_History_Library" : "Settings_Faces_History_Person";
+        return Text[key, when, deletion.DeletedBy, deletion.Faces, deletion.People].Value;
+    }
+}

@@ -94,6 +94,9 @@ else
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
     var importIdentity = builder.AddAzureUserAssignedIdentity("import-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    // The faces job writes manifests (S-022): its own identity, so the import jobs stay readers.
+    var facesIdentity = builder.AddAzureUserAssignedIdentity("faces-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
 
     // The application role's connection, for the web and the import jobs: they read and write rows, never
     // the schema. The server's fixed host name rather than a reference to it: a reference would also grant
@@ -164,6 +167,18 @@ else
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureImportAllJob);
 
+    // Erases faces from the stored manifests after face recognition is turned off (S-022, D-081), every hour. It
+    // connects as the application role and writes manifests through ManifestStore; its only storage role, on the
+    // manifests container, is in access.bicep.
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.FacesResourceName)
+        .WithArgs("faces", "sweep")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(blobs)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithAzureUserAssignedIdentity(facesIdentity)
+        .WithRoleAssignments(storage, [])
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureFacesJob);
+
     // The web's custom domain (S-035, D-065), empty for none. Set after the DNS records exist, first with the
     // binding Disabled (the host name is added), then SniEnabled (domain.bicep creates the managed certificate
     // and the web binds it); docs/operations.md has the steps. No published default: azd would then read only
@@ -184,6 +199,7 @@ else
         .WithParameter("storageName", storage.GetOutput("name"))
         .WithParameter("vaultName", vault.GetOutput("name"))
         .WithParameter("webPrincipalId", webIdentity.Resource.PrincipalId)
+        .WithParameter("facesPrincipalId", facesIdentity.Resource.PrincipalId)
         .WithParameter("uploaderPrincipalIds", uploaders);
 
     web.WithReference(insights)
