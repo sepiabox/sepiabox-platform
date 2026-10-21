@@ -23,6 +23,7 @@ Manifests from exports carry captions and album names (S-045). The family should
 - [ ] Given the photo detail in `en` and `pt-BR`, then the caption and albums are shown with localized labels.
 
 ### Technical notes
+- Runs after S-040 (full export) and S-057 (deleting a source's assets), D-090: the export's `catalog.json` gains the albums and captions here, and deleting a source also removes its album memberships.
 - New migration (D-033); extends `search.v1.json` and the executor (D-020).
 - Decisions: D-020, D-032, D-033, D-050, D-053.
 

@@ -299,11 +299,12 @@ Photos and videos are grouped into occasions (a wedding, a trip) by `sepiabox-wo
 - Keep the `process` work folder (`manifests/` and `derivatives/`) until every file has its embedding, and its faces if you use `--faces`: a later `process` run adds them from the previews in the work folder without the drive, but cannot once they are deleted. The summary has no "have no embedding" or "no preview or poster" warning when nothing is left to add.
 - Manifests written by `process` from S-043 on may carry `capturedAtSource` (D-046). Older `sepiabox-ingest` and `sepiabox-worker` builds reject that field, so update every computer that runs `sepiabox-ingest` and deploy the worker before uploading such manifests; otherwise `upload` from an old build fails to merge them and the old worker's import reports them as problems.
 - Manifests written by `process --faces` carry faces and `facesVersion` (S-018, D-047). Older `sepiabox-ingest` and `sepiabox-worker` builds reject `facesVersion`, so update every computer that runs `sepiabox-ingest` and deploy the worker before uploading manifests from a `--faces` run; otherwise `upload` from an old build fails to merge them (that asset is reported and retried, the stored blob is left alone) and the old worker's import reports them as problems.
+- **Locations of videos processed by older builds (S-060, D-089).** The first `process` run with the same `--out` after updating records every file's metadata version once (fast: one small write per file, nothing read from the drive), and reads the header of each MP4, MOV, M4V or 3GP video whose manifest has no location, once, even in a work folder processed after S-053; most of those videos simply have no location and gain nothing. Nothing is hashed or made again, and photos and camcorder files are not read. The summary says "metadata refreshed M, locations added K"; then run `upload` to send the manifests that changed. Later runs read nothing again.
 - Files processed before S-043 keep the date they had (none, for undated videos): `process` skips unchanged files. To date them from their folder or file name, run `process` again into a fresh work folder and upload from it.
 
 ## Importing exports (after the MVP)
 
-Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from their official exports (D-053, Sprints 20–22; with `--index-only`, D-088, their originals stay in the export folder), which only the account owner can request:
+Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from their official exports (D-053, Sprints 15–16, renumbered by D-090; with `--index-only`, D-088, their originals stay in the export folder), which only the account owner can request:
 
 | Source | How to get it |
 |---|---|
