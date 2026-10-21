@@ -128,6 +128,195 @@ public class VideoProcessingTests
     }
 
     [Fact]
+    public void Reads_again_only_the_location_of_a_video_an_older_metadata_version_processed()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "android.mp4");
+        MakeVideo(clip, 640, 360, seconds: 1, "-metadata", "location=+38.7223-009.1393+010.000/");
+        Process(drive, work);
+        AsProcessedByAnOlderMetadataVersion(work);
+        var derivatives = DerivativeWriteTimes(work);
+
+        var refreshed = Process(drive, work);
+        var after = Process(drive, work);
+
+        Assert.Equal((0, 1, 1, 1), (refreshed.Processed, refreshed.Skipped, refreshed.Refreshed, refreshed.LocationsAdded));
+        Assert.Equal(new GeoPoint(38.7223, -9.1393), Assert.Single(ReadManifests(work)).Location);
+        // Only the manifest changed: no derivative was made again.
+        Assert.Equal(derivatives, DerivativeWriteTimes(work));
+        Assert.Equal(ProcessCommand.MetadataVersion, StateOf(work, clip).MetadataVersion);
+        Assert.Equal((0, 1, 0), (after.Processed, after.Skipped, after.Refreshed));
+    }
+
+    [UnixFact]
+    public void Reads_no_header_again_for_files_at_the_current_version_or_that_a_newer_version_adds_nothing_to()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var phone = Path.Combine(drive.Path, "android.mp4");
+        var camcorder = Path.Combine(drive.Path, "MOV002.MOD");
+        var photo = drive.Write("photo.jpg", TestPhotos.Porto("red"));
+        MakeVideo(phone, 640, 360, seconds: 1, "-metadata", "location=+38.7223-009.1393+010.000/");
+        MakeCamcorderFile(camcorder);
+        Process(drive, work);
+        var log = LoggingTools(tools);
+
+        var current = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+        // An older version, but the phone video already has its location, a camcorder file has none to read and a photo
+        // gains nothing from version 2: each is recorded as current without being read.
+        AsProcessedByAnOlderMetadataVersion(work, dropLocations: false);
+        var older = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Equal((0, 3, 0), (current.Processed, current.Skipped, current.Refreshed));
+        Assert.Equal((0, 3, 0), (older.Processed, older.Skipped, older.Refreshed));
+        Assert.Empty(File.Exists(log) ? File.ReadAllLines(log) : []);
+        Assert.All([phone, camcorder, photo], path => Assert.Equal(ProcessCommand.MetadataVersion, StateOf(work, path).MetadataVersion));
+    }
+
+    [UnixFact]
+    public void Reads_a_video_s_header_once_when_its_sound_and_its_metadata_are_both_checked()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var clip = Path.Combine(drive.Path, "android.mp4");
+        MakeVideo(clip, 640, 360, seconds: 1, "-metadata", "location=+38.7223-009.1393+010.000/");
+        Process(drive, work);
+        // An earlier build's work folder: no sound recorded (D-087) and an older metadata version, its 720p version with sound.
+        AsMadeWithoutSoundByAnEarlierBuild(work, proxy: null);
+        AsProcessedByAnOlderMetadataVersion(work);
+        var log = LoggingTools(tools);
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Equal((0, 1, 1, 1), (result.Processed, result.Skipped, result.Refreshed, result.LocationsAdded));
+        var reads = File.ReadAllLines(log).Where(line => line.Contains(clip, StringComparison.Ordinal)).ToList();
+        // The sound was checked on the 720p version in the work folder; the drive's file was read once, for its header.
+        Assert.Single(reads);
+        var state = StateOf(work, clip);
+        Assert.Equal((VideoSound.Kept, ProcessCommand.MetadataVersion), (state.Sound, state.MetadataVersion));
+        Assert.Equal(new GeoPoint(38.7223, -9.1393), Assert.Single(ReadManifests(work)).Location);
+    }
+
+    [UnixFact]
+    public void Brings_the_metadata_up_to_date_in_the_same_pass_when_a_silent_720p_version_is_made_again()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var clip = Path.Combine(drive.Path, "android.mp4");
+        MakeVideo(clip, 640, 360, seconds: 1, "-metadata", "location=+38.7223-009.1393+010.000/");
+        Process(drive, work);
+        AsMadeWithoutSoundByAnEarlierBuild(work, ProxyOf(work, Assert.Single(ReadManifests(work))));
+        AsProcessedByAnOlderMetadataVersion(work);
+        var log = LoggingTools(tools);
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        // Made again (D-087), which probes the file and so reads its location: no separate header read for it.
+        Assert.Equal((1, 0, 0, 0), (result.Processed, result.Skipped, result.Refreshed, result.LocationsAdded));
+        var probes = File.ReadAllLines(log).Where(line => line.Contains(clip, StringComparison.Ordinal) && line.Contains("stream=width", StringComparison.Ordinal));
+        Assert.Single(probes);
+        Assert.Equal(new GeoPoint(38.7223, -9.1393), Assert.Single(ReadManifests(work)).Location);
+        Assert.Equal(ProcessCommand.MetadataVersion, StateOf(work, clip).MetadataVersion);
+    }
+
+    [UnixFact]
+    public void Reads_a_video_without_a_location_once_and_records_the_version_so_it_is_not_read_again()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var clip = Path.Combine(drive.Path, "no-location.mp4");
+        MakeVideo(clip, 640, 360, seconds: 1);
+        Process(drive, work);
+        AsProcessedByAnOlderMetadataVersion(work);
+
+        var refreshed = Process(drive, work);
+        var log = LoggingTools(tools);
+        var after = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        // Read once, gaining nothing: it has no location to find.
+        Assert.Equal((1, 0), (refreshed.Refreshed, refreshed.LocationsAdded));
+        Assert.Null(Assert.Single(ReadManifests(work)).Location);
+        Assert.Equal((0, 1, 0), (after.Processed, after.Skipped, after.Refreshed));
+        Assert.Empty(File.Exists(log) ? File.ReadAllLines(log) : []);
+        Assert.Equal(ProcessCommand.MetadataVersion, StateOf(work, clip).MetadataVersion);
+    }
+
+    [UnixFact]
+    public void Leaves_the_old_version_when_the_header_cannot_be_read_and_reads_it_on_the_next_run()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var clip = Path.Combine(drive.Path, "android.mp4");
+        MakeVideo(clip, 640, 360, seconds: 1, "-metadata", "location=+38.7223-009.1393+010.000/");
+        Process(drive, work);
+        AsProcessedByAnOlderMetadataVersion(work);
+        var failed = Path.Combine(tools.Path, "failed-once");
+        // The drive drops out the first time the video's header is read.
+        TestTools.FakeTool(tools, "ffmpeg", $"exec '{s_tools.Ffmpeg}' \"$@\"");
+        TestTools.FakeTool(tools, "ffprobe", $$"""
+            case "$*" in
+              *android.mp4*) if [ ! -e '{{failed}}' ]; then touch '{{failed}}'; echo 'android.mp4: Input/output error' >&2; exit 1; fi;;
+            esac
+            exec '{{s_tools.Ffprobe}}' "$@"
+            """);
+
+        var first = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+        var unchanged = (Assert.Single(ReadManifests(work)).Location, StateOf(work, clip).MetadataVersion);
+        var second = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.True(File.Exists(failed));
+        Assert.Empty(first.Problems);
+        Assert.Equal((0, 0), (first.Refreshed, first.LocationsAdded));
+        Assert.Equal(((GeoPoint?)null, (int?)null), unchanged);
+        Assert.Equal((1, 1), (second.Refreshed, second.LocationsAdded));
+        Assert.Equal(new GeoPoint(38.7223, -9.1393), Assert.Single(ReadManifests(work)).Location);
+        Assert.Equal(ProcessCommand.MetadataVersion, StateOf(work, clip).MetadataVersion);
+    }
+
+    [Fact]
+    public void Never_replaces_a_location_the_manifest_already_has()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "android.mp4");
+        MakeVideo(clip, 640, 360, seconds: 1, "-metadata", "location=+38.7223-009.1393+010.000/");
+        Process(drive, work);
+        AsProcessedByAnOlderMetadataVersion(work, dropLocations: false);
+        var manifestPath = Assert.Single(Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json"));
+        var porto = new GeoPoint(41.1579, -8.6291);
+        ManifestJson.WriteFile(manifestPath, ManifestJson.Deserialize(File.ReadAllText(manifestPath)) with { Location = porto });
+
+        var result = Process(drive, work);
+
+        Assert.Equal((0, 0), (result.Refreshed, result.LocationsAdded));
+        Assert.Equal(porto, Assert.Single(ReadManifests(work)).Location);
+        Assert.Equal(ProcessCommand.MetadataVersion, StateOf(work, clip).MetadataVersion);
+    }
+
+    [Fact]
+    public void Leaves_the_metadata_version_unrecorded_for_a_video_to_read_again_until_ffmpeg_is_there()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "android.mp4");
+        MakeVideo(clip, 640, 360, seconds: 1, "-metadata", "location=+38.7223-009.1393+010.000/");
+        Process(drive, work);
+        AsProcessedByAnOlderMetadataVersion(work);
+
+        var withoutFfmpeg = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
+
+        Assert.Equal((1, 0), (withoutFfmpeg.Skipped, withoutFfmpeg.Refreshed));
+        Assert.Null(StateOf(work, clip).MetadataVersion);
+        Assert.Equal(1, Process(drive, work).Refreshed);
+    }
+
+    [Fact]
     public void Has_no_location_when_a_video_records_the_null_island_position()
     {
         using var drive = new TempFolder();
@@ -971,6 +1160,48 @@ public class VideoProcessingTests
             exec '{{s_tools.Ffmpeg}}' "$@"
             """);
     }
+
+    // What a work folder written before S-060 holds: no metadata version recorded and, unless told otherwise, the videos'
+    // manifests without the location version 2 reads.
+    private static void AsProcessedByAnOlderMetadataVersion(TempFolder work, bool dropLocations = true)
+    {
+        if (dropLocations)
+        {
+            foreach (var file in Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json"))
+            {
+                var manifest = ManifestJson.Deserialize(File.ReadAllText(file));
+                if (manifest.Kind == MediaKind.Video)
+                {
+                    ManifestJson.WriteFile(file, manifest with { Location = null });
+                }
+            }
+        }
+
+        using var state = new SqliteConnection($"Data Source={Path.Combine(work.Path, "state.db")};Pooling=False");
+        state.Open();
+        using var forget = state.CreateCommand();
+        forget.CommandText = "UPDATE files SET metadata_version = NULL";
+        forget.ExecuteNonQuery();
+    }
+
+    // Stand-ins that log every call's arguments, one line each, then run the real tools.
+    private static string LoggingTools(TempFolder tools)
+    {
+        var log = Path.Combine(tools.Path, "calls.log");
+        foreach (var (name, real) in new[] { ("ffprobe", s_tools.Ffprobe), ("ffmpeg", s_tools.Ffmpeg) })
+        {
+            TestTools.FakeTool(tools, name, $$"""
+                echo "{{name}} $*" >> '{{log}}'
+                exec '{{real}}' "$@"
+                """);
+        }
+
+        return log;
+    }
+
+    private static Dictionary<string, DateTime> DerivativeWriteTimes(TempFolder work) =>
+        Directory.GetFiles(Path.Combine(work.Path, "derivatives"), "*", SearchOption.AllDirectories)
+            .ToDictionary(file => file, File.GetLastWriteTimeUtc);
 
     private static FileState StateOf(TempFolder work, string path)
     {
