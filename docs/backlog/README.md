@@ -106,7 +106,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
 | S-056 | [Ship the CLIP text model with the web in Azure](S-056-ship-the-clip-text-model-with-the.md) | Search | S-016, S-032 | High | S | `done` |
-| S-025 | [Ask questions in English or Brazilian Portuguese with Claude Haiku](S-025-ask-questions-in-english-or-brazilian-portuguese.md) | Questions | S-016, S-044 | Medium | M | `todo` |
+| S-025 | [Ask questions in English or Brazilian Portuguese with Claude Haiku](S-025-ask-questions-in-english-or-brazilian-portuguese.md) | Questions | S-016, S-044 | Medium | M | `blocked` |
 | S-062 | [Count unique assets in a work folder](S-062-count-unique-assets-in-a-work-folder.md) | Local ingest | S-004, S-043 | High | S | `todo` |
 
 ### Sprint 9 — Counting answers and MVP acceptance (end of the MVP)

@@ -291,4 +291,92 @@
   <data name="Search_DescribeUnavailable" xml:space="preserve">
     <value>Search by description is not available right now. The other filters still work.</value>
   </data>
+  <data name="Format_Day" xml:space="preserve">
+    <value>MMMM d, yyyy</value>
+    <comment>A whole day, for a chip such as "From December 1, 2019".</comment>
+  </data>
+  <data name="Ask_Label" xml:space="preserve">
+    <value>Ask a question</value>
+  </data>
+  <data name="Ask_Placeholder" xml:space="preserve">
+    <value>Videos from Lisbon in December 2019</value>
+  </data>
+  <data name="Ask_Hint" xml:space="preserve">
+    <value>In English or Portuguese. Only the question's text is sent to Anthropic's Claude, never your photos.</value>
+  </data>
+  <data name="Ask_Submit" xml:space="preserve">
+    <value>Ask</value>
+  </data>
+  <data name="Ask_NotConfigured" xml:space="preserve">
+    <value>Questions are not set up on this server. The filters still work.</value>
+  </data>
+  <data name="Ask_LimitReached" xml:space="preserve">
+    <value>You have asked {0} questions today, the daily limit. Questions are back tomorrow; the filters still work.</value>
+    <comment>{0} is the daily limit.</comment>
+  </data>
+  <data name="Ask_NotUnderstood" xml:space="preserve">
+    <value>The question could not be turned into a search. Try other words, or use the filters.</value>
+  </data>
+  <data name="Ask_Unavailable" xml:space="preserve">
+    <value>The question service is busy or out of reach right now. Try again in a moment.</value>
+  </data>
+  <data name="Ask_Failed" xml:space="preserve">
+    <value>Questions are not working right now; the problem was logged. The filters still work.</value>
+  </data>
+  <data name="Ask_Invalid" xml:space="preserve">
+    <value>Type a question of up to {0} characters.</value>
+    <comment>{0} is the maximum length.</comment>
+  </data>
+  <data name="Ask_NothingToFilter" xml:space="preserve">
+    <value>Nothing in the question could be turned into a filter. Try naming a date, a place, photos or videos, or what the picture shows.</value>
+  </data>
+  <data name="Chips_Label" xml:space="preserve">
+    <value>Searching for</value>
+  </data>
+  <data name="Chip_Remove" xml:space="preserve">
+    <value>Remove: {0}</value>
+    <comment>Accessible label of a chip's remove button; {0} is the chip.</comment>
+  </data>
+  <data name="Chip_Years" xml:space="preserve">
+    <value>Year: {0}</value>
+    <comment>{0} is one or more years, such as "2019, 2020".</comment>
+  </data>
+  <data name="Chip_Months" xml:space="preserve">
+    <value>Month: {0}</value>
+    <comment>{0} is one or more month names.</comment>
+  </data>
+  <data name="Chip_From" xml:space="preserve">
+    <value>From {0}</value>
+    <comment>{0} is a date.</comment>
+  </data>
+  <data name="Chip_To" xml:space="preserve">
+    <value>Until {0}</value>
+    <comment>{0} is a date.</comment>
+  </data>
+  <data name="Chip_YearsAgo" xml:space="preserve">
+    <value>This day, {0} years ago</value>
+  </data>
+  <data name="Chip_Cities" xml:space="preserve">
+    <value>City: {0}</value>
+  </data>
+  <data name="Chip_Countries" xml:space="preserve">
+    <value>Country: {0}</value>
+  </data>
+  <data name="Chip_Sources" xml:space="preserve">
+    <value>Source: {0}</value>
+  </data>
+  <data name="Chip_Visual" xml:space="preserve">
+    <value>Showing: {0}</value>
+    <comment>{0} is the English description CLIP compares the photos with.</comment>
+  </data>
+  <data name="Chip_Undated" xml:space="preserve">
+    <value>Without a date</value>
+  </data>
+  <data name="Chip_OldestFirst" xml:space="preserve">
+    <value>Oldest first</value>
+  </data>
+  <data name="Chip_Limit" xml:space="preserve">
+    <value>First {0}</value>
+    <comment>{0} is how many results the search returns at most.</comment>
+  </data>
 </root>

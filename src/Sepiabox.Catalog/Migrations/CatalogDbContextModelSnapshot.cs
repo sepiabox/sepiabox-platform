@@ -291,6 +291,43 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("manifest_imports", (string)null);
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.QuestionUsage", b =>
+                {
+                    b.Property<string>("UserKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("user_key");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date")
+                        .HasColumnName("day");
+
+                    b.Property<long>("CacheCreationInputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cache_creation_input_tokens");
+
+                    b.Property<long>("CacheReadInputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cache_read_input_tokens");
+
+                    b.Property<long>("InputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("input_tokens");
+
+                    b.Property<long>("OutputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("output_tokens");
+
+                    b.Property<int>("Questions")
+                        .HasColumnType("integer")
+                        .HasColumnName("questions");
+
+                    b.HasKey("UserKey", "Day")
+                        .HasName("pk_question_usage");
+
+                    b.ToTable("question_usage", (string)null);
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.AssetEmbedding", b =>
                 {
                     b.HasOne("Sepiabox.Catalog.Asset", null)

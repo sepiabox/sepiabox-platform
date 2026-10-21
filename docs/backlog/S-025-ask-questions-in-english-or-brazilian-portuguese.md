@@ -22,14 +22,14 @@ People type the way they speak, in English first ("videos from Lisbon in Decembe
 - People, personal places and occasions in questions: each of S-021, S-014 and S-024 extends the translator, its prompt examples and its context when it adds its filter. Until then, a question that needs them is answered with the filters the DSL has, and the chips show what was understood.
 
 ### Acceptance criteria
-- [ ] Given a fake translator that returns a DSL, when I ask a question, then the results and the chips match that DSL.
-- [ ] Given the built request, when it is inspected, then it uses the model `claude-haiku-5-5`, the DSL schema as the output format, and contains no images.
-- [ ] Given the context, when the prompt is built, then it includes today's date, the sources and the catalog's cities and countries.
-- [ ] Given a fake translator, when I ask the same question in English and in Portuguese with the UI in either culture, then both reach the translator unchanged and the chips are labelled in the UI culture.
-- [ ] Given the committed golden set `tests/Sepiabox.Web.Tests/TestData/questions.golden.json` (at least 30 questions, each in English and in Brazilian Portuguese, covering dates and ranges, "on this day", places including "Lisboa" → "Lisbon", kinds, sources and descriptions, each with its expected DSL and a fixed "today"), when it runs in CI against recorded responses, then parsing and validation give the expected DSL.
-- [ ] Given the same golden set, when it runs against the real Anthropic API (tests marked `Category=LiveApi`, run with the key before the story is `done`), then every question's returned DSL means the same as the expected one: both are executed against a small seeded fixture catalog and their result sets are equal (not a comparison of JSON text). A question that misses may be retried once, and the retry is recorded; the story can only be `blocked`, not `done`, if the key is missing.
-- [ ] Given invalid JSON or a model refusal, when I ask a question, then I see a message and the app does not fail.
-- [ ] Given the daily limit has been reached, when I ask a question, then the API returns 429.
+- [x] Given a fake translator that returns a DSL, when I ask a question, then the results and the chips match that DSL. *(`QuestionPageTests`, `QuestionEndpointTests`.)*
+- [x] Given the built request, when it is inspected, then it uses the model `claude-haiku-5-5`, the DSL schema as the output format, and contains no images. *(`AnthropicQuestionTranslatorTests`, on the JSON the SDK sends.)*
+- [x] Given the context, when the prompt is built, then it includes today's date, the sources and the catalog's cities and countries. *(`AnthropicQuestionTranslatorTests`, `QuestionEndpointTests`, `LibraryQueriesTests`.)*
+- [x] Given a fake translator, when I ask the same question in English and in Portuguese with the UI in either culture, then both reach the translator unchanged and the chips are labelled in the UI culture. *(`QuestionPageTests`, `SearchChipsTests`.)*
+- [ ] Given the committed golden set `tests/Sepiabox.Web.Tests/TestData/questions.golden.json` (at least 30 questions, each in English and in Brazilian Portuguese, covering dates and ranges, "on this day", places including "Lisboa" → "Lisbon", kinds, sources and descriptions, each with its expected DSL and a fixed "today"), when it runs in CI against recorded responses, then parsing and validation give the expected DSL. *(Not ticked: the set (32 questions) and the replay (`GoldenQuestionsTests`, and `GoldenQuestionsCatalogTests` comparing what the queries find) are in place and pass, but `questions.recorded.json` holds the expected queries until the live run records the model's responses.)*
+- [ ] Given the same golden set, when it runs against the real Anthropic API (tests marked `Category=LiveApi`, run with the key before the story is `done`), then every question's returned DSL means the same as the expected one: both are executed against a small seeded fixture catalog and their result sets are equal (not a comparison of JSON text). A question that misses may be retried once, and the retry is recorded; the story can only be `blocked`, not `done`, if the key is missing. *(Not run: `ANTHROPIC_API_KEY` is not set in the agents' environment, and a request with a placeholder key gets 401 from `api.anthropic.com`, so the story is `blocked` (D-054). `GoldenQuestionsLiveTests` is ready: `dotnet test tests/Sepiabox.Web.Tests --filter "Category=LiveApi"`.)*
+- [x] Given invalid JSON or a model refusal, when I ask a question, then I see a message and the app does not fail. *(`AnthropicQuestionTranslatorTests`, `QuestionEndpointTests`, `QuestionPageTests`.)*
+- [x] Given the daily limit has been reached, when I ask a question, then the API returns 429. *(`QuestionEndpointTests`; the counter itself in `CatalogQuestionQuotaTests`.)*
 
 ### Technical notes
 - Before writing code, read the Anthropic C# SDK README for the exact names (do not guess the API). Do not use assistant prefill; Haiku 5.5 does not accept it.
@@ -38,6 +38,9 @@ People type the way they speak, in English first ("videos from Lisbon in Decembe
 - Cost: Anthropic bills the API separately from Azure, outside D-008's €50/month Azure ceiling, under its own spend limit (D-052).
 - The Anthropic API key is a human prerequisite (`docs/operations.md`); without it the question box says questions are not configured, and the rest of the app works.
 - Decisions: D-007, D-017, D-020, D-050, D-051, D-052, D-054, D-056.
+
+### Status
+- `blocked` (2026-10-20): the required live golden run needs `ANTHROPIC_API_KEY` in the agents' environment (docs/operations.md, prerequisites); everything else is implemented and tested (D-073). Once the key is set: run the `LiveApi` test with `SEPIABOX_RECORD_GOLDEN=1`, commit the recorded responses, tick the last two criteria and set the story `done`.
 
 ### Expected tests
 - Unit: prompt and request construction, refusal/invalid JSON handling, daily limit. Integration: endpoint with a fake translator.

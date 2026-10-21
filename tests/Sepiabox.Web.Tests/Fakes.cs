@@ -159,3 +159,61 @@ internal sealed class FakeQueryEmbedder(bool available = true, Func<string, floa
         return [.. vector.Select(v => v / norm)];
     }
 }
+
+/// <summary>A translator that answers every question with <see cref="Json"/>, or with <see cref="Outcome"/>.</summary>
+internal sealed class FakeTranslator : Sepiabox.Search.Questions.IQuestionTranslator
+{
+    public bool IsConfigured { get; init; } = true;
+
+    public string Json { get; init; } = """{"filters": {}}""";
+
+    public Sepiabox.Search.Questions.QuestionOutcome Outcome { get; init; } = Sepiabox.Search.Questions.QuestionOutcome.Translated;
+
+    public Sepiabox.Search.Questions.TokenUsage Usage { get; init; } = new(100, 20, 80, 0);
+
+    /// <summary>The questions and contexts it was given, in order.</summary>
+    public List<(string Question, Sepiabox.Search.Questions.QuestionContext Context)> Calls { get; } = [];
+
+    public Task<Sepiabox.Search.Questions.QuestionTranslation> TranslateAsync(
+        string question, Sepiabox.Search.Questions.QuestionContext context, CancellationToken cancellationToken = default)
+    {
+        lock (Calls)
+        {
+            Calls.Add((question, context));
+        }
+
+        return Task.FromResult(new Sepiabox.Search.Questions.QuestionTranslation(
+            Outcome, Outcome == Sepiabox.Search.Questions.QuestionOutcome.Translated ? Json : null, Usage, 1));
+    }
+}
+
+/// <summary>The daily question counter in memory.</summary>
+internal sealed class FakeQuestionQuota : IQuestionQuota
+{
+    public Dictionary<(string UserKey, DateOnly Day), (int Questions, Sepiabox.Search.Questions.TokenUsage Usage)> Days { get; } = [];
+
+    public Task<bool> TryTakeAsync(string userKey, DateOnly day, int limit, CancellationToken cancellationToken = default)
+    {
+        lock (Days)
+        {
+            var (questions, usage) = Days.GetValueOrDefault((userKey, day), (0, Sepiabox.Search.Questions.TokenUsage.None));
+            if (questions >= limit)
+            {
+                return Task.FromResult(false);
+            }
+
+            Days[(userKey, day)] = (questions + 1, usage);
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task RecordAsync(string userKey, DateOnly day, Sepiabox.Search.Questions.TokenUsage usage, CancellationToken cancellationToken = default)
+    {
+        lock (Days)
+        {
+            var (questions, total) = Days[(userKey, day)];
+            Days[(userKey, day)] = (questions, total.Add(usage));
+            return Task.CompletedTask;
+        }
+    }
+}

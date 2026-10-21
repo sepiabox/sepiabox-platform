@@ -1,17 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- The CLIP text side of search and the pinned models (D-055): ONNX Runtime only, no Magick.NET or FFmpeg, so the
-       web can reference it without Sepiabox.Pipeline (D-038). -->
+       web can reference it without Sepiabox.Pipeline (D-038). The question translator (S-025, D-056) is here too, and
+       only it uses the Anthropic SDK (D-051); it works on the DSL's JSON, so this library still has no EF Core. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Anthropic" Version="12.58.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="..\..\models\models.json" LogicalName="models.json" />
+    <EmbeddedResource Include="..\..\docs\schemas\search.v1.json" LogicalName="search.v1.json" />
   </ItemGroup>
 
   <ItemGroup>

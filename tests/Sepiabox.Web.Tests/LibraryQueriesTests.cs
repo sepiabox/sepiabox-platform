@@ -116,5 +116,37 @@ public sealed class LibraryQueriesTests(CatalogFixture catalog)
         Assert.Null(await queries.GetOriginalAsync(Ids.Of(12)));
     }
 
+    [Fact]
+    public async Task Filter_options_list_the_codes_of_the_countries_the_places_are_in()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        var lisbon = CatalogData.Photo(Ids.Of(1), new DateTime(2019, 12, 24));
+        lisbon.PlaceCity = "Lisbon";
+        lisbon.PlaceCountry = "Portugal";
+        var rio = CatalogData.Photo(Ids.Of(2), new DateTime(2020, 1, 1));
+        rio.PlaceCity = "Rio de Janeiro";
+        rio.PlaceCountry = "Brazil";
+        db.Assets.AddRange(lisbon, rio, CatalogData.Photo(Ids.Of(3), null));
+        db.GeoNames.AddRange(
+            City(1, "Lisbon", "PT", "Portugal"), City(2, "Porto", "PT", "Portugal"),
+            City(3, "Rio de Janeiro", "BR", "Brazil"), City(4, "Madrid", "ES", "Spain"));
+        await db.SaveChangesAsync();
+
+        var options = await Queries(db).GetFilterOptionsAsync();
+
+        // Only countries the library has, as the codes the DSL takes (S-025).
+        Assert.Equal(["BR", "PT"], options.Countries);
+    }
+
+    private static Catalog.GeoName City(long id, string name, string code, string country) => new()
+    {
+        GeonameId = id,
+        Name = name,
+        AsciiName = name,
+        CountryCode = code,
+        CountryName = country,
+        Location = new NetTopologySuite.Geometries.Point(0, 0) { SRID = 4326 },
+    };
+
     private LibraryQueries Queries(Catalog.CatalogDbContext db) => new(new TestContexts(catalog.ConnectionStringFor(db)));
 }

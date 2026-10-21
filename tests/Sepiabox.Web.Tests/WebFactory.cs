@@ -61,6 +61,12 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>The CLIP text encoder; unset, the real one, pointed at a folder with no model in it.</summary>
     public Sepiabox.Catalog.Search.IQueryEmbedder? QueryEmbedder { get; init; }
 
+    /// <summary>The question translator; unset, the real one, without a key (questions off): no test reaches Anthropic.</summary>
+    public Sepiabox.Search.Questions.IQuestionTranslator? QuestionTranslator { get; init; }
+
+    /// <summary>The daily question counter; unset, the catalog's (or an in-memory one with a fake library).</summary>
+    public IQuestionQuota? QuestionQuota { get; init; }
+
     /// <summary>Answers the Google handler's server-to-server calls (token and user info) instead of Google.</summary>
     public HttpMessageHandler? GoogleBackchannel { get; init; }
 
@@ -72,7 +78,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             .UseSetting("ConnectionStrings:blobs", "UseDevelopmentStorage=true")
             .UseSetting("Access:Emails", AccessEmails)
             // Never the developer's or CI's downloaded models: a test chooses with QueryEmbedder.
-            .UseSetting("Search:ModelFolder", Path.Combine(Path.GetTempPath(), "sepiabox-tests-no-models"));
+            .UseSetting("Search:ModelFolder", Path.Combine(Path.GetTempPath(), "sepiabox-tests-no-models"))
+            // Never the developer's key from user secrets: a test that needs questions gives a fake translator.
+            .UseSetting("Anthropic:ApiKey", string.Empty);
         foreach (var (key, value) in Settings)
         {
             builder.UseSetting(key, value);
@@ -109,6 +117,20 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             if (QueryEmbedder is not null)
             {
                 services.AddSingleton(QueryEmbedder);
+            }
+
+            if (QuestionTranslator is not null)
+            {
+                services.AddSingleton(QuestionTranslator);
+            }
+
+            if (QuestionQuota is not null)
+            {
+                services.AddSingleton(QuestionQuota);
+            }
+            else if (_library is not null)
+            {
+                services.AddSingleton<IQuestionQuota>(new FakeQuestionQuota());
             }
 
             if (Time is not null)

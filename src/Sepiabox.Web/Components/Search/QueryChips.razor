@@ -1,0 +1,27 @@
+@using Sepiabox.Catalog.Search
+@* What a search applies (S-025): from a question or the filter bar, each part with a link to the search without it. *@
+
+@if (_chips.Count > 0)
+{
+    <nav class="chips" aria-label="@Text["Chips_Label"]">
+        <span class="muted">@Text["Chips_Label"]</span>
+        <ul>
+            @foreach (var chip in _chips)
+            {
+                <li>
+                    <span>@chip.Label</span>
+                    <a href="@SearchLinks.Timeline(chip.Without)" aria-label="@Text["Chip_Remove", chip.Label]" title="@Text["Chip_Remove", chip.Label]"><span aria-hidden="true">×</span></a>
+                </li>
+            }
+        </ul>
+    </nav>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public SearchQuery Query { get; set; } = new();
+
+    private IReadOnlyList<SearchChip> _chips = [];
+
+    protected override void OnParametersSet() => _chips = SearchChips.For(Query, Text);
+}

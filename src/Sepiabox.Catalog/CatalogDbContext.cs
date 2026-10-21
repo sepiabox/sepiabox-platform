@@ -20,6 +20,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<GeoName> GeoNames => Set<GeoName>();
 
+    public DbSet<QuestionUsage> QuestionUsage => Set<QuestionUsage>();
+
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options
@@ -109,6 +111,13 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             geoName.Property(g => g.Location).HasColumnType("geography (Point, 4326)");
             // Nearest-city lookups: ST_DWithin and the <-> distance order both use a GiST index (S-012).
             geoName.HasIndex(g => g.Location).HasDatabaseName("ix_geonames_location").HasMethod("gist");
+        });
+
+        modelBuilder.Entity<QuestionUsage>(usage =>
+        {
+            usage.ToTable("question_usage");
+            usage.HasKey(u => new { u.UserKey, u.Day });
+            usage.Property(u => u.UserKey).HasMaxLength(64);
         });
 
         modelBuilder.Entity<ManifestImport>(import =>

@@ -4,15 +4,36 @@
 @inject ILibraryQueries Library
 @inject NavigationManager Navigation
 @inject IQueryEmbedder Describer
-@* Static server rendering (no @rendermode): the page is plain HTML with links and a GET form, nothing interactive. *@
+@inject QuestionService Questions
+@using Sepiabox.Search.Questions
+@* Static server rendering (no @rendermode): plain HTML with links, a GET form for the filters and a POST form for a
+   question, which the server answers with a redirect to the search it was understood as (S-025). *@
 
 <PageTitle>Sepiabox</PageTitle>
 
 <h1 class="visually-hidden">@Text["Timeline_Heading"]</h1>
 
-@if (_options is { } options && (_filtered || _invalid || _page is { Items.Count: > 0 } || _page is { Page: > 1 }))
+@if (_options is { } options && (_filtered || _invalid || _asked || _page is { Items.Count: > 0 } || _page is { Page: > 1 }))
 {
+    <form class="ask" method="post" action="./" @formname="ask" @onsubmit="AskAsync" role="search" aria-label="@Text["Ask_Label"]">
+        <AntiforgeryToken />
+        <label>
+            <span>@Text["Ask_Label"]</span>
+            <input type="search" name="Question" value="@(Question ?? Asked)" maxlength="@QuestionPrompt.MaxQuestionLength" placeholder="@Text["Ask_Placeholder"]" disabled="@(!Questions.IsConfigured)" />
+        </label>
+        <button type="submit" disabled="@(!Questions.IsConfigured)">@Text["Ask_Submit"]</button>
+        <p class="hint muted">@(Questions.IsConfigured ? Text["Ask_Hint"] : Text["Ask_NotConfigured"])</p>
+    </form>
+    @if (_askMessage is not null)
+    {
+        <p class="empty" role="alert">@_askMessage</p>
+    }
+
     <FilterBar Options="options" Fields="SearchLinks.ToFields(_query)" Filtered="@(_filtered || _invalid)" OnThisDayActive="@(_query == SearchLinks.OnThisDay)" DescribeAvailable="Describer.IsAvailable" />
+    @if (_filtered && _query is not null)
+    {
+        <QueryChips Query="_query" />
+    }
 }
 
 @if (_invalid)
@@ -118,6 +139,19 @@ else
     [SupplyParameterFromQuery(Name = "text")]
     public string? Description { get; set; }
 
+    /// <summary>The question the search came from, shown again in the box (S-025).</summary>
+    [SupplyParameterFromQuery(Name = AskedParameter)]
+    public string? Asked { get; set; }
+
+    /// <summary>The question box's text, on the form's POST.</summary>
+    [SupplyParameterFromForm(FormName = "ask")]
+    public string? Question { get; set; }
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    public const string AskedParameter = "asked";
+
     private TimelinePage? _page;
     private SearchPage? _results;
     private FilterOptions? _options;
@@ -125,8 +159,48 @@ else
     private bool _filtered;
     private bool _invalid;
     private bool _describeUnavailable;
+    private bool _asked;
+    private string? _askMessage;
 
     protected override async Task OnParametersSetAsync()
+    {
+        // A question's POST is answered by AskAsync, which redirects or shows a message over the same page.
+        if (HttpContext is not null && HttpMethods.IsPost(HttpContext.Request.Method) && Question is not null)
+        {
+            // The form must be on the page for Blazor to hand it the POST; the rest waits for the answer.
+            _asked = true;
+            _options = await Library.GetFilterOptionsAsync();
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task AskAsync()
+    {
+        var result = await Questions.AskAsync(Question, HttpContext?.User ?? new ClaimsPrincipal());
+        if (result is { Outcome: AskOutcome.Answered, Query: { } query } && !query.Filters.IsEmpty)
+        {
+            // Post, redirect, get: the search has its own address, and reloading it does not ask again.
+            var asked = QuestionPrompt.Clean(Question) ?? string.Empty;
+            Navigation.NavigateTo(SearchLinks.Timeline(query) + "&" + AskedParameter + "=" + Uri.EscapeDataString(asked));
+            return;
+        }
+
+        _askMessage = result.Outcome switch
+        {
+            AskOutcome.Answered => Text["Ask_NothingToFilter"],
+            AskOutcome.Invalid => Text["Ask_Invalid", QuestionPrompt.MaxQuestionLength],
+            AskOutcome.NotConfigured => Text["Ask_NotConfigured"],
+            AskOutcome.LimitReached => Text["Ask_LimitReached", Questions.DailyLimit],
+            AskOutcome.NotUnderstood => Text["Ask_NotUnderstood"],
+            AskOutcome.Unavailable => Text["Ask_Unavailable"],
+            _ => Text["Ask_Failed"],
+        };
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
     {
         if (FilterSubmitted is not null)
         {

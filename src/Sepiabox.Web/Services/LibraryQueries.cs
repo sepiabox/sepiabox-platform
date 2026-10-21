@@ -34,8 +34,12 @@ public sealed record AssetDetail(
 /// <summary>The assets a search found, up to its limit; <see cref="HasMore"/> says whether more matched.</summary>
 public sealed record SearchPage(IReadOnlyList<TimelineItem> Items, bool HasMore);
 
-/// <summary>What the filter bar offers: the years, cities and sources the catalog has, in display order.</summary>
-public sealed record FilterOptions(IReadOnlyList<int> Years, IReadOnlyList<string> Cities, IReadOnlyList<string> Sources);
+/// <summary>
+/// What the filter bar offers: the years, cities and sources the catalog has, in display order. <c>Countries</c> are
+/// the ISO codes of the countries the catalog's places are in, for the question translator (S-025).
+/// </summary>
+public sealed record FilterOptions(
+    IReadOnlyList<int> Years, IReadOnlyList<string> Cities, IReadOnlyList<string> Sources, IReadOnlyList<string>? Countries = null);
 
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
 public sealed record OriginalFile(string FileName, string ContentType);
@@ -222,7 +226,7 @@ public sealed class LibraryQueries(
         var options = await (filterOptions?.GetAsync(() => LoadFilterOptionsAsync(CancellationToken.None))
             ?? LoadFilterOptionsAsync(cancellationToken));
         var byName = StringComparer.Create(System.Globalization.CultureInfo.CurrentCulture, ignoreCase: true);
-        return new FilterOptions(options.Years, [.. options.Cities.Order(byName)], [.. options.Sources.Order(byName)]);
+        return options with { Cities = [.. options.Cities.Order(byName)], Sources = [.. options.Sources.Order(byName)] };
     }
 
     private async Task<FilterOptions> LoadFilterOptionsAsync(CancellationToken cancellationToken)
@@ -233,7 +237,11 @@ public sealed class LibraryQueries(
         var cities = await db.Assets.Where(a => a.PlaceCity != null).Select(a => a.PlaceCity!)
             .Distinct().ToListAsync(cancellationToken);
         var sources = await db.AssetSources.Select(s => s.Name).Distinct().ToListAsync(cancellationToken);
-        return new FilterOptions(years, cities, sources);
+        // The catalog keeps country names (D-066); GeoNames gives their codes, which the DSL takes.
+        var countryNames = db.Assets.Where(a => a.PlaceCountry != null).Select(a => a.PlaceCountry);
+        var countries = await db.GeoNames.Where(g => g.CountryName != null && countryNames.Contains(g.CountryName))
+            .Select(g => g.CountryCode).Distinct().OrderBy(c => c).ToListAsync(cancellationToken);
+        return new FilterOptions(years, cities, sources, countries);
     }
 
     private static IEnumerable<AssetSource> OrderSources(IEnumerable<AssetSource> sources) =>
