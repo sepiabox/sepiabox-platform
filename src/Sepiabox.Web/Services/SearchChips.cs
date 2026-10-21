@@ -78,12 +78,20 @@ public static class SearchChips
             Add(text["Chip_Undated"], f with { UndatedOnly = false });
         }
 
-        if (query.Sort == SearchSort.CapturedAtAsc)
+        if (query.Aggregate is null && query.Sort == SearchSort.CapturedAtAsc)
         {
             chips.Add(new SearchChip(text["Chip_OldestFirst"], query with { Sort = SearchSort.CapturedAtDesc }));
         }
 
-        if (query.Limit != SearchQuery.DefaultLimit)
+        if (query.Aggregate is { } aggregate)
+        {
+            var label = aggregate.GroupBy is { } groupBy
+                ? text["Chip_CountBy", text["Group_" + char.ToUpperInvariant(groupBy[0]) + groupBy[1..]]]
+                : text["Chip_Count"];
+            chips.Add(new SearchChip(label, query with { Aggregate = null }));
+        }
+
+        if (query.Aggregate is null && query.Limit != SearchQuery.DefaultLimit)
         {
             chips.Add(new SearchChip(text["Chip_Limit", query.Limit], query with { Limit = SearchQuery.DefaultLimit }));
         }

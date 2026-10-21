@@ -64,6 +64,12 @@ public interface ILibraryQueries
     /// </summary>
     Task<SearchPage> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The count a query with <see cref="SearchQuery.Aggregate"/> asks for (S-026); null for one with a description,
+    /// which is not counted in the MVP (D-070, D-075).
+    /// </summary>
+    Task<CountResult?> CountAsync(SearchQuery query, CancellationToken cancellationToken = default);
+
     Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default);
 }
 
@@ -202,6 +208,13 @@ public sealed class LibraryQueries(
         // The first source in the order the detail page lists them names the download.
         var path = OrderSources(asset.Sources).FirstOrDefault()?.Path;
         return new OriginalFile(DownloadName(path, asset.Id, asset.ContentType), asset.ContentType);
+    }
+
+    public async Task<CountResult?> CountAsync(SearchQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        return await new SearchService(db, clock ?? TimeProvider.System, searchOptions, embedder).CountAsync(query, cancellationToken);
     }
 
     public async Task<SearchPage> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)

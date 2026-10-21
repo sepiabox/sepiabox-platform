@@ -135,8 +135,14 @@ internal sealed class GoldenQuestions
             throw new InvalidOperationException($"Not a valid query: {error}");
         }
 
-        var result = await new SearchService(db, Clock, new SearchOptions { TimeZone = Zone }, new ConceptEmbedder(Concepts))
-            .ExecuteAsync(query, SimilarityMode.Exact);
+        var search = new SearchService(db, Clock, new SearchOptions { TimeZone = Zone }, new ConceptEmbedder(Concepts));
+        // A count is compared by its numbers: the total, the undated it leaves out, and the groups in order (S-026).
+        if (query.Aggregate is not null && await search.CountAsync(query) is { } count)
+        {
+            return ["count", $"total={count.Total}", $"undated={count.Undated}", .. count.Groups.Select(g => $"{g.Key ?? "(none)"}={g.Count}")];
+        }
+
+        var result = await search.ExecuteAsync(query, SimilarityMode.Exact);
         // A visual search ranks by similarity: ties between equally similar assets may come in any order.
         return query.Filters.Visual is null && query.Limit < Catalog.Count
             ? [.. result.Hits.Select(h => h.Id)]

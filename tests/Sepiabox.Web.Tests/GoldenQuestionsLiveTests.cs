@@ -92,6 +92,8 @@ public sealed class GoldenQuestionsLiveTests(CatalogFixture catalog, ITestOutput
         var root = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         root["description"] = "Responses replayed by the golden test in CI (S-025): the real model's answers from the last live run (SEPIABOX_RECORD_GOLDEN=1), which rewrites this file.";
         root["source"] = "live";
+        // Every response now comes from the model.
+        root.Remove("placeholders");
         root["model"] = model;
         root["recordedAt"] = DateTime.UtcNow.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         var recorded = new JsonObject();

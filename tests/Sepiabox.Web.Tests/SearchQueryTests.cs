@@ -204,7 +204,26 @@ public sealed class SearchQueryTests
         """{"sort": "random"}""",
         """{"limit": 1001}""",
         "[]",
+        // The count of S-026 (D-075).
+        """{"filters": {"kinds": ["video"], "years": [2019]}, "aggregate": {"count": "assets"}}""",
+        """{"filters": {}, "aggregate": {"count": "assets", "groupBy": "year", "top": 3}}""",
+        """{"aggregate": {"count": "assets", "groupBy": "source", "top": 100}}""",
+        """{"aggregate": {"count": "events"}}""",
+        """{"aggregate": {"groupBy": "year"}}""",
+        """{"aggregate": {"count": "assets", "groupBy": "person"}}""",
+        """{"aggregate": {"count": "assets", "top": 0}}""",
+        """{"aggregate": {"count": "assets", "top": 101}}""",
+        """{"aggregate": {"count": "assets", "groupBy": null}}""",
+        """{"aggregate": {"count": "assets", "order": "asc"}}""",
     ];
+
+    [Fact]
+    public void Refuses_a_top_without_a_grouping()
+    {
+        Assert.False(SearchQueryJson.TryParse("""{"aggregate": {"count": "assets", "top": 3}}""", out _, out var error));
+        Assert.Contains("aggregate.top needs aggregate.groupBy", error, StringComparison.Ordinal);
+        Assert.True(SearchQueryJson.TryParse("""{"aggregate": {"count": "assets", "groupBy": "city", "top": 3}}""", out _, out _));
+    }
 
     [Theory]
     [MemberData(nameof(SchemaExamples))]

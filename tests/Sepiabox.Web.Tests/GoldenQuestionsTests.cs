@@ -31,6 +31,12 @@ public sealed class GoldenQuestionsTests
         Assert.Superset(
             new HashSet<string> { "dates", "range", "on this day", "places", "Lisboa", "countries", "kinds", "sources", "descriptions", "undated" },
             covered);
+        // At least 10 counting questions (S-026), by year, kind, place, source and "on this day".
+        var counting = Golden.Questions.Where(q => q.Expected.Contains("\"aggregate\"", StringComparison.Ordinal)).ToList();
+        Assert.True(counting.Count >= 10, $"{counting.Count} counting questions.");
+        Assert.Superset(
+            new HashSet<string> { "by year", "by kind", "places", "sources", "on this day" },
+            counting.SelectMany(q => q.Covers).ToHashSet());
         // "Lisboa" is asked for as Lisbon, the name GeoNames stores.
         Assert.Contains(Golden.Questions, q => q.Portuguese.Contains("Lisboa", StringComparison.Ordinal) && q.Expected.Contains("\"Lisbon\"", StringComparison.Ordinal));
     }

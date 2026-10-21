@@ -115,7 +115,7 @@ Statuses: `todo` · `doing` · `blocked` · `done`.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-026 | [Answer counting questions](S-026-answer-counting-questions.md) | Questions | S-025 | Medium | M | `todo` |
+| S-026 | [Answer counting questions](S-026-answer-counting-questions.md) | Questions | S-025 | Medium | M | `done` |
 | S-054 | [Accept the MVP from drive to answers](S-054-accept-the-mvp-from-drive-to-answers.md) | Questions | S-026, S-061, S-062, S-012 | High | M | `todo` |
 
 ### After the MVP

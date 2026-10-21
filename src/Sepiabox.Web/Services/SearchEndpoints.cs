@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Localization;
 using Sepiabox.Catalog.Search;
 
@@ -16,7 +17,21 @@ public static class SearchEndpoints
 
     public sealed record Item(string Id, string Kind, DateTime? CapturedAt, double? DurationSeconds, bool HasThumbnail);
 
-    public sealed record Response(IReadOnlyList<Item> Items, bool HasMore);
+    /// <summary>
+    /// A count (S-026): the total, the groups shown, how many groups there are in all (more when only the largest are
+    /// shown), and the undated assets a time filter leaves out.
+    /// </summary>
+    public sealed record CountBody(int Total, IReadOnlyList<CountGroup> Groups, int GroupCount, int? Undated);
+
+    /// <summary>
+    /// The items found, or for a query with <c>aggregate</c> its <see cref="Count"/> (and no items); a count with a
+    /// description is not counted (D-075): <see cref="NotCounted"/> says why, and the items are its results instead.
+    /// </summary>
+    public sealed record Response(
+        IReadOnlyList<Item> Items,
+        bool HasMore,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CountBody? Count = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NotCounted = null);
 
     public static IEndpointRouteBuilder MapSearchEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -52,10 +67,10 @@ public static class SearchEndpoints
             return Invalid(error);
         }
 
-        SearchPage page;
+        Response response;
         try
         {
-            page = await library.SearchAsync(query, http.RequestAborted);
+            response = await AnswerAsync(query, library, text, http.RequestAborted);
         }
         catch (VisualSearchUnavailableException)
         {
@@ -68,8 +83,29 @@ public static class SearchEndpoints
                 extensions: new Dictionary<string, object?> { ["field"] = "filters.visual" });
         }
 
-        return Results.Ok(new Response(
-            [.. page.Items.Select(i => new Item(i.Id, i.Kind, i.CapturedAt, i.DurationSeconds, i.HasThumbnail))], page.HasMore));
+        return Results.Ok(response);
+    }
+
+    /// <summary>
+    /// What a query answers: its items, or its count when it has <c>aggregate</c> (S-026); a count with a description
+    /// gives the items with the reason it is not counted. Shared with <c>/api/questions</c>.
+    /// </summary>
+    public static async Task<Response> AnswerAsync(
+        SearchQuery query, ILibraryQueries library, IStringLocalizer<SharedResource> text, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(library);
+        ArgumentNullException.ThrowIfNull(text);
+        if (query.Aggregate is not null && await library.CountAsync(query, cancellationToken) is { } count)
+        {
+            return new Response([], false, new CountBody(count.Total, count.Groups, count.AllGroups, count.Undated));
+        }
+
+        var page = await library.SearchAsync(query, cancellationToken);
+        return new Response(
+            [.. page.Items.Select(i => new Item(i.Id, i.Kind, i.CapturedAt, i.DurationSeconds, i.HasThumbnail))],
+            page.HasMore,
+            NotCounted: query.Aggregate is null ? null : text["Count_NeedsDescription"].Value);
     }
 
     private static IResult Invalid(string message) =>

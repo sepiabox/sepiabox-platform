@@ -339,4 +339,112 @@
   <data name="Chip_Limit" xml:space="preserve">
     <value>Primeiros {0}</value>
   </data>
+  <data name="Count_Photos_One" xml:space="preserve">
+    <value>{0} foto</value>
+  </data>
+  <data name="Count_Photos_Other" xml:space="preserve">
+    <value>{0} fotos</value>
+  </data>
+  <data name="Count_Videos_One" xml:space="preserve">
+    <value>{0} vídeo</value>
+  </data>
+  <data name="Count_Videos_Other" xml:space="preserve">
+    <value>{0} vídeos</value>
+  </data>
+  <data name="Count_Items_One" xml:space="preserve">
+    <value>{0} item</value>
+  </data>
+  <data name="Count_Items_Other" xml:space="preserve">
+    <value>{0} itens</value>
+  </data>
+  <data name="Count_InYear" xml:space="preserve">
+    <value> em {0}</value>
+  </data>
+  <data name="Count_InPlace" xml:space="preserve">
+    <value> em {0}</value>
+  </data>
+  <data name="Count_OnThisDay" xml:space="preserve">
+    <value> neste dia</value>
+  </data>
+  <data name="Count_YearsAgo" xml:space="preserve">
+    <value> neste dia, há {0} anos</value>
+  </data>
+  <data name="Count_ItemsNoun" xml:space="preserve">
+    <value>Itens</value>
+  </data>
+  <data name="Count_ByYear" xml:space="preserve">
+    <value>{0} por ano</value>
+  </data>
+  <data name="Count_ByMonth" xml:space="preserve">
+    <value>{0} por mês</value>
+  </data>
+  <data name="Count_ByKind" xml:space="preserve">
+    <value>{0} por tipo</value>
+  </data>
+  <data name="Count_ByCity" xml:space="preserve">
+    <value>{0} por cidade</value>
+  </data>
+  <data name="Count_BySource" xml:space="preserve">
+    <value>{0} por origem</value>
+  </data>
+  <data name="Count_Group" xml:space="preserve">
+    <value>Grupo</value>
+  </data>
+  <data name="Count_Count" xml:space="preserve">
+    <value>Quantidade</value>
+  </data>
+  <data name="Count_NoPlace" xml:space="preserve">
+    <value>Sem lugar</value>
+  </data>
+  <data name="Count_Undated_One" xml:space="preserve">
+    <value>1 item não tem data e por isso fica fora desta contagem.</value>
+  </data>
+  <data name="Count_Undated_Other" xml:space="preserve">
+    <value>{0} itens não têm data e por isso ficam fora desta contagem.</value>
+  </data>
+  <data name="Count_ShowItems" xml:space="preserve">
+    <value>Ver os itens</value>
+  </data>
+  <data name="Count_ShowUndated" xml:space="preserve">
+    <value>Mostrar os itens sem data</value>
+  </data>
+  <data name="Count_NeedsDescription" xml:space="preserve">
+    <value>Esta contagem precisa de uma busca por descrição, que encontra as fotos mais parecidas em vez de um número exato. Veja os resultados abaixo.</value>
+  </data>
+  <data name="Count_Label" xml:space="preserve">
+    <value>Resposta</value>
+  </data>
+  <data name="Chip_Count" xml:space="preserve">
+    <value>Contagem</value>
+  </data>
+  <data name="Chip_CountBy" xml:space="preserve">
+    <value>Contagem por {0}</value>
+  </data>
+  <data name="Group_Year" xml:space="preserve">
+    <value>ano</value>
+  </data>
+  <data name="Group_Month" xml:space="preserve">
+    <value>mês</value>
+  </data>
+  <data name="Group_Kind" xml:space="preserve">
+    <value>tipo</value>
+  </data>
+  <data name="Group_City" xml:space="preserve">
+    <value>cidade</value>
+  </data>
+  <data name="Group_Source" xml:space="preserve">
+    <value>origem</value>
+  </data>
+  <data name="Count_WithoutDate" xml:space="preserve">
+    <value> sem data</value>
+  </data>
+  <data name="Count_Shown_One" xml:space="preserve">
+    <value>Mostrando o maior de {0}.</value>
+  </data>
+  <data name="Count_Shown" xml:space="preserve">
+    <value>Mostrando os {0} maiores de {1}.</value>
+  </data>
+  <data name="Count_FromSource" xml:space="preserve">
+    <value> de {0}</value>
+  </data>
 </root>

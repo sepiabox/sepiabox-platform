@@ -292,6 +292,39 @@ main {
     font-size: 0.85rem;
 }
 
+/* A counting answer (S-026): the number first, large. */
+.answer {
+    margin: 0 0 24px;
+}
+
+.answer .number {
+    margin: 0;
+    font-size: 3rem;
+    font-weight: 600;
+    line-height: 1.1;
+}
+
+.answer .sentence {
+    margin: 4px 0 8px;
+    font-size: 1.1rem;
+}
+
+.answer .ranking {
+    border-collapse: collapse;
+    min-width: 16rem;
+}
+
+.answer .ranking th,
+.answer .ranking td {
+    padding: 4px 12px 4px 0;
+    text-align: left;
+}
+
+.answer .ranking td {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
 /* What a search applies, each part removable. */
 .chips {
     display: flex;

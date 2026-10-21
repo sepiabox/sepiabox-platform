@@ -1,0 +1,63 @@
+@using System.Globalization
+@using Sepiabox.Catalog.Search
+@* A counting answer (S-026): a big number and its sentence, or a ranking, with links to the items. *@
+
+<section class="answer" aria-label="@Text["Count_Label"]">
+    @if (Query.Aggregate?.GroupBy is null)
+    {
+        <p class="number">@Count.Total.ToString("N0", CultureInfo.CurrentCulture)</p>
+        <p class="sentence">@CountAnswers.Sentence(Query, Count.Total, Text)</p>
+    }
+    else
+    {
+        <h2>@CountAnswers.Heading(Query, Text)</h2>
+        <table class="ranking">
+            <thead>
+                <tr><th scope="col">@Text["Count_Group"]</th><th scope="col">@Text["Count_Count"]</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var row in CountAnswers.Rows(Query, Count, Text))
+                {
+                    <tr>
+                        <th scope="row">
+                            @if (row.Items is { } items)
+                            {
+                                <a href="@SearchLinks.Timeline(items)">@row.Label</a>
+                            }
+                            else
+                            {
+                                @row.Label
+                            }
+                        </th>
+                        <td>@row.Count.ToString("N0", CultureInfo.CurrentCulture)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (Count.AllGroups > Count.Groups.Count)
+        {
+            @* Only the largest are shown: say so, as the rows then add up to less than the total. *@
+            <p class="muted shown">@(Count.Groups.Count == 1
+                ? Text["Count_Shown_One", Count.AllGroups.ToString("N0", CultureInfo.CurrentCulture)]
+                : Text["Count_Shown", Count.Groups.Count.ToString("N0", CultureInfo.CurrentCulture), Count.AllGroups.ToString("N0", CultureInfo.CurrentCulture)])</p>
+        }
+        <p class="sentence">@CountAnswers.Sentence(Query, Count.Total, Text)</p>
+    }
+
+    <p><a class="show" href="@SearchLinks.Timeline(Query with { Aggregate = null })">@Text["Count_ShowItems"]</a></p>
+    @if (Count.Undated is > 0 and var undated)
+    {
+        <p class="undated">
+            @CountAnswers.Undated(undated, Text)
+            <a href="@SearchLinks.Timeline(Query with { Aggregate = null, Filters = Query.Filters.UndatedInstead })">@Text["Count_ShowUndated"]</a>
+        </p>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public SearchQuery Query { get; set; } = new();
+
+    [Parameter, EditorRequired]
+    public CountResult Count { get; set; } = new(0, [], null);
+}

@@ -17,9 +17,9 @@ public static class SearchLinks
     /// <summary>The "On this day" shortcut: today's day and month in every earlier year.</summary>
     public static SearchQuery OnThisDay { get; } = new() { Filters = new SearchFilters { OnThisDay = new OnThisDayFilter() } };
 
-    /// <summary>The timeline with these filters; the plain timeline when there are none.</summary>
+    /// <summary>The timeline with these filters (or this count, S-026); the plain timeline when there are none.</summary>
     public static string Timeline(SearchQuery? query) =>
-        query is null || query.Filters.IsEmpty ? "./" : "./?" + QueryParameter + "=" + SearchQueryJson.Encode(query);
+        query is null || (query.Filters.IsEmpty && query.Aggregate is null) ? "./" : "./?" + QueryParameter + "=" + SearchQueryJson.Encode(query);
 
     /// <summary>
     /// The query the bar's submitted fields describe; values that are not a year, a month or a kind are ignored, as
