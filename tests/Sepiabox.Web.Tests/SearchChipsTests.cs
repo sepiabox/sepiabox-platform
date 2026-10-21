@@ -100,6 +100,22 @@ public sealed class SearchChipsTests
     }
 
     [Fact]
+    public void Removing_similar_photos_after_show_more_also_drops_the_limit_it_raised_but_not_one_set_apart()
+    {
+        var shown = SimilarSearch.More(SimilarSearch.More(SearchLinks.Similar(Ids.Of(1)))!)!;
+        var setApart = SearchLinks.Similar(Ids.Of(1)) with { Limit = 500 };
+
+        var withoutShown = SearchChips.For(shown, Cultures.Text()).Single(c => c.Label == "Similar to a photo").Without;
+        var withoutSetApart = SearchChips.For(setApart, Cultures.Text()).Single(c => c.Label == "Similar to a photo").Without;
+
+        Assert.Equal(1000, shown.Limit);
+        Assert.Equal(new SearchQuery(), withoutShown);
+        Assert.DoesNotContain(SearchChips.For(withoutShown, Cultures.Text()), c => c.Label.StartsWith("First", StringComparison.Ordinal));
+        // A limit the similar search did not raise is the query's own, and stays.
+        Assert.Equal(new SearchQuery { Limit = 500 }, withoutSetApart);
+    }
+
+    [Fact]
     public void Refuses_a_translated_answer_with_similar_to_since_a_question_cannot_name_an_asset()
     {
         var json = $$$$"""{"filters": {"similarTo": {"assetId": "{{{{Ids.Of(1)}}}}"}}}""";
