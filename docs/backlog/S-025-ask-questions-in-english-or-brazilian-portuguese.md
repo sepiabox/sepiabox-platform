@@ -37,7 +37,17 @@ People type the way they speak, in English first ("videos from Lisbon in Decembe
 - No real calls in CI. CI's unit filter is `Category!=Integration&Category!=LiveApi` (`.github/workflows/ci.yml`, `CLAUDE.md`). The live golden run is required before `done` (D-054). It reads the key from the environment variable `ANTHROPIC_API_KEY` of the agents' environment (`docs/operations.md`, prerequisites), the SDK's default; without it `GoldenQuestionsLiveTests` is skipped and the story stays `blocked`. Before the golden questions it asks `GET /v1/models`: a 401 or 403 fails the test ("missing or wrong"), never a silent pass. The key is never printed or logged. Production is unchanged: the web reads `Anthropic:ApiKey` from Key Vault (S-058).
 - **The recording run**, in a session that has `ANTHROPIC_API_KEY` and Docker, on this story's branch:
   1. `git fetch origin && git checkout story/S-025-questions-haiku && git pull`
-  2. `docker info` must answer (start `dockerd` if it does not); the catalog fixture builds `infra/postgres` unless `SEPIABOX_TEST_POSTGRES_IMAGE` names an image with pgvector and PostGIS.
+  2. `docker info` must answer (start `dockerd` if it does not). The agents' container cannot build `infra/postgres` (its `apt-get` cannot reach the Debian mirrors), so build an equivalent test image without network `RUN` steps and point the fixture at it. The pgvector stage must be a bookworm image: a trixie `vector.so` needs a newer glibc than `postgis/postgis:17-3.5` has.
+     ```bash
+     mkdir -p /tmp/pgtest && cat > /tmp/pgtest/Dockerfile <<'DOCKERFILE'
+     FROM pgvector/pgvector:0.8.1-pg17-bookworm AS vec
+     FROM postgis/postgis:17-3.5
+     COPY --from=vec /usr/lib/postgresql/17/lib/vector.so /usr/lib/postgresql/17/lib/
+     COPY --from=vec /usr/share/postgresql/17/extension/vector* /usr/share/postgresql/17/extension/
+     DOCKERFILE
+     docker build -t sepiabox-postgres-local:test /tmp/pgtest
+     export SEPIABOX_TEST_POSTGRES_IMAGE=sepiabox-postgres-local:test
+     ```
   3. `SEPIABOX_RECORD_GOLDEN=1 dotnet test tests/Sepiabox.Web.Tests --filter "Category=LiveApi" --logger "console;verbosity=detailed"`. It must report `Passed: 1` (`Skipped: 1` means the key is not set); its output ends with `Model claude-haiku-5-5, <date>: <passed>/64 passed, <n> after a retry (<ids>).` and lists every miss.
   4. `dotnet test tests/Sepiabox.Web.Tests --filter "FullyQualifiedName~GoldenQuestions"` (the CI replay, now on the recorded responses) must pass.
   5. `git add tests/Sepiabox.Web.Tests/TestData/questions.recorded.json`, tick the last two acceptance criteria, set S-025 to `done` in `docs/backlog/README.md`, commit, push, and put the run's line from step 3 in the PR description.
