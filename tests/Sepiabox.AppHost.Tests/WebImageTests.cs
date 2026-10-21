@@ -8,7 +8,7 @@ namespace Sepiabox.AppHost.Tests;
 /// The web's image as a deploy builds it (S-056, D-071), against a local registry instead of Azure's: the models image
 /// from scripts/web-models.sh with the real, verified model, then the web published twice on it as two releases.
 /// Needs Docker and the CLIP text model. CI runs it in its web-image job, on main and on a pull request that changes
-/// what goes into the image (D-081), so it is also in the category WebImage, which the integration job leaves out.
+/// what goes into the image (D-082), so it is also in the category WebImage, which the integration job leaves out.
 /// </summary>
 [Trait("Category", "Integration")]
 [Trait("Category", "WebImage")]
@@ -19,7 +19,7 @@ public sealed class WebImageTests
     // Pinned: the test should not change because the registry image did.
     private const string Registry = "registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373";
 
-    // How long a command's output may stay open after it exits (D-081).
+    // How long a command's output may stay open after it exits (D-082).
     private static readonly TimeSpan s_outputGrace = TimeSpan.FromMinutes(1);
 
     [WebImageFact]
@@ -130,7 +130,7 @@ public sealed class WebImageTests
 
         // MSBuild worker nodes kept for reuse, and the MSBuild server, outlive a dotnet command yet inherit its
         // redirected output, so reading that output to the end waited for their idle timeout: about 10 minutes for
-        // each of this test's three builds in CI (issue #55, D-081). Without them every build's processes end with it.
+        // each of this test's three builds in CI (issue #55, D-082). Without them every build's processes end with it.
         start.Environment["MSBUILDDISABLENODEREUSE"] = "1";
         start.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
         foreach (var (name, value) in environment ?? [])
@@ -153,7 +153,7 @@ public sealed class WebImageTests
         {
             Assert.Fail(
                 $"{fileName} {string.Join(' ', arguments)} exited, but its output was still open {s_outputGrace.TotalSeconds:F0} s later: "
-                + "a process it started (such as an MSBuild node or build server) outlived it holding the output (D-081).");
+                + "a process it started (such as an MSBuild node or build server) outlived it holding the output (D-082).");
         }
 
         Assert.True(!check || process.ExitCode == 0, $"{fileName} {string.Join(' ', arguments)} failed: {await error}");

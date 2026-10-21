@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 # A new push to a pull request cancels its older, now pointless run; runs on main always finish, since Deploy
-# waits for them (D-081).
+# waits for them (D-082).
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -54,7 +54,7 @@ jobs:
   # Tests that need Docker, FFmpeg or ML models. Linux only: Windows runners have no Linux Docker.
   integration:
     runs-on: ubuntu-latest
-    # About 6 minutes since D-081; a hang fails the run instead of billing up to the 6-hour default.
+    # About 6 minutes since D-082; a hang fails the run instead of billing up to the 6-hour default.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -75,7 +75,7 @@ jobs:
         with:
           path: ~/.sepiabox/models
           key: models-${{ hashFiles('models/models.json') }}
-      # The web image tests run in the web-image job below, only when their inputs change (D-081).
+      # The web image tests run in the web-image job below, only when their inputs change (D-082).
       - run: dotnet test Sepiabox.slnx --configuration Release --filter "Category=Integration&Category!=WebImage"
         env:
           # Model tests are skipped on machines without the models; in CI a missing model is a failure.
@@ -83,7 +83,7 @@ jobs:
 
   # The web's image as a deploy builds it (WebImageTests, S-056): the models image with the real CLIP text model and
   # two web releases on it. It runs on every push to main, so Deploy never ships an image it did not check, and on a
-  # pull request only when it changes what goes into that image (D-081, issue #55); otherwise the job ends in seconds.
+  # pull request only when it changes what goes into that image (D-082, issue #55); otherwise the job ends in seconds.
   web-image:
     runs-on: ubuntu-latest
     timeout-minutes: 30
