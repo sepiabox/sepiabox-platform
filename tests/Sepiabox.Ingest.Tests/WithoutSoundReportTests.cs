@@ -13,15 +13,15 @@ public class WithoutSoundReportTests
         WithoutSoundReport.Write(
             [
                 new ScanProblem("/drive/MOV001.MOD", "ffmpeg failed: at least one of its streams received no packets."),
-                new ScanProblem("/drive/party.mp4", "ffmpeg failed: OpenEncodeSessionEx failed: out of memory"),
+                new ScanProblem("/drive/MOV002.MOD", "ffmpeg failed: Decode error rate 1 exceeds maximum 0.666667"),
             ],
             output);
 
         Assert.Equal(
             [
-                "2 videos' 720p versions were made without sound, because the transcode with sound failed:",
+                "2 videos' 720p versions were made without sound, because FFmpeg cannot decode their sound:",
                 "  Made without sound /drive/MOV001.MOD: ffmpeg failed: at least one of its streams received no packets.",
-                "  Made without sound /drive/party.mp4: ffmpeg failed: OpenEncodeSessionEx failed: out of memory",
+                "  Made without sound /drive/MOV002.MOD: ffmpeg failed: Decode error rate 1 exceeds maximum 0.666667",
             ],
             output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
     }
@@ -44,5 +44,21 @@ public class WithoutSoundReportTests
         WithoutSoundReport.Write([], output);
 
         Assert.Empty(output.ToString());
+    }
+
+    [Fact]
+    public void Tells_the_owner_to_update_the_nvidia_driver_or_run_without_nvenc_when_its_encoder_cannot_encode()
+    {
+        const string Ffmpeg = "ffmpeg failed: [h264_nvenc @ 0x1] Driver does not support the required nvenc API version. Required: 13.1 Found: 13.0 | "
+            + "[h264_nvenc @ 0x1] The minimum required Nvidia driver for nvenc is 610.00 or newer | Error while opening encoder";
+        var failure = new Sepiabox.Pipeline.Video.VideoEncoderUnavailableException(
+            Sepiabox.Pipeline.Video.VideoEncoder.Nvenc, Ffmpeg, new InvalidOperationException());
+
+        var message = EncoderCheckReport.Message(failure);
+
+        Assert.Contains("nothing was processed", message, StringComparison.Ordinal);
+        Assert.Contains(Ffmpeg, message, StringComparison.Ordinal);
+        Assert.Contains("Update the NVIDIA driver", message, StringComparison.Ordinal);
+        Assert.Contains("without --hw nvenc", message, StringComparison.Ordinal);
     }
 }

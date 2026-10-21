@@ -357,30 +357,277 @@ public class VideoProcessingTests
         var silent = Assert.Single(result.WithoutSound);
         Assert.Equal(Path.Combine(drive.Path, "MOV001.MOD"), silent.Path);
         Assert.Contains("received no packets", silent.Reason, StringComparison.Ordinal);
+        Assert.Equal(VideoSound.Undecodable, StateOf(work, Path.Combine(drive.Path, "MOV001.MOD")).Sound);
+    }
+
+    [Fact]
+    public void Keeps_the_sound_of_a_camcorder_file_whose_ac3_sound_decodes()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        MakeCamcorderFile(Path.Combine(drive.Path, "MOV002.MOD"));
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        Assert.Empty(result.WithoutSound);
+        Assert.Equal(["video", "audio"], StreamTypes(ProxyOf(work, Assert.Single(ReadManifests(work)))));
+        Assert.Equal(VideoSound.Kept, StateOf(work, Path.Combine(drive.Path, "MOV002.MOD")).Sound);
+    }
+
+    [Fact]
+    public void Reports_an_encoder_that_fails_as_a_problem_and_not_as_made_without_sound()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV002.MOD");
+        MakeCamcorderFile(clip);
+        // An encoder that cannot open, as NVENC with a driver older than FFmpeg needs (D-087): FFmpeg's last line is
+        // "received no packets" here too.
+        var failing = new VideoProcessor(s_tools, VideoEncoder.Software, ["-c:v", "libx264", "-preset", "sepiabox-no-such-preset"]);
+
+        var result = ProcessWith(drive, work, failing);
+
+        Assert.Empty(result.WithoutSound);
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal(clip, problem.Path);
+        Assert.StartsWith("Could not make the poster and 720p version: ffmpeg failed: ", problem.Reason, StringComparison.Ordinal);
+        // The whole message, the cause first, not only its last line.
+        Assert.Contains("sepiabox-no-such-preset", problem.Reason, StringComparison.Ordinal);
+        Assert.Contains("Error while opening encoder", problem.Reason, StringComparison.Ordinal);
+        Assert.Contains("received no packets", problem.Reason, StringComparison.Ordinal);
+        Assert.Equal(FileStatus.Failed, StateOf(work, clip).Status);
+
+        // Tried again by the next run, which keeps the sound.
+        var again = Process(drive, work);
+
+        Assert.Empty(again.Problems);
+        Assert.Equal(["video", "audio"], StreamTypes(ProxyOf(work, Assert.Single(ReadManifests(work)))));
+    }
+
+    [Fact]
+    public void Stops_before_any_file_when_the_chosen_encoder_cannot_encode_a_generated_clip()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        MakeVideo(Path.Combine(drive.Path, "party.mp4"), 640, 360, seconds: 1);
+        var broken = new VideoProcessor(s_tools, VideoEncoder.Nvenc, ["-c:v", "libx264", "-preset", "sepiabox-no-such-preset"]);
+
+        var failure = Assert.Throws<VideoEncoderUnavailableException>(() => ProcessWith(drive, work, broken));
+
+        Assert.Equal(VideoEncoder.Nvenc, failure.Encoder);
+        Assert.Contains("sepiabox-no-such-preset", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("Update the NVIDIA driver", EncoderCheckReport.Message(failure), StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(Path.Combine(work.Path, "manifests")));
+        Assert.Empty(Directory.GetFiles(work.Path, "encoder-check-*", SearchOption.AllDirectories));
+        Assert.False(File.Exists(Path.Combine(work.Path, "state.db")));
+    }
+
+    [Fact]
+    public void Processes_after_the_chosen_encoder_encodes_a_generated_clip_and_leaves_no_trace_of_it()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        MakeVideo(Path.Combine(drive.Path, "party.mp4"), 640, 360, seconds: 1);
+        // NVENC is not on every test machine: the preflight is the same with libx264's arguments.
+        var working = new VideoProcessor(s_tools, VideoEncoder.Nvenc, FfmpegArguments.VideoCodec(VideoEncoder.Software));
+
+        var result = ProcessWith(drive, work, working);
+
+        Assert.Empty(result.Problems);
+        Assert.Equal(1, result.Processed);
+        Assert.Empty(Directory.GetFiles(work.Path, "encoder-check-*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void Makes_again_with_sound_a_video_an_earlier_build_made_without_sound()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV002.MOD");
+        MakeCamcorderFile(clip);
+        Process(drive, work);
+        var proxy = ProxyOf(work, Assert.Single(ReadManifests(work)));
+        // What a build with D-084 left after an NVENC failure: a 720p version without sound, done, its sound unrecorded.
+        AsMadeWithoutSoundByAnEarlierBuild(work, proxy);
+        Assert.Equal(["video"], StreamTypes(proxy));
+
+        var redone = Process(drive, work);
+        var after = Process(drive, work);
+
+        Assert.Empty(redone.Problems);
+        Assert.Equal((1, 0), (redone.Processed, redone.Skipped));
+        Assert.Empty(redone.WithoutSound);
+        Assert.Equal(["video", "audio"], StreamTypes(ProxyOf(work, Assert.Single(ReadManifests(work)))));
+        Assert.Equal(VideoSound.Kept, StateOf(work, clip).Sound);
+        Assert.Equal((0, 1), (after.Processed, after.Skipped));
+    }
+
+    [Fact]
+    public void Checks_once_and_keeps_a_video_an_earlier_build_made_with_sound_or_one_whose_sound_does_not_decode()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var good = Path.Combine(drive.Path, "MOV002.MOD");
+        var empty = Path.Combine(drive.Path, "MOV001.MOD");
+        MakeCamcorderFile(good);
+        MakeCamcorderFileWithEmptySound(empty);
+        Process(drive, work);
+        // An earlier build recorded no sound for either; the good one's 720p version has its sound.
+        AsMadeWithoutSoundByAnEarlierBuild(work, proxy: null);
+
+        var checkedOnce = Process(drive, work);
+        var after = Process(drive, work);
+
+        // The good one is checked and kept; the one whose sound does not decode is recorded as it is, with no new encode.
+        Assert.Equal((0, 2), (checkedOnce.Processed, checkedOnce.Skipped));
+        Assert.Empty(checkedOnce.WithoutSound);
+        Assert.Equal((VideoSound.Kept, VideoSound.Undecodable), (StateOf(work, good).Sound, StateOf(work, empty).Sound));
+        Assert.Equal((0, 2), (after.Processed, after.Skipped));
+        Assert.Empty(after.WithoutSound);
+    }
+
+    [Fact]
+    public void Records_without_making_again_a_silent_video_an_earlier_build_made_from_a_source_without_sound()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "silent.mp4");
+        MakeVideo(clip, 320, 180, seconds: 1, "-an");
+        Process(drive, work);
+        AsMadeWithoutSoundByAnEarlierBuild(work, proxy: null);
+
+        var again = Process(drive, work);
+
+        Assert.Equal((0, 1), (again.Processed, again.Skipped));
+        Assert.Equal(VideoSound.NoStream, StateOf(work, clip).Sound);
     }
 
     [UnixFact]
-    public void Lists_a_video_made_without_sound_after_a_failure_that_was_not_about_sound()
+    public void Fails_without_dropping_the_sound_when_only_the_transcode_with_sound_fails_and_the_sound_decodes()
     {
         using var drive = new TempFolder();
         using var work = new TempFolder();
         using var tools = new TempFolder();
-        MakeVideo(Path.Combine(drive.Path, "party.mp4"), 640, 360, seconds: 1);
-        // A one-off encoder error on the transcode with sound: the fallback must not drop good sound unseen.
-        TestTools.FakeTool(tools, "ffprobe", $"exec '{s_tools.Ffprobe}' \"$@\"");
-        TestTools.FakeTool(tools, "ffmpeg", $$"""
-            case "$*" in
-              *0:a:0?*) echo '[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)' >&2; exit 1;;
-            esac
-            exec '{{s_tools.Ffmpeg}}' "$@"
+        var clip = Path.Combine(drive.Path, "MOV002.MOD");
+        MakeCamcorderFile(clip);
+        // The encoder fails only with sound, so a fallback that followed any failure (D-084) would succeed without it.
+        FakeFfmpeg(tools, """*"0:a:0?"*) echo '[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)' >&2; exit 1;;""");
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Empty(result.WithoutSound);
+        Assert.Equal(
+            "Could not make the poster and 720p version: ffmpeg failed: [h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)",
+            Assert.Single(result.Problems).Reason);
+        Assert.Equal(FileStatus.Failed, StateOf(work, clip).Status);
+    }
+
+    [UnixFact]
+    public void Fails_without_dropping_the_sound_when_the_file_cannot_be_read_to_check_its_sound()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV002.MOD");
+        MakeCamcorderFile(clip);
+        // The transcode with sound fails, then the drive drops out while the sound is checked.
+        FakeFfmpeg(tools, """
+            *framecrc*) echo 'Error opening input file MOV002.MOD.' >&2; echo 'Error opening input files: Input/output error' >&2; exit 254;;
+              *"0:a:0?"*) echo '[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)' >&2; exit 1;;
             """);
 
         var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
 
+        Assert.Empty(result.WithoutSound);
+        Assert.Contains("OpenEncodeSessionEx failed", Assert.Single(result.Problems).Reason, StringComparison.Ordinal);
+        Assert.Equal(FileStatus.Failed, StateOf(work, clip).Status);
+    }
+
+    [UnixFact]
+    public void Keeps_the_old_720p_version_and_tries_again_next_run_when_making_it_again_fails()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV002.MOD");
+        MakeCamcorderFile(clip);
+        Process(drive, work);
+        var proxy = ProxyOf(work, Assert.Single(ReadManifests(work)));
+        AsMadeWithoutSoundByAnEarlierBuild(work, proxy);
+        FakeFfmpeg(tools, """*"0:a:0?"*) echo '[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)' >&2; exit 1;;""");
+
+        var failed = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Contains("OpenEncodeSessionEx failed", Assert.Single(failed.Problems).Reason, StringComparison.Ordinal);
+        var state = StateOf(work, clip);
+        Assert.Equal((FileStatus.Done, null), (state.Status, state.Sound));
+        Assert.Equal(proxy, ProxyOf(work, Assert.Single(ReadManifests(work))));
+        Assert.Equal(["video"], StreamTypes(proxy));
+
+        var again = Process(drive, work);
+
+        Assert.Equal(1, again.Processed);
+        Assert.Equal(["video", "audio"], StreamTypes(proxy));
+        Assert.Equal(VideoSound.Kept, StateOf(work, clip).Sound);
+    }
+
+    [Fact]
+    public void Makes_again_a_720p_version_ffprobe_cannot_read()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV002.MOD");
+        MakeCamcorderFile(clip);
+        Process(drive, work);
+        var proxy = ProxyOf(work, Assert.Single(ReadManifests(work)));
+        AsMadeWithoutSoundByAnEarlierBuild(work, proxy: null);
+        File.WriteAllBytes(proxy, new byte[4096]);
+
+        var again = Process(drive, work);
+
+        Assert.Equal(1, again.Processed);
+        Assert.Equal(["video", "audio"], StreamTypes(proxy));
+    }
+
+    [UnixFact]
+    public void Runs_at_most_four_nvenc_encodes_at_once_whatever_the_jobs()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        using var running = new TempFolder();
+        for (var i = 0; i < 10; i++)
+        {
+            // Different sizes, so each is its own content with its own 720p version.
+            MakeVideo(Path.Combine(drive.Path, $"clip{i}.mp4"), 160 + (2 * i), 90, seconds: 1);
+        }
+
+        var log = Path.Combine(tools.Path, "concurrent.log");
+        // Every encode (the 720p versions and the preflight) notes how many encodes are running as it starts.
+        var ffmpeg = TestTools.FakeTool(tools, "ffmpeg", $$"""
+            case "$*" in
+              *-movflags*) marker=$(mktemp -p '{{running.Path}}'); ls '{{running.Path}}' | wc -l >> '{{log}}'; sleep 2
+                '{{s_tools.Ffmpeg}}' "$@"; status=$?; rm -f "$marker"; exit $status;;
+            esac
+            exec '{{s_tools.Ffmpeg}}' "$@"
+            """);
+        // NVENC's session limit, with libx264's arguments: not every test machine has an NVIDIA GPU.
+        var nvenc = new VideoProcessor(new FfmpegTools(ffmpeg, s_tools.Ffprobe), VideoEncoder.Nvenc, FfmpegArguments.VideoCodec(VideoEncoder.Software));
+
+        var result = ProcessCommand.Run(
+            new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: s_ffmpegFolder, ModelFolder: TestModels.None, Jobs: 8, VideoJobs: 8),
+            embedder: null,
+            embedderWarning: null,
+            hooks: new ProcessCommand.ProcessHooks(Video: nvenc));
+
         Assert.Empty(result.Problems);
-        var silent = Assert.Single(result.WithoutSound);
-        Assert.Equal(Path.Combine(drive.Path, "party.mp4"), silent.Path);
-        Assert.Equal("ffmpeg failed: [h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)", silent.Reason);
+        Assert.Equal(10, result.Processed);
+        var counts = File.ReadAllLines(log).Select(line => int.Parse(line.Trim(), CultureInfo.InvariantCulture)).ToList();
+        Assert.Equal(11, counts.Count);
+        // Only an upper bound: the session limit is process-wide, so another test's NVENC encode may hold slots meanwhile.
+        // Without the limit, 8 jobs reach 8 encodes at once here, so this still fails when the limit is gone.
+        Assert.InRange(counts.Max(), 1, VideoProcessor.MaxNvencSessions);
     }
 
     [UnixFact]
@@ -684,6 +931,62 @@ public class VideoProcessingTests
         File.WriteAllBytes(path, bytes);
         Assert.Equal(["video", "audio"], StreamTypes(path));
     }
+
+    // As the owner's camcorder files whose sound plays (D-087): MPEG-2 video and AC-3 sound at 48 kHz in a program stream.
+    private static void MakeCamcorderFile(string path) =>
+        Run(s_tools.Ffmpeg,
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc=duration=1:size=176x144:rate=25",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1:sample_rate=48000",
+            "-c:v", "mpeg2video", "-c:a", "ac3", "-ac", "2", "-b:a", "192k", "-f", "vob", path,
+        ]);
+
+    // Replaces the 720p version with the same picture without sound, when given, and forgets every video's sound, as a
+    // work folder written by a build before D-087 has it.
+    private static void AsMadeWithoutSoundByAnEarlierBuild(TempFolder work, string? proxy)
+    {
+        if (proxy is not null)
+        {
+            var silent = proxy + ".silent.mp4";
+            Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", proxy, "-map", "0:v", "-c", "copy", "-f", "mp4", silent]);
+            File.Move(silent, proxy, overwrite: true);
+        }
+
+        using var state = new SqliteConnection($"Data Source={Path.Combine(work.Path, "state.db")};Pooling=False");
+        state.Open();
+        using var forget = state.CreateCommand();
+        forget.CommandText = "UPDATE files SET sound = NULL";
+        forget.ExecuteNonQuery();
+    }
+
+    // The real tools, except for ffmpeg calls matching the given shell case branches (quote a literal "?" in a pattern).
+    private static void FakeFfmpeg(TempFolder tools, string branches)
+    {
+        TestTools.FakeTool(tools, "ffprobe", $"exec '{s_tools.Ffprobe}' \"$@\"");
+        TestTools.FakeTool(tools, "ffmpeg", $$"""
+            case "$*" in
+              {{branches}}
+            esac
+            exec '{{s_tools.Ffmpeg}}' "$@"
+            """);
+    }
+
+    private static FileState StateOf(TempFolder work, string path)
+    {
+        using var state = new StateStore(Path.Combine(work.Path, "state.db"));
+        return state.Get(path) ?? throw new InvalidOperationException($"No state for {path}.");
+    }
+
+    private static string ProxyOf(TempFolder work, Manifest manifest) =>
+        Path.Combine(work.Path, Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p").Path);
+
+    private static ProcessResult ProcessWith(TempFolder drive, TempFolder work, IVideoProcessor video) =>
+        ProcessCommand.Run(
+            new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: s_ffmpegFolder, ModelFolder: TestModels.None),
+            embedder: null,
+            embedderWarning: null,
+            hooks: new ProcessCommand.ProcessHooks(Video: video));
 
     private static List<string> StreamTypes(string path) =>
         [.. Run(s_tools.Ffprobe, ["-v", "error", "-show_entries", "stream=codec_type", "-of", "default=noprint_wrappers=1:nokey=1", path]).Output
