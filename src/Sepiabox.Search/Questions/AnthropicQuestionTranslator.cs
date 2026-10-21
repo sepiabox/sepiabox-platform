@@ -35,6 +35,19 @@ public sealed record AnthropicQuestionOptions
 
     /// <summary>Requests per question: the second one, after an invalid answer, says what was wrong.</summary>
     public int MaxAttempts { get; init; } = 2;
+
+    // A record prints every property; the key must never reach a log or an assertion message.
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("ApiKey = ").Append(string.IsNullOrWhiteSpace(ApiKey) ? "(none)" : "(set)")
+            .Append(", Model = ").Append(Model)
+            .Append(", BaseUrl = ").Append(BaseUrl)
+            .Append(", MaxTokens = ").Append(MaxTokens)
+            .Append(", Timeout = ").Append(Timeout)
+            .Append(", MaxRetries = ").Append(MaxRetries)
+            .Append(", MaxAttempts = ").Append(MaxAttempts);
+        return true;
+    }
 }
 
 /// <summary>
@@ -139,31 +152,36 @@ public sealed partial class AnthropicQuestionTranslator : IQuestionTranslator, I
         (string Answer, string Problem)? previous = null;
         for (var attempt = 1; attempt <= _options.MaxAttempts; attempt++)
         {
-            Message reply;
+            string? stopReason;
+            string? answer;
             try
             {
-                reply = await _client.Messages.Create(BuildRequest(cleaned, context, previous), cancellationToken);
+                // The SDK reads the response's fields when they are used, so a malformed one throws here too.
+                var reply = await _client.Messages.Create(BuildRequest(cleaned, context, previous), cancellationToken);
+                usage = usage.Add(Usage(reply));
+                stopReason = reply.StopReason?.Raw();
+                answer = Text(reply);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
             }
-            catch (Exception ex) when (Classify(ex) is { } outcome)
+            catch (Exception ex)
             {
-                // The exception's type and status only: its message may quote the response, never the request.
-                LogFailed(_log, outcome, ex.GetType().Name, attempt);
+                // The exception's type, the HTTP status, the API's error type and request id: never its message, which
+                // may quote the response, nor anything of the request.
+                var outcome = Classify(ex);
+                var (status, errorType, requestId) = Details(ex);
+                LogFailed(_log, outcome, ex.GetType().Name, status, errorType, requestId, attempt);
                 return QuestionTranslation.Of(outcome, usage, attempt - 1);
             }
 
-            usage = usage.Add(Usage(reply));
-            var stopReason = reply.StopReason?.Raw();
             if (stopReason == "refusal")
             {
                 LogRefused(_log, attempt);
                 return QuestionTranslation.Of(QuestionOutcome.NotUnderstood, usage, attempt);
             }
 
-            var answer = Text(reply);
             var problem = stopReason == "max_tokens"
                 ? "The answer was cut off before it ended."
                 : answer is null ? "The answer had no text." : _validate(answer);
@@ -207,17 +225,39 @@ public sealed partial class AnthropicQuestionTranslator : IQuestionTranslator, I
             ? new TokenUsage(usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens ?? 0, usage.CacheCreationInputTokens ?? 0)
             : TokenUsage.None;
 
-    // Busy, down, slow or unreachable: try later. Refused credentials or request: an operator has to look.
-    private static QuestionOutcome? Classify(Exception exception) => exception switch
+    // Busy, down, slow or unreachable: try later. Anything else, an SDK error or not (a response it cannot read):
+    // an operator has to look, and the person gets a message, never an error page.
+    private static QuestionOutcome Classify(Exception exception) => exception switch
     {
         AnthropicRateLimitException or Anthropic5xxException or AnthropicIOException => QuestionOutcome.Unavailable,
-        AnthropicUnauthorizedException or AnthropicForbiddenException or AnthropicApiException => QuestionOutcome.Failed,
-        AnthropicException => QuestionOutcome.Failed,
         HttpRequestException => QuestionOutcome.Unavailable,
         // The SDK's own timeout, not the caller's cancellation (that one is rethrown above).
         OperationCanceledException => QuestionOutcome.Unavailable,
-        _ => null,
+        _ => QuestionOutcome.Failed,
     };
+
+    // From an API error: its status, and the error type and request id of its JSON body (what support asks for).
+    private static (int? Status, string? ErrorType, string? RequestId) Details(Exception exception)
+    {
+        if (exception is not AnthropicApiException api)
+        {
+            return (null, null, null);
+        }
+
+        try
+        {
+            using var body = JsonDocument.Parse(api.ResponseBody ?? "{}");
+            var root = body.RootElement;
+            var type = root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object
+                && error.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+            var id = root.TryGetProperty("request_id", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null;
+            return ((int)api.StatusCode, type, id);
+        }
+        catch (JsonException)
+        {
+            return ((int)api.StatusCode, null, null);
+        }
+    }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Question translated on attempt {Attempt}: {InputTokens} input tokens ({CacheReadTokens} from cache), {OutputTokens} output tokens.")]
     private static partial void LogTranslated(ILogger logger, int attempt, long inputTokens, long outputTokens, long cacheReadTokens);
@@ -228,6 +268,6 @@ public sealed partial class AnthropicQuestionTranslator : IQuestionTranslator, I
     [LoggerMessage(Level = LogLevel.Warning, Message = "The model refused the question on attempt {Attempt}.")]
     private static partial void LogRefused(ILogger logger, int attempt);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "The question could not be translated ({Outcome}): {ExceptionType} on attempt {Attempt}.")]
-    private static partial void LogFailed(ILogger logger, QuestionOutcome outcome, string exceptionType, int attempt);
+    [LoggerMessage(Level = LogLevel.Error, Message = "The question could not be translated ({Outcome}): {ExceptionType}, HTTP {Status}, {ErrorType}, request {RequestId}, on attempt {Attempt}.")]
+    private static partial void LogFailed(ILogger logger, QuestionOutcome outcome, string exceptionType, int? status, string? errorType, string? requestId, int attempt);
 }

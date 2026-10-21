@@ -178,7 +178,7 @@ else
 
     private async Task AskAsync()
     {
-        var result = await Questions.AskAsync(Question, HttpContext?.User ?? new ClaimsPrincipal());
+        var result = await Questions.AskAsync(Question, HttpContext?.User ?? new ClaimsPrincipal(), HttpContext?.RequestAborted ?? default);
         if (result is { Outcome: AskOutcome.Answered, Query: { } query } && !query.Filters.IsEmpty)
         {
             // Post, redirect, get: the search has its own address, and reloading it does not ask again.

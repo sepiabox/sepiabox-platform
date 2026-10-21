@@ -44,17 +44,24 @@ public static class QuestionEndpoints
             return Problem(text["Ask_Invalid", QuestionPrompt.MaxQuestionLength], StatusCodes.Status400BadRequest);
         }
 
+        // Bounded whatever the headers say: a chunked body has no Content-Length.
+        var json = await SearchEndpoints.ReadBoundedAsync(http.Request.Body, MaxBodyBytes, http.RequestAborted);
         Request? request;
         try
         {
-            request = await http.Request.ReadFromJsonAsync<Request>(http.RequestAborted);
+            request = json is null ? null : JsonSerializer.Deserialize<Request>(json, JsonSerializerOptions.Web);
         }
         catch (JsonException)
+        {
+            request = null;
+        }
+
+        if (request is null)
         {
             return Problem(text["Ask_Invalid", QuestionPrompt.MaxQuestionLength], StatusCodes.Status400BadRequest);
         }
 
-        var result = await questions.AskAsync(request?.Question, http.User, http.RequestAborted);
+        var result = await questions.AskAsync(request.Question, http.User, http.RequestAborted);
         switch (result.Outcome)
         {
             case AskOutcome.Answered:

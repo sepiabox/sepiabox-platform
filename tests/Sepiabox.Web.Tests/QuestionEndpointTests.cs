@@ -148,6 +148,41 @@ public sealed class QuestionEndpointTests
         Assert.DoesNotContain("example.com", key.UserKey, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(QuestionOutcome.Unavailable, false, 0)]
+    [InlineData(QuestionOutcome.Failed, false, 0)]
+    [InlineData(QuestionOutcome.Unavailable, true, 1)]
+    [InlineData(QuestionOutcome.NotUnderstood, false, 1)]
+    public async Task Gives_back_a_question_the_provider_never_answered(QuestionOutcome outcome, bool billed, int counted)
+    {
+        var quota = new FakeQuestionQuota();
+        var translator = new FakeTranslator { Outcome = outcome, Usage = billed ? new TokenUsage(10, 0, 0, 0) : TokenUsage.None };
+        await using var web = Web(new FakeLibrary(), translator, quota);
+        using var http = web.CreateSignedInClient();
+
+        using var response = await AskAsync(http, "fotos");
+
+        Assert.Equal(counted, Assert.Single(quota.Days).Value.Questions);
+    }
+
+    [Fact]
+    public async Task Stops_reading_a_chunked_body_at_the_limit()
+    {
+        var translator = new FakeTranslator();
+        await using var web = Web(new FakeLibrary(), translator);
+        using var http = web.CreateSignedInClient();
+        var json = "{\"question\": \"" + new string('a', QuestionEndpoints.MaxBodyBytes) + "\"}";
+        // A stream that cannot tell its length, so the client sends it chunked, without Content-Length.
+        using var content = new StreamContent(new UnknownLengthStream(Encoding.UTF8.GetBytes(json)));
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        Assert.Null(content.Headers.ContentLength);
+
+        using var response = await http.PostAsync(new Uri("/api/questions", UriKind.Relative), content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(translator.Calls);
+    }
+
     [Fact]
     public async Task Counts_each_person_separately()
     {
@@ -265,6 +300,11 @@ public sealed class QuestionEndpointTests
 
     private static async Task<string?> DetailAsync(HttpResponseMessage response) =>
         (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("detail").GetString();
+
+    private sealed class UnknownLengthStream(byte[] bytes) : MemoryStream(bytes)
+    {
+        public override bool CanSeek => false;
+    }
 
     private sealed class Clock(DateTimeOffset now) : TimeProvider
     {

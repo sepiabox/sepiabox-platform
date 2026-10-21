@@ -154,6 +154,36 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.Null(result.Json);
         var entry = Assert.Single(log.Entries, e => e.Level == LogLevel.Error);
         Assert.DoesNotContain(Key, entry.Message, StringComparison.Ordinal);
+        // What support needs, and nothing of the request.
+        Assert.Contains($"HTTP {(int)status}", entry.Message, StringComparison.Ordinal);
+        Assert.Contains(type, entry.Message, StringComparison.Ordinal);
+        Assert.Contains("req_test", entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("videos", entry.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("not json at all")]
+    [InlineData("""{"type": "message"}""")]
+    public async Task Reports_a_response_it_cannot_read_as_failed_never_an_exception(string body)
+    {
+        var api = new FakeApi(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+        var log = new ListLogger();
+        using var translator = Translator(api, log);
+
+        var result = await translator.TranslateAsync("videos", Context());
+
+        Assert.Equal(QuestionOutcome.Failed, result.Outcome);
+        Assert.Single(log.Entries, e => e.Level == LogLevel.Error);
+    }
+
+    [Fact]
+    public void Options_never_print_the_key()
+    {
+        var options = new AnthropicQuestionOptions { ApiKey = Key };
+
+        Assert.DoesNotContain(Key, options.ToString(), StringComparison.Ordinal);
+        Assert.Contains("ApiKey = (set)", options.ToString(), StringComparison.Ordinal);
+        Assert.Contains("claude-haiku-5-5", options.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -253,6 +283,29 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.Equal(["text"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
     }
 
+    [Theory]
+    [InlineData("""{"type": "object", "additionalProperties": false, "properties": {"a": {"type": "string", "contentEncoding": "base64"}}}""", "contentEncoding")]
+    [InlineData("""{"type": "object", "additionalProperties": false, "properties": {"a": {"type": "string", "format": "regex"}}}""", "regex")]
+    [InlineData("""{"type": "object", "additionalProperties": true}""", "additionalProperties")]
+    [InlineData("""{"type": "object", "properties": {}}""", "additionalProperties")]
+    [InlineData("""{"type": "object", "additionalProperties": false, "if": {}}""", "'if'")]
+    public void Output_schema_refuses_what_structured_outputs_does_not_support(string schema, string named)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => QuestionPrompt.OutputSchema(JsonNode.Parse(schema)!));
+
+        Assert.Contains(named, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Output_schema_keeps_field_names_that_look_like_keywords_and_drops_checked_constraints()
+    {
+        var schema = JsonNode.Parse(QuestionPrompt.OutputSchema(JsonNode.Parse("""
+            {"type": "object", "additionalProperties": false, "properties": {"pattern": {"type": "string", "maxLength": 3}}}
+            """)!))!;
+
+        Assert.Equal("""{"type":"string"}""", schema["properties"]!["pattern"]!.ToJsonString());
+    }
+
     [Fact]
     public void Context_leaves_out_blank_overlong_and_repeated_names_and_caps_each_list()
     {
@@ -328,7 +381,7 @@ public sealed class AnthropicQuestionTranslatorTests
     private static Func<HttpResponseMessage> Error(HttpStatusCode status, string type) => () => new HttpResponseMessage(status)
     {
         Content = new StringContent(
-            new JsonObject { ["type"] = "error", ["error"] = new JsonObject { ["type"] = type, ["message"] = "test" } }.ToJsonString(),
+            new JsonObject { ["type"] = "error", ["error"] = new JsonObject { ["type"] = type, ["message"] = "test" }, ["request_id"] = "req_test" }.ToJsonString(),
             Encoding.UTF8,
             "application/json"),
     };

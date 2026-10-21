@@ -207,6 +207,16 @@ internal sealed class FakeQuestionQuota : IQuestionQuota
         }
     }
 
+    public Task GiveBackAsync(string userKey, DateOnly day, CancellationToken cancellationToken = default)
+    {
+        lock (Days)
+        {
+            var (questions, usage) = Days[(userKey, day)];
+            Days[(userKey, day)] = (questions - 1, usage);
+            return Task.CompletedTask;
+        }
+    }
+
     public Task RecordAsync(string userKey, DateOnly day, Sepiabox.Search.Questions.TokenUsage usage, CancellationToken cancellationToken = default)
     {
         lock (Days)

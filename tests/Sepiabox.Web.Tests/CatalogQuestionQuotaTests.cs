@@ -45,6 +45,22 @@ public sealed class CatalogQuestionQuotaTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Gives_back_a_question_so_it_can_be_taken_again()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        var quota = new CatalogQuestionQuota(new TestContexts(catalog.ConnectionStringFor(db)));
+        Assert.True(await quota.TryTakeAsync(Ana, Day, limit: 1));
+        Assert.False(await quota.TryTakeAsync(Ana, Day, limit: 1));
+
+        await quota.GiveBackAsync(Ana, Day);
+        await quota.GiveBackAsync(Bruno, Day);
+
+        Assert.True(await quota.TryTakeAsync(Ana, Day, limit: 1));
+        // Nothing to give back for someone who took nothing: no row, and never a negative count.
+        Assert.Equal(1, (await db.QuestionUsage.AsNoTracking().SingleAsync()).Questions);
+    }
+
+    [Fact]
     public async Task Takes_nothing_with_a_limit_of_zero()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();

@@ -14,9 +14,18 @@ public static class QuestionPrompt
     /// <summary>The longest question accepted; a question is a sentence or two.</summary>
     public const int MaxQuestionLength = 500;
 
-    // Keywords the structured outputs grammar does not take (they are checked by SearchQueryJson instead).
-    private static readonly HashSet<string> s_unsupported =
-        ["$schema", "$id", "title", "minItems", "maxItems", "minimum", "maximum", "minLength", "maxLength", "pattern", "uniqueItems"];
+    // What structured outputs supports (Anthropic's JSON schema limitations): anything else in the DSL schema must be
+    // either a constraint the DSL's own validation checks afterwards (dropped here) or a reason to fail at once, never
+    // a keyword sent to the API, which would refuse every question.
+    private static readonly HashSet<string> s_supported =
+        ["type", "properties", "required", "additionalProperties", "items", "enum", "const", "anyOf", "allOf", "$ref", "$defs", "description", "format"];
+
+    // Checked by SearchQueryJson after the answer, so the output format can leave them out.
+    private static readonly HashSet<string> s_checkedAfterwards =
+        ["$schema", "$id", "title", "minItems", "maxItems", "minimum", "maximum", "minLength", "maxLength", "pattern"];
+
+    private static readonly HashSet<string> s_supportedFormats =
+        ["date-time", "time", "date", "duration", "email", "hostname", "uri", "ipv4", "ipv6", "uuid"];
 
     private static readonly Lazy<string> s_schema = new(LoadSchema);
 
@@ -150,38 +159,77 @@ public static class QuestionPrompt
     {
         using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")
             ?? throw new InvalidOperationException("The search DSL schema is not embedded in Sepiabox.Search.");
-        var root = JsonNode.Parse(stream) ?? throw new InvalidOperationException("The search DSL schema is empty.");
-        Simplify(root);
-        return root.ToJsonString();
+        return OutputSchema(JsonNode.Parse(stream) ?? throw new InvalidOperationException("The search DSL schema is empty."));
     }
 
-    // A schema object loses the unsupported keywords; a "properties" map is walked without touching its keys, which
-    // are field names.
-    private static void Simplify(JsonNode node, bool propertyMap = false)
+    /// <summary>
+    /// <paramref name="schema"/> as structured outputs takes it: supported keywords kept, the constraints the DSL checks
+    /// afterwards dropped, the date pattern turned into <c>format: date</c>; any other keyword, an unsupported format or
+    /// an <c>additionalProperties</c> other than false throws, so a change to the schema fails a test, not production.
+    /// </summary>
+    internal static string OutputSchema(JsonNode schema)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+        Simplify(schema);
+        return schema.ToJsonString();
+    }
+
+    // A schema object is checked keyword by keyword; a "properties" or "$defs" map is walked without checking its keys,
+    // which are names.
+    private static void Simplify(JsonNode node, bool nameMap = false)
     {
         switch (node)
         {
-            case JsonObject obj:
-                if (!propertyMap)
+            case JsonObject obj when nameMap:
+                foreach (var (_, child) in obj.ToList())
                 {
-                    var datePattern = obj["pattern"] is JsonValue pattern
-                        && pattern.TryGetValue<string>(out var value) && value == "^[0-9]{4}-[0-9]{2}-[0-9]{2}$";
-                    foreach (var key in obj.Select(p => p.Key).Where(s_unsupported.Contains).ToList())
+                    if (child is not null)
+                    {
+                        Simplify(child);
+                    }
+                }
+
+                break;
+            case JsonObject obj:
+                var datePattern = obj["pattern"] is JsonValue pattern
+                    && pattern.TryGetValue<string>(out var value) && value == "^[0-9]{4}-[0-9]{2}-[0-9]{2}$";
+                foreach (var key in obj.Select(p => p.Key).ToList())
+                {
+                    if (s_checkedAfterwards.Contains(key))
                     {
                         obj.Remove(key);
                     }
-
-                    if (datePattern)
+                    else if (!s_supported.Contains(key))
                     {
-                        obj["format"] = "date";
+                        throw new InvalidOperationException($"The DSL schema uses '{key}', which structured outputs does not support.");
                     }
+                }
+
+                if (datePattern)
+                {
+                    obj["format"] = "date";
+                }
+
+                if (obj["format"] is JsonNode format && !s_supportedFormats.Contains(format.GetValue<string>()))
+                {
+                    throw new InvalidOperationException($"The DSL schema uses format '{format}', which structured outputs does not support.");
+                }
+
+                if (obj["additionalProperties"] is JsonNode additional && additional.GetValueKind() != JsonValueKind.False)
+                {
+                    throw new InvalidOperationException("Structured outputs needs additionalProperties to be false.");
+                }
+
+                if (obj["type"]?.ToString() == "object" && obj["additionalProperties"] is null)
+                {
+                    throw new InvalidOperationException("Structured outputs needs additionalProperties: false on every object.");
                 }
 
                 foreach (var (key, child) in obj.ToList())
                 {
-                    if (child is not null)
+                    if (child is not null && key is not ("enum" or "const" or "description" or "format" or "type" or "required"))
                     {
-                        Simplify(child, propertyMap: !propertyMap && key is "properties" or "$defs");
+                        Simplify(child, nameMap: key is "properties" or "$defs");
                     }
                 }
 

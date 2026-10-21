@@ -56,6 +56,9 @@ public interface IQuestionQuota
 
     /// <summary>Adds the tokens a counted question cost.</summary>
     Task RecordAsync(string userKey, DateOnly day, TokenUsage usage, CancellationToken cancellationToken = default);
+
+    /// <summary>Gives a counted question back, for one the provider never answered (nothing was billed).</summary>
+    Task GiveBackAsync(string userKey, DateOnly day, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -95,6 +98,13 @@ public sealed class CatalogQuestionQuota(IDbContextFactory<CatalogDbContext> con
                 .SetProperty(u => u.CacheCreationInputTokens, u => u.CacheCreationInputTokens + usage.CacheCreationInputTokens),
             cancellationToken);
     }
+
+    public async Task GiveBackAsync(string userKey, DateOnly day, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        await db.QuestionUsage.Where(u => u.UserKey == userKey && u.Day == day && u.Questions > 0)
+            .ExecuteUpdateAsync(set => set.SetProperty(u => u.Questions, u => u.Questions - 1), cancellationToken);
+    }
 }
 
 /// <summary>
@@ -117,7 +127,7 @@ public sealed class QuestionService(
     public static string? Validate(string json) => SearchQueryJson.TryParse(json, out _, out var error) ? null : error;
 
     /// <summary>
-    /// A person, for the daily limit, without keeping who they are: the SHA-256 of their e-mail address (D-073). Null
+    /// A person, for the daily limit, pseudonymously: the SHA-256 of their e-mail address, not the address (D-073). Null
     /// for a request without one, which the access list never lets through anyway.
     /// </summary>
     public static string? UserKey(ClaimsPrincipal user)
@@ -160,8 +170,16 @@ public sealed class QuestionService(
             .Build();
 
         var translation = await translator.TranslateAsync(cleaned, context, cancellationToken);
-        // Recorded whatever the outcome: a refused or invalid answer was billed too.
-        await quota.RecordAsync(userKey, today, translation.Usage, CancellationToken.None);
+        if (translation.Outcome is QuestionOutcome.Unavailable or QuestionOutcome.Failed && translation.Usage == TokenUsage.None)
+        {
+            // The provider answered nothing, so nothing was billed: the question does not count.
+            await quota.GiveBackAsync(userKey, today, CancellationToken.None);
+        }
+        else
+        {
+            // Recorded whatever the outcome: a refused or invalid answer was billed too.
+            await quota.RecordAsync(userKey, today, translation.Usage, CancellationToken.None);
+        }
         return translation.Outcome switch
         {
             // Parsed again here: the translator's own check is not what the search trusts.
