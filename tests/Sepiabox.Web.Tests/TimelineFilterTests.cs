@@ -209,6 +209,108 @@ public sealed class TimelineFilterTests : LocalizedContext
         Assert.NotEmpty(page.FindAll("form.filters"));
     }
 
+    [Fact]
+    public void Shows_the_photos_similar_to_one_most_similar_first_without_month_groups()
+    {
+        var older = new TimelineItem(Ids.Of(32), AssetKinds.Photo, new DateTime(2018, 1, 1), true, null);
+        var library = Use(new FakeLibrary { SearchResults = new SearchPage([older, LisbonInDecember], HasMore: false) });
+        var query = SearchLinks.Similar(Ids.Of(30));
+
+        var page = RenderAt(SearchLinks.Timeline(query));
+
+        Assert.Equal(query, Assert.Single(library.Searches));
+        Assert.Equal(["Most similar to the photo"], page.FindAll("section.month h2").Select(h => h.TextContent));
+        // In the order the search gave, not by date.
+        Assert.Equal([$"photos/{Ids.Of(32)}", $"photos/{Ids.Of(31)}"], page.FindAll("ul.grid a").Select(a => a.GetAttribute("href")![..71]));
+        Assert.Contains("Similar to a photo", page.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_the_photo_has_not_been_analysed_yet_when_a_search_for_similar_ones_finds_no_embedding()
+    {
+        Use(new FakeLibrary { SearchFailure = new AssetNotAnalysedException(Ids.Of(30), AssetKinds.Photo) });
+
+        var page = RenderAt(SearchLinks.Timeline(SearchLinks.Similar(Ids.Of(30))));
+
+        Assert.Contains("This photo has not been analysed yet.", page.Find("[role=alert]").TextContent, StringComparison.Ordinal);
+        Assert.Empty(page.FindAll("ul.grid"));
+    }
+
+    [Fact]
+    public void Says_the_photo_is_not_in_the_library_when_a_search_for_similar_ones_names_no_asset()
+    {
+        Use(new FakeLibrary { SearchFailure = new AssetNotAnalysedException(Ids.Of(30), kind: null) });
+
+        var page = RenderAt(SearchLinks.Timeline(SearchLinks.Similar(Ids.Of(30))));
+
+        Assert.Contains("This photo or video is not in the library.", page.Find("[role=alert]").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_the_video_has_not_been_analysed_yet_when_it_is_a_video()
+    {
+        Use(new FakeLibrary { SearchFailure = new AssetNotAnalysedException(Ids.Of(30), AssetKinds.Video) });
+
+        var page = RenderAt(SearchLinks.Timeline(SearchLinks.Similar(Ids.Of(30))));
+
+        Assert.Contains("This video has not been analysed yet.", page.Find("[role=alert]").TextContent, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "Show more")]
+    [InlineData(Cultures.BrazilianPortuguese, "Mostrar mais")]
+    public void Offers_more_similar_ones_instead_of_saying_to_narrow_the_filters(string culture, string label)
+    {
+        using var language = Cultures.Use(culture);
+        Use(new FakeLibrary { SearchResults = new SearchPage([LisbonInDecember], HasMore: true) });
+        var query = SearchLinks.Similar(Ids.Of(30));
+
+        var page = RenderAt(SearchLinks.Timeline(query));
+
+        var more = page.Find("p.more a");
+        Assert.Equal(label, more.TextContent);
+        Assert.Equal(SearchLinks.Timeline(SimilarSearch.More(query)), more.GetAttribute("href"));
+        Assert.Single(page.FindAll("p.more"));
+        Assert.DoesNotContain("Narrow the filters", page.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Refine os filtros", page.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Shows_no_link_and_no_note_once_it_shows_as_many_similar_ones_as_allowed()
+    {
+        Use(new FakeLibrary { SearchResults = new SearchPage([LisbonInDecember], HasMore: true) });
+        var query = new SearchQuery
+        {
+            Filters = new SearchFilters { SimilarTo = new SimilarToFilter { AssetId = Ids.Of(30), Limit = SearchQuery.MaxLimit } },
+            Limit = SearchQuery.MaxLimit,
+        };
+
+        var page = RenderAt(SearchLinks.Timeline(query));
+
+        Assert.Single(page.FindAll("ul.grid li"));
+        Assert.Empty(page.FindAll("p.more"));
+        Assert.DoesNotContain("First 1000", page.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Narrows_the_similar_ones_with_the_bar_instead_of_starting_a_new_search()
+    {
+        var library = Use(new FakeLibrary { SearchResults = new SearchPage([LisbonInDecember], false) });
+        var similar = SearchLinks.Similar(Ids.Of(30));
+
+        var page = RenderAt(SearchLinks.Timeline(similar));
+        var hidden = page.FindAll("form.filters input[type=hidden]").ToDictionary(i => i.GetAttribute("name")!, i => i.GetAttribute("value"));
+        Assert.Equal(Ids.Of(30), hidden[SearchLinks.SimilarParameter]);
+        Assert.False(hidden.ContainsKey(SearchLinks.SimilarLimitParameter));
+        // The bar's form submitted with a year chosen.
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/?filter=1&year=2020&month=&kind=&city=&source=&{SearchLinks.SimilarParameter}={Ids.Of(30)}");
+        Render<Timeline>();
+
+        Assert.Equal(similar with { Filters = similar.Filters with { Years = [2020] } }, library.Searches[^1]);
+        // The chip still removes it.
+        Assert.Contains(SearchChips.For(library.Searches[^1], Cultures.Text()), c => c.Label == "Similar to a photo" && c.Without.Filters.SimilarTo is null);
+    }
+
     private FakeLibrary Use(FakeLibrary library)
     {
         Services.AddSingleton<ILibraryQueries>(library);

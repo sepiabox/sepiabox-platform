@@ -89,4 +89,69 @@ public sealed class SearchLinksTests
         Assert.Null(SearchLinks.OnThisDay.Filters.OnThisDay!.YearsAgo);
         Assert.Null(SearchQueryJson.Validate(SearchLinks.OnThisDay));
     }
+
+    [Fact]
+    public void Keeps_the_photo_whose_similar_ones_the_bar_narrows_with_the_number_asked_for()
+    {
+        var id = Ids.Of(7);
+
+        var narrowed = SearchLinks.FromFields("2020", null, null, null, null, similar: id, similarLimit: "200");
+        var raised = SearchLinks.FromFields(null, null, null, null, null, similar: id, similarLimit: "1000");
+
+        Assert.Equal(
+            new SearchQuery { Filters = new SearchFilters { Years = [2020], SimilarTo = new SimilarToFilter { AssetId = id, Limit = 200 } } },
+            narrowed);
+        // A raised number raises the query's own limit, which would otherwise cap it.
+        Assert.Equal((1000, 1000), (raised.Limit, raised.ResultLimit));
+        Assert.Null(SearchQueryJson.Validate(raised));
+        // The bar shows the same search back, with the photo in its hidden fields.
+        Assert.Equal(new SimilarToFilter { AssetId = id, Limit = 200 }, SearchLinks.ToFields(narrowed).SimilarTo);
+    }
+
+    [Theory]
+    [InlineData("not an id", null)]
+    [InlineData("ABCDEF", null)]
+    [InlineData("", null)]
+    public void Ignores_a_hidden_similar_field_that_is_not_an_asset_id(string similar, string? limit)
+    {
+        Assert.Null(SearchLinks.FromFields("2020", null, null, null, null, similar: similar, similarLimit: limit).Filters.SimilarTo);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("1001")]
+    [InlineData("abc")]
+    public void Uses_the_default_number_when_the_hidden_one_is_out_of_range(string limit)
+    {
+        var query = SearchLinks.FromFields(null, null, null, null, null, similar: Ids.Of(7), similarLimit: limit);
+
+        Assert.Null(query.Filters.SimilarTo!.Limit);
+        Assert.Equal(SimilarToFilter.DefaultLimit, query.ResultLimit);
+    }
+
+    [Fact]
+    public void A_description_typed_in_the_bar_replaces_the_search_for_similar_ones()
+    {
+        var query = SearchLinks.FromFields(null, null, null, null, null, text: "snow", similar: Ids.Of(7));
+
+        Assert.Null(query.Filters.SimilarTo);
+        Assert.Equal("snow", query.Filters.Visual!.Text);
+        Assert.Null(SearchQueryJson.Validate(query));
+    }
+
+    [Fact]
+    public void Shows_more_similar_ones_in_steps_of_50_200_and_1000_then_no_more()
+    {
+        var first = SearchLinks.Similar(Ids.Of(7)) with { Filters = SearchLinks.Similar(Ids.Of(7)).Filters with { Years = [2020] } };
+
+        var second = SimilarSearch.More(first)!;
+        var third = SimilarSearch.More(second)!;
+
+        Assert.Equal((200, 200), (second.ResultLimit, second.Limit));
+        Assert.Equal([2020], second.Filters.Years!);
+        Assert.Equal((1000, 1000), (third.ResultLimit, third.Limit));
+        Assert.Null(SimilarSearch.More(third));
+        Assert.Null(SimilarSearch.More(new SearchQuery()));
+        Assert.All(new[] { second, third }, q => Assert.Null(SearchQueryJson.Validate(q)));
+    }
 }

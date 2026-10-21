@@ -123,8 +123,14 @@ public sealed class QuestionService(
 
     public int DailyLimit => limits.DailyLimit;
 
-    /// <summary>The DSL's own gate for the translator's answers: <see cref="SearchQueryJson.TryParse"/>.</summary>
-    public static string? Validate(string json) => SearchQueryJson.TryParse(json, out _, out var error) ? null : error;
+    /// <summary>
+    /// The DSL's own gate for the translator's answers: <see cref="SearchQueryJson.TryParse"/>, and none of the filters a
+    /// question cannot express (<see cref="QuestionPrompt.NotFromQuestions"/>), which the output format leaves out anyway.
+    /// </summary>
+    public static string? Validate(string json) =>
+        !SearchQueryJson.TryParse(json, out var query, out var error) ? error
+        : query.Filters.SimilarTo is not null ? "filters.similarTo is not part of an answer: a question cannot name an asset."
+        : null;
 
     /// <summary>
     /// A person, for the daily limit, pseudonymously: the SHA-256 of their e-mail address, not the address (D-073). Null

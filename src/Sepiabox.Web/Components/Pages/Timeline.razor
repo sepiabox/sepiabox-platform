@@ -67,11 +67,11 @@ else if (_filtered)
     {
         <p class="empty">@Text["Search_NoResults"] <a href="./">@Text["Filter_Clear"]</a></p>
     }
-    else if (_query?.Filters.Visual is not null)
+    else if (_query?.Filters.Visual is not null || _query?.Filters.SimilarTo is not null)
     {
-        @* Most similar first (S-016): grouping by month would hide that order. *@
+        @* Most similar first (S-016, S-017): grouping by month would hide that order. *@
         <section class="month">
-            <h2>@Text["Search_MostSimilar"]</h2>
+            <h2>@(_query.Filters.SimilarTo is null ? Text["Search_MostSimilar"] : Text["Search_MostSimilarToPhoto"])</h2>
             <ul class="grid">
                 @foreach (var item in _results.Items)
                 {
@@ -79,7 +79,15 @@ else if (_filtered)
                 }
             </ul>
         </section>
-        @if (_results.HasMore)
+        @if (_query.Filters.SimilarTo is not null)
+        {
+            @* With no threshold there are always more similar ones: offer the next step, up to the DSL's maximum (D-086). *@
+            @if (_results.HasMore && SimilarSearch.More(_query) is { } more)
+            {
+                <p class="more"><a href="@SearchLinks.Timeline(more)">@Text["Similar_ShowMore"]</a></p>
+            }
+        }
+        else if (_results.HasMore)
         {
             <p class="more muted">@Text["Search_FirstResults", _results.Items.Count]</p>
         }
@@ -162,6 +170,13 @@ else
     [SupplyParameterFromQuery(Name = "place")]
     public string[]? SavedPlaces { get; set; }
 
+    /// <summary>The photo whose similar ones the bar narrows (S-017), carried in a hidden field.</summary>
+    [SupplyParameterFromQuery(Name = SearchLinks.SimilarParameter)]
+    public string? Similar { get; set; }
+
+    [SupplyParameterFromQuery(Name = SearchLinks.SimilarLimitParameter)]
+    public string? SimilarLimit { get; set; }
+
     /// <summary>The question the search came from, shown again in the box (S-025).</summary>
     [SupplyParameterFromQuery(Name = AskedParameter)]
     public string? Asked { get; set; }
@@ -230,7 +245,8 @@ else
         if (FilterSubmitted is not null)
         {
             // One address per set of filters, so the URL can be copied and opened again.
-            Navigation.NavigateTo(SearchLinks.Timeline(SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces)));
+            Navigation.NavigateTo(SearchLinks.Timeline(
+                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit)));
             return;
         }
 
@@ -275,6 +291,11 @@ else
             {
                 // A saved place that is not there (any more), or "from home" with no home (S-014).
                 _peopleMessage = PlacesSearch.Message(unknown, Text);
+            }
+            catch (AssetNotAnalysedException missing)
+            {
+                // "Similar" on a photo without an embedding yet, or a link to one no longer in the catalog (S-017).
+                _peopleMessage = SimilarSearch.Message(missing, Text);
             }
         }
         else if (!_invalid)
