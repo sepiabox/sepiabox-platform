@@ -20,10 +20,20 @@ public static class ThumbnailGenerator
     /// <summary>The large preview, which is also what the CLIP embedding is computed from (S-015).</summary>
     public const string PreviewName = "preview-1280";
 
+    /// <summary>The larger preview of an index-only work folder (S-063), which stands in for the original on screen.</summary>
+    public const string LargePreviewName = "preview-2048";
+
     public static readonly IReadOnlyList<ThumbnailSize> PhotoSizes =
     [
         new("thumb-256", 256),
         new(PreviewName, 1280),
+    ];
+
+    /// <summary>Index-only work folders (S-063) make <see cref="LargePreviewName"/> instead of <see cref="PreviewName"/>.</summary>
+    public static readonly IReadOnlyList<ThumbnailSize> IndexOnlyPhotoSizes =
+    [
+        new("thumb-256", 256),
+        new(LargePreviewName, 2048),
     ];
 
     /// <summary>

@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Sepiabox.Ingest.Processing;
 
 namespace Sepiabox.Ingest.Uploading;
 
@@ -43,6 +44,18 @@ public sealed class UploadState : IDisposable
             );
             """;
         command.ExecuteNonQuery();
+    }
+
+    /// <summary>What <c>process</c> recorded for the work folder: whether the originals are uploaded (S-063).</summary>
+    public WorkFolderMode Mode
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return WorkFolderModes.Read(_connection);
+            }
+        }
     }
 
     /// <summary>Paths where <c>process</c> found a file with this content, so the original can be read again.</summary>

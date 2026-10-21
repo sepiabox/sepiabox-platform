@@ -69,6 +69,22 @@ public static class ProcessCommand
 {
     public const string LocalSourceType = "local";
 
+    /// <summary>The warning printed at the start of an index-only run (S-063, D-088).</summary>
+    public const string IndexOnlyWarning = "Index-only: the originals stay where they are and Sepiabox keeps no copy of them.";
+
+    /// <summary>
+    /// Refuses a run that asks for the other mode than its work folder's, before any file is read or anything is
+    /// written (S-063): throws <see cref="WorkFolderModeException"/>. <see cref="Run(ProcessOptions, IProgress{int}?, CancellationToken)"/>
+    /// does the same first, so calling this is only needed to act on the mode earlier, such as to print a warning.
+    /// </summary>
+    public static void CheckMode(ProcessOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        WorkFolderModes.Check(StatePath(Path.GetFullPath(options.OutputPath)), options.Mode);
+    }
+
+    private static string StatePath(string output) => Path.Combine(output, "state.db");
+
     /// <summary>
     /// What <c>process</c> reads from each file's metadata, recorded per file in its state (S-060, D-089), so a newer
     /// version reads again only what it adds. 1: everything until S-053 (rows without a version). 2: a video's location
@@ -95,8 +111,9 @@ public static class ProcessCommand
     public static ProcessResult Run(
         ProcessOptions options, TimeProvider? clock, IProgress<int>? filesDone = null, CancellationToken cancellationToken = default)
     {
-        // A wrong folder fails before the model is checked, which can take seconds the first time.
+        // A wrong folder or mode fails before the model is checked, which can take seconds the first time.
         var (root, output) = Resolve(options);
+        WorkFolderModes.Check(StatePath(output), options.Mode);
         var models = options.ModelFolder ?? ModelFolder.Default();
         var threads = ThreadsFor(options.EffectiveJobs);
         using var embedder = ClipImageEmbedder.TryCreate(models, out var embedderWarning, threads);
@@ -168,6 +185,9 @@ public static class ProcessCommand
         ProcessHooks? hooks,
         CancellationToken cancellationToken)
     {
+        // The mode is the work folder's (S-063): a run asking for the other one stops before it reads or writes anything.
+        WorkFolderModes.Check(StatePath(output), options.Mode);
+        var indexOnly = options.IndexOnly;
         // Faces are biometric data: without --faces nothing looks for them, whatever detector was passed in.
         var faces = options.Faces ? faceDetector : null;
         var manifestFolder = Path.Combine(output, "manifests");
@@ -179,7 +199,8 @@ public static class ProcessCommand
         var outputPrefix = Path.TrimEndingDirectorySeparator(output) + Path.DirectorySeparatorChar;
 
         var ffmpeg = FfmpegTools.Find(options.FfmpegFolder);
-        var video = hooks?.Video ?? (ffmpeg is null ? null : new VideoProcessor(ffmpeg, options.Encoder));
+        var videoVersion = indexOnly ? VideoVersion.Hd1080 : VideoVersion.Hd720;
+        var video = hooks?.Video ?? (ffmpeg is null ? null : new VideoProcessor(ffmpeg, options.Encoder, videoVersion));
         // An encoder chosen for speed (--hw nvenc) is tried on a generated clip before any file (D-087): one that cannot
         // encode, such as NVENC with a driver older than FFmpeg needs, stops the run with FFmpeg's message, rather than
         // failing every video or quietly falling back to libx264.
@@ -188,7 +209,8 @@ public static class ProcessCommand
             processor.CheckEncoder(output, cancellationToken);
         }
 
-        using var state = new StateStore(Path.Combine(output, "state.db"));
+        using var state = new StateStore(StatePath(output));
+        state.RecordMode(options.Mode);
         var stopwatch = Stopwatch.StartNew();
         var jobs = options.EffectiveJobs;
         // A file's outcome, in the order the files were found, so the result lists come out as a sequential run's.
@@ -483,7 +505,7 @@ public static class ProcessCommand
             // version has no sound: its header, and up to its first sound frame (to its end only when no frame decodes).
             (bool Redo, FileState Done) CheckLostSound(FileState done, string sha256)
             {
-                var proxy = Path.Combine(output, DerivativeFolder(sha256), VideoProcessor.ProxyName + ".mp4");
+                var proxy = Path.Combine(output, DerivativeFolder(sha256), videoVersion.Name + ".mp4");
                 if (!File.Exists(proxy))
                 {
                     return (false, done);
@@ -739,9 +761,9 @@ public static class ProcessCommand
                     RemoveSource(output, oldSha256, source);
                 }
 
-                var described = Describe(manifestFolder, sha256, kind, file, source, clock, content);
+                var described = Describe(manifestFolder, sha256, kind, file, source, clock, content, indexOnly);
                 var (manifest, status, derivativeProblem, noVideo, withoutSound, sound) =
-                    AddDerivatives(output, file, described, content, video, redoProxy, stop.Token);
+                    AddDerivatives(output, file, described, content, video, redoProxy, indexOnly, stop.Token);
                 if (withoutSound is not null)
                 {
                     o.WithoutSound.Add(new ScanProblem(file.Path, withoutSound));
@@ -898,8 +920,11 @@ public static class ProcessCommand
     }
 
     private static Manifest Describe(
-        string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source, TimeProvider clock, byte[]? content)
+        string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source, TimeProvider clock, byte[]? content,
+        bool indexOnly)
     {
+        // Written only when false, as the schema says; a work folder keeps one mode, so every manifest in it agrees.
+        bool? originalStored = indexOnly ? false : null;
         var path = ManifestPath(manifestFolder, sha256);
         if (File.Exists(path))
         {
@@ -910,6 +935,7 @@ public static class ProcessCommand
             {
                 Captured = CaptureDate.Stronger(existing.Captured, CaptureDate.Resolve(null, file.Path, clock)),
                 Sources = WithSource(existing.Sources, source),
+                OriginalStored = originalStored,
             };
         }
 
@@ -938,6 +964,7 @@ public static class ProcessCommand
             Height = metadata.Height,
             DurationSeconds = metadata.DurationSeconds,
             Sources = [source],
+            OriginalStored = originalStored,
         };
     }
 
@@ -947,7 +974,8 @@ public static class ProcessCommand
     /// was made without sound (D-084), and Sound when a video's derivatives were made.
     /// </summary>
     private static (Manifest Manifest, FileStatus Status, string? Problem, NoVideoReason? NoVideo, string? WithoutSound, VideoSound? Sound) AddDerivatives(
-        string output, FoundFile file, Manifest manifest, byte[]? content, IVideoProcessor? video, bool redo, CancellationToken cancellationToken)
+        string output, FoundFile file, Manifest manifest, byte[]? content, IVideoProcessor? video, bool redo, bool indexOnly,
+        CancellationToken cancellationToken)
     {
         if (manifest.Derivatives.Count > 0 && !(redo && video is not null && manifest.Kind == MediaKind.Video))
         {
@@ -960,14 +988,15 @@ public static class ProcessCommand
             if (manifest.Kind == MediaKind.Photo)
             {
                 IReadOnlyList<ManifestDerivative> thumbnails;
+                var sizes = indexOnly ? ThumbnailGenerator.IndexOnlyPhotoSizes : ThumbnailGenerator.PhotoSizes;
                 if (content is null)
                 {
-                    thumbnails = ThumbnailGenerator.Generate(file.Path, output, folder, ThumbnailGenerator.PhotoSizes);
+                    thumbnails = ThumbnailGenerator.Generate(file.Path, output, folder, sizes);
                 }
                 else
                 {
                     using var stream = new MemoryStream(content, writable: false);
-                    thumbnails = ThumbnailGenerator.Generate(stream, output, folder, ThumbnailGenerator.PhotoSizes);
+                    thumbnails = ThumbnailGenerator.Generate(stream, output, folder, sizes);
                 }
 
                 return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null, null, null, null);
@@ -1002,7 +1031,7 @@ public static class ProcessCommand
         }
         catch (Exception ex) when (ex is MagickException or VideoProcessingException)
         {
-            var what = manifest.Kind == MediaKind.Photo ? "thumbnails" : "the poster and 720p version";
+            var what = manifest.Kind == MediaKind.Photo ? "thumbnails" : indexOnly ? "the poster and 1080p version" : "the poster and 720p version";
             return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}", null, null, null);
         }
     }

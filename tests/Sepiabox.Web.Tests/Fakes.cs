@@ -66,7 +66,7 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
         Task.FromResult(Assets.GetValueOrDefault(id));
 
     public Task<string?> GetDerivativeBlobPathAsync(string id, string name, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Assets.ContainsKey(id) ? $"{id}/{name}{(name == DerivativeNames.Proxy ? ".mp4" : ".webp")}" : null);
+        Task.FromResult(Assets.ContainsKey(id) ? $"{id}/{name}{(DerivativeNames.IsVideo(name) ? ".mp4" : ".webp")}" : null);
 
     public Task<OriginalFile?> GetOriginalAsync(string id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Assets.ContainsKey(id) ? new OriginalFile("IMG_0001.jpg", "image/jpeg") : null);

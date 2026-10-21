@@ -22,6 +22,18 @@ public sealed record Manifest
     private Manifest(DateTime? capturedAt, CaptureDateSource? capturedAtSource) =>
         Captured = capturedAt is { } value ? new CaptureDate(value, capturedAtSource ?? CaptureDateSource.Metadata) : null;
 
+    /// <summary>
+    /// Whether Sepiabox keeps the original (S-063, D-088). Written only as <c>false</c>, by an index-only work folder:
+    /// absent means true, so manifests written before the field existed keep their meaning, and a stored original
+    /// never reads differently by how the merge was ordered. Use <see cref="IsOriginalStored"/> to read it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? OriginalStored { get; init; }
+
+    /// <summary>Whether the original is in storage: anything but an explicit <c>originalStored: false</c>.</summary>
+    [JsonIgnore]
+    public bool IsOriginalStored => OriginalStored ?? true;
+
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
 
     /// <summary>SHA-256 of the content, lowercase hex.</summary>
@@ -110,8 +122,16 @@ public sealed record Manifest
 /// <param name="Name">Name the user gave the source, such as "HD da Ana".</param>
 /// <param name="Path">Path inside the source, with forward slashes.</param>
 /// <param name="ModifiedAt">Last write time of the file, UTC.</param>
-public sealed record ManifestSource(string Type, string Name, string Path, DateTimeOffset ModifiedAt)
+/// <param name="Url">
+/// The original's address at its source (S-063), when the source gives one: an <c>https://</c> URL of at most
+/// <see cref="MaxUrlLength"/> characters. Not part of the file's identity.
+/// </param>
+public sealed record ManifestSource(
+    string Type, string Name, string Path, DateTimeOffset ModifiedAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Url = null)
 {
+    public const int MaxUrlLength = 2000;
+
     /// <summary>Paths are stored with '/'; a manifest written on Windows by another tool may use '\'.</summary>
     public static string NormalizePath(string path) => path.Replace('\\', '/');
 

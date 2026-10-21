@@ -17,6 +17,29 @@ public class VideoProcessorTests
         Assert.Equal((expectedWidth, expectedHeight), VideoScale.Fit(width, height));
     }
 
+    [Theory]
+    [InlineData(1920, 1080, 1920, 1080)]
+    [InlineData(3840, 2160, 1920, 1080)]
+    [InlineData(1080, 1920, 1080, 1920)]
+    [InlineData(2160, 3840, 1080, 1920)]
+    [InlineData(4000, 3000, 1440, 1080)]
+    [InlineData(1280, 720, 1280, 720)]
+    [InlineData(640, 360, 640, 360)]
+    [InlineData(641, 361, 640, 360)]
+    [InlineData(3841, 2161, 1920, 1080)]
+    [InlineData(1921, 1081, 1918, 1080)]
+    public void Fits_into_1080p_in_either_orientation_without_upscaling_and_with_even_sides(int width, int height, int expectedWidth, int expectedHeight)
+    {
+        Assert.Equal((expectedWidth, expectedHeight), VideoScale.Fit(width, height, VideoVersion.Hd1080.LongestSide, VideoVersion.Hd1080.ShortestSide));
+    }
+
+    [Fact]
+    public void The_two_playable_versions_have_their_own_names_and_sizes()
+    {
+        Assert.Equal(("proxy-720p", 1280, 720), (VideoVersion.Hd720.Name, VideoVersion.Hd720.LongestSide, VideoVersion.Hd720.ShortestSide));
+        Assert.Equal(("proxy-1080p", 1920, 1080), (VideoVersion.Hd1080.Name, VideoVersion.Hd1080.LongestSide, VideoVersion.Hd1080.ShortestSide));
+    }
+
     [Fact]
     public void Builds_a_software_proxy_command_that_strips_metadata()
     {
