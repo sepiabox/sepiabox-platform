@@ -64,6 +64,9 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Information, Message = "Named the place of {Assets} assets.")]
     public static partial void PlacesRefreshed(ILogger logger, int assets);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Rebuilt the occasions: {Occasions} occasions with {Assets} assets ({Created} created, {Updated} changed, {Removed} removed).")]
+    public static partial void OccasionsRebuilt(ILogger logger, int occasions, int assets, int created, int updated, int removed);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Stopped before finishing; running the same command again continues.")]
     public static partial void Cancelled(ILogger logger);
 

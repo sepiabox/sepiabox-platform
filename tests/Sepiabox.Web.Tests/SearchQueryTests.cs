@@ -237,6 +237,14 @@ public sealed class SearchQueryTests
         """{"sort": "random"}""",
         """{"limit": 1001}""",
         "[]",
+        // Occasions (S-023, D-092).
+        """{"filters": {"eventIds": [1, 42], "years": [2024]}}""",
+        """{"filters": {"eventIds": []}}""",
+        """{"filters": {"eventIds": [0]}}""",
+        """{"filters": {"eventIds": [-3]}}""",
+        """{"filters": {"eventIds": ["7"]}}""",
+        """{"filters": {"eventIds": [1.5]}}""",
+        """{"filters": {"eventIds": 7}}""",
         // The count of S-026 (D-075).
         """{"filters": {"kinds": ["video"], "years": [2019]}, "aggregate": {"count": "assets"}}""",
         """{"filters": {}, "aggregate": {"count": "assets", "groupBy": "year", "top": 3}}""",

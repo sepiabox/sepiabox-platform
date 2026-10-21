@@ -458,6 +458,11 @@ public sealed class SearchService(
             assets = WithPeople(assets, people);
         }
 
+        if (filters.EventIds is { } eventIds)
+        {
+            assets = assets.Where(a => db.OccasionAssets.Any(l => l.AssetId == a.Id && eventIds.Contains(l.EventId)));
+        }
+
         // "More like this one" never shows this one (S-017).
         if (filters.SimilarTo is { } similar)
         {

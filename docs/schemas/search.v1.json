@@ -105,6 +105,13 @@
             "includeMe": { "type": "boolean" }
           }
         },
+        "eventIds": {
+          "description": "Assets in any of these occasions (S-023, D-092), by id; an id no occasion has matches nothing, and undated assets are in no occasion. Never part of the question translator's output format: a question cannot name an occasion.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "type": "integer", "minimum": 1 }
+        },
         "visual": {
           "description": "A description in English matched against the photos' CLIP embeddings (S-016, D-070); results are ordered by similarity, most similar first, and sort is not used.",
           "type": "object",

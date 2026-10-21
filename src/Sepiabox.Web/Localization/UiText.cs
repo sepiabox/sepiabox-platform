@@ -26,4 +26,26 @@ public static class UiText
     /// <summary>"Photo" or "Video".</summary>
     public static string KindLabel(this IStringLocalizer<SharedResource> text, string kind) =>
         AssetKinds.IsVideo(kind) ? text["Kind_Video"] : text["Kind_Photo"];
+
+    /// <summary>
+    /// An occasion's title (S-023): "Lisbon · Dec 14–16, 2024" in English, "Lisbon · 14–16 dez 2024" in Brazilian
+    /// Portuguese. The place is as the catalog stored it and is left out when there is none; the date range is written
+    /// in the current culture, never stored (D-050), with the shortest form its days allow: one day, days of one month,
+    /// of one year, or of two years.
+    /// </summary>
+    public static string OccasionTitle(this IStringLocalizer<SharedResource> text, string? place, DateTime startsAt, DateTime endsAt)
+    {
+        // Abbreviated month names without the dot ICU gives some cultures ("dez." becomes "dez"): the patterns do the rest.
+        var format = (DateTimeFormatInfo)CultureInfo.CurrentCulture.DateTimeFormat.Clone();
+        format.AbbreviatedMonthNames = [.. format.AbbreviatedMonthNames.Select(name => name.TrimEnd('.'))];
+        format.AbbreviatedMonthGenitiveNames = [.. format.AbbreviatedMonthGenitiveNames.Select(name => name.TrimEnd('.'))];
+
+        string Part(string key, DateTime day) => day.ToString(text[key], format);
+        var (first, last) = (startsAt.Date, endsAt.Date);
+        var range = first == last ? Part("Format_Occasion_Day", first)
+            : first.Year == last.Year && first.Month == last.Month ? Part("Format_Occasion_MonthStart", first) + "–" + Part("Format_Occasion_MonthEnd", last)
+            : first.Year == last.Year ? Part("Format_Occasion_YearStart", first) + " – " + Part("Format_Occasion_Day", last)
+            : Part("Format_Occasion_Day", first) + " – " + Part("Format_Occasion_Day", last);
+        return string.IsNullOrWhiteSpace(place) ? range : place + " · " + range;
+    }
 }

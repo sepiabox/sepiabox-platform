@@ -177,6 +177,10 @@ else
     [SupplyParameterFromQuery(Name = SearchLinks.SimilarLimitParameter)]
     public string? SimilarLimit { get; set; }
 
+    /// <summary>The occasions the bar narrows (S-023), carried in hidden fields.</summary>
+    [SupplyParameterFromQuery(Name = SearchLinks.EventParameter)]
+    public string[]? EventIds { get; set; }
+
     /// <summary>The question the search came from, shown again in the box (S-025).</summary>
     [SupplyParameterFromQuery(Name = AskedParameter)]
     public string? Asked { get; set; }
@@ -246,7 +250,7 @@ else
         {
             // One address per set of filters, so the URL can be copied and opened again.
             Navigation.NavigateTo(SearchLinks.Timeline(
-                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit)));
+                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit, EventIds)));
             return;
         }
 

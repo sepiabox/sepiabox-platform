@@ -1,0 +1,77 @@
+@page "/occasions/{Id:long}"
+@using Sepiabox.Catalog.Search
+@inject ILibraryQueries Library
+@* One occasion (S-023): its title, how many photos and videos it holds and them, oldest first, as a plain grid; the same
+   photos are the timeline's filter eventIds. *@
+
+<PageTitle>@Title · Sepiabox</PageTitle>
+
+<p class="back"><a href="occasions">@Text["Occasion_Back"]</a></p>
+
+@if (_occasion is null)
+{
+    <h1 class="page-heading">@Text["Occasion_NotFound"]</h1>
+    <p class="muted">@Text["Occasion_NotFoundHint"] <a href="occasions">@Text["Occasion_SeeAll"]</a></p>
+}
+else
+{
+    <h1 class="page-heading">@Title</h1>
+    <p class="muted">
+        @Items(_occasion.AssetCount)
+        @if (_occasion.AssetCount <= SearchQuery.DefaultLimit)
+        {
+            @* The timeline shows 200 at a time: past that, the link would show fewer than this page does. *@
+            <text>· </text><a href="@SearchLinks.Timeline(Query)">@Text["Occasion_OpenOnTimeline"]</a>
+        }
+    </p>
+
+    @if (_results is { Items.Count: > 0 } results)
+    {
+        <ul class="grid">
+            @foreach (var item in results.Items)
+            {
+                <li><MediaCard Item="item" Href="@DetailLink(item)" /></li>
+            }
+        </ul>
+        @if (results.HasMore)
+        {
+            <p class="more muted">@Text["Search_FirstResults", results.Items.Count]</p>
+        }
+    }
+    else
+    {
+        <p class="empty">@Text["Occasion_Empty"]</p>
+    }
+}
+
+@code {
+    [Parameter]
+    public long Id { get; set; }
+
+    private OccasionSummary? _occasion;
+    private SearchPage? _results;
+
+    private string Title => _occasion is { } o ? Text.OccasionTitle(o.PlaceLabel, o.StartsAt, o.EndsAt) : Text["Occasion_NotFound"];
+
+    // Oldest first: the order things happened in.
+    private SearchQuery Query => new() { Filters = new SearchFilters { EventIds = [Id] }, Sort = SearchSort.CapturedAtAsc };
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _occasion = await Library.GetOccasionAsync(Id);
+        if (_occasion is null && HttpContext is not null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+
+        _results = _occasion is null ? null : await Library.SearchAsync(Query with { Limit = SearchQuery.MaxLimit });
+    }
+
+    private string DetailLink(TimelineItem item) => $"photos/{item.Id}?{SearchLinks.QueryParameter}={SearchQueryJson.Encode(Query)}";
+
+    private string Items(int count) =>
+        count == 1 ? Text["Occasions_Items_One"] : Text["Occasions_Items_Other", count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)];
+}
