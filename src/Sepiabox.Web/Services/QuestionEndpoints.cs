@@ -116,6 +116,11 @@ public static class QuestionEndpoints
             // Understood, but naming someone the catalog does not have (S-021): the query comes back with the names.
             return PeopleSearch.Problem(unknown, text, dsl);
         }
+        catch (UnknownPlacesException unknown)
+        {
+            // Understood, but naming a place the family has not saved, or home with none marked (S-014).
+            return PlacesSearch.Problem(unknown, text, dsl);
+        }
 
         return Results.Ok(new Response(dsl, answer.Items, answer.HasMore, answer.Count, answer.NotCounted));
     }

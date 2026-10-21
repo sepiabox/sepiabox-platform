@@ -100,6 +100,15 @@ public sealed record SearchFilters
 
     public PlaceFilter? Places { get; init; }
 
+    /// <summary>
+    /// The family's places (S-014, D-083), by name, matched ignoring case: assets taken within any of them (inside its
+    /// radius). An unknown name is an error.
+    /// </summary>
+    public IReadOnlyList<string>? SavedPlaces { get; init; }
+
+    /// <summary>How far from one of the family's places, or from home, the asset was taken (S-014).</summary>
+    public DistanceFilter? DistanceFrom { get; init; }
+
     /// <summary>Source names, such as the drive's name given to <c>process</c>.</summary>
     public IReadOnlyList<string>? Sources { get; init; }
 
@@ -133,7 +142,8 @@ public sealed record SearchFilters
         other is not null
         && Same(Kinds, other.Kinds) && DateFrom == other.DateFrom && DateTo == other.DateTo
         && Same(Years, other.Years) && Same(Months, other.Months) && OnThisDay == other.OnThisDay
-        && Equals(Places, other.Places) && Same(Sources, other.Sources) && Equals(People, other.People) && UndatedOnly == other.UndatedOnly
+        && Equals(Places, other.Places) && Same(SavedPlaces, other.SavedPlaces) && DistanceFrom == other.DistanceFrom
+        && Same(Sources, other.Sources) && Equals(People, other.People) && UndatedOnly == other.UndatedOnly
         && Visual == other.Visual;
 
     public override int GetHashCode() => HashCode.Combine(DateFrom, DateTo, OnThisDay, Places, UndatedOnly);
@@ -157,6 +167,23 @@ public sealed record PeopleFilter
     public bool Equals(PeopleFilter? other) => other is not null && SearchFilters.Same(All, other.All) && IncludeMe == other.IncludeMe;
 
     public override int GetHashCode() => HashCode.Combine(All?.Count, IncludeMe);
+}
+
+/// <summary>
+/// The distance from a saved place's centre (S-014, D-083): from <see cref="Place"/> (a saved place's name) or from the
+/// home (<see cref="Home"/>), exactly one of them; more than <see cref="MinKm"/> and at most <see cref="MaxKm"/>, at
+/// least one of them. Assets without a location never match.
+/// </summary>
+public sealed record DistanceFilter
+{
+    public string? Place { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Home { get; init; }
+
+    public double? MinKm { get; init; }
+
+    public double? MaxKm { get; init; }
 }
 
 /// <summary>Search by description (S-016, D-070).</summary>
@@ -206,6 +233,9 @@ public static class SearchQueryJson
     public const int MinYear = 1800;
     public const int MaxYear = 9999;
     public const int MaxYearsAgo = 200;
+
+    /// <summary>Half the Earth's circumference: no two points are farther apart.</summary>
+    public const double MaxKm = 20_040;
 
     /// <summary>The longest description accepted; CLIP reads at most 77 tokens of it anyway.</summary>
     public const int MaxTextLength = 300;
@@ -332,6 +362,8 @@ public static class SearchQueryJson
                 : null)
             ?? List("filters.places.cities", filters.Places?.Cities, Name)
             ?? List("filters.places.countries", filters.Places?.Countries, code => code.Length == 2 && code.All(char.IsAsciiLetterUpper) ? null : "must be a two-letter country code such as 'PT'")
+            ?? List("filters.savedPlaces", filters.SavedPlaces, Name)
+            ?? Distance(filters.DistanceFrom)
             ?? List("filters.sources", filters.Sources, Name)
             ?? List("filters.people.all", filters.People?.All, Name)
             ?? (filters.People is { All: null, IncludeMe: false } ? "filters.people needs all, includeMe or both." : null)
@@ -339,6 +371,36 @@ public static class SearchQueryJson
             ?? (filters.UndatedOnly && filters.HasTimeFilter
                 ? "filters.undatedOnly cannot be combined with dateFrom, dateTo, years, months or onThisDay."
                 : null);
+    }
+
+    private static string? Distance(DistanceFilter? distance)
+    {
+        if (distance is null)
+        {
+            return null;
+        }
+
+        if ((distance.Place is null) == !distance.Home)
+        {
+            return "filters.distanceFrom needs exactly one of place or home.";
+        }
+
+        if (distance.Place is { } place && Name(place) is { } problem)
+        {
+            return $"filters.distanceFrom.place: '{place}' {problem}.";
+        }
+
+        if (distance is { MinKm: null, MaxKm: null })
+        {
+            return "filters.distanceFrom needs minKm, maxKm or both.";
+        }
+
+        if (distance.MinKm is { } min && !(min >= 0 && min <= MaxKm) || distance.MaxKm is { } max && !(max > 0 && max <= MaxKm))
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"filters.distanceFrom.minKm and maxKm must be between 0 and {MaxKm} (maxKm above 0).");
+        }
+
+        return distance.MinKm >= distance.MaxKm ? "filters.distanceFrom.minKm must be less than maxKm." : null;
     }
 
     private static string? Visual(VisualFilter? visual)

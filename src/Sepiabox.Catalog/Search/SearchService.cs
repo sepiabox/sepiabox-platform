@@ -44,6 +44,40 @@ public sealed class UnknownPeopleException(IReadOnlyList<string> missing, bool m
         }.Where(part => part is not null));
 }
 
+/// <summary>
+/// A search names saved places the catalog does not have (S-014): <see cref="Missing"/> lists them, as written;
+/// <see cref="HomeMissing"/> says it asked for the distance from home and no place is the home.
+/// </summary>
+public sealed class UnknownPlacesException(IReadOnlyList<string> missing, bool homeMissing)
+    : Exception(Describe(missing, homeMissing))
+{
+    public IReadOnlyList<string> Missing { get; } = missing;
+
+    public bool HomeMissing { get; } = homeMissing;
+
+    private static string Describe(IReadOnlyList<string> missing, bool homeMissing) =>
+        string.Join(" ", new[]
+        {
+            missing.Count > 0 ? $"No saved place is called {string.Join(", ", missing)}." : null,
+            homeMissing ? "No saved place is marked as home." : null,
+        }.Where(part => part is not null));
+}
+
+/// <summary>
+/// The saved places a search names (S-014, D-083), read before it runs by <see cref="SearchService.ResolvePlacesAsync"/>:
+/// by the cleaned name the filters gave, and the home. Passed to the query explicitly, so nothing about one search is
+/// kept on the service.
+/// </summary>
+public sealed record ResolvedPlaces(IReadOnlyDictionary<string, SavedPlace> ByName, SavedPlace? Home)
+{
+    public static readonly ResolvedPlaces None = new(new Dictionary<string, SavedPlace>(), null);
+
+    /// <summary>The place a filter names; throws when it was not resolved for this search.</summary>
+    public SavedPlace Named(string name) => ByName.TryGetValue(SearchService.PlaceKey(name), out var place)
+        ? place
+        : throw new InvalidOperationException($"Resolve the places with ResolvePlacesAsync before filtering by the saved place '{name}'.");
+}
+
 /// <summary>One asset a search found; <see cref="Score"/> is its cosine similarity to the description, for a visual search.</summary>
 public sealed record SearchHit(
     string Id, string Kind, DateTime? CapturedAt, double? DurationSeconds, string? PlaceCity, string? PlaceCountry, double? Score = null);
@@ -127,20 +161,60 @@ public sealed class SearchService(
     }
 
     /// <summary>
+    /// Reads the saved places the filters name (ignoring case, with PostgreSQL's <c>lower()</c> on both sides, as the
+    /// unique index compares them) and the home, for the search to filter by; throws
+    /// <see cref="UnknownPlacesException"/> when one is not there or the distance from home has no home. What it returns is
+    /// what <see cref="Filtered"/> and <see cref="Query"/> filter by.
+    /// </summary>
+    public async Task<ResolvedPlaces> ResolvePlacesAsync(SearchFilters filters, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filters);
+        if (filters.SavedPlaces is null && filters.DistanceFrom is null)
+        {
+            return ResolvedPlaces.None;
+        }
+
+        var written = (filters.SavedPlaces ?? []).Concat(filters.DistanceFrom?.Place is { } place ? [place] : []).Distinct().ToList();
+        var cleaned = written.Select(PlaceKey).Distinct().ToArray();
+        // One query for every name: which place, if any, each one is.
+        var matches = cleaned.Length == 0
+            ? []
+            : await db.Database.SqlQuery<PlaceMatch>($"""
+                SELECT n AS "Name", p.id AS "Id"
+                FROM unnest({cleaned}) AS n
+                LEFT JOIN saved_places p ON lower(p.name) = lower(n)
+                """).ToListAsync(cancellationToken);
+        var ids = matches.Where(m => m.Id is not null).Select(m => m.Id!.Value).ToList();
+        var places = await db.SavedPlaces.AsNoTracking().Where(p => ids.Contains(p.Id) || p.IsHome).ToListAsync(cancellationToken);
+        var byName = matches.Where(m => m.Id is not null)
+            .ToDictionary(m => m.Name, m => places.Single(p => p.Id == m.Id), StringComparer.Ordinal);
+        var home = places.FirstOrDefault(p => p.IsHome);
+        var missing = written.Where(name => !byName.ContainsKey(PlaceKey(name))).ToList();
+        var homeMissing = filters.DistanceFrom is { Home: true } && home is null;
+        return missing.Count > 0 || homeMissing
+            ? throw new UnknownPlacesException(missing, homeMissing)
+            : new ResolvedPlaces(byName, home);
+    }
+
+    /// <summary>
     /// The assets the query's filters match, in no particular order and without its limit: for a caller that orders
     /// by something else, such as visual similarity (S-016).
     /// </summary>
-    public IQueryable<Asset> Filtered(SearchQuery query)
+    /// <param name="query">The search.</param>
+    /// <param name="places">The saved places its filters name, from <see cref="ResolvePlacesAsync"/>; none when they name none.</param>
+    public IQueryable<Asset> Filtered(SearchQuery query, ResolvedPlaces? places = null)
     {
         ArgumentNullException.ThrowIfNull(query);
-        return Filter(db.Assets.AsNoTracking(), query.Filters);
+        return Filter(db.Assets.AsNoTracking(), query.Filters, places ?? ResolvedPlaces.None);
     }
 
     /// <summary>
     /// The assets the query matches, sorted by capture date (undated last, then by id), without its limit. A query with
     /// <see cref="SearchFilters.Visual"/> needs its vector: use <see cref="RunAsync{T}"/>.
     /// </summary>
-    public IQueryable<Asset> Query(SearchQuery query)
+    /// <param name="query">The search.</param>
+    /// <param name="places">The saved places its filters name, from <see cref="ResolvePlacesAsync"/>; none when they name none.</param>
+    public IQueryable<Asset> Query(SearchQuery query, ResolvedPlaces? places = null)
     {
         ArgumentNullException.ThrowIfNull(query);
         if (query.Filters.Visual is not null)
@@ -148,7 +222,7 @@ public sealed class SearchService(
             throw new InvalidOperationException("A search by description is run with RunAsync, which computes its vector.");
         }
 
-        var assets = Filtered(query);
+        var assets = Filtered(query, places);
         // Undated last in both directions; the id makes the order total, so pages never overlap.
         return query.Sort == SearchSort.CapturedAtAsc
             ? assets.OrderBy(a => a.CapturedAt == null).ThenBy(a => a.CapturedAt).ThenBy(a => a.Id)
@@ -184,9 +258,10 @@ public sealed class SearchService(
         ArgumentNullException.ThrowIfNull(byDate);
         ArgumentNullException.ThrowIfNull(bySimilarity);
         await ResolvePeopleAsync(query.Filters, cancellationToken);
+        var places = await ResolvePlacesAsync(query.Filters, cancellationToken);
         if (query.Filters.Visual is not { } visual)
         {
-            return await byDate(Query(query)).Take(query.Limit + 1).ToListAsync(cancellationToken);
+            return await byDate(Query(query, places)).Take(query.Limit + 1).ToListAsync(cancellationToken);
         }
 
         if (embedder is not { IsAvailable: true })
@@ -200,7 +275,7 @@ public sealed class SearchService(
         var walkIndex = similarity == SimilarityMode.Ranking
             && (query.Filters with { Visual = null }).IsEmpty
             && await PgvectorSimilarity.CanWalkIndexAsync(db, cancellationToken);
-        var ranked = PgvectorSimilarity.Rank(db, Filtered(query), vector, visual.EffectiveMinScore, exact: !walkIndex);
+        var ranked = PgvectorSimilarity.Rank(db, Filtered(query, places), vector, visual.EffectiveMinScore, exact: !walkIndex);
         if (!walkIndex)
         {
             return await bySimilarity(ranked).Take(query.Limit + 1).ToListAsync(cancellationToken);
@@ -227,7 +302,8 @@ public sealed class SearchService(
         }
 
         var named = await ResolvePeopleAsync(query.Filters, cancellationToken);
-        var assets = Filtered(query);
+        var places = await ResolvePlacesAsync(query.Filters, cancellationToken);
+        var assets = Filtered(query, places);
         var total = await assets.CountAsync(cancellationToken);
         var aggregate = query.Aggregate ?? new SearchAggregate();
         var groups = aggregate.GroupBy switch
@@ -259,7 +335,7 @@ public sealed class SearchService(
             _ => throw new InvalidOperationException($"Unknown groupBy '{aggregate.GroupBy}'."),
         };
         int? undated = query.Filters.HasTimeFilter
-            ? await Filter(db.Assets.AsNoTracking(), query.Filters.UndatedInstead).CountAsync(cancellationToken)
+            ? await Filter(db.Assets.AsNoTracking(), query.Filters.UndatedInstead, places).CountAsync(cancellationToken)
             : null;
         // Without top, a grouping by year, month or kind is complete and in its own order ("photos per month" is 12
         // months, in order); by city or source, the largest 10. With top, the largest that many (D-075).
@@ -289,7 +365,7 @@ public sealed class SearchService(
     public DateOnly Today() =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.GetUtcNow(), options?.TimeZone ?? clock.LocalTimeZone).DateTime);
 
-    private IQueryable<Asset> Filter(IQueryable<Asset> assets, SearchFilters filters)
+    private IQueryable<Asset> Filter(IQueryable<Asset> assets, SearchFilters filters, ResolvedPlaces places)
     {
         if (filters.Kinds is { } kinds)
         {
@@ -341,6 +417,19 @@ public sealed class SearchService(
             assets = assets.Where(a => a.PlaceCountry != null && names.Contains(a.PlaceCountry));
         }
 
+        if (filters.SavedPlaces is { } savedPlaces)
+        {
+            assets = PostgisDistance.InAny(assets, savedPlaces.Select(places.Named).DistinctBy(p => p.Id));
+        }
+
+        if (filters.DistanceFrom is { } distance)
+        {
+            var centre = distance.Home
+                ? places.Home ?? throw new InvalidOperationException("Resolve the places with ResolvePlacesAsync before filtering by the distance from home.")
+                : places.Named(distance.Place!);
+            assets = PostgisDistance.Between(assets, centre.Location, distance.MinKm * 1000, distance.MaxKm * 1000);
+        }
+
         if (filters.Sources is { } sources)
         {
             var lowered = sources.Select(s => s.ToLowerInvariant()).ToList();
@@ -354,6 +443,15 @@ public sealed class SearchService(
 
         return assets;
     }
+
+    // A place's name cleaned as it is stored (D-079); lower() is then applied in SQL.
+    internal static string PlaceKey(string name)
+    {
+        PeopleCuration.CleanName(name, out var clean);
+        return clean ?? name.Trim();
+    }
+
+    private sealed record PlaceMatch(string Name, long? Id);
 
     // A searched name cleaned as names are stored (D-079: NFC, invisible formatting dropped, white space collapsed), so a
     // double space or a decomposed "José" still finds the person, then lower-cased to match ignoring case.

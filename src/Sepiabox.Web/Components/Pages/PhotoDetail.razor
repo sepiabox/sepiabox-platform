@@ -53,6 +53,12 @@
                 <dd>@Text.KindLabel(_asset.Kind)</dd>
             </dl>
 
+            @if (_asset.Location is not null)
+            {
+                @* Opens the places page with this photo's coordinates filled in (S-014). *@
+                <p class="save-place"><a href="places?asset=@_asset.Id">@Text["Detail_SavePlace"]</a></p>
+            }
+
             @if (_asset.People.Count > 0)
             {
                 @* A named person links to their photos; an unnamed one to their page, to be named (S-021). *@

@@ -106,6 +106,11 @@ namespace Sepiabox.Catalog.Migrations
                     b.HasKey("Id")
                         .HasName("pk_assets");
 
+                    b.HasIndex("Location")
+                        .HasDatabaseName("ix_assets_location");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Location"), "gist");
+
                     b.HasIndex("CapturedAt", "Id")
                         .IsDescending(true, false)
                         .HasDatabaseName("ix_assets_timeline");
@@ -510,6 +515,48 @@ namespace Sepiabox.Catalog.Migrations
                         .HasName("pk_question_usage");
 
                     b.ToTable("question_usage", (string)null);
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.SavedPlace", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("IsHome")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_home");
+
+                    b.Property<Point>("Location")
+                        .IsRequired()
+                        .HasColumnType("geography (Point, 4326)")
+                        .HasColumnName("location");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("RadiusM")
+                        .HasColumnType("integer")
+                        .HasColumnName("radius_m");
+
+                    b.HasKey("Id")
+                        .HasName("pk_saved_places");
+
+                    b.HasIndex("IsHome")
+                        .IsUnique()
+                        .HasDatabaseName("ix_saved_places_home")
+                        .HasFilter("is_home");
+
+                    b.ToTable("saved_places", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_saved_places_radius_m", "radius_m BETWEEN 10 AND 50000");
+                        });
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.Setting", b =>

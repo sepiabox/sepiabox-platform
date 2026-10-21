@@ -87,6 +87,11 @@ public static class SearchEndpoints
             // A name that is no one's, or "me" without "This is me" (S-021): the field and the names say what to fix.
             return PeopleSearch.Problem(unknown, text);
         }
+        catch (UnknownPlacesException unknown)
+        {
+            // A saved place that is not there (any more), or the distance from home with no home (S-014).
+            return PlacesSearch.Problem(unknown, text);
+        }
 
         return Results.Ok(response);
     }

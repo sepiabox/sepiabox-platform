@@ -162,12 +162,14 @@ public sealed class QuestionService(
         }
 
         var options = await library.GetFilterOptionsAsync(cancellationToken);
-        // People's names, never an e-mail address or who said "This is me" (D-080); later stories add personal places
-        // and occasion types here (S-014, S-024).
+        // People's names, never an e-mail address or who said "This is me" (D-080); the family's places by name, and
+        // which one is home, never where they are (D-083); a later story adds occasion types here (S-024).
         var context = QuestionContext.For(today, zone.Id)
             .Add("sources", "filters.sources", options.Sources)
             .Add("cities", "filters.places.cities", options.Cities)
             .Add("countries", "filters.places.countries", options.Countries ?? [])
+            .Add("saved places", "filters.savedPlaces", options.SavedPlaces)
+            .Add("home place", "filters.savedPlaces", options.HomePlace is { } home ? [home] : [])
             .Add("people", "filters.people.all", options.People)
             .Build();
 

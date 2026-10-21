@@ -269,7 +269,7 @@ public sealed class AnthropicQuestionTranslatorTests
         var schema = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
         var text = schema.ToJsonString();
 
-        foreach (var keyword in new[] { "minItems", "maxItems", "minimum", "maximum", "minLength", "maxLength", "pattern", "$schema", "$id" })
+        foreach (var keyword in new[] { "minItems", "maxItems", "minimum", "maximum", "exclusiveMinimum", "minLength", "maxLength", "pattern", "$schema", "$id" })
         {
             Assert.DoesNotContain($"\"{keyword}\"", text, StringComparison.Ordinal);
         }
@@ -278,10 +278,146 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.False(filters["additionalProperties"]!.GetValue<bool>());
         Assert.Equal("date", filters["properties"]!["dateFrom"]!["format"]!.GetValue<string>());
         Assert.Equal(
-            ["dateFrom", "dateTo", "kinds", "months", "onThisDay", "people", "places", "sources", "undatedOnly", "visual", "years"],
+            ["dateFrom", "dateTo", "distanceFrom", "kinds", "months", "onThisDay", "people", "places", "savedPlaces", "sources", "undatedOnly", "visual", "years"],
             filters["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
-        Assert.Equal(["text"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
+        // minScore is required but nullable in the output format only (D-085).
+        Assert.Equal(["text", "minScore"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
     }
+
+    [Fact]
+    public void Output_schema_has_no_more_optional_properties_than_the_api_allows()
+    {
+        var count = OptionalProperties(JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!);
+
+        Assert.True(count <= QuestionPrompt.MaxOptionalProperties, $"{count} optional properties; the API allows {QuestionPrompt.MaxOptionalProperties}.");
+    }
+
+    [Fact]
+    public void Output_schema_makes_the_nested_objects_properties_required_and_nullable_and_keeps_the_rest()
+    {
+        var schema = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
+        var filters = schema["properties"]!["filters"]!;
+        var distance = filters["properties"]!["distanceFrom"]!;
+
+        Assert.Equal(["place", "home", "minKm", "maxKm"], distance["required"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(["number", "null"], distance["properties"]!["minKm"]!["type"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(["text", "minScore"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
+        // The text was required already, so it stays non-null.
+        Assert.Equal("string", filters["properties"]!["visual"]!["properties"]!["text"]!["type"]!.GetValue<string>());
+        // The root, filters and aggregate keep their optional fields.
+        Assert.Null(filters["required"]);
+        Assert.Equal(["count"], schema["properties"]!["aggregate"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
+        // The root's 4, filters' 13 and aggregate's 2; the 10 made nullable are union-typed.
+        Assert.Equal(19, OptionalProperties(schema));
+        Assert.Equal(10, UnionTypeProperties(schema));
+    }
+
+    [Theory]
+    [InlineData("""{"filters": {"kinds": ["photo"], "distanceFrom": {"place": null, "home": true, "minKm": 100, "maxKm": null}, "people": {"all": ["Ana"], "includeMe": null}}, "aggregate": null}""")]
+    [InlineData("""{"filters":{"kinds":["photo"],"distanceFrom":{"place":null,"home":true,"minKm":100,"maxKm":null},"people":{"all":["Ana"],"includeMe":null}},"aggregate":null}""")]
+    public void Cleans_an_answer_with_null_fields_to_the_query_without_them(string answer)
+    {
+        var cleaned = QuestionPrompt.WithoutNulls(answer);
+
+        Assert.Equal("""{"filters":{"kinds":["photo"],"distanceFrom":{"home":true,"minKm":100},"people":{"all":["Ana"]}}}""", cleaned);
+        // An answer without nulls comes back exactly as written.
+        Assert.Equal(cleaned, QuestionPrompt.WithoutNulls(cleaned));
+    }
+
+    [Fact]
+    public void Keeps_an_empty_on_this_day_and_text_that_is_not_an_object()
+    {
+        Assert.Equal("""{"filters":{"onThisDay":{}}}""", QuestionPrompt.WithoutNulls("""{"filters":{"onThisDay":{"yearsAgo":null}}}"""));
+        Assert.Equal("not json", QuestionPrompt.WithoutNulls("not json"));
+        Assert.Equal("[1,null]", QuestionPrompt.WithoutNulls("[1,null]"));
+    }
+
+    [Fact]
+    public void Output_schema_has_no_more_union_typed_properties_than_the_api_allows()
+    {
+        var count = UnionTypeProperties(JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!);
+
+        Assert.True(count <= QuestionPrompt.MaxUnionTypeProperties, $"{count} union-typed properties; the API allows {QuestionPrompt.MaxUnionTypeProperties}.");
+    }
+
+    [Fact]
+    public void Counts_the_29_optional_properties_the_api_reported_in_the_dsl_schema_itself()
+    {
+        using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
+
+        Assert.Equal(29, OptionalProperties(JsonNode.Parse(stream)));
+    }
+
+    [Fact]
+    public void Makes_a_nested_enum_or_const_nullable_too()
+    {
+        var schema = JsonNode.Parse(QuestionPrompt.OutputSchema(JsonNode.Parse("""
+            {
+              "type": "object", "additionalProperties": false,
+              "properties": {
+                "filters": {
+                  "type": "object", "additionalProperties": false,
+                  "properties": {
+                    "order": {
+                      "type": "object", "additionalProperties": false,
+                      "properties": {
+                        "direction": { "type": "string", "enum": ["up", "down"] },
+                        "mode": { "const": "fast" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """)!))!;
+        var order = schema["properties"]!["filters"]!["properties"]!["order"]!["properties"]!;
+
+        Assert.Equal("""{"type":["string","null"],"enum":["up","down",null]}""", order["direction"]!.ToJsonString());
+        Assert.Equal("""{"anyOf":[{"const":"fast"},{"type":"null"}]}""", order["mode"]!.ToJsonString());
+    }
+
+    [Fact]
+    public async Task Asks_again_when_an_answer_repeats_a_field_instead_of_failing()
+    {
+        Assert.Equal("""{"filters": {"months": [12], "months": null}}""", QuestionPrompt.WithoutNulls("""{"filters": {"months": [12], "months": null}}"""));
+        var api = new FakeApi(Answer("""{"filters": {"months": [12], "months": null}}"""), Answer("""{"filters": {"months": [12]}}"""));
+        // As the DSL's parser does, a repeated field is refused.
+        using var translator = new AnthropicQuestionTranslator(
+            new AnthropicQuestionOptions { ApiKey = Key, MaxRetries = 0 },
+            json => json.Split("\"months\"").Length > 2 ? "months is repeated." : null,
+            new ListLogger(),
+            new HttpClient(api));
+
+        var result = await translator.TranslateAsync("December", Context());
+
+        Assert.Equal(QuestionOutcome.Translated, result.Outcome);
+        Assert.Equal("""{"filters": {"months": [12]}}""", result.Json);
+        Assert.Equal(2, result.Attempts);
+        Assert.Contains("months is repeated.", UserText(api.Requests[1], 2), StringComparison.Ordinal);
+    }
+
+    // As the API counts them: every property whose schema is a union, an anyOf or a type array, wherever it is.
+    private static int UnionTypeProperties(JsonNode? node) => node switch
+    {
+        JsonObject obj => (obj["properties"] is JsonObject properties
+                ? properties.Count(p => p.Value is JsonObject property && (property["anyOf"] is not null || property["type"] is JsonArray))
+                : 0)
+            + obj.Sum(p => UnionTypeProperties(p.Value)),
+        JsonArray array => array.Sum(UnionTypeProperties),
+        _ => 0,
+    };
+
+    // As the API counts them: every property not in its object's "required", in every object of the schema, whether under
+    // properties, $defs, items or an anyOf branch.
+    private static int OptionalProperties(JsonNode? node) => node switch
+    {
+        JsonObject obj => (obj["properties"] is JsonObject properties
+                ? properties.Count(p => !(obj["required"]?.AsArray().Any(r => r!.GetValue<string>() == p.Key) ?? false))
+                : 0)
+            + obj.Sum(p => OptionalProperties(p.Value)),
+        JsonArray array => array.Sum(OptionalProperties),
+        _ => 0,
+    };
 
     [Fact]
     public void Output_schema_lets_dates_places_sources_and_a_description_go_together()

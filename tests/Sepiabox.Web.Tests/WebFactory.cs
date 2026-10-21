@@ -73,6 +73,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>The face recognition switch; unset, the catalog's (or an in-memory one with a fake library).</summary>
     public IFaceSettings? FaceSettings { get; init; }
 
+    /// <summary>The family's places; unset, the catalog's (or an in-memory one with a fake library).</summary>
+    public ISavedPlaces? SavedPlaces { get; init; }
+
     /// <summary>Answers the Google handler's server-to-server calls (token and user info) instead of Google.</summary>
     public HttpMessageHandler? GoogleBackchannel { get; init; }
 
@@ -146,6 +149,15 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             else if (_library is not null)
             {
                 services.AddSingleton<IFaceSettings>(new FakeFaceSettings());
+            }
+
+            if (SavedPlaces is not null)
+            {
+                services.AddSingleton(SavedPlaces);
+            }
+            else if (_library is not null)
+            {
+                services.AddSingleton<ISavedPlaces>(new FakeSavedPlaces());
             }
 
             if (QuestionQuota is not null)

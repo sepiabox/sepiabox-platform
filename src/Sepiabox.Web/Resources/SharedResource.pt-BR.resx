@@ -271,7 +271,7 @@
     <value>Vídeos de Lisboa em dezembro de 2019</value>
   </data>
   <data name="Ask_Hint" xml:space="preserve">
-    <value>Em português ou inglês. Só o texto da pergunta é enviado ao Claude, da Anthropic, nunca suas fotos.</value>
+    <value>Em português ou inglês. A pergunta e os nomes da sua biblioteca (pessoas, lugares, origens, cidades) vão para o Claude, da Anthropic; nunca suas fotos, e-mails ou coordenadas.</value>
   </data>
   <data name="Ask_Submit" xml:space="preserve">
     <value>Perguntar</value>
@@ -722,5 +722,116 @@
   </data>
   <data name="Settings_Faces_Backups" xml:space="preserve">
     <value>Os backups automáticos (a restauração do banco de dados a um momento anterior, e os arquivos apagados ou substituídos guardados por 7 dias) ainda mantêm os dados faciais apagados por até 7 dias; depois disso, eles deixam de existir.</value>
+  </data>
+  <data name="Layout_Places" xml:space="preserve">
+    <value>Lugares</value>
+  </data>
+  <data name="Places_Heading" xml:space="preserve">
+    <value>Lugares</value>
+  </data>
+  <data name="Places_New" xml:space="preserve">
+    <value>Novo lugar</value>
+  </data>
+  <data name="Places_Name" xml:space="preserve">
+    <value>Nome</value>
+  </data>
+  <data name="Places_Radius" xml:space="preserve">
+    <value>Raio (m)</value>
+  </data>
+  <data name="Places_IsHome" xml:space="preserve">
+    <value>É a nossa casa</value>
+  </data>
+  <data name="Places_Save" xml:space="preserve">
+    <value>Salvar lugar</value>
+  </data>
+  <data name="Places_Hint" xml:space="preserve">
+    <value>Em uma foto com localização, “Salvar este lugar” preenche as coordenadas.</value>
+  </data>
+  <data name="Places_HomeMark" xml:space="preserve">
+    <value>(casa)</value>
+  </data>
+  <data name="Places_Coordinates" xml:space="preserve">
+    <value>{0}, {1} · raio de {2} m</value>
+  </data>
+  <data name="Places_Photos" xml:space="preserve">
+    <value>Fotos</value>
+  </data>
+  <data name="Places_OverTheYears" xml:space="preserve">
+    <value>Ao longo dos anos</value>
+  </data>
+  <data name="Places_Update" xml:space="preserve">
+    <value>Salvar</value>
+  </data>
+  <data name="Places_Delete" xml:space="preserve">
+    <value>Apagar</value>
+  </data>
+  <data name="Places_DeleteExplain" xml:space="preserve">
+    <value>Apagar {0}? As fotos e os vídeos tirados lá ficam; só o lugar é apagado.</value>
+  </data>
+  <data name="Places_DeleteConfirm" xml:space="preserve">
+    <value>Apagar</value>
+  </data>
+  <data name="Places_None" xml:space="preserve">
+    <value>Ainda não há lugares. Salve um a partir de uma foto com localização, ou com a latitude e a longitude.</value>
+  </data>
+  <data name="Places_Done_Created" xml:space="preserve">
+    <value>O lugar foi salvo.</value>
+  </data>
+  <data name="Places_Done_Updated" xml:space="preserve">
+    <value>O lugar foi alterado.</value>
+  </data>
+  <data name="Places_Done_Deleted" xml:space="preserve">
+    <value>O lugar foi apagado; as fotos ficam.</value>
+  </data>
+  <data name="Places_Error_NotFound" xml:space="preserve">
+    <value>Esse lugar não existe mais.</value>
+  </data>
+  <data name="Places_Error_NameTaken" xml:space="preserve">
+    <value>Outro lugar já tem esse nome.</value>
+  </data>
+  <data name="Places_Error_NameInvalid" xml:space="preserve">
+    <value>O nome está vazio, tem mais de {0} caracteres ou tem caracteres não permitidos.</value>
+  </data>
+  <data name="Places_Error_LocationInvalid" xml:space="preserve">
+    <value>Escreva as coordenadas como latitude, longitude, por exemplo 38.72, -9.13: a latitude entre -90 e 90 e a longitude entre -180 e 180.</value>
+  </data>
+  <data name="Places_Error_RadiusInvalid" xml:space="preserve">
+    <value>O raio deve estar entre {0} e {1} metros.</value>
+  </data>
+  <data name="Detail_SavePlace" xml:space="preserve">
+    <value>Salvar este lugar</value>
+  </data>
+  <data name="Filter_SavedPlaces" xml:space="preserve">
+    <value>Lugares</value>
+  </data>
+  <data name="Chip_SavedPlaces" xml:space="preserve">
+    <value>Em: {0}</value>
+  </data>
+  <data name="Chip_Home" xml:space="preserve">
+    <value>casa</value>
+  </data>
+  <data name="Chip_DistanceMin" xml:space="preserve">
+    <value>A mais de {0} km de {1}</value>
+  </data>
+  <data name="Chip_DistanceMax" xml:space="preserve">
+    <value>Até {0} km de {1}</value>
+  </data>
+  <data name="Chip_DistanceBetween" xml:space="preserve">
+    <value>Entre {0} e {1} km de {2}</value>
+  </data>
+  <data name="Search_UnknownPlaces" xml:space="preserve">
+    <value>Nenhum lugar salvo se chama {0}.</value>
+  </data>
+  <data name="Search_NoHome" xml:space="preserve">
+    <value>Nenhum lugar está marcado como casa ainda: marque um em Lugares.</value>
+  </data>
+  <data name="Places_NameHint" xml:space="preserve">
+    <value>O nome vai para o Claude ao responder perguntas; não use o endereço.</value>
+  </data>
+  <data name="Places_CoordinatesLabel" xml:space="preserve">
+    <value>Coordenadas (latitude, longitude)</value>
+  </data>
+  <data name="Places_CannotMove" xml:space="preserve">
+    <value>Um lugar não pode ser movido: apague-o e salve-o de novo no lugar certo.</value>
   </data>
 </root>

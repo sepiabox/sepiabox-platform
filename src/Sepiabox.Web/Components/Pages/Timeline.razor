@@ -159,6 +159,9 @@ else
     [SupplyParameterFromQuery(Name = "me")]
     public string? Me { get; set; }
 
+    [SupplyParameterFromQuery(Name = "place")]
+    public string[]? SavedPlaces { get; set; }
+
     /// <summary>The question the search came from, shown again in the box (S-025).</summary>
     [SupplyParameterFromQuery(Name = AskedParameter)]
     public string? Asked { get; set; }
@@ -227,7 +230,7 @@ else
         if (FilterSubmitted is not null)
         {
             // One address per set of filters, so the URL can be copied and opened again.
-            Navigation.NavigateTo(SearchLinks.Timeline(SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1")));
+            Navigation.NavigateTo(SearchLinks.Timeline(SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces)));
             return;
         }
 
@@ -267,6 +270,11 @@ else
             {
                 // A name that is no one's (any more), or "me" without "This is me" (S-021).
                 _peopleMessage = PeopleSearch.Message(unknown, Text);
+            }
+            catch (UnknownPlacesException unknown)
+            {
+                // A saved place that is not there (any more), or "from home" with no home (S-014).
+                _peopleMessage = PlacesSearch.Message(unknown, Text);
             }
         }
         else if (!_invalid)

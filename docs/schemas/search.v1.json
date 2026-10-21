@@ -66,6 +66,24 @@
             }
           }
         },
+        "savedPlaces": {
+          "description": "The family's own places (S-014), by the names they gave them, matched ignoring case: items taken inside any of them (within its radius). An unknown name is an error.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
+        },
+        "distanceFrom": {
+          "description": "How far from the centre of one of the family's places (place, by name) or from home (home: true) the item was taken (S-014): more than minKm and at most maxKm. Exactly one of place and home; at least one of minKm and maxKm. Items without a location never match.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "place": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" },
+            "home": { "type": "boolean" },
+            "minKm": { "type": "number", "minimum": 0, "maximum": 20040 },
+            "maxKm": { "type": "number", "exclusiveMinimum": 0, "maximum": 20040 }
+          }
+        },
         "sources": {
           "description": "Source names, such as the drive's name given to process, matched ignoring case.",
           "type": "array",
