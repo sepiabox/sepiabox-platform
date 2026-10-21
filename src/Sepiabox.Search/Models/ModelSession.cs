@@ -6,16 +6,16 @@ namespace Sepiabox.Search.Models;
 public sealed record ModelInput(string Name, IReadOnlyList<int>? Shape = null);
 
 /// <summary>
-/// Opens a pinned model with ONNX Runtime (D-044): the file must exist, match its SHA-256 and have the outputs the
-/// caller reads and the inputs it feeds. Anything else is a warning, never an exception, so a run goes on without
-/// what the model computes.
-/// </summary>
-/// <summary>
 /// How a session uses the processor: <paramref name="IntraOpThreads"/> threads for one run, and whether they spin
 /// while they wait for work. <c>process --jobs</c> runs several sessions at once, which share the processors (D-078).
 /// </summary>
 public sealed record ModelThreads(int IntraOpThreads, bool AllowSpinning);
 
+/// <summary>
+/// Opens a pinned model with ONNX Runtime (D-044): the file must exist, match its SHA-256 and have the outputs the
+/// caller reads and the inputs it feeds. Anything else is a warning, never an exception, so a run goes on without
+/// what the model computes.
+/// </summary>
 public static class ModelSession
 {
     private const string Forgotten = "Its verification was removed, so the next run checks its SHA-256 again.";
