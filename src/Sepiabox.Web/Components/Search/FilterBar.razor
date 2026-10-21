@@ -4,6 +4,15 @@
 
 <form class="filters" method="get" action="./" role="search" aria-label="@Text["Filter_Label"]">
     <input type="hidden" name="filter" value="1" />
+    @if (Fields.SimilarTo is { } similar)
+    {
+        @* The bar narrows the photos similar to one (S-017): the photo, and how many were asked for, go with it. *@
+        <input type="hidden" name="@SearchLinks.SimilarParameter" value="@similar.AssetId" />
+        @if (similar.Limit is { } limit)
+        {
+            <input type="hidden" name="@SearchLinks.SimilarLimitParameter" value="@limit.ToString(CultureInfo.InvariantCulture)" />
+        }
+    }
 
     <label>
         <span>@Text["Filter_Year"]</span>

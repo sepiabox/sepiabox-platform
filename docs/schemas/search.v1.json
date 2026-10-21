@@ -120,6 +120,16 @@
             }
           }
         },
+        "similarTo": {
+          "description": "The assets most similar to one asset by their stored CLIP embeddings (S-017, D-086), the asset itself left out; combined with the other filters, ordered by similarity, most similar first, and sort is not used. Not together with visual or aggregate. Never part of the question translator's output format: a question cannot name an asset.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["assetId"],
+          "properties": {
+            "assetId": { "description": "The asset's id: the SHA-256 of its content in lower-case hex.", "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "limit": { "description": "The most similar assets returned; 50 when absent, and never more than the query's limit.", "type": "integer", "minimum": 1, "maximum": 1000 }
+          }
+        },
         "undatedOnly": {
           "description": "Only assets without a capture date; not together with dateFrom, dateTo, years, months or onThisDay.",
           "type": "boolean"

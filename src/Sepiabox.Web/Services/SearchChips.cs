@@ -96,6 +96,16 @@ public static class SearchChips
             Add(text["Chip_Visual", visual.Text], f with { Visual = null });
         }
 
+        if (f.SimilarTo is { } similar)
+        {
+            // "Show more" raised the query's limit with the similar one's (SimilarSearch.More): without the search for
+            // similar ones, that raise goes too, or the timeline would show a "First 1000" it never asked for.
+            var raised = similar.Limit is { } asked && asked > SearchQuery.DefaultLimit && query.Limit == asked;
+            chips.Add(new SearchChip(
+                text["Chip_SimilarTo"],
+                query with { Filters = f with { SimilarTo = null }, Limit = raised ? SearchQuery.DefaultLimit : query.Limit }));
+        }
+
         if (f.UndatedOnly)
         {
             Add(text["Chip_Undated"], f with { UndatedOnly = false });
@@ -114,7 +124,8 @@ public static class SearchChips
             chips.Add(new SearchChip(label, query with { Aggregate = null }));
         }
 
-        if (query.Aggregate is null && query.Limit != SearchQuery.DefaultLimit)
+        // A search for similar ones raises its limit with "Show more" (S-017): how many it shows is not a filter to remove.
+        if (query.Aggregate is null && query.Limit != SearchQuery.DefaultLimit && f.SimilarTo is null)
         {
             chips.Add(new SearchChip(text["Chip_Limit", query.Limit], query with { Limit = SearchQuery.DefaultLimit }));
         }
