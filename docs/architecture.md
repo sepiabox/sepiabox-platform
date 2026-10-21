@@ -54,7 +54,7 @@ Originals are **never re-read** in the cloud during local ingest (reading the Co
 ## Data
 
 - **Blob Storage**: `originals` (Cold; only for sources not in index-only or reference mode, D-023, D-088), `derivatives` (Hot), `manifests`, `incoming`, `exports`. Public access disabled; the browser only reads through short-lived SAS URLs issued after sign-in.
-- **PostgreSQL Flexible (B1ms)** with **pgvector** (512-d CLIP and 128-d face embeddings, HNSW indexes) and **PostGIS** (location, distance, places). Main tables: `assets`, `asset_sources`, `derivatives`, `asset_embeddings`, `faces`, `people`, `settings`, `events`, `saved_places`, `geonames`.
+- **PostgreSQL Flexible (B1ms)** with **pgvector** (512-d CLIP and 128-d face embeddings, HNSW indexes) and **PostGIS** (location, distance, places). Main tables: `assets`, `asset_sources`, `derivatives`, `asset_embeddings`, `faces`, `people`, `settings`, `events`, `event_assets`, `saved_places`, `geonames`.
 - **Place names**: GeoNames `cities500` loaded into PostgreSQL (offline, no Azure Maps). Personal places ("Beach house", and one place flagged as home, S-014) are points with a radius saved by the user.
 
 ## ML models (ONNX Runtime, CPU only, D-042)

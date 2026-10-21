@@ -265,6 +265,14 @@ Until the job has run, the search's country filter (`places.countries`, S-013) m
 
 The application role `sepiabox_web` can read the cities but not change them: load them with the administrator connection (D-066).
 
+## Occasions
+
+Photos and videos are grouped into occasions (a wedding, a trip) by `sepiabox-worker events rebuild` (S-023, D-092): a new occasion starts after a gap of more than 6 hours between two dated assets, or when an asset is more than 50 km from the previous geotagged one. Nothing groups them by itself yet: **run it after importing**, or the new photos are in no occasion and the **Occasions** page does not show them. It is safe to run again: with the same assets it changes nothing, and occasions keep their ids.
+
+- **Locally**: `dotnet run --project src/Sepiabox.Worker -- events rebuild` against the catalog in `ConnectionStrings__catalog`.
+- **In Azure** there is no job for it yet. Until a story adds one, run it with the administrator connection from your computer, or start the `sepiabox-geonames` job once with its arguments overridden to `events rebuild` (the same worker image and identity; check `az containerapp job start --help` for the exact form, as for `places refresh --all` above).
+- Assets without a capture date are in no occasion. Re-running `places refresh` renames places on assets, not on occasions: run `events rebuild` after it for their labels to follow.
+
 ## Uploading the drive to Azure
 
 1. Once: be listed in `uploaderPrincipalIds` (see the prerequisites) and run `az login` on the computer with the work folder; `upload` signs in with `DefaultAzureCredential`, so the Azure CLI login is enough.

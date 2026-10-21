@@ -165,7 +165,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 | Story | Title | Epic | Depends on | Priority | Size | Status |
 |---|---|---|---|---|---|---|
-| S-023 | [Group photos into occasions](S-023-group-photos-into-occasions.md) | Occasions | S-012 | Medium | M | `todo` |
+| S-023 | [Group photos into occasions](S-023-group-photos-into-occasions.md) | Occasions | S-012 | Medium | M | `done` |
 | S-024 | [Classify occasions by type](S-024-classify-occasions-by-type.md) | Occasions | S-023, S-016, S-026, S-014 | Medium | M | `todo` |
 
 ### Sprint 15 — Organization

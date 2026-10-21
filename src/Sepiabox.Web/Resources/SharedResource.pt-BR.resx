@@ -855,4 +855,49 @@
   <data name="Chip_SimilarTo" xml:space="preserve">
     <value>Parecidas com uma foto</value>
   </data>
+  <data name="Format_Occasion_Day" xml:space="preserve">
+    <value>d MMM yyyy</value>
+  </data>
+  <data name="Format_Occasion_MonthStart" xml:space="preserve">
+    <value>%d</value>
+  </data>
+  <data name="Format_Occasion_MonthEnd" xml:space="preserve">
+    <value>d MMM yyyy</value>
+  </data>
+  <data name="Format_Occasion_YearStart" xml:space="preserve">
+    <value>d MMM</value>
+  </data>
+  <data name="Layout_Occasions" xml:space="preserve">
+    <value>Ocasiões</value>
+  </data>
+  <data name="Occasions_Heading" xml:space="preserve">
+    <value>Ocasiões</value>
+  </data>
+  <data name="Occasions_None" xml:space="preserve">
+    <value>Ainda não há ocasiões.</value>
+  </data>
+  <data name="Occasions_NoneHint" xml:space="preserve">
+    <value>Fotos tiradas perto no tempo e no espaço são agrupadas em ocasiões por sepiabox-worker events rebuild.</value>
+  </data>
+  <data name="Occasions_Items_One" xml:space="preserve">
+    <value>1 item</value>
+  </data>
+  <data name="Occasions_Items_Other" xml:space="preserve">
+    <value>{0} itens</value>
+  </data>
+  <data name="Occasion_Back" xml:space="preserve">
+    <value>Todas as ocasiões</value>
+  </data>
+  <data name="Occasion_NotFound" xml:space="preserve">
+    <value>Ocasião não encontrada</value>
+  </data>
+  <data name="Occasion_OpenOnTimeline" xml:space="preserve">
+    <value>Abrir na linha do tempo</value>
+  </data>
+  <data name="Chip_Occasion_One" xml:space="preserve">
+    <value>Em uma ocasião</value>
+  </data>
+  <data name="Chip_Occasion_Other" xml:space="preserve">
+    <value>Em {0} ocasiões</value>
+  </data>
 </root>

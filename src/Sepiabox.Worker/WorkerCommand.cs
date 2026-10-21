@@ -12,6 +12,7 @@ public enum WorkerAction
     GeoNamesUpdate,
     PlacesRefresh,
     FacesSweep,
+    EventsRebuild,
 }
 
 /// <summary>The three GeoNames dump files that <c>geonames load</c> reads (S-012).</summary>
@@ -47,6 +48,9 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
           faces sweep                After face recognition was turned off, erase the faces found before
                                      that from every manifest written since the last sweep (S-022); does
                                      nothing while it was never turned off. What the sepiabox-faces job runs.
+          events rebuild             Group every dated asset into occasions (S-023): a new one starts after
+                                     a gap of more than 6 hours or 50 km. Safe to run again: with the same
+                                     assets it changes nothing. Run it after importing.
         """;
 
     public static bool TryParse(string[] args, [NotNullWhen(true)] out WorkerCommand? command, out string error)
@@ -87,6 +91,9 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                 return true;
             case ["faces", "sweep"]:
                 command = new WorkerCommand(WorkerAction.FacesSweep, false);
+                return true;
+            case ["events", "rebuild"]:
+                command = new WorkerCommand(WorkerAction.EventsRebuild, false);
                 return true;
             case [_, ..]:
                 error = $"Unknown command or option in '{string.Join(' ', args)}'.";

@@ -48,6 +48,15 @@ public sealed class WorkerCommandTests
     }
 
     [Fact]
+    public void Parses_events_rebuild_and_nothing_after_it()
+    {
+        Assert.True(WorkerCommand.TryParse(["events", "rebuild"], out var command, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.EventsRebuild, false), command);
+        Assert.False(WorkerCommand.TryParse(["events", "rebuild", "--all"], out _, out _));
+        Assert.False(WorkerCommand.TryParse(["events"], out _, out _));
+    }
+
+    [Fact]
     public void Parses_places_refresh()
     {
         Assert.True(WorkerCommand.TryParse(["places", "refresh"], out var command, out _));

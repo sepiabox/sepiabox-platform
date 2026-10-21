@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Sepiabox.Catalog;
+using Sepiabox.Catalog.Events;
 using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
@@ -138,6 +139,13 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
                 services.GetRequiredService<CatalogDbContext>(), services.GetRequiredService<IPlaceResolver>(), command.AllPlaces)
             .RunAsync(cancellationToken);
         Log.PlacesRefreshed(logger, named);
+        return ExitCodes.Success;
+    }
+
+    if (command.Action == WorkerAction.EventsRebuild)
+    {
+        var rebuilt = await new OccasionRebuild(services.GetRequiredService<CatalogDbContext>()).RunAsync(cancellationToken);
+        Log.OccasionsRebuilt(logger, rebuilt.Occasions, rebuilt.Assets, rebuilt.Created, rebuilt.Updated, rebuilt.Removed);
         return ExitCodes.Success;
     }
 

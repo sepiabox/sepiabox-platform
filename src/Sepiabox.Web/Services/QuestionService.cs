@@ -130,6 +130,7 @@ public sealed class QuestionService(
     public static string? Validate(string json) =>
         !SearchQueryJson.TryParse(json, out var query, out var error) ? error
         : query.Filters.SimilarTo is not null ? "filters.similarTo is not part of an answer: a question cannot name an asset."
+        : query.Filters.EventIds is not null ? "filters.eventIds is not part of an answer: a question cannot name an occasion."
         : null;
 
     /// <summary>

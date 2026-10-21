@@ -102,8 +102,26 @@ public sealed record PersonDetail(
     public PersonFace? FindFace(long faceId) => Faces.Concat(ExcludedFaces).FirstOrDefault(f => f.Id == faceId);
 }
 
+/// <summary>
+/// One occasion (S-023): its dates and place label as stored (the title is written per culture, <c>UiText.OccasionTitle</c>),
+/// how many photos and videos it holds, and up to three of their ids that have a thumbnail, for its card.
+/// </summary>
+public sealed record OccasionSummary(
+    long Id, DateTime StartsAt, DateTime EndsAt, string? PlaceLabel, int AssetCount, IReadOnlyList<string> Thumbnails);
+
+/// <summary>A page of the occasions, newest first; <see cref="HasMore"/> says whether an older page exists.</summary>
+public sealed record OccasionsPage(int Page, IReadOnlyList<OccasionSummary> Items, bool HasMore);
+
 public interface ILibraryQueries
 {
+    /// <summary>
+    /// The occasions, newest first, <see cref="LibraryQueries.OccasionsPageSize"/> to a page; <paramref name="page"/> starts at 1.
+    /// </summary>
+    Task<OccasionsPage> GetOccasionsPageAsync(int page, CancellationToken cancellationToken = default);
+
+    /// <summary>Null when the catalog has no occasion with that id. Its thumbnails are not read.</summary>
+    Task<OccasionSummary?> GetOccasionAsync(long id, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// The people faces were grouped into, most faces first (then oldest first), up to <see cref="LibraryQueries.MaxPeople"/>;
     /// people left with no face are not listed.
@@ -151,6 +169,12 @@ public sealed class LibraryQueries(
     ICurrentUser? user = null) : ILibraryQueries
 {
     public const int PageSize = 200;
+
+    /// <summary>Occasions to a page: each is a card with three thumbnails.</summary>
+    public const int OccasionsPageSize = 24;
+
+    /// <summary>Thumbnails on an occasion's card.</summary>
+    public const int OccasionThumbnails = 3;
 
     /// <summary>More people than a family has faces worth naming; the page shows the most photographed.</summary>
     public const int MaxPeople = 500;
@@ -223,6 +247,55 @@ public sealed class LibraryQueries(
 
         var items = rows.Take(PageSize).Select(r => new TimelineItem(r.Id, r.Kind, r.CapturedAt, r.HasThumbnail, r.DurationSeconds)).ToList();
         return new TimelinePage(page, items, HasNextPage(page, rows.Count));
+    }
+
+    public async Task<OccasionsPage> GetOccasionsPageAsync(int page, CancellationToken cancellationToken = default)
+    {
+        page = ClampPage(page);
+        var skip = (page - 1) * OccasionsPageSize;
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        // One extra row tells whether another page follows.
+        var rows = await db.Occasions.AsNoTracking()
+            .OrderByDescending(o => o.StartsAt).ThenBy(o => o.Id)
+            .Skip(skip).Take(OccasionsPageSize + 1)
+            .ToListAsync(cancellationToken);
+        var shown = rows.Take(OccasionsPageSize).ToList();
+        var thumbnails = await OccasionThumbnailsAsync(db, [.. shown.Select(o => o.Id)], cancellationToken);
+        return new OccasionsPage(
+            page,
+            [.. shown.Select(o => Summary(o, thumbnails))],
+            rows.Count > OccasionsPageSize && page < MaxPage);
+    }
+
+    public async Task<OccasionSummary?> GetOccasionAsync(long id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var occasion = await db.Occasions.AsNoTracking().SingleOrDefaultAsync(o => o.Id == id, cancellationToken);
+        return occasion is null ? null : Summary(occasion, []);
+    }
+
+    private static OccasionSummary Summary(Occasion occasion, Dictionary<long, List<string>> thumbnails) =>
+        new(occasion.Id, occasion.StartsAt, occasion.EndsAt, occasion.PlaceLabel, occasion.AssetCount,
+            thumbnails.GetValueOrDefault(occasion.Id) ?? []);
+
+    // The first assets of each occasion, in capture order, that have a thumbnail.
+    private static async Task<Dictionary<long, List<string>>> OccasionThumbnailsAsync(
+        CatalogDbContext db, long[] eventIds, CancellationToken cancellationToken)
+    {
+        var rows = await db.Database.SqlQuery<OccasionThumbnailRow>($"""
+            SELECT t.event_id, t.asset_id
+            FROM (
+                SELECT ea.event_id, ea.asset_id,
+                       row_number() OVER (PARTITION BY ea.event_id ORDER BY a.captured_at, a.id) AS rn
+                FROM event_assets ea
+                JOIN assets a ON a.id = ea.asset_id
+                WHERE ea.event_id = ANY({eventIds})
+                  AND EXISTS (SELECT 1 FROM derivatives d WHERE d.asset_id = a.id AND d.name = {DerivativeNames.Thumbnail})
+            ) t
+            WHERE t.rn <= {OccasionThumbnails}
+            ORDER BY t.event_id, t.rn
+            """).ToListAsync(cancellationToken);
+        return rows.GroupBy(r => r.EventId).ToDictionary(g => g.Key, g => g.Select(r => r.AssetId).ToList());
     }
 
     public async Task<AssetDetail?> GetAssetAsync(string id, CancellationToken cancellationToken = default)
@@ -450,6 +523,8 @@ public sealed class LibraryQueries(
 
     private static IEnumerable<AssetSource> OrderSources(IEnumerable<AssetSource> sources) =>
         sources.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.Path, StringComparer.Ordinal);
+
+    private sealed record OccasionThumbnailRow(long EventId, string AssetId);
 
     private sealed record TimelineRow(string Id, string Kind, DateTime? CapturedAt, double? DurationSeconds, bool HasThumbnail);
 }

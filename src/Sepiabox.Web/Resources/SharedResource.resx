@@ -907,4 +907,55 @@
   <data name="Chip_SimilarTo" xml:space="preserve">
     <value>Similar to a photo</value>
   </data>
+  <data name="Format_Occasion_Day" xml:space="preserve">
+    <value>MMM d, yyyy</value>
+    <comment>A whole day in an occasion's title, such as "Dec 14, 2024": a .NET date format; month names come from the culture, abbreviated and without a trailing dot.</comment>
+  </data>
+  <data name="Format_Occasion_MonthStart" xml:space="preserve">
+    <value>MMM d</value>
+    <comment>The first day of an occasion within one month, before the dash: "Dec 14" in "Dec 14–16, 2024". A format of one letter is written with a leading %, as "%d".</comment>
+  </data>
+  <data name="Format_Occasion_MonthEnd" xml:space="preserve">
+    <value>d, yyyy</value>
+    <comment>The last day of an occasion within one month, after the dash: "16, 2024" in "Dec 14–16, 2024".</comment>
+  </data>
+  <data name="Format_Occasion_YearStart" xml:space="preserve">
+    <value>MMM d</value>
+    <comment>The first day of an occasion within one year, before the dash: "Nov 28" in "Nov 28 – Dec 2, 2024".</comment>
+  </data>
+  <data name="Layout_Occasions" xml:space="preserve">
+    <value>Occasions</value>
+  </data>
+  <data name="Occasions_Heading" xml:space="preserve">
+    <value>Occasions</value>
+  </data>
+  <data name="Occasions_None" xml:space="preserve">
+    <value>There are no occasions yet.</value>
+  </data>
+  <data name="Occasions_NoneHint" xml:space="preserve">
+    <value>Photos taken close together in time and place are grouped into occasions by sepiabox-worker events rebuild.</value>
+    <comment>The command name stays as it is.</comment>
+  </data>
+  <data name="Occasions_Items_One" xml:space="preserve">
+    <value>1 item</value>
+    <comment>One photo or video.</comment>
+  </data>
+  <data name="Occasions_Items_Other" xml:space="preserve">
+    <value>{0} items</value>
+  </data>
+  <data name="Occasion_Back" xml:space="preserve">
+    <value>All occasions</value>
+  </data>
+  <data name="Occasion_NotFound" xml:space="preserve">
+    <value>Occasion not found</value>
+  </data>
+  <data name="Occasion_OpenOnTimeline" xml:space="preserve">
+    <value>Open on the timeline</value>
+  </data>
+  <data name="Chip_Occasion_One" xml:space="preserve">
+    <value>In an occasion</value>
+  </data>
+  <data name="Chip_Occasion_Other" xml:space="preserve">
+    <value>In {0} occasions</value>
+  </data>
 </root>

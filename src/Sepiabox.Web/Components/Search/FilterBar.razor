@@ -14,6 +14,12 @@
         }
     }
 
+    @foreach (var eventId in Fields.EventIds)
+    {
+        @* The bar narrows an occasion's photos (S-023): the occasions go with it. *@
+        <input type="hidden" name="@SearchLinks.EventParameter" value="@eventId.ToString(CultureInfo.InvariantCulture)" />
+    }
+
     <label>
         <span>@Text["Filter_Year"]</span>
         <select name="year">

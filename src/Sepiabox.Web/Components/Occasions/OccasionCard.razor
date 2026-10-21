@@ -1,0 +1,22 @@
+@* One occasion (S-023): up to three thumbnails, its title with the dates, and how many photos and videos it holds. *@
+
+<a href="occasions/@Occasion.Id" class="occasion-link">
+    <span class="occasion-thumbs">
+        @foreach (var id in Occasion.Thumbnails)
+        {
+            <img src="photos/@id/@DerivativeNames.Thumbnail" alt="" loading="lazy" width="256" height="256" />
+        }
+    </span>
+    <span class="occasion-title">@Text.OccasionTitle(Occasion.PlaceLabel, Occasion.StartsAt, Occasion.EndsAt)</span>
+    <span class="count muted small">@Items</span>
+</a>
+
+@code {
+    [Parameter, EditorRequired]
+    public OccasionSummary Occasion { get; set; } = default!;
+
+    private string Items =>
+        Occasion.AssetCount == 1
+            ? Text["Occasions_Items_One"]
+            : Text["Occasions_Items_Other", Occasion.AssetCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)];
+}

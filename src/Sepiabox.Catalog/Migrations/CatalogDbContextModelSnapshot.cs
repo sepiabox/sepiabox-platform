@@ -429,6 +429,74 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("manifest_imports", (string)null);
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.Occasion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AssetCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("asset_count");
+
+                    b.Property<Point>("Centroid")
+                        .HasColumnType("geography (Point, 4326)")
+                        .HasColumnName("centroid");
+
+                    b.Property<DateTime>("EndsAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<string>("PlaceLabel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("place_label");
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<string>("Type")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_events");
+
+                    b.HasIndex("StartsAt", "Id")
+                        .IsDescending(true, false)
+                        .HasDatabaseName("ix_events_starts_at");
+
+                    b.ToTable("events", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_events_ends_at", "ends_at >= starts_at");
+                        });
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.OccasionAsset", b =>
+                {
+                    b.Property<string>("AssetId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("asset_id");
+
+                    b.Property<long>("EventId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("event_id");
+
+                    b.HasKey("AssetId")
+                        .HasName("pk_event_assets");
+
+                    b.HasIndex("EventId")
+                        .HasDatabaseName("ix_event_assets_event_id");
+
+                    b.ToTable("event_assets", (string)null);
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.Person", b =>
                 {
                     b.Property<long>("Id")
@@ -633,6 +701,23 @@ namespace Sepiabox.Catalog.Migrations
                         .HasConstraintName("fk_faces_people_person_id");
 
                     b.Navigation("Person");
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.OccasionAsset", b =>
+                {
+                    b.HasOne("Sepiabox.Catalog.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_assets_assets_asset_id");
+
+                    b.HasOne("Sepiabox.Catalog.Occasion", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_assets_events_event_id");
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.Asset", b =>
