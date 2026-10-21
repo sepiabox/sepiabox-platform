@@ -44,6 +44,12 @@ public sealed class Asset
 
     public string? PlaceCountry { get; set; }
 
+    /// <summary>
+    /// The face pipeline version of the asset's stored faces (D-047, S-019); null while its faces were never looked
+    /// for. Set with no face rows when faces were looked for and none were found.
+    /// </summary>
+    public int? FacesVersion { get; set; }
+
     /// <summary>When the asset first entered the catalog.</summary>
     public DateTimeOffset ImportedAt { get; set; }
 
@@ -159,4 +165,71 @@ public sealed class QuestionUsage
     public long CacheReadInputTokens { get; set; }
 
     public long CacheCreationInputTokens { get; set; }
+}
+
+/// <summary>
+/// Someone whose faces were grouped together (S-019, D-077): unnamed until the family names them (S-020). The library
+/// is shared, so a person belongs to no user; <see cref="UserEmail"/> only links a user to themselves (D-018).
+/// </summary>
+public sealed class Person
+{
+    public long Id { get; set; }
+
+    /// <summary>Null until someone names the person: the web shows "Unnamed".</summary>
+    public string? Name { get; set; }
+
+    /// <summary>The signed-in user who said "this is me" (S-020); null otherwise.</summary>
+    public string? UserEmail { get; set; }
+
+    /// <summary>How many faces are assigned to the person (not excluded), of any face version.</summary>
+    public int FaceCount { get; set; }
+
+    /// <summary>
+    /// The L2-normalized mean of the person's faces of <see cref="FacesVersion"/> only, so it never mixes the
+    /// embeddings of two face models; null when the person has no face to average.
+    /// </summary>
+    public Vector? Centroid { get; set; }
+
+    /// <summary>The face pipeline version <see cref="Centroid"/> was computed from (D-047).</summary>
+    public int FacesVersion { get; set; } = 1;
+
+    public List<Face> Faces { get; set; } = [];
+}
+
+/// <summary>
+/// One face found in an asset (S-018, S-019). <see cref="Box"/> is <c>[left, top, width, height]</c> relative to the
+/// asset's upright derivatives, so it is mapped with a derivative's width and height, never the asset's.
+/// </summary>
+public sealed class Face
+{
+    public long Id { get; set; }
+
+    public required string AssetId { get; set; }
+
+    public required double[] Box { get; set; }
+
+    public double Score { get; set; }
+
+    /// <summary>SFace's 128 values, L2-normalized (D-047).</summary>
+    public required Vector Embedding { get; set; }
+
+    public long? PersonId { get; set; }
+
+    public Person? Person { get; set; }
+
+    /// <summary>One of <see cref="FaceAssignments"/>: who put the face where it is.</summary>
+    public required string Assignment { get; set; }
+}
+
+/// <summary>How a face got its person: the importer's own choice, the family's, or excluded from every person.</summary>
+public static class FaceAssignments
+{
+    /// <summary>Chosen by the importer by similarity (S-019); the only kind a later import may change.</summary>
+    public const string Auto = "auto";
+
+    /// <summary>Put there by someone in the family (S-020); never changed by an import.</summary>
+    public const string Manual = "manual";
+
+    /// <summary>Not a face of anyone the family wants grouped (S-020): no person, and in no centroid.</summary>
+    public const string Excluded = "excluded";
 }

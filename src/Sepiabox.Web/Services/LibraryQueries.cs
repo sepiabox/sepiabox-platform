@@ -44,8 +44,20 @@ public sealed record FilterOptions(
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
 public sealed record OriginalFile(string FileName, string ContentType);
 
+/// <summary>
+/// One person on the people page (S-019): <see cref="Name"/> is null while unnamed, <see cref="Cover"/> the face shown
+/// (their best scored one), null when no thumbnail is there to crop.
+/// </summary>
+public sealed record PersonSummary(long Id, string? Name, int FaceCount, FaceCrop? Cover);
+
 public interface ILibraryQueries
 {
+    /// <summary>
+    /// The people faces were grouped into, most faces first (then oldest first), up to <see cref="LibraryQueries.MaxPeople"/>;
+    /// people left with no face are not listed.
+    /// </summary>
+    Task<IReadOnlyList<PersonSummary>> GetPeopleAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Newest first; assets without a capture date come last. <paramref name="page"/> starts at 1.</summary>
     Task<TimelinePage> GetTimelinePageAsync(int page, CancellationToken cancellationToken = default);
 
@@ -81,6 +93,9 @@ public sealed class LibraryQueries(
     IQueryEmbedder? embedder = null) : ILibraryQueries
 {
     public const int PageSize = 200;
+
+    /// <summary>More people than a family has faces worth naming; the page shows the most photographed.</summary>
+    public const int MaxPeople = 500;
 
     /// <summary>Far beyond any family library (20 million assets); keeps a hand-typed page number sane.</summary>
     public const int MaxPage = 100_000;
@@ -231,6 +246,41 @@ public sealed class LibraryQueries(
                 s.Asset.DurationSeconds)),
             cancellationToken: cancellationToken);
         return new SearchPage([.. rows.Take(query.Limit)], rows.Count > query.Limit);
+    }
+
+    public async Task<IReadOnlyList<PersonSummary>> GetPeopleAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var people = await db.People.AsNoTracking()
+            .Where(p => p.FaceCount > 0)
+            .OrderByDescending(p => p.FaceCount).ThenBy(p => p.Id)
+            .Take(MaxPeople)
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.FaceCount,
+                Cover = p.Faces
+                    .Where(f => f.Assignment != FaceAssignments.Excluded)
+                    .OrderByDescending(f => f.Score).ThenBy(f => f.Id)
+                    .Select(f => new { f.AssetId, f.Box })
+                    .FirstOrDefault(),
+            })
+            .ToListAsync(cancellationToken);
+
+        // Boxes are relative to the upright derivatives (D-047), so the thumbnail's own size maps them.
+        var assets = people.Where(p => p.Cover is not null).Select(p => p.Cover!.AssetId).Distinct().ToList();
+        var thumbnails = await db.Derivatives.AsNoTracking()
+            .Where(d => assets.Contains(d.AssetId) && d.Name == DerivativeNames.Thumbnail && d.Width > 0 && d.Height > 0)
+            .ToDictionaryAsync(d => d.AssetId, d => (d.Width, d.Height), StringComparer.Ordinal, cancellationToken);
+
+        return [.. people.Select(p => new PersonSummary(
+            p.Id,
+            p.Name,
+            p.FaceCount,
+            p.Cover is { } cover && thumbnails.TryGetValue(cover.AssetId, out var size) && cover.Box is { Length: 4 }
+                ? new FaceCrop(cover.AssetId, cover.Box, size.Width, size.Height)
+                : null))];
     }
 
     public async Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default)

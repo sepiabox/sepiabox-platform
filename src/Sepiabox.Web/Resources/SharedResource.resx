@@ -494,4 +494,22 @@
   <data name="Count_FromSource" xml:space="preserve">
     <value> from {0}</value>
   </data>
+  <data name="Layout_People" xml:space="preserve">
+    <value>People</value>
+  </data>
+  <data name="People_Heading" xml:space="preserve">
+    <value>People</value>
+  </data>
+  <data name="People_Unnamed" xml:space="preserve">
+    <value>Unnamed</value>
+  </data>
+  <data name="People_None" xml:space="preserve">
+    <value>No people yet. Faces appear here once photos processed with face recognition are uploaded.</value>
+  </data>
+  <data name="People_Faces_One" xml:space="preserve">
+    <value>1 face</value>
+  </data>
+  <data name="People_Faces_Other" xml:space="preserve">
+    <value>{0} faces</value>
+  </data>
 </root>

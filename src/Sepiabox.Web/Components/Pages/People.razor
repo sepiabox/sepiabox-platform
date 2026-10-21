@@ -1,0 +1,22 @@
+@page "/people"
+@inject ILibraryQueries Library
+@* Static server rendering, as the timeline: the people faces were grouped into (S-019). Naming them is S-020. *@
+
+<PageTitle>@Text["People_Heading"] · Sepiabox</PageTitle>
+
+<h1 class="page-heading">@Text["People_Heading"]</h1>
+
+@if (_people is { Count: > 0 } people)
+{
+    <PeopleGrid People="people" />
+}
+else
+{
+    <p class="empty">@Text["People_None"]</p>
+}
+
+@code {
+    private IReadOnlyList<PersonSummary>? _people;
+
+    protected override async Task OnInitializedAsync() => _people = await Library.GetPeopleAsync();
+}
