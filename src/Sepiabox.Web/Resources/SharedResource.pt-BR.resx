@@ -523,7 +523,7 @@
     <value>O rosto foi retirado desta pessoa e está em Rostos excluídos.</value>
   </data>
   <data name="Person_Done_NotAFace" xml:space="preserve">
-    <value>Marcado como não sendo um rosto.</value>
+    <value>Marcado como não sendo um rosto; está em Rostos excluídos.</value>
   </data>
   <data name="Person_Error_NotFound" xml:space="preserve">
     <value>Essa pessoa ou esse rosto não existe mais.</value>
@@ -599,5 +599,11 @@
   </data>
   <data name="Move_Submit" xml:space="preserve">
     <value>Mover</value>
+  </data>
+  <data name="Person_Excluded_NotAFace" xml:space="preserve">
+    <value>(não é um rosto)</value>
+  </data>
+  <data name="Merge_ExplainCards" xml:space="preserve">
+    <value>Os rostos da pessoa à esquerda passam para a da direita; a da esquerda deixa de existir.</value>
   </data>
 </root>

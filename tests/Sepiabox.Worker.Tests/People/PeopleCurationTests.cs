@@ -77,23 +77,74 @@ public sealed class PeopleCurationTests(CatalogFixture fixture)
     }
 
     [Fact]
-    public async Task Leaves_a_face_marked_not_a_face_with_nobody_after_a_re_import()
+    public async Task Keeps_a_face_marked_not_a_face_out_of_every_count_through_a_re_import_and_can_give_it_back()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
         var container = await fixture.CreateContainerAsync();
-        var manifest = FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 1)));
+        var face = SyntheticFaces.Unit(seed: 1);
+        var manifest = FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, face));
         await PutAsync(container, manifest);
+        await PutAsync(container, FaceImportTests.WithFaces(2, FaceImportTests.Face(s_box, SyntheticFaces.Near(face, seed: 2))));
+        await ImportAsync(db, container);
+        var person = await db.People.AsNoTracking().SingleAsync();
+        var marked = await db.Faces.AsNoTracking().SingleAsync(f => f.AssetId == manifest.Id);
+
+        Assert.Equal(CurationOutcome.Done, await Curation(db).NotAFaceAsync(person.Id, marked.Id));
+        await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face([0.11, 0.20, 0.30, 0.40], SyntheticFaces.Near(face, seed: 3))));
+        await Importer(db).ImportOneAsync(container, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
+
+        var again = await db.Faces.AsNoTracking().SingleAsync(f => f.Id == marked.Id);
+        Assert.Equal((FaceAssignments.NotFace, (long?)person.Id), (again.Assignment, again.PersonId));
+        var counted = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal(1, counted.FaceCount);
+        Assert.True(FaceMath.Cosine(SyntheticFaces.Near(face, seed: 2), counted.Centroid!.ToArray()) > 0.99999);
+
+        Assert.Equal(CurationOutcome.Done, await Curation(db).ReturnFaceAsync(person.Id, marked.Id));
+        var back = await db.Faces.AsNoTracking().SingleAsync(f => f.Id == marked.Id);
+        Assert.Equal((FaceAssignments.Manual, (long?)person.Id), (back.Assignment, back.PersonId));
+        Assert.Equal(2, (await db.People.AsNoTracking().SingleAsync()).FaceCount);
+    }
+
+    [Fact]
+    public async Task Lets_a_new_face_of_a_photo_join_a_person_whose_face_there_was_excluded()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var face = SyntheticFaces.Unit(seed: 1);
+        var manifest = FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 7)));
+        await PutAsync(container, manifest);
+        await PutAsync(container, FaceImportTests.WithFaces(2, FaceImportTests.Face(s_box, face)));
+        await ImportAsync(db, container);
+        var person = await db.People.AsNoTracking().SingleAsync(p => p.Faces.Any(f => f.AssetId == FaceImportTests.WithFaces(2).Id));
+        // The stranger of photo 1 is moved to this person by mistake, then excluded from them again.
+        var stranger = await db.Faces.AsNoTracking().SingleAsync(f => f.AssetId == manifest.Id);
+        await Curation(db).MoveFaceAsync(stranger.PersonId!.Value, stranger.Id, person.Id);
+        await Curation(db).NotThisPersonAsync(person.Id, stranger.Id);
+
+        // A newer run finds the person's real face in photo 1 too.
+        await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 7)), FaceImportTests.Face([0.6, 0.2, 0.3, 0.4], SyntheticFaces.Near(face, seed: 2))));
+        await Importer(db).ImportOneAsync(container, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
+
+        var joined = await db.Faces.AsNoTracking().SingleAsync(f => f.AssetId == manifest.Id && f.Box[0] == 0.6);
+        Assert.Equal(person.Id, joined.PersonId);
+        Assert.Equal(2, (await db.People.AsNoTracking().SingleAsync(p => p.Id == person.Id)).FaceCount);
+    }
+
+    [Fact]
+    public async Task Keeps_an_unnamed_person_whose_only_face_is_marked_not_a_face()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 1))));
         await ImportAsync(db, container);
         var person = await db.People.AsNoTracking().SingleAsync();
         var face = await db.Faces.AsNoTracking().SingleAsync();
 
         Assert.Equal(CurationOutcome.Done, await Curation(db).NotAFaceAsync(person.Id, face.Id));
-        await Importer(db).ImportOneAsync(container, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
 
-        var again = await db.Faces.AsNoTracking().SingleAsync();
-        Assert.Equal((FaceAssignments.Excluded, (long?)null), (again.Assignment, again.PersonId));
-        // The unnamed person had nothing else: gone.
-        Assert.Equal(0, await db.People.CountAsync());
+        // Still there, with nothing counted, so the mis-click can be undone from their page.
+        var kept = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal((0, (Pgvector.Vector?)null), (kept.FaceCount, kept.Centroid));
     }
 
     [Fact]

@@ -270,7 +270,7 @@ namespace Sepiabox.Catalog.Migrations
 
                     b.ToTable("faces", null, t =>
                         {
-                            t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded')");
+                            t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded', 'not_face')");
                         });
                 });
 

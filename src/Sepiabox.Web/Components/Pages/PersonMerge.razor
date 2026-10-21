@@ -20,7 +20,10 @@ else
         <li class="person"><span class="caption">@Text["Merge_Goes"]</span><PersonCard Person="Summary(_other)" /></li>
         <li class="person"><span class="caption">@Text["Merge_Stays"]</span><PersonCard Person="Summary(_person)" /></li>
     </ul>
-    <p class="note">@Text["Merge_Explain", NameOf(_other.Name), NameOf(_person.Name)]</p>
+    @* The cards above: the one that goes on the left, the one that stays on the right. *@
+    <p class="note">@(_other.Name is null || _person.Name is null
+        ? Text["Merge_ExplainCards"]
+        : Text["Merge_Explain", _other.Name, _person.Name])</p>
     <form method="post" @formname="confirm" @onsubmit="ConfirmAsync" class="confirm">
         <AntiforgeryToken />
         <input type="hidden" name="Confirmed" value="yes" />

@@ -145,7 +145,7 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             face.Property(f => f.Box).HasColumnType("double precision[]");
             face.Property(f => f.Embedding).HasColumnType("vector(128)");
             face.Property(f => f.Assignment).HasMaxLength(16);
-            face.ToTable(t => t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded')"));
+            face.ToTable(t => t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded', 'not_face')"));
             face.HasOne<Asset>().WithMany().HasForeignKey(f => f.AssetId).OnDelete(DeleteBehavior.Cascade);
             face.HasIndex(f => f.AssetId);
             face.HasIndex(f => f.PersonId);

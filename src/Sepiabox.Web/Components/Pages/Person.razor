@@ -104,6 +104,10 @@ else
                                 <img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" />
                             }
                         </a>
+                        @if (face.NotAFace)
+                        {
+                            <span class="muted small not-a-face">@Text["Person_Excluded_NotAFace"]</span>
+                        }
                         <button type="submit" name="Face" value="@($"{GiveBack}:{face.Id}")" class="small">@Text["Person_Face_GiveBack"]</button>
                         <a href="people/@_person.Id/faces/@face.Id/move" class="small">@Text["Person_Face_Move"]</a>
                     </li>

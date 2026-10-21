@@ -14,7 +14,7 @@ using Sepiabox.Catalog;
 namespace Sepiabox.Catalog.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
-    [Migration("20261021110345_PeopleUnique")]
+    [Migration("20261021114835_PeopleUnique")]
     partial class PeopleUnique
     {
         /// <inheritdoc />
@@ -273,7 +273,7 @@ namespace Sepiabox.Catalog.Migrations
 
                     b.ToTable("faces", null, t =>
                         {
-                            t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded')");
+                            t.HasCheckConstraint("ck_faces_assignment", "assignment IN ('auto', 'manual', 'excluded', 'not_face')");
                         });
                 });
 

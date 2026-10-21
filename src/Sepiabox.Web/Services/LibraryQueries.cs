@@ -50,8 +50,11 @@ public sealed record OriginalFile(string FileName, string ContentType);
 /// </summary>
 public sealed record PersonSummary(long Id, string? Name, int FaceCount, FaceCrop? Cover);
 
-/// <summary>One face on a person's page (S-020): its id for the corrections, its photo, and its crop when there is a thumbnail.</summary>
-public sealed record PersonFace(long Id, string AssetId, FaceCrop? Crop);
+/// <summary>
+/// One face on a person's page (S-020): its id for the corrections, its photo, its crop when there is a thumbnail, and,
+/// among the excluded faces, whether the family said it is not a face.
+/// </summary>
+public sealed record PersonFace(long Id, string AssetId, FaceCrop? Crop, bool NotAFace = false);
 
 /// <summary>
 /// A person's page (S-020): their name, the user who said "This is me" (D-018), their faces (not excluded, best first,
@@ -290,7 +293,7 @@ public sealed class LibraryQueries(
                 p.Name,
                 p.FaceCount,
                 Cover = p.Faces
-                    .Where(f => f.Assignment != FaceAssignments.Excluded)
+                    .Where(f => f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual)
                     .OrderByDescending(f => f.Score).ThenBy(f => f.Id)
                     .Select(f => new { f.AssetId, f.Box })
                     .FirstOrDefault(),
@@ -312,18 +315,18 @@ public sealed class LibraryQueries(
         }
 
         var faces = await db.Faces.AsNoTracking()
-            .Where(f => f.PersonId == id && f.Assignment != FaceAssignments.Excluded)
+            .Where(f => f.PersonId == id && (f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual))
             .OrderByDescending(f => f.Score).ThenBy(f => f.Id)
             .Take(MaxPersonFaces)
             .Select(f => new { f.Id, f.AssetId, f.Box })
             .ToListAsync(cancellationToken);
         var excluded = await db.Faces.AsNoTracking()
-            .Where(f => f.PersonId == id && f.Assignment == FaceAssignments.Excluded)
+            .Where(f => f.PersonId == id && (f.Assignment == FaceAssignments.Excluded || f.Assignment == FaceAssignments.NotFace))
             .OrderByDescending(f => f.Score).ThenBy(f => f.Id)
             .Take(MaxPersonFaces)
-            .Select(f => new { f.Id, f.AssetId, f.Box })
+            .Select(f => new { f.Id, f.AssetId, f.Box, NotAFace = f.Assignment == FaceAssignments.NotFace })
             .ToListAsync(cancellationToken);
-        var thumbnails = await ThumbnailSizesAsync(db, [.. faces.Concat(excluded).Select(f => f.AssetId)], cancellationToken);
+        var thumbnails = await ThumbnailSizesAsync(db, [.. faces.Select(f => f.AssetId).Concat(excluded.Select(f => f.AssetId))], cancellationToken);
         // Anyone else with faces or a name can be the same person; most faces first, as on the people page.
         var others = await db.People.AsNoTracking()
             .Where(p => p.Id != id && (p.FaceCount > 0 || p.Name != null))
@@ -339,7 +342,7 @@ public sealed class LibraryQueries(
             person.FaceCount,
             [.. faces.Select(f => new PersonFace(f.Id, f.AssetId, Crop(f.AssetId, f.Box, thumbnails)))],
             others,
-            [.. excluded.Select(f => new PersonFace(f.Id, f.AssetId, Crop(f.AssetId, f.Box, thumbnails)))]);
+            [.. excluded.Select(f => new PersonFace(f.Id, f.AssetId, Crop(f.AssetId, f.Box, thumbnails), f.NotAFace))]);
     }
 
     // Boxes are relative to the upright derivatives (D-047), so each thumbnail's own size maps them.

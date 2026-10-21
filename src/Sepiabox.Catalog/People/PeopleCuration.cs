@@ -181,7 +181,7 @@ public sealed class PeopleCuration(CatalogDbContext db)
             // One face of a photo per person: where both had a face in the same photo, the one nearer the merged
             // centroid stays and the other is excluded, still pointing here, to be moved where it belongs.
             var ours = await db.Faces.Where(f => f.PersonId == personId).ToListAsync(cancellationToken);
-            var counted = ours.Concat(faces).Where(f => f.Assignment != FaceAssignments.Excluded).ToList();
+            var counted = ours.Concat(faces).Where(f => FaceAssignments.Counts(f.Assignment)).ToList();
             if (FaceMath.Centroid(counted.Select(f => f.Embedding.ToArray())) is { } centroid)
             {
                 foreach (var photo in counted.GroupBy(f => f.AssetId).Where(g => g.Count() > 1))
@@ -213,21 +213,26 @@ public sealed class PeopleCuration(CatalogDbContext db)
     /// nobody, is in no centroid, and no re-import gives it back to them (its row and choice are kept, D-077).
     /// </summary>
     public Task<CurationOutcome> NotThisPersonAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
-        ExcludeAsync(personId, faceId, keepPerson: true, cancellationToken);
-
-    /// <summary>"Not a face": the detection was wrong; the face belongs to nobody and is excluded for good.</summary>
-    public Task<CurationOutcome> NotAFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
-        ExcludeAsync(personId, faceId, keepPerson: false, cancellationToken);
+        MarkAsync(personId, faceId, FaceAssignments.Excluded, cancellationToken);
 
     /// <summary>
-    /// "Give back": a face excluded from this person (still pointing to them) is theirs again, as the family's choice
-    /// (<c>manual</c>); refused when the person already has a face in that photo.
+    /// "Not a face": the detection was wrong. Like "Not this person" it counts for nobody and stays through re-imports,
+    /// marked <c>not_face</c> and still pointing to the person, so a mis-click can be given back.
+    /// </summary>
+    public Task<CurationOutcome> NotAFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
+        MarkAsync(personId, faceId, FaceAssignments.NotFace, cancellationToken);
+
+    /// <summary>
+    /// "Give back": a face excluded from this person, or marked not a face (still pointing to them), is theirs again, as
+    /// the family's choice (<c>manual</c>); refused when the person already has a face in that photo.
     /// </summary>
     public Task<CurationOutcome> ReturnFaceAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
         InTransactionAsync(async () =>
         {
             var face = await db.Faces.SingleOrDefaultAsync(
-                f => f.Id == faceId && f.PersonId == personId && f.Assignment == FaceAssignments.Excluded, cancellationToken);
+                f => f.Id == faceId && f.PersonId == personId
+                    && (f.Assignment == FaceAssignments.Excluded || f.Assignment == FaceAssignments.NotFace),
+                cancellationToken);
             if (face is null || await db.People.FindAsync([personId], cancellationToken) is not { } person)
             {
                 return CurationOutcome.NotFound;
@@ -300,10 +305,11 @@ public sealed class PeopleCuration(CatalogDbContext db)
     // Whether the person already has a counted face, other than this one, in this face's photo.
     private Task<bool> HasFaceInPhotoAsync(long personId, Face face, CancellationToken cancellationToken) =>
         db.Faces.AnyAsync(
-            f => f.PersonId == personId && f.AssetId == face.AssetId && f.Id != face.Id && f.Assignment != FaceAssignments.Excluded,
+            f => f.PersonId == personId && f.AssetId == face.AssetId && f.Id != face.Id
+                && (f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual),
             cancellationToken);
 
-    private Task<CurationOutcome> ExcludeAsync(long personId, long faceId, bool keepPerson, CancellationToken cancellationToken) =>
+    private Task<CurationOutcome> MarkAsync(long personId, long faceId, string assignment, CancellationToken cancellationToken) =>
         InTransactionAsync(async () =>
         {
             var face = await db.Faces.SingleOrDefaultAsync(f => f.Id == faceId && f.PersonId == personId, cancellationToken);
@@ -312,8 +318,7 @@ public sealed class PeopleCuration(CatalogDbContext db)
                 return CurationOutcome.NotFound;
             }
 
-            face.Assignment = FaceAssignments.Excluded;
-            face.PersonId = keepPerson ? personId : null;
+            face.Assignment = assignment;
             await db.SaveChangesAsync(cancellationToken);
             await _assigner.RecomputeAsync(person, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);

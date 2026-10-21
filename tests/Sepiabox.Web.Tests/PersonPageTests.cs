@@ -32,12 +32,14 @@ public sealed class PersonPageFormTests : LocalizedContext
         Assert.Equal(["8", "9"], page.FindAll("form.merge option").Select(o => o.GetAttribute("value")));
         Assert.Equal(("get", "people/7/merge"), (page.Find("form.merge").GetAttribute("method"), page.Find("form.merge").GetAttribute("action")));
         Assert.Equal(
-            ["not-this-person:70", "not-a-face:70", "not-this-person:71", "not-a-face:71", "give-back:72"],
+            ["not-this-person:70", "not-a-face:70", "not-this-person:71", "not-a-face:71", "give-back:72", "give-back:73"],
             page.FindAll(".person-faces button").Select(b => b.GetAttribute("value")));
         Assert.Equal(
-            ["people/7/faces/70/move", "people/7/faces/71/move", "people/7/faces/72/move"],
+            ["people/7/faces/70/move", "people/7/faces/71/move", "people/7/faces/72/move", "people/7/faces/73/move"],
             page.FindAll(".person-faces a.small").Select(a => a.GetAttribute("href")));
         Assert.Equal("Excluded faces", page.FindAll("h2")[1].TextContent);
+        // Only the face marked "Not a face" says so.
+        Assert.Equal("(not a face)", Assert.Single(page.FindAll(".excluded-faces .not-a-face")).TextContent);
     }
 
     [Fact]
@@ -91,6 +93,21 @@ public sealed class PersonPageFormTests : LocalizedContext
         Assert.Equal(["Bruno", "Ana"], page.FindAll(".merge-people .name").Select(c => c.TextContent));
         Assert.Equal("Os rostos de Bruno passam para Ana; Bruno deixa de existir.", page.Find(".note").TextContent);
         Assert.Equal("Juntar", page.Find("form.confirm button").TextContent);
+    }
+
+    [Fact]
+    public void Refers_to_the_cards_when_a_person_to_merge_is_unnamed()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+        _library.Persons[9] = PersonPages.Person(9, name: null, user: null);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("people/7/merge?other=9");
+
+        var page = Render<PersonMerge>(p => p.Add(x => x.Id, 7L));
+
+        // Left goes, right stays, as the sentence says.
+        Assert.Equal(["Deixa de existir", "Fica"], page.FindAll(".merge-people .caption").Select(c => c.TextContent));
+        Assert.Equal(["Sem nome", "Ana"], page.FindAll(".merge-people .name").Select(c => c.TextContent));
+        Assert.Equal("Os rostos da pessoa à esquerda passam para a da direita; a da esquerda deixa de existir.", page.Find(".note").TextContent);
     }
 
     [Fact]
@@ -161,7 +178,7 @@ public sealed partial class PersonPagePostTests
 
         var confirmation = await http.GetStringAsync(new Uri("/people/7/merge?other=9", UriKind.Relative));
         Assert.Empty(editor.Calls);
-        Assert.Contains("The faces of Unnamed move to Unnamed; Unnamed no longer exists.", WebUtility.HtmlDecode(confirmation), StringComparison.Ordinal);
+        Assert.Contains("The faces of the person on the left move to the one on the right", WebUtility.HtmlDecode(confirmation), StringComparison.Ordinal);
         using var response = await PostAsync(http, "/people/7/merge?other=9", "confirm", new() { ["Confirmed"] = "yes" });
 
         Assert.Equal("/people/7?note=merged", response.Headers.Location?.PathAndQuery);
@@ -246,5 +263,5 @@ internal static class PersonPages
         2,
         [new PersonFace(70, Ids.Of(1), new FaceCrop(Ids.Of(1), [0.1, 0.1, 0.2, 0.2], 256, 192)), new PersonFace(71, Ids.Of(2), null)],
         [new PersonSummary(8, "Bruno", 3, null), new PersonSummary(9, null, 1, null)],
-        [new PersonFace(72, Ids.Of(3), null)]);
+        [new PersonFace(72, Ids.Of(3), null), new PersonFace(73, Ids.Of(4), null, NotAFace: true)]);
 }

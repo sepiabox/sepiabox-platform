@@ -111,7 +111,8 @@ public sealed class FaceAssigner(CatalogDbContext db, FaceAssignerOptions? optio
         }
 
         // People this asset's kept faces already belong to: one face of an asset per person.
-        var used = kept.Where(f => f.PersonId is not null).Select(f => f.PersonId!.Value).ToHashSet();
+        // A face excluded from a person, or not a face, does not stop a real face of this photo from joining them.
+        var used = kept.Where(f => f.PersonId is not null && FaceAssignments.Counts(f.Assignment)).Select(f => f.PersonId!.Value).ToHashSet();
         var chosen = await ChooseExistingAsync(unmatched, version, used, cancellationToken);
         for (var i = 0; i < unmatched.Count; i++)
         {
@@ -289,9 +290,9 @@ public sealed class FaceAssigner(CatalogDbContext db, FaceAssignerOptions? optio
         {
             groups = await db.Database.SqlQuery<FaceGroup>($"""
                 SELECT coalesce(a.faces_version, 1) AS "Version",
-                       count(*) FILTER (WHERE f.assignment <> 'excluded')::int AS "Counted",
+                       count(*) FILTER (WHERE f.assignment IN ('auto', 'manual'))::int AS "Counted",
                        count(*)::int AS "Rows",
-                       avg(f.embedding) FILTER (WHERE f.assignment <> 'excluded') AS "Mean"
+                       avg(f.embedding) FILTER (WHERE f.assignment IN ('auto', 'manual')) AS "Mean"
                 FROM faces f JOIN assets a ON a.id = f.asset_id
                 WHERE f.person_id = {person.Id} AND f.asset_id <> {assetId}
                 GROUP BY 1
@@ -299,7 +300,7 @@ public sealed class FaceAssigner(CatalogDbContext db, FaceAssignerOptions? optio
         }
 
         var mine = kept.Where(f => ReferenceEquals(f.Person, person) || (person.Id != 0 && f.PersonId == person.Id)).ToList();
-        var counted = mine.Where(f => f.Assignment != FaceAssignments.Excluded).ToList();
+        var counted = mine.Where(f => FaceAssignments.Counts(f.Assignment)).ToList();
         if (groups.Sum(g => g.Rows) + mine.Count == 0 && person.Name is null && person.UserEmail is null)
         {
             db.People.Remove(person);

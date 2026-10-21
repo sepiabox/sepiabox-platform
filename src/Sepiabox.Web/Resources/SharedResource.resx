@@ -570,7 +570,7 @@
     <value>The face was removed from this person; it is under Excluded faces.</value>
   </data>
   <data name="Person_Done_NotAFace" xml:space="preserve">
-    <value>Marked as not a face.</value>
+    <value>Marked as not a face; it is under Excluded faces.</value>
   </data>
   <data name="Person_Error_NotFound" xml:space="preserve">
     <value>That person or face is no longer there.</value>
@@ -646,5 +646,11 @@
   </data>
   <data name="Move_Submit" xml:space="preserve">
     <value>Move</value>
+  </data>
+  <data name="Person_Excluded_NotAFace" xml:space="preserve">
+    <value>(not a face)</value>
+  </data>
+  <data name="Merge_ExplainCards" xml:space="preserve">
+    <value>The faces of the person on the left move to the one on the right; the one on the left no longer exists.</value>
   </data>
 </root>
