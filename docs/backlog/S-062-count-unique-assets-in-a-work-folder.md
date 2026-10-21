@@ -10,7 +10,7 @@
 ### Scope
 - `sepiabox-ingest report <workdir>...`: reads every manifest in the given work folders and prints unique assets per year × kind (photo, video), the undated count, the total, and how many assets have more than one source; `--json <file>` writes the same numbers.
 - Years come from `capturedAt` as stored (wall-clock, D-037), whatever `capturedAtSource` says; undated means no `capturedAt`.
-- Several work folders (several drives, or a re-run into a fresh folder) are given in upload order: an asset in more than one counts once, and its date and kind come from the last folder that has it, as the cloud's merged manifest takes the last upload's description (D-036).
+- Several work folders (several drives, or a re-run into a fresh folder) are given in upload order: an asset in more than one counts once, with the date and kind the cloud's merge gives it (`ManifestMerge`, D-036, D-046): the last folder's description, and its date when both dates come from metadata, otherwise the stronger date source (D-074).
 - Manifests that fail validation are listed as problems and not counted.
 
 ### Out of scope

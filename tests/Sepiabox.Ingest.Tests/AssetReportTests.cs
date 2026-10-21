@@ -78,7 +78,8 @@ public sealed class AssetReportTests
         Write(work, Asset(2, MediaKind.Video, 2019, "c.mp4"));
         Write(work, Asset(3, MediaKind.Video, null, "d.mp4"));
         File.WriteAllText(Path.Combine(work.Path, "manifests", "broken.json"), "{}");
-        var json = Path.Combine(work.Path, "report.json");
+        using var elsewhere = new TempFolder();
+        var json = Path.Combine(elsewhere.Path, "report.json");
 
         var exit = ReportCommand.Run(new ReportOptions([work.Path], json), TextWriter.Null);
 
@@ -112,6 +113,87 @@ public sealed class AssetReportTests
         Assert.Contains("Total            1         0         1", output.ToString(), StringComparison.Ordinal);
         Assert.Contains("1 manifests could not be read and are not counted:", output.ToString(), StringComparison.Ordinal);
         Assert.Contains($"  {broken}: ", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Counts_the_same_without_keeping_embeddings_and_faces()
+    {
+        using var light = new TempFolder();
+        using var heavy = new TempFolder();
+        foreach (var n in Enumerable.Range(1, 6))
+        {
+            var asset = Asset(n, n % 2 == 0 ? MediaKind.Video : MediaKind.Photo, n < 5 ? 2010 + n : null, $"a{n}.jpg");
+            Write(light, asset);
+            Write(heavy, asset with
+            {
+                Embeddings = new Dictionary<string, JsonNode> { ["clip-vit-b32"] = JsonValue.Create(Sepiabox.Pipeline.Embeddings.EmbeddingCodec.Encode(new float[512]))! },
+                FacesProcessed = true,
+                FacesVersion = 2,
+                Faces = [TestManifests.Face(0.9)],
+            });
+        }
+
+        var expected = AssetReport.Build([light.Path], new ManifestValidator());
+        var actual = AssetReport.Build([heavy.Path, light.Path], new ManifestValidator());
+
+        Assert.Equal(expected.Years, actual.Years);
+        Assert.Equal((expected.UndatedPhotos, expected.UndatedVideos, expected.Total), (actual.UndatedPhotos, actual.UndatedVideos, actual.Total));
+    }
+
+    [Fact]
+    public void Counts_one_file_written_with_both_slashes_as_one_source_as_the_cloud_stores_it()
+    {
+        using var work = new TempFolder();
+        Write(work, Asset(1, MediaKind.Photo, 2019, "DCIM\\a.jpg", "DCIM/a.jpg"));
+
+        var report = AssetReport.Build([work.Path], new ManifestValidator());
+
+        Assert.Equal(1, report.Total);
+        Assert.Equal(0, report.MultipleSources);
+    }
+
+    [Fact]
+    public void Refuses_a_json_path_inside_a_work_folder()
+    {
+        using var work = new TempFolder();
+        Write(work, Asset(1, MediaKind.Photo, 2019, "a.jpg"));
+        using var errors = new StringWriter(CultureInfo.InvariantCulture);
+        var json = Path.Combine(work.Path, "manifests", "report.json");
+
+        var exit = ReportCommand.Run(new ReportOptions([work.Path], json), TextWriter.Null, errors);
+
+        Assert.Equal(2, exit);
+        Assert.Contains("outside the work folders", errors.ToString(), StringComparison.Ordinal);
+        Assert.False(File.Exists(json));
+    }
+
+    [Fact]
+    public void Says_so_and_exits_with_1_when_the_json_cannot_be_written()
+    {
+        using var work = new TempFolder();
+        using var elsewhere = new TempFolder();
+        Write(work, Asset(1, MediaKind.Photo, 2019, "a.jpg"));
+        using var errors = new StringWriter(CultureInfo.InvariantCulture);
+
+        var exit = ReportCommand.Run(new ReportOptions([work.Path], Path.Combine(elsewhere.Path, "missing", "report.json")), TextWriter.Null, errors);
+
+        Assert.Equal(1, exit);
+        Assert.Contains("Could not write", errors.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Replaces_an_earlier_json_whole_and_leaves_no_temporary_file()
+    {
+        using var work = new TempFolder();
+        using var elsewhere = new TempFolder();
+        Write(work, Asset(1, MediaKind.Photo, 2019, "a.jpg"));
+        var json = Path.Combine(elsewhere.Path, "report.json");
+        File.WriteAllText(json, new string('x', 100_000));
+
+        Assert.Equal(0, ReportCommand.Run(new ReportOptions([work.Path], json), TextWriter.Null));
+
+        Assert.Equal(1, JsonNode.Parse(File.ReadAllText(json))!["total"]!.GetValue<int>());
+        Assert.Equal(["report.json"], Directory.GetFiles(elsewhere.Path).Select(Path.GetFileName));
     }
 
     [Fact]

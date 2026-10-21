@@ -58,7 +58,12 @@ public sealed record AssetReport(
                     continue;
                 }
 
-                assets[manifest.Id] = assets.TryGetValue(manifest.Id, out var earlier) ? ManifestMerge.Merge(earlier, manifest) : manifest;
+                // Embeddings and faces are not counted and are most of a manifest's size: dropped, so 50,000
+                // assets fit in memory. The first manifest of an asset is stored canonical, as the cloud writes it.
+                var light = Light(manifest);
+                assets[manifest.Id] = assets.TryGetValue(manifest.Id, out var earlier)
+                    ? Light(ManifestMerge.Merge(earlier, light))
+                    : ManifestMerge.Canonical(light);
             }
         }
 
@@ -78,12 +83,16 @@ public sealed record AssetReport(
             problems);
     }
 
+    // What the counts need of a manifest; whether faces were looked for stays, as the merge compares it.
+    private static Manifest Light(Manifest manifest) =>
+        manifest with { Embeddings = new Dictionary<string, System.Text.Json.Nodes.JsonNode>(), Faces = [] };
+
     /// <summary>The table people read.</summary>
     public void WriteTable(TextWriter output)
     {
         ArgumentNullException.ThrowIfNull(output);
         var folders = WorkFolders.Count == 1 ? "1 work folder" : $"{WorkFolders.Count} work folders";
-        output.WriteLine($"Unique photos and videos in {folders}, as the catalog counts them:");
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Unique photos and videos in {folders}, as the catalog counts them:"));
         output.WriteLine();
         output.WriteLine($"{"Year",-8}{"Photos",10}{"Videos",10}{"Total",10}");
         foreach (var year in Years)
@@ -96,11 +105,11 @@ public sealed record AssetReport(
         output.WriteLine();
         output.WriteLine(MultipleSources == 1
             ? "1 asset was found at more than one path."
-            : $"{MultipleSources:N0} assets were found at more than one path.");
+            : string.Create(CultureInfo.InvariantCulture, $"{MultipleSources:N0} assets were found at more than one path."));
         if (Problems.Count > 0)
         {
             output.WriteLine();
-            output.WriteLine($"{Problems.Count:N0} manifests could not be read and are not counted:");
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"{Problems.Count:N0} manifests could not be read and are not counted:"));
             foreach (var problem in Problems)
             {
                 output.WriteLine($"  {problem.Path}: {problem.Reason}");

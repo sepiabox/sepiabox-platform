@@ -171,7 +171,7 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
 
 static int RunReport(string[] args, CancellationToken cancellationToken) =>
     ReportOptions.TryParse(args, out var options, out var error)
-        ? ReportCommand.Run(options, Console.Out, cancellationToken)
+        ? ReportCommand.Run(options, Console.Out, Console.Error, cancellationToken)
         : UsageError(error);
 
 static async Task<int> RunModels(string[] args, CancellationToken cancellationToken)
