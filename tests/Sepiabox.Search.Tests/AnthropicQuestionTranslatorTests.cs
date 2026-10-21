@@ -278,7 +278,7 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.False(filters["additionalProperties"]!.GetValue<bool>());
         Assert.Equal("date", filters["properties"]!["dateFrom"]!["format"]!.GetValue<string>());
         Assert.Equal(
-            ["dateFrom", "dateTo", "kinds", "months", "onThisDay", "places", "sources", "undatedOnly", "visual", "years"],
+            ["dateFrom", "dateTo", "kinds", "months", "onThisDay", "people", "places", "sources", "undatedOnly", "visual", "years"],
             filters["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
         Assert.Equal(["text"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
     }

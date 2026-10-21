@@ -1,4 +1,5 @@
 @page "/photos/{Id}"
+@using Sepiabox.Catalog.Search
 @inject ILibraryQueries Library
 @inject NavigationManager Navigation
 @* Static server rendering (no @rendermode): the page is plain HTML with links, nothing interactive. *@
@@ -51,6 +52,27 @@
                 <dt>@Text["Detail_Type"]</dt>
                 <dd>@Text.KindLabel(_asset.Kind)</dd>
             </dl>
+
+            @if (_asset.People.Count > 0)
+            {
+                @* A named person links to their photos; an unnamed one to their page, to be named (S-021). *@
+                <h2>@Text["Detail_People"]</h2>
+                <ul class="photo-people">
+                    @foreach (var person in _asset.People)
+                    {
+                        <li>
+                            @if (person.Name is { } name)
+                            {
+                                <a href="@SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { People = new PeopleFilter { All = [name] } } })">@name</a>
+                            }
+                            else
+                            {
+                                <a href="people/@person.Id">@Text["People_Unnamed"]</a>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
 
             <h2>@Text["Detail_Sources"]</h2>
             <ul class="sources">

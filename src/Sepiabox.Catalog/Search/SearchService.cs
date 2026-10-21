@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Sepiabox.Catalog.People;
 
 namespace Sepiabox.Catalog.Search;
 
@@ -22,6 +23,25 @@ public enum SimilarityMode
 
     /// <summary>Every candidate's exact distance: every match above the threshold. For counting (S-025, S-026).</summary>
     Exact,
+}
+
+/// <summary>
+/// A search names people the catalog does not have (S-021, D-080): <see cref="Missing"/> lists the names, and
+/// <see cref="MeMissing"/> says the signed-in user asked for themselves without having said "This is me".
+/// </summary>
+public sealed class UnknownPeopleException(IReadOnlyList<string> missing, bool meMissing)
+    : Exception(Describe(missing, meMissing))
+{
+    public IReadOnlyList<string> Missing { get; } = missing;
+
+    public bool MeMissing { get; } = meMissing;
+
+    private static string Describe(IReadOnlyList<string> missing, bool meMissing) =>
+        string.Join(" ", new[]
+        {
+            missing.Count > 0 ? $"No one is called {string.Join(", ", missing)}." : null,
+            meMissing ? "The signed-in user has not said \"This is me\" for any person." : null,
+        }.Where(part => part is not null));
 }
 
 /// <summary>One asset a search found; <see cref="Score"/> is its cosine similarity to the description, for a visual search.</summary>
@@ -49,9 +69,63 @@ public sealed record CountResult(int Total, IReadOnlyList<CountGroup> Groups, in
 /// Runs the search DSL (S-013) with plain EF Core (D-051): every value goes to the database as a parameter, never
 /// into SQL text. Filters are combined with AND; the values of one list with OR.
 /// </summary>
+/// <remarks>
+/// <paramref name="userEmail"/> is the signed-in user's address, for <see cref="PeopleFilter.IncludeMe"/> (S-021); it is
+/// only compared with the catalog's "This is me" links, never sent anywhere.
+/// </remarks>
 public sealed class SearchService(
-    CatalogDbContext db, TimeProvider clock, SearchOptions? options = null, IQueryEmbedder? embedder = null)
+    CatalogDbContext db, TimeProvider clock, SearchOptions? options = null, IQueryEmbedder? embedder = null, string? userEmail = null)
 {
+    private readonly string? _me = string.IsNullOrWhiteSpace(userEmail) ? null : userEmail.Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// The people the filters name, by id: every name must be a person's (ignoring case) and, with includeMe, the user
+    /// must have said "This is me"; otherwise <see cref="UnknownPeopleException"/>. Run before a search or a count.
+    /// </summary>
+    public async Task<IReadOnlyList<long>> ResolvePeopleAsync(SearchFilters filters, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filters);
+        if (filters.People is not { } people)
+        {
+            return [];
+        }
+
+        var ids = new List<long>();
+        var missing = new List<string>();
+        foreach (var name in people.All ?? [])
+        {
+            string[] lowered = [NameKey(name)];
+            var id = await db.People.AsNoTracking().Where(p => p.Name != null && lowered.Contains(p.Name.ToLower()))
+                .Select(p => (long?)p.Id).FirstOrDefaultAsync(cancellationToken);
+            if (id is { } found)
+            {
+                ids.Add(found);
+            }
+            else
+            {
+                missing.Add(name);
+            }
+        }
+
+        var meMissing = false;
+        if (people.IncludeMe)
+        {
+            var me = _me is null
+                ? null
+                : await db.People.AsNoTracking().Where(p => p.UserEmail == _me).Select(p => (long?)p.Id).FirstOrDefaultAsync(cancellationToken);
+            if (me is { } myId)
+            {
+                ids.Add(myId);
+            }
+            else
+            {
+                meMissing = true;
+            }
+        }
+
+        return missing.Count > 0 || meMissing ? throw new UnknownPeopleException(missing, meMissing) : [.. ids.Distinct()];
+    }
+
     /// <summary>
     /// The assets the query's filters match, in no particular order and without its limit: for a caller that orders
     /// by something else, such as visual similarity (S-016).
@@ -109,6 +183,7 @@ public sealed class SearchService(
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(byDate);
         ArgumentNullException.ThrowIfNull(bySimilarity);
+        await ResolvePeopleAsync(query.Filters, cancellationToken);
         if (query.Filters.Visual is not { } visual)
         {
             return await byDate(Query(query)).Take(query.Limit + 1).ToListAsync(cancellationToken);
@@ -151,6 +226,7 @@ public sealed class SearchService(
             return null;
         }
 
+        var named = await ResolvePeopleAsync(query.Filters, cancellationToken);
         var assets = Filtered(query);
         var total = await assets.CountAsync(cancellationToken);
         var aggregate = query.Aggregate ?? new SearchAggregate();
@@ -168,6 +244,17 @@ public sealed class SearchService(
             // An asset found on two drives counts once in each; twice on one drive, once.
             SearchGroupBy.Source => [.. (await assets.SelectMany(a => a.Sources.Select(s => new { a.Id, s.Name })).Distinct()
                 .GroupBy(x => x.Name).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                .Select(g => new CountGroup(g.Key, g.Count))],
+            // Named people only, once per photo; the people the filters name are in every photo, so they are left out
+            // ("who did I take the most photos with" is never "me", D-080).
+            SearchGroupBy.Person => [.. (await db.Faces.AsNoTracking()
+                .Where(f => (f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual)
+                    && f.PersonId != null && !named.Contains(f.PersonId.Value) && f.Person!.Name != null
+                    && assets.Select(a => a.Id).Contains(f.AssetId))
+                .Select(f => new { f.AssetId, Name = f.Person!.Name! })
+                .Distinct()
+                .GroupBy(x => x.Name).Select(g => new { g.Key, Count = g.Count() })
+                .ToListAsync(cancellationToken))
                 .Select(g => new CountGroup(g.Key, g.Count))],
             _ => throw new InvalidOperationException($"Unknown groupBy '{aggregate.GroupBy}'."),
         };
@@ -258,6 +345,39 @@ public sealed class SearchService(
         {
             var lowered = sources.Select(s => s.ToLowerInvariant()).ToList();
             assets = assets.Where(a => a.Sources.Any(s => lowered.Contains(s.Name.ToLower())));
+        }
+
+        if (filters.People is { } people)
+        {
+            assets = WithPeople(assets, people);
+        }
+
+        return assets;
+    }
+
+    // A searched name cleaned as names are stored (D-079: NFC, invisible formatting dropped, white space collapsed), so a
+    // double space or a decomposed "José" still finds the person, then lower-cased to match ignoring case.
+    private static string NameKey(string name)
+    {
+        PeopleCuration.CleanName(name, out var clean);
+        return (clean ?? name.Trim()).ToLowerInvariant();
+    }
+
+    // Every person named, and the user's own: each must have a counted face in the photo (D-077, D-079).
+    private IQueryable<Asset> WithPeople(IQueryable<Asset> assets, PeopleFilter people)
+    {
+        var counted = db.Faces.Where(f => f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual);
+        foreach (var name in people.All ?? [])
+        {
+            string[] lowered = [NameKey(name)];
+            assets = assets.Where(a => counted.Any(f => f.AssetId == a.Id && f.Person!.Name != null && lowered.Contains(f.Person.Name.ToLower())));
+        }
+
+        if (people.IncludeMe)
+        {
+            // No address, no "me": nothing matches (ResolvePeopleAsync reports it before a search runs).
+            var me = _me ?? string.Empty;
+            assets = assets.Where(a => counted.Any(f => f.AssetId == a.Id && f.Person!.UserEmail == me));
         }
 
         return assets;

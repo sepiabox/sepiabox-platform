@@ -606,4 +606,37 @@
   <data name="Merge_ExplainCards" xml:space="preserve">
     <value>Os rostos da pessoa à esquerda passam para a da direita; a da esquerda deixa de existir.</value>
   </data>
+  <data name="List_And" xml:space="preserve">
+    <value>{0} e {1}</value>
+  </data>
+  <data name="Search_UnknownPeople" xml:space="preserve">
+    <value>Não há ninguém chamado {0}.</value>
+  </data>
+  <data name="Search_MeNotLinked" xml:space="preserve">
+    <value>Você ainda não marcou “Sou eu” em nenhuma pessoa. Encontre a sua em Pessoas e marque “Sou eu”.</value>
+  </data>
+  <data name="Chip_People" xml:space="preserve">
+    <value>Com: {0}</value>
+  </data>
+  <data name="Chip_Me" xml:space="preserve">
+    <value>Comigo</value>
+  </data>
+  <data name="Group_Person" xml:space="preserve">
+    <value>pessoa</value>
+  </data>
+  <data name="Count_ByPerson" xml:space="preserve">
+    <value>{0} por pessoa</value>
+  </data>
+  <data name="Count_WithPeople" xml:space="preserve">
+    <value> com {0}</value>
+  </data>
+  <data name="Filter_People" xml:space="preserve">
+    <value>Pessoas</value>
+  </data>
+  <data name="Filter_Me" xml:space="preserve">
+    <value>Comigo</value>
+  </data>
+  <data name="Detail_People" xml:space="preserve">
+    <value>Pessoas</value>
+  </data>
 </root>

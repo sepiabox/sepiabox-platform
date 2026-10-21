@@ -111,6 +111,11 @@ public static class QuestionEndpoints
             http.Response.Headers.RetryAfter = "3600";
             return Problem(text["Search_DescribeUnavailable"], StatusCodes.Status503ServiceUnavailable, dsl, "filters.visual");
         }
+        catch (UnknownPeopleException unknown)
+        {
+            // Understood, but naming someone the catalog does not have (S-021): the query comes back with the names.
+            return PeopleSearch.Problem(unknown, text, dsl);
+        }
 
         return Results.Ok(new Response(dsl, answer.Items, answer.HasMore, answer.Count, answer.NotCounted));
     }

@@ -82,6 +82,11 @@ public static class SearchEndpoints
                 statusCode: StatusCodes.Status503ServiceUnavailable,
                 extensions: new Dictionary<string, object?> { ["field"] = "filters.visual" });
         }
+        catch (UnknownPeopleException unknown)
+        {
+            // A name that is no one's, or "me" without "This is me" (S-021): the field and the names say what to fix.
+            return PeopleSearch.Problem(unknown, text);
+        }
 
         return Results.Ok(response);
     }
