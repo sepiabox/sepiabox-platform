@@ -1,12 +1,14 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using Sepiabox.Worker;
 
-namespace Sepiabox.Worker.Tests.Places;
+namespace Sepiabox.Tests.Places;
 
 /// <summary>
 /// Small synthetic GeoNames dump files, written in the test's folder: GeoNames' data is never committed
-/// (CC BY 4.0, D-066). Positions are close to the real ones, so distances between them are realistic.
+/// (CC BY 4.0, D-066). Positions are close to the real ones, so distances between them are realistic. Compiled into
+/// the worker's tests and the MVP's acceptance test, which resolves the fixture library's locations against it.
 /// </summary>
 internal static class GeoNamesSample
 {
