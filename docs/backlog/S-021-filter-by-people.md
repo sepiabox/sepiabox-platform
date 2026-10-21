@@ -22,7 +22,7 @@
 - [x] Given photos with several people in 2025, when I group by person with `top=3`, then the 3 with the most photos are returned, in order. *(`PeopleSearchTests`: the people the filters name are left out of the groups, D-080.)*
 - [x] Given existing people, when the question prompt is built, then it includes their names. *(`PeopleFilterTests` and `GoldenQuestionsTests`: names only, never an address.)*
 
-- [ ] Given the golden set's five people questions (English and Brazilian Portuguese), when they run with the real API before `done` (D-054), then each means its expected query on the fixture catalog, as in S-025 (one recorded retry per question).
+- [x] Given the golden set's five people questions (English and Brazilian Portuguese), when they run with the real API before `done` (D-054), then each means its expected query on the fixture catalog, as in S-025 (one recorded retry per question). *(Recording run 2026-10-21: `Model claude-haiku-5-5, 2026-10-21: 98/98 passed, 1 after a retry (count-by-kind/pt).`; the first run missed only `birthday-in-sintra`, whose S-025 expectation treated Ana as unsupported and was updated; the CI replay passes on the recorded responses.)*
 
 ### Technical notes
 - Extends `search.v1.json` and the executor.
@@ -49,7 +49,7 @@ In a session that has `SEPIABOX_ANTHROPIC_API_KEY` and Docker, on this story's b
 If the run fails, keep the story `blocked` (the recorded file is unchanged) and report the misses: they are prompt or golden-set fixes for a review iteration.
 
 ### Status
-- `blocked` (2026-10-21): everything is implemented and tested (D-080) but the required live golden run with recording (D-054), above.
+- `done` (2026-10-21): implemented and tested (D-080); the required live golden run with recording (D-054) passed 98/98.
 
 ### Expected tests
 - Integration (PostgreSQL): "all" semantics, `includeMe`, errors.
