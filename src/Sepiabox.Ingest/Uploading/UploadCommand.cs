@@ -22,7 +22,8 @@ public sealed class ClockSkewException(TimeSpan skew) : Exception(Describe(skew)
 
     private static string Describe(TimeSpan skew) =>
         $"This computer's clock is {Math.Abs(skew.TotalMinutes):N0} minutes {(skew > TimeSpan.Zero ? "ahead of" : "behind")} the storage server's. " +
-        $"Set it right (synchronize it with internet time) and upload again: faces are kept or erased by the time they were found, " +
+        $"Set it right (synchronize it with internet time; on Windows: Settings → Time & language → Date & time → Sync now) " +
+        $"and upload again: faces are kept or erased by the time they were found, " +
         $"so upload refuses a clock more than {UploadCommand.MaxClockSkew.TotalMinutes:N0} minutes off.";
 }
 
@@ -129,12 +130,11 @@ public static class UploadCommand
             return;
         }
 
-        // The header has whole seconds and was written somewhere during the request: compared with its middle.
-        var local = before + ((after - before) / 2);
-        var skew = local - server;
-        if (skew.Duration() > MaxClockSkew)
+        // The server wrote the header somewhere between our before and after, in whole seconds (rounded down): the clocks
+        // differ only when it falls more than MaxClockSkew outside that window, however slow the request was.
+        if (server < before - MaxClockSkew - TimeSpan.FromSeconds(1) || server > after + MaxClockSkew)
         {
-            throw new ClockSkewException(skew);
+            throw new ClockSkewException(before + ((after - before) / 2) - server);
         }
     }
 

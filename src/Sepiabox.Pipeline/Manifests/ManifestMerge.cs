@@ -46,13 +46,33 @@ public static class ManifestMerge
     }
 
     /// <summary>
+    /// How far after its blob was written a manifest's <c>facesDetectedAt</c> may be (D-081): beyond it, the computer's
+    /// clock was ahead when it ran <c>process</c>, and the time is not trusted.
+    /// </summary>
+    public static readonly TimeSpan DetectionTolerance = TimeSpan.FromMinutes(5);
+
+    /// <summary>Whether <paramref name="manifest"/>'s detection time is plausible for a blob written at <paramref name="writtenAt"/>.</summary>
+    public static bool DetectionTrusted(Manifest manifest, DateTimeOffset? writtenAt)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        return manifest.FacesDetectedAt is not { } detected || writtenAt is not { } written || detected <= written + DetectionTolerance;
+    }
+
+    /// <summary>
     /// The erase writer (S-022, D-081): <paramref name="stored"/> with the tombstone <paramref name="erasedAt"/> merged
     /// in, so its faces found at or before it are gone and the newer of the two tombstones is kept. Everything else is
-    /// the stored manifest's own, so an erase never changes what the asset is.
+    /// the stored manifest's own, so an erase never changes what the asset is. Faces said to be found more than
+    /// <see cref="DetectionTolerance"/> after the blob was written (<paramref name="writtenAt"/>) are erased too.
     /// </summary>
-    public static Manifest EraseFaces(Manifest stored, DateTimeOffset erasedAt)
+    public static Manifest EraseFaces(Manifest stored, DateTimeOffset erasedAt, DateTimeOffset? writtenAt = null)
     {
         ArgumentNullException.ThrowIfNull(stored);
+        if (!DetectionTrusted(stored, writtenAt))
+        {
+            // Found "in the future": a clock that was ahead, so these faces may be older than the erase.
+            stored = stored with { FacesProcessed = false, Faces = [], FacesVersion = null, FacesDetectedAt = null };
+        }
+
         return Merge(stored, stored with
         {
             FacesProcessed = false,

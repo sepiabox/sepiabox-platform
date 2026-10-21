@@ -162,7 +162,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             setting.ToTable("settings");
             setting.HasKey(x => x.Key);
             setting.Property(x => x.Key).HasMaxLength(64);
-            setting.Property(x => x.Value).HasMaxLength(200);
+            // Unbounded: the faces sweep's checkpoint holds a storage continuation token (D-081).
+            setting.Property(x => x.Value).HasColumnType("text");
         });
 
         modelBuilder.Entity<ErasedFace>(erased =>

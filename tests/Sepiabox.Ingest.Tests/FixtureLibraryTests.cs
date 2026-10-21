@@ -17,6 +17,9 @@ public sealed class FixtureLibraryTests
 {
     private const int Seed = 61;
 
+    // Stopped once for the class, so two runs compared byte for byte see the same "now".
+    private static readonly Sepiabox.Tests.Shared.FixedClock s_clock = new(DateTime.UtcNow);
+
     private static readonly FfmpegTools s_tools = FfmpegTools.Find(null)
         ?? throw new InvalidOperationException("Integration tests need ffmpeg and ffprobe on the PATH.");
 
@@ -223,8 +226,9 @@ public sealed class FixtureLibraryTests
         // A real face too, public domain (D-047), so faces are found and embedded.
         File.Copy(TestDataPath("face-portrait.jpg"), Path.Combine(drive.Path, "face-portrait.jpg"));
 
-        var one = ProcessCommand.Run(Options(drive, sequential, jobs: 1) with { ModelFolder = TestModels.Folder, Faces = true });
-        var four = ProcessCommand.Run(Options(drive, parallel, jobs: 4) with { ModelFolder = TestModels.Folder, Faces = true });
+        // One clock for both runs: the manifests say when their faces were found (D-081).
+        var one = ProcessCommand.Run(Options(drive, sequential, jobs: 1) with { ModelFolder = TestModels.Folder, Faces = true }, s_clock);
+        var four = ProcessCommand.Run(Options(drive, parallel, jobs: 4) with { ModelFolder = TestModels.Folder, Faces = true }, s_clock);
 
         Assert.Equal(Files(sequential, "manifests"), Files(parallel, "manifests"));
         Assert.Equal((one.Embedded, one.FacesFound), (four.Embedded, four.FacesFound));
@@ -268,7 +272,8 @@ public sealed class FixtureLibraryTests
             digits.Contains(Path.GetFileName(Path.GetDirectoryName(derivative))![^1], StringComparison.Ordinal);
         var embedder = new FakeEmbedder { Failure = path => IdEndsIn(path, "0123") ? new InvalidOperationException("broken") : null };
         var faces = new FakeFaceDetector { Failure = path => IdEndsIn(path, "abcd") ? new InvalidOperationException("broken") : null };
-        return ProcessCommand.Run(Options(drive, work, jobs) with { Faces = true }, embedder, embedderWarning: null, faces: faces);
+        // One clock for both runs: the manifests say when their faces were found (D-081).
+        return ProcessCommand.Run(Options(drive, work, jobs) with { Faces = true }, embedder, embedderWarning: null, clock: s_clock, faces: faces);
     }
 
     private static string TestDataPath(string name)

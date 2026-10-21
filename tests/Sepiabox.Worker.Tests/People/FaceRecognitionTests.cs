@@ -276,6 +276,155 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Keeps_the_pass_start_across_runs_so_a_blob_written_behind_the_checkpoint_is_erased_by_the_next_pass()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAllAsync(container, Enumerable.Range(2, 5));
+        await Recognition(db).TurnOffAsync(Ana);
+        // The job's clock moves an hour between runs, as the hourly schedule does.
+        var clock = new SettableClock(DateTimeOffset.UtcNow);
+        var startedAt = clock.Now;
+
+        var first = await SweepAsync(db, container, s_onePageARun, clock);
+        Assert.False(first.Finished);
+        // An old work folder uploads a photo whose blob sorts before the page already swept.
+        var behind = FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 1)));
+        await PutAsync(container, behind);
+        clock.Now += TimeSpan.FromHours(1);
+        var rest = await SweepUntilFinishedAsync(db, container, s_onePageARun, clock);
+
+        Assert.True(rest[^1].Recorded);
+        Assert.Single((await StoredAsync(container, behind.Id)).Faces);
+        Assert.Equal(startedAt - ManifestFacesSweep.Margin, (await FaceRecognition.ReadAsync(db)).SweptThrough);
+        clock.Now += TimeSpan.FromHours(1);
+        var next = await SweepUntilFinishedAsync(db, container, s_onePageARun, clock);
+
+        Assert.Empty((await StoredAsync(container, behind.Id)).Faces);
+        Assert.True(next[^1].Recorded);
+    }
+
+    [Fact]
+    public async Task Records_nothing_and_keeps_recognition_off_when_an_earlier_run_of_the_pass_had_a_problem()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        // Sorts first, so the first run meets it.
+        var broken = container.GetBlobClient(BlobLayout.ManifestBlobName(new string('0', 64)));
+        await broken.UploadAsync(BinaryData.FromString("{ \"id\": 42 }"));
+        await PutAllAsync(container, Enumerable.Range(1, 4));
+        await Recognition(db).TurnOffAsync(Ana);
+
+        var first = await SweepAsync(db, container, s_onePageARun);
+        Assert.Single(first.Problems);
+        // Fixed before the next run: the rest of the pass is clean.
+        await broken.DeleteAsync();
+        var rest = await SweepUntilFinishedAsync(db, container, s_onePageARun);
+
+        Assert.All(rest, run => Assert.Empty(run.Problems));
+        Assert.False(rest[^1].Recorded);
+        Assert.True((await FaceRecognition.ReadAsync(db)).ManifestsPending);
+        Assert.False(await Recognition(db).TurnOnAsync());
+        // The next pass starts over and is clean.
+        var again = await SweepUntilFinishedAsync(db, container, s_onePageARun);
+        Assert.True(again[^1].Recorded);
+        Assert.True(await Recognition(db).TurnOnAsync());
+    }
+
+    [Fact]
+    public async Task Does_nothing_while_another_sweep_holds_the_lock()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAllAsync(container, [1]);
+        await Recognition(db).TurnOffAsync(Ana);
+        await using var other = Context(fixture.ConnectionStringFor(db));
+        await other.Database.OpenConnectionAsync();
+        await other.Database.ExecuteSqlAsync($"SELECT pg_advisory_lock({ManifestFacesSweep.SweepLockKey})");
+
+        var result = await SweepAsync(db, container);
+
+        Assert.False(result.Ran);
+        Assert.Single((await StoredAsync(container, FaceImportTests.WithFaces(1).Id)).Faces);
+        Assert.True((await FaceRecognition.ReadAsync(db)).ManifestsPending);
+    }
+
+    [Fact]
+    public async Task Stops_the_pass_when_recognition_is_turned_off_again_meanwhile()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAllAsync(container, Enumerable.Range(1, 5));
+        await Recognition(db).TurnOffAsync(Ana);
+        var later = (await FaceRecognition.ReadAsync(db)).ErasedAt!.Value.AddMinutes(5);
+        // Another erase lands while the first page is being swept.
+        var interfering = new InterferingContainer(fixture.BlobConnectionString, container.Name, async () =>
+        {
+            await using var other = Context(fixture.ConnectionStringFor(db));
+            await other.Settings.Where(x => x.Key == FaceRecognition.ErasedAtKey)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.Value, later.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));
+        });
+
+        var result = await SweepAsync(db, interfering, new SweepOptions(Concurrency: 4, PageSize: 2, Budget: TimeSpan.FromHours(1)));
+
+        Assert.False(result.Finished);
+        Assert.Equal(2, result.Erased);
+        Assert.Null(await FaceRecognition.ReadSweepAsync(db));
+        Assert.Null((await FaceRecognition.ReadAsync(db)).SweptThrough);
+    }
+
+    [Fact]
+    public async Task Ignores_a_checkpoint_left_by_another_erase()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAllAsync(container, Enumerable.Range(1, 3));
+        await Recognition(db).TurnOffAsync(Ana);
+        var erasedAt = (await FaceRecognition.ReadAsync(db)).ErasedAt!.Value;
+        db.Settings.Add(new Setting
+        {
+            Key = FaceRecognition.SweepKey,
+            Value = System.Text.Json.JsonSerializer.Serialize(new SweepCheckpoint(erasedAt.AddDays(-1), null, erasedAt.AddDays(-1), "not-a-token", false)),
+        });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await SweepAsync(db, container);
+
+        Assert.True(result.Recorded);
+        Assert.Equal(3, result.Erased);
+    }
+
+    [Fact]
+    public async Task Ignores_faces_said_to_be_found_after_their_manifest_was_uploaded()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        // A computer a day ahead when it ran process, corrected before upload.
+        var ahead = FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 1))) with
+        {
+            FacesDetectedAt = DateTimeOffset.UtcNow.AddDays(1),
+        };
+        var fine = FaceImportTests.WithFaces(2, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 2))) with
+        {
+            FacesDetectedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+        };
+        await PutAsync(container, ahead);
+        await PutAsync(container, fine);
+
+        var result = await ImportAsync(db, container);
+
+        Assert.Equal(2, result.Imported);
+        Assert.Equal([fine.Id], await db.Faces.Select(f => f.AssetId).ToListAsync());
+        Assert.Contains(result.Warnings, w => w.Reason.Contains("a clock ahead", StringComparison.Ordinal));
+
+        // And the sweep erases them from the blob, though their time is after the erase.
+        await Recognition(db).TurnOffAsync(Ana);
+        await SweepAsync(db, container);
+        Assert.Empty((await StoredAsync(container, ahead.Id)).Faces);
+    }
+
+    [Fact]
     public async Task Leaves_the_sweep_pending_while_a_stored_manifest_cannot_be_read()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
@@ -306,9 +455,50 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
 
     private static FaceRecognition Recognition(CatalogDbContext db) => new(db, TimeProvider.System);
 
-    private static Task<SweepResult> SweepAsync(CatalogDbContext db, BlobContainerClient container, SweepOptions? options = null) =>
-        new ManifestFacesSweep(db, new ManifestStore(new ManifestValidator()), TimeProvider.System, NullLogger.Instance, options)
+    private static Task<SweepResult> SweepAsync(
+        CatalogDbContext db, BlobContainerClient container, SweepOptions? options = null, TimeProvider? clock = null) =>
+        new ManifestFacesSweep(db, new ManifestStore(new ManifestValidator()), clock ?? TimeProvider.System, NullLogger.Instance, options)
             .RunAsync(container, CancellationToken.None);
+
+    // Runs a stopping sweep until its pass finishes, at most ten times.
+    private static async Task<List<SweepResult>> SweepUntilFinishedAsync(
+        CatalogDbContext db, BlobContainerClient container, SweepOptions options, TimeProvider? clock = null)
+    {
+        var runs = new List<SweepResult>();
+        do
+        {
+            Assert.True(runs.Count < 10, "The sweep does not finish.");
+            runs.Add(await SweepAsync(db, container, options, clock));
+        }
+        while (!runs[^1].Finished);
+        return runs;
+    }
+
+    private static readonly SweepOptions s_onePageARun = new(Concurrency: 4, PageSize: 2, Budget: TimeSpan.Zero);
+
+    private static async Task PutAllAsync(BlobContainerClient container, IEnumerable<int> ids)
+    {
+        foreach (var n in ids)
+        {
+            await PutAsync(container, FaceImportTests.WithFaces(n, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: n))));
+        }
+    }
+
+    /// <summary>The manifests container, which runs <paramref name="interfere"/> once, the first time a blob is opened.</summary>
+    private sealed class InterferingContainer(string connectionString, string name, Func<Task> interfere) : BlobContainerClient(connectionString, name)
+    {
+        private int _done;
+
+        public override BlobClient GetBlobClient(string blobName)
+        {
+            if (Interlocked.Exchange(ref _done, 1) == 0)
+            {
+                interfere().GetAwaiter().GetResult();
+            }
+
+            return base.GetBlobClient(blobName);
+        }
+    }
 
     private sealed class SettableClock(DateTimeOffset now) : TimeProvider
     {

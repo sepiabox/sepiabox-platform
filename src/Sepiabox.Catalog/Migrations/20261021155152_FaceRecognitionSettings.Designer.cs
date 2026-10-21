@@ -14,7 +14,7 @@ using Sepiabox.Catalog;
 namespace Sepiabox.Catalog.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
-    [Migration("20261021140048_FaceRecognitionSettings")]
+    [Migration("20261021155152_FaceRecognitionSettings")]
     partial class FaceRecognitionSettings
     {
         /// <inheritdoc />
@@ -524,8 +524,7 @@ namespace Sepiabox.Catalog.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("text")
                         .HasColumnName("value");
 
                     b.HasKey("Key")

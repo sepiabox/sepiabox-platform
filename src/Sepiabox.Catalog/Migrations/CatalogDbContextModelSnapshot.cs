@@ -521,8 +521,7 @@ namespace Sepiabox.Catalog.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("text")
                         .HasColumnName("value");
 
                     b.HasKey("Key")

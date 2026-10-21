@@ -43,7 +43,7 @@ public sealed class ManifestStore(IManifestValidator validator)
         return await WriteAsync(
             manifests,
             incoming.Id,
-            stored => stored is null ? ManifestMerge.Canonical(incoming) : ManifestMerge.Merge(stored, incoming),
+            (stored, _) => stored is null ? ManifestMerge.Canonical(incoming) : ManifestMerge.Merge(stored, incoming),
             cancellationToken);
     }
 
@@ -55,12 +55,17 @@ public sealed class ManifestStore(IManifestValidator validator)
     public Task<ManifestWriteResult> WriteMergedAsync(BlobContainerClient manifests, FacesErasure erasure, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(erasure);
-        return WriteAsync(manifests, erasure.Id, stored => stored is null ? null : ManifestMerge.EraseFaces(stored, erasure.ErasedAt), cancellationToken);
+        return WriteAsync(
+            manifests,
+            erasure.Id,
+            (stored, written) => stored is null ? null : ManifestMerge.EraseFaces(stored, erasure.ErasedAt, written),
+            cancellationToken);
     }
 
-    // merge gets the stored manifest (null when there is none) and returns what to store, or null to write nothing.
+    // merge gets the stored manifest (null when there is none) and when its blob was written, and returns what to store,
+    // or null to write nothing.
     private async Task<ManifestWriteResult> WriteAsync(
-        BlobContainerClient manifests, string id, Func<Manifest?, Manifest?> merge, CancellationToken cancellationToken)
+        BlobContainerClient manifests, string id, Func<Manifest?, DateTimeOffset?, Manifest?> merge, CancellationToken cancellationToken)
     {
         var blob = manifests.GetBlobClient(BlobLayout.ManifestBlobName(id));
 
@@ -74,11 +79,13 @@ public sealed class ManifestStore(IManifestValidator validator)
 
             string? storedJson = null;
             ETag? storedETag = null;
+            DateTimeOffset? storedAt = null;
             try
             {
                 var current = (await blob.DownloadContentAsync(cancellationToken)).Value;
                 storedJson = current.Content.ToString();
                 storedETag = current.Details.ETag;
+                storedAt = current.Details.LastModified;
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
@@ -98,7 +105,7 @@ public sealed class ManifestStore(IManifestValidator validator)
                 }
             }
 
-            if (merge(stored) is not { } merged)
+            if (merge(stored, storedAt) is not { } merged)
             {
                 return new ManifestWriteResult(ManifestWriteStatus.Unchanged);
             }

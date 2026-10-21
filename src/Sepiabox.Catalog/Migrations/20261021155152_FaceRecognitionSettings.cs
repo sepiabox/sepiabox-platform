@@ -56,7 +56,7 @@ namespace Sepiabox.Catalog.Migrations
                 columns: table => new
                 {
                     key = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    value = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false)
+                    value = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {

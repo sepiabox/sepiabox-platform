@@ -74,6 +74,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
             () => UploadCommand.RunAsync(Options(), Service, null, new ManifestValidator(), CancellationToken.None, clock));
 
         Assert.Contains(minutes > 0 ? "10 minutes ahead of the storage server's" : "10 minutes behind the storage server's", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Settings → Time & language → Date & time → Sync now", refused.Message, StringComparison.Ordinal);
         Assert.Empty(await BlobNames(BlobLayout.ManifestsContainer));
         Assert.Empty(await BlobNames(BlobLayout.OriginalsContainer));
     }

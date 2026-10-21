@@ -110,6 +110,17 @@ public sealed class FacesErasureMergeTests
     }
 
     [Fact]
+    public void Erases_faces_said_to_be_found_after_their_blob_was_written()
+    {
+        // The computer's clock was a day ahead when it ran process: the time is after the erase, but cannot be trusted.
+        var stored = WithFaces("HD da Ana", ErasedAt.AddDays(1));
+
+        Assert.Empty(ManifestMerge.EraseFaces(stored, ErasedAt, writtenAt: ErasedAt.AddMinutes(-30)).Faces);
+        Assert.Single(ManifestMerge.EraseFaces(stored, ErasedAt, writtenAt: ErasedAt.AddDays(1).AddMinutes(-4)).Faces);
+        Assert.Single(ManifestMerge.EraseFaces(stored, ErasedAt).Faces);
+    }
+
+    [Fact]
     public void Erases_faces_found_at_the_very_moment_of_the_erase()
     {
         var stored = WithFaces("HD da Ana", ErasedAt);
