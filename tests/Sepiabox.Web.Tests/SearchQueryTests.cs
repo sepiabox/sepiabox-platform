@@ -217,6 +217,14 @@ public sealed class SearchQueryTests
         """{"aggregate": {"count": "assets", "order": "asc"}}""",
     ];
 
+    [Fact]
+    public void Refuses_a_top_without_a_grouping()
+    {
+        Assert.False(SearchQueryJson.TryParse("""{"aggregate": {"count": "assets", "top": 3}}""", out _, out var error));
+        Assert.Contains("aggregate.top needs aggregate.groupBy", error, StringComparison.Ordinal);
+        Assert.True(SearchQueryJson.TryParse("""{"aggregate": {"count": "assets", "groupBy": "city", "top": 3}}""", out _, out _));
+    }
+
     [Theory]
     [MemberData(nameof(SchemaExamples))]
     public void Agrees_with_docs_schemas_search_v1_json_on_what_is_valid(string json)

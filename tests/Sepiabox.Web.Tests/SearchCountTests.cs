@@ -74,11 +74,12 @@ public sealed class SearchCountTests(CatalogFixture catalog)
     }
 
     [Theory]
-    [InlineData(SearchGroupBy.Month, "12=3,1=1,(none)=1")]
+    // Without top: years, months and kinds complete and in order; cities by size, "no place" last among equals.
+    [InlineData(SearchGroupBy.Month, "1=1,12=3,(none)=1")]
     [InlineData(SearchGroupBy.Kind, "photo=3,video=2")]
     [InlineData(SearchGroupBy.City, "Lisbon=2,Porto=2,(none)=1")]
-    [InlineData(SearchGroupBy.Year, "2019=2,2018=1,2020=1,(none)=1")]
-    public async Task Groups_by_month_kind_city_and_year_with_none_last_among_equals(string groupBy, string expected)
+    [InlineData(SearchGroupBy.Year, "2018=1,2019=2,2020=1,(none)=1")]
+    public async Task Groups_by_month_kind_city_and_year_with_none_last(string groupBy, string expected)
     {
         await using var db = await CatalogWithAsync(
             Asset(1, new DateTime(2019, 12, 24), city: "Lisbon"),
@@ -91,6 +92,45 @@ public sealed class SearchCountTests(CatalogFixture catalog)
 
         Assert.Equal(5, count!.Total);
         Assert.Equal(expected, string.Join(',', count.Groups.Select(g => $"{g.Key ?? "(none)"}={g.Count}")));
+    }
+
+    [Fact]
+    public async Task Returns_all_12_months_in_order_when_grouping_by_month_without_top()
+    {
+        // More photos in later months, so an order by size would differ from the months' order.
+        var n = 0;
+        var assets = Enumerable.Range(1, 12).SelectMany(month => Enumerable.Range(0, month).Select(_ => Asset(++n, new DateTime(2020, month, 1)))).ToArray();
+        await using var db = await CatalogWithAsync(assets);
+
+        var count = await CountAsync(db, new SearchFilters { Years = [2020] }, new SearchAggregate { GroupBy = SearchGroupBy.Month });
+
+        Assert.Equal(78, count!.Total);
+        Assert.Equal(Enumerable.Range(1, 12).Select(m => new CountGroup(m.ToString(System.Globalization.CultureInfo.InvariantCulture), m)), count.Groups);
+    }
+
+    [Fact]
+    public async Task Returns_every_year_in_order_when_grouping_by_year_without_top()
+    {
+        var assets = Enumerable.Range(0, 15).Select(i => Asset(i + 1, new DateTime(2005 + i, 6, 1))).ToArray();
+        await using var db = await CatalogWithAsync(assets);
+
+        var count = await CountAsync(db, new SearchFilters(), new SearchAggregate { GroupBy = SearchGroupBy.Year });
+
+        Assert.Equal(Enumerable.Range(2005, 15).Select(y => y.ToString(System.Globalization.CultureInfo.InvariantCulture)), count!.Groups.Select(g => g.Key));
+    }
+
+    [Fact]
+    public async Task Keeps_the_largest_10_cities_without_top_and_the_largest_n_with_it()
+    {
+        var n = 0;
+        var assets = Enumerable.Range(1, 12).SelectMany(c => Enumerable.Range(0, c).Select(_ => Asset(++n, new DateTime(2020, 1, 1), city: $"City {c:D2}"))).ToArray();
+        await using var db = await CatalogWithAsync(assets);
+
+        var cities = await CountAsync(db, new SearchFilters(), new SearchAggregate { GroupBy = SearchGroupBy.City });
+        var topTwo = await CountAsync(db, new SearchFilters(), new SearchAggregate { GroupBy = SearchGroupBy.City, Top = 2 });
+
+        Assert.Equal(Enumerable.Range(3, 10).Reverse().Select(c => $"City {c:D2}"), cities!.Groups.Select(g => g.Key));
+        Assert.Equal(["City 12", "City 11"], topTwo!.Groups.Select(g => g.Key));
     }
 
     [Fact]

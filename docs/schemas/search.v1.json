@@ -110,7 +110,7 @@
           "description": "Absent or null for the total only. year and month are the capture year and the month of the year (1-12) on the camera's wall clock; an asset with several sources counts in each source.",
           "enum": ["year", "month", "kind", "city", "source", null]
         },
-        "top": { "description": "At most this many groups, the largest first; 10 when absent.", "type": "integer", "minimum": 1, "maximum": 100 }
+        "top": { "description": "Only with groupBy: the largest this many groups. Absent: every year, month or kind group in its own order, or the largest 10 cities or sources.", "type": "integer", "minimum": 1, "maximum": 100 }
       }
     }
   }

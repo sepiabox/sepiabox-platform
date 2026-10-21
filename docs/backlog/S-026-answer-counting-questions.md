@@ -8,7 +8,7 @@
 "How many videos did we take in 2019?" ("Quantos vídeos fizemos em 2019?") and "In which year did we take the most photos in Lisbon?" ("Em que ano tiramos mais fotos em Lisboa?") ask for numbers, not grids. In the MVP, counts use the MVP filters (dates, places, kinds, sources, description); counting occasions (S-024) and grouping by person (S-021) extend this later.
 
 ### Scope
-- DSL: `aggregate: { "count": "assets", "groupBy": null | "year" | "month" | "kind" | "city" | "source", "top": 10 }`, designed so later stories add `count: "events"` and other `groupBy` values.
+- DSL: `aggregate: { "count": "assets", "groupBy": null | "year" | "month" | "kind" | "city" | "source", "top": 10 }`, designed so later stories add `count: "events"` and other `groupBy` values. `top` only with `groupBy`, for "the most" or "the N ... with the most": without it, a grouping by year, month or kind returns every group in its order (chronological; photos, videos), and one by city or source the largest 10 (D-075).
 - The executor returns `{ total, groups: [{ key, count }] }`.
 - Counts are exact only over exact filters: a count with a `visual` (description) filter is not shown as a number in the MVP; the card says the question needs a description search and shows the results instead. (A later count with `visual` must use `SimilarityMode.Exact` and a calibrated threshold, D-070.) When the query has a time filter, the card also says "N items have no date" (undated items cannot match a date) with a link to them.
 - UI: answer card (big number + a sentence in the current culture, e.g. "312 videos in 2019" / "312 vídeos em 2019", with plural forms from the resources) or a ranking table, with a link to the items.
@@ -47,7 +47,7 @@ In a session that has `SEPIABOX_ANTHROPIC_API_KEY` and Docker, on this story's b
    export SEPIABOX_TEST_POSTGRES_IMAGE=sepiabox-postgres-local:test
    ```
 3. `SEPIABOX_RECORD_GOLDEN=1 dotnet test tests/Sepiabox.Web.Tests --filter "Category=LiveApi" --logger "console;verbosity=detailed"`. It must report `Passed: 1` (`Skipped: 1` means the key is not set); its output ends with `Model claude-haiku-5-5, <date>: <passed>/88 passed, <n> after a retry (<ids>).` and lists every miss. It rewrites every response of `questions.recorded.json` and removes its `placeholders`.
-4. `dotnet test tests/Sepiabox.Web.Tests --filter "FullyQualifiedName~GoldenQuestions"` (the CI replay, now on the recorded responses) must pass.
+4. `dotnet test tests/Sepiabox.Web.Tests --filter "FullyQualifiedName~GoldenQuestions&Category!=LiveApi"` (the CI replay, now on the recorded responses) must pass.
 5. `git add tests/Sepiabox.Web.Tests/TestData/questions.recorded.json`, tick the last acceptance criterion, set S-026 to `done` in `docs/backlog/README.md`, commit, push, and put the run's line from step 3 in the PR description.
 
 If the run fails, keep the story `blocked`, do not commit the recorded file, and report the misses: they are prompt or golden-set fixes for a review iteration.

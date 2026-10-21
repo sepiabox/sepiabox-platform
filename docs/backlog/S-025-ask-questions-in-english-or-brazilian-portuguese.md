@@ -49,7 +49,7 @@ People type the way they speak, in English first ("videos from Lisbon in Decembe
      export SEPIABOX_TEST_POSTGRES_IMAGE=sepiabox-postgres-local:test
      ```
   3. `SEPIABOX_RECORD_GOLDEN=1 dotnet test tests/Sepiabox.Web.Tests --filter "Category=LiveApi" --logger "console;verbosity=detailed"`. It must report `Passed: 1` (`Skipped: 1` means the key is not set); its output ends with `Model claude-haiku-5-5, <date>: <passed>/64 passed, <n> after a retry (<ids>).` and lists every miss.
-  4. `dotnet test tests/Sepiabox.Web.Tests --filter "FullyQualifiedName~GoldenQuestions"` (the CI replay, now on the recorded responses) must pass.
+  4. `dotnet test tests/Sepiabox.Web.Tests --filter "FullyQualifiedName~GoldenQuestions&Category!=LiveApi"` (the CI replay, now on the recorded responses) must pass.
   5. `git add tests/Sepiabox.Web.Tests/TestData/questions.recorded.json`, tick the last two acceptance criteria, set S-025 to `done` in `docs/backlog/README.md`, commit, push, and put the run's line from step 3 in the PR description.
   If the run fails, keep the story `blocked`, do not commit the recorded file, and report the misses: they are prompt or golden-set fixes for a review iteration.
 - Cost: Anthropic bills the API separately from Azure, outside D-008's €50/month Azure ceiling, under its own spend limit (D-052).

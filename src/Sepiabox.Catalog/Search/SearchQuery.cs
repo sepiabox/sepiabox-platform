@@ -43,7 +43,10 @@ public sealed record SearchAggregate
     /// <summary>Absent or null for the total only; otherwise one of <see cref="SearchGroupBy"/>.</summary>
     public string? GroupBy { get; init; }
 
-    /// <summary>At most this many groups, the largest first; 10 when absent.</summary>
+    /// <summary>
+    /// The largest this many groups. Absent: every group by year, month or kind, in their order (at most
+    /// <see cref="MaxTop"/>), or the largest <see cref="DefaultTop"/> by city or source. Only with <see cref="GroupBy"/>.
+    /// </summary>
     public int? Top { get; init; }
 
     public int EffectiveTop => Top ?? DefaultTop;
@@ -282,6 +285,11 @@ public static class SearchQueryJson
             if (aggregate.GroupBy is { } groupBy && !SearchGroupBy.All.Contains(groupBy))
             {
                 return $"aggregate.groupBy must be one of {string.Join(", ", SearchGroupBy.All.Select(g => $"'{g}'"))}.";
+            }
+
+            if (aggregate.Top is not null && aggregate.GroupBy is null)
+            {
+                return "aggregate.top needs aggregate.groupBy: a total has no groups to keep.";
             }
 
             if (aggregate.Top is < 1 or > SearchAggregate.MaxTop)

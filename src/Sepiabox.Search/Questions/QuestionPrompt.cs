@@ -67,7 +67,7 @@ public static class QuestionPrompt
           "aggregate": {                             only for a question that asks how many
             "count": "assets",                       always "assets": photos and videos
             "groupBy": "year",                       per year | month | kind | city | source; leave out for one total
-            "top": 3                                 only with groupBy: how many groups (the largest)
+            "top": 3                                 only for "the most" or "top N": the largest N groups
           }
         }
 
@@ -107,7 +107,8 @@ public static class QuestionPrompt
         - A question that asks how many ("how many", "quantas", "quantos", "number of", "número de") gets the filters it
           would get as a request to show the items, plus "aggregate": {"count": "assets"}; no sort and no limit. "How many
           per year", "por ano", "in each city", "em cada cidade" adds "groupBy". "Which year/city/source has the most",
-          "em que ano ... mais" is that groupBy with "top": 1; "the N years/cities with the most" is "top": N. "How many
+          "em que ano ... mais" is that groupBy with "top": 1; "the N years/cities with the most" is "top": N; otherwise
+          never set top ("per month" gets every month, in order). "How many
           photos and how many videos" is "groupBy": "kind". A count with no filter at all is {"filters": {}, "aggregate": ...}.
         - People's names, events, occasions and personal places ("home", "grandma's house") have no filter yet: leave
           them out and keep the rest of the question.

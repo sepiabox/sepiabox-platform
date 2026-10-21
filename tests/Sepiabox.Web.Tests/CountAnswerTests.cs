@@ -34,7 +34,7 @@ public sealed class CountAnswerTests : LocalizedContext
 
     [Theory]
     [InlineData(Cultures.English, "3 items have no date and cannot match the dates asked.")]
-    [InlineData(Cultures.BrazilianPortuguese, "3 itens não têm data e não podem corresponder às datas pedidas.")]
+    [InlineData(Cultures.BrazilianPortuguese, "3 itens não têm data e por isso ficam fora desta contagem.")]
     public void Says_how_many_items_have_no_date_next_to_the_number_with_a_link(string culture, string note)
     {
         using var language = Cultures.Use(culture);
@@ -61,6 +61,18 @@ public sealed class CountAnswerTests : LocalizedContext
         Assert.Equal(place, CountAnswers.Sentence(Query(new SearchFilters { Places = new PlaceFilter { Cities = ["Lisbon"] } }), 1, text));
         Assert.Equal(month, CountAnswers.Sentence(Query(new SearchFilters { Kinds = ["video"], Years = [2019], Months = [12] }), 12, text));
         Assert.Equal(onThisDay, CountAnswers.Sentence(Query(new SearchFilters { Kinds = ["photo"], OnThisDay = new OnThisDayFilter() }), 2, text));
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "3,214 items without a date", "12 photos in HD da Ana")]
+    [InlineData(Cultures.BrazilianPortuguese, "3.214 itens sem data", "12 fotos em HD da Ana")]
+    public void Says_without_a_date_and_the_source_when_the_count_has_them(string culture, string undated, string source)
+    {
+        using var language = Cultures.Use(culture);
+        var text = Cultures.Text();
+
+        Assert.Equal(undated, CountAnswers.Sentence(Query(new SearchFilters { UndatedOnly = true }), 3214, text));
+        Assert.Equal(source, CountAnswers.Sentence(Query(new SearchFilters { Kinds = ["photo"], Sources = ["HD da Ana"] }), 12, text));
     }
 
     [Theory]

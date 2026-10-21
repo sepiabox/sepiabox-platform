@@ -99,6 +99,16 @@ public static class CountAnswers
             about += text["Count_InPlace", city];
         }
 
+        if (filters.Sources is [var source])
+        {
+            about += text["Count_InPlace", source];
+        }
+
+        if (filters.UndatedOnly)
+        {
+            about += text["Count_WithoutDate"];
+        }
+
         if (filters.OnThisDay is { } onThisDay)
         {
             about += onThisDay.YearsAgo is { } ago ? text["Count_YearsAgo", ago] : text["Count_OnThisDay"];

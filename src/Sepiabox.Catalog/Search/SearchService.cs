@@ -169,8 +169,19 @@ public sealed class SearchService(
         int? undated = query.Filters.HasTimeFilter
             ? await Filter(db.Assets.AsNoTracking(), query.Filters.UndatedInstead).CountAsync(cancellationToken)
             : null;
-        return new CountResult(total, [.. Largest(groups).Take(aggregate.EffectiveTop)], undated);
+        // Without top, a grouping by year, month or kind is complete and in its own order ("photos per month" is 12
+        // months, in order); by city or source, the largest 10. With top, the largest that many (D-075).
+        var ordered = aggregate.Top is null && aggregate.GroupBy is SearchGroupBy.Year or SearchGroupBy.Month or SearchGroupBy.Kind
+            ? InKeyOrder(groups).Take(SearchAggregate.MaxTop)
+            : Largest(groups).Take(aggregate.EffectiveTop);
+        return new CountResult(total, [.. ordered], undated);
     }
+
+    // Years and months in order, photos before videos, "no date" last.
+    private static IEnumerable<CountGroup> InKeyOrder(IEnumerable<CountGroup> groups) =>
+        groups.OrderBy(g => g.Key is null)
+            .ThenBy(g => int.TryParse(g.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : int.MaxValue)
+            .ThenBy(g => g.Key, StringComparer.Ordinal);
 
     private static List<CountGroup> Numbered<T>(IEnumerable<T> groups, Func<T, (int? Key, int Count)> select) =>
         [.. groups.Select(select).Select(g => new CountGroup(g.Key?.ToString(CultureInfo.InvariantCulture), g.Count))];
