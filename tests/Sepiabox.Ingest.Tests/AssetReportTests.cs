@@ -182,6 +182,21 @@ public sealed class AssetReportTests
     }
 
     [Fact]
+    public void Leaves_no_temporary_file_when_the_json_cannot_replace_its_target()
+    {
+        using var work = new TempFolder();
+        using var elsewhere = new TempFolder();
+        Write(work, Asset(1, MediaKind.Photo, 2019, "a.jpg"));
+        // A folder where the file should go: the temporary file is written, the move fails.
+        var json = Path.Combine(elsewhere.Path, "report.json");
+        Directory.CreateDirectory(json);
+
+        Assert.Equal(1, ReportCommand.Run(new ReportOptions([work.Path], json), TextWriter.Null, TextWriter.Null));
+
+        Assert.False(File.Exists(json + ".tmp"));
+    }
+
+    [Fact]
     public void Replaces_an_earlier_json_whole_and_leaves_no_temporary_file()
     {
         using var work = new TempFolder();
@@ -243,6 +258,8 @@ public sealed class AssetReportTests
         Array.Empty<string>(),
         new[] { "--json", "r.json" },
         new[] { "w1", "--json" },
+        new[] { "w1", "--json", "" },
+        new[] { "w1", "--json", "  " },
         new[] { "w1", "--json", "a.json", "--json", "b.json" },
         new[] { "w1", "--fast" },
     };

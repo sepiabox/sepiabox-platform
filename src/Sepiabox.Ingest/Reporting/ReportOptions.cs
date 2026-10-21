@@ -19,7 +19,7 @@ public sealed record ReportOptions(IReadOnlyList<string> WorkFolders, string? Js
             switch (args[i])
             {
                 case "--json":
-                    if (i + 1 >= args.Count || jsonPath is not null)
+                    if (i + 1 >= args.Count || jsonPath is not null || string.IsNullOrWhiteSpace(args[i + 1]))
                     {
                         error = "--json needs one file path.";
                         return false;

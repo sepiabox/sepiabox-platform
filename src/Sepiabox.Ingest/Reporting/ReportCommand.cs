@@ -39,6 +39,7 @@ public static class ReportCommand
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
+                DeleteQuietly(temporary);
                 errors.WriteLine($"Could not write {path}: {ex.Message}");
                 return 1;
             }
@@ -48,6 +49,18 @@ public static class ReportCommand
         }
 
         return report.Problems.Count == 0 ? 0 : 1;
+    }
+
+    private static void DeleteQuietly(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The write already failed; that is the error to report.
+        }
     }
 
     private static bool IsInside(string file, string folder)
