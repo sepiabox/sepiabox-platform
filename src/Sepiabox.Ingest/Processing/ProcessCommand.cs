@@ -34,7 +34,8 @@ public sealed record ProcessResult(
     IReadOnlyList<LeftOutFile>? LeftOut = null,
     int FacesChecked = 0,
     int FacesFound = 0,
-    IReadOnlyList<EmbeddingProblem>? FaceProblems = null)
+    IReadOnlyList<EmbeddingProblem>? FaceProblems = null,
+    IReadOnlyList<ScanProblem>? WithoutSound = null)
 {
     public IReadOnlyList<EmbeddingProblem> EmbeddingProblems { get; init; } = EmbeddingProblems ?? [];
 
@@ -44,6 +45,9 @@ public sealed record ProcessResult(
     public IReadOnlyList<LeftOutFile> LeftOut { get; init; } = LeftOut ?? [];
 
     public int NotVideo => LeftOut.Count;
+
+    /// <summary>Videos whose 720p version was made without sound in this run, with FFmpeg's message (D-084).</summary>
+    public IReadOnlyList<ScanProblem> WithoutSound { get; init; } = WithoutSound ?? [];
 }
 
 /// <summary>
@@ -558,7 +562,12 @@ public static class ProcessCommand
                 }
 
                 var described = Describe(manifestFolder, sha256, kind, file, source, clock, content);
-                var (manifest, status, derivativeProblem, noVideo) = AddDerivatives(output, file, described, content, video, stop.Token);
+                var (manifest, status, derivativeProblem, noVideo, withoutSound) = AddDerivatives(output, file, described, content, video, stop.Token);
+                if (withoutSound is not null)
+                {
+                    o.WithoutSound.Add(new ScanProblem(file.Path, withoutSound));
+                }
+
                 if (status == FileStatus.NotVideo)
                 {
                     // Not catalogued. A run without FFmpeg may have written a manifest for it already: this path
@@ -622,6 +631,7 @@ public static class ProcessCommand
         var embeddingProblems = outcomes.SelectMany(o => o.EmbeddingProblems).ToList();
         var faceProblems = outcomes.SelectMany(o => o.FaceProblems).ToList();
         var leftOut = outcomes.SelectMany(o => o.LeftOut).ToList();
+        var withoutSound = outcomes.SelectMany(o => o.WithoutSound).ToList();
         int processed = outcomes.Sum(o => o.Processed), skipped = outcomes.Sum(o => o.Skipped), pending = outcomes.Sum(o => o.Pending);
         int embedded = outcomes.Sum(o => o.Embedded), facesChecked = outcomes.Sum(o => o.FacesChecked), facesFound = outcomes.Sum(o => o.FacesFound);
         // By asset, so the same photo in two folders counts once.
@@ -671,7 +681,7 @@ public static class ProcessCommand
         var warning = warnings.Count == 0 ? null : string.Join(Environment.NewLine, warnings);
         return new ProcessResult(
             root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems, leftOut,
-            facesChecked, facesFound, faceProblems);
+            facesChecked, facesFound, faceProblems, withoutSound);
     }
 
     /// <summary>
@@ -743,15 +753,15 @@ public static class ProcessCommand
     }
 
     /// <summary>
-    /// Generates the derivatives the manifest is still missing. Problem is set when the status is Failed, and
-    /// NoVideo when it is NotVideo.
+    /// Generates the derivatives the manifest is still missing. Problem is set when the status is Failed, NoVideo
+    /// when it is NotVideo, and WithoutSound when a video's 720p version was made without sound (D-084).
     /// </summary>
-    private static (Manifest Manifest, FileStatus Status, string? Problem, NoVideoReason? NoVideo) AddDerivatives(
+    private static (Manifest Manifest, FileStatus Status, string? Problem, NoVideoReason? NoVideo, string? WithoutSound) AddDerivatives(
         string output, FoundFile file, Manifest manifest, byte[]? content, IVideoProcessor? video, CancellationToken cancellationToken)
     {
         if (manifest.Derivatives.Count > 0)
         {
-            return (manifest, FileStatus.Done, null, null);
+            return (manifest, FileStatus.Done, null, null, null);
         }
 
         var folder = DerivativeFolder(manifest.Id);
@@ -770,22 +780,22 @@ public static class ProcessCommand
                     thumbnails = ThumbnailGenerator.Generate(stream, output, folder, ThumbnailGenerator.PhotoSizes);
                 }
 
-                return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null, null);
+                return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null, null, null);
             }
 
             // Checked without FFmpeg, whose module support depends on how it was built.
             if (TrackerModule.IsTrackerModule(file.Path))
             {
-                return (manifest, FileStatus.NotVideo, null, NoVideoReason.TrackerModule);
+                return (manifest, FileStatus.NotVideo, null, NoVideoReason.TrackerModule, null);
             }
 
             if (video is null)
             {
-                return (manifest, FileStatus.Pending, null, null);
+                return (manifest, FileStatus.Pending, null, null, null);
             }
 
             var probe = video.Probe(file.Path, cancellationToken);
-            var derivatives = video.Generate(file.Path, output, folder, probe, cancellationToken);
+            var generated = video.Generate(file.Path, output, folder, probe, cancellationToken);
             return (manifest with
             {
                 Width = probe.Width,
@@ -793,17 +803,17 @@ public static class ProcessCommand
                 DurationSeconds = probe.DurationSeconds ?? manifest.DurationSeconds,
                 // MetadataExtractor misses some containers' positions (an MP4's loci box), which ffprobe reads.
                 Location = manifest.Location ?? probe.Location,
-                Derivatives = derivatives,
-            }, FileStatus.Done, null, null);
+                Derivatives = generated.Derivatives,
+            }, FileStatus.Done, null, null, generated.WithoutSoundBecause);
         }
         catch (NoVideoStreamException ex)
         {
-            return (manifest, FileStatus.NotVideo, null, ex.Reason);
+            return (manifest, FileStatus.NotVideo, null, ex.Reason, null);
         }
         catch (Exception ex) when (ex is MagickException or VideoProcessingException)
         {
             var what = manifest.Kind == MediaKind.Photo ? "thumbnails" : "the poster and 720p version";
-            return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}", null);
+            return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}", null, null);
         }
     }
 
@@ -902,6 +912,8 @@ public static class ProcessCommand
         public List<EmbeddingProblem> FaceProblems { get; } = [];
 
         public List<LeftOutFile> LeftOut { get; } = [];
+
+        public List<ScanProblem> WithoutSound { get; } = [];
 
         public HashSet<string> WithoutPreviewForEmbedding { get; } = new(StringComparer.Ordinal);
 
