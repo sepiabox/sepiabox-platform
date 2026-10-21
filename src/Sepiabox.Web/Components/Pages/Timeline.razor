@@ -44,8 +44,17 @@ else if (_describeUnavailable)
 {
     <p class="empty" role="alert">@Text["Search_DescribeUnavailable"] <a href="./">@Text["Filter_Clear"]</a></p>
 }
+else if (_filtered && _count is { } count)
+{
+    <AnswerCard Query="_query!" Count="count" />
+}
 else if (_filtered)
 {
+    @if (_query?.Aggregate is not null)
+    {
+        @* A count with a description is not a number in the MVP (D-070, D-075): its results instead. *@
+        <p class="empty" role="status">@Text["Count_NeedsDescription"]</p>
+    }
     @if (_results is null)
     {
         <p class="muted">@Text["Timeline_Loading"]</p>
@@ -154,6 +163,7 @@ else
 
     private TimelinePage? _page;
     private SearchPage? _results;
+    private CountResult? _count;
     private FilterOptions? _options;
     private SearchQuery? _query;
     private bool _filtered;
@@ -179,7 +189,7 @@ else
     private async Task AskAsync()
     {
         var result = await Questions.AskAsync(Question, HttpContext?.User ?? new ClaimsPrincipal(), HttpContext?.RequestAborted ?? default);
-        if (result is { Outcome: AskOutcome.Answered, Query: { } query } && !query.Filters.IsEmpty)
+        if (result is { Outcome: AskOutcome.Answered, Query: { } query } && (!query.Filters.IsEmpty || query.Aggregate is not null))
         {
             // Post, redirect, get: the search has its own address, and reloading it does not ask again.
             var asked = QuestionPrompt.Clean(Question) ?? string.Empty;
@@ -209,13 +219,13 @@ else
             return;
         }
 
-        (_page, _results, _query, _filtered, _invalid, _describeUnavailable) = (null, null, null, false, false, false);
+        (_page, _results, _query, _filtered, _invalid, _describeUnavailable, _count) = (null, null, null, false, false, false, null);
         if (!string.IsNullOrEmpty(SearchQueryParameter))
         {
             if (SearchQueryJson.TryDecode(SearchQueryParameter, out var query, out _))
             {
                 _query = query;
-                _filtered = !query.Filters.IsEmpty;
+                _filtered = !query.Filters.IsEmpty || query.Aggregate is not null;
             }
             else
             {
@@ -228,7 +238,12 @@ else
         {
             try
             {
-                _results = await Library.SearchAsync(_query!);
+                // A count answers with a number (S-026); one with a description, with its results.
+                _count = _query!.Aggregate is null ? null : await Library.CountAsync(_query);
+                if (_count is null)
+                {
+                    _results = await Library.SearchAsync(_query);
+                }
             }
             catch (VisualSearchUnavailableException)
             {

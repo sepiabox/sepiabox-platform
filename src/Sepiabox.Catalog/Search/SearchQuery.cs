@@ -22,6 +22,48 @@ public sealed record SearchQuery
     public string Sort { get; init; } = SearchSort.CapturedAtDesc;
 
     public int Limit { get; init; } = DefaultLimit;
+
+    /// <summary>
+    /// Count instead of listing (S-026, D-075): the matching assets' total, or groups of them. <see cref="Sort"/> and
+    /// <see cref="Limit"/> do not apply to a count.
+    /// </summary>
+    public SearchAggregate? Aggregate { get; init; }
+}
+
+/// <summary>What to count and how to group it (S-026). Later stories add <c>count: "events"</c> and other groupings.</summary>
+public sealed record SearchAggregate
+{
+    public const int DefaultTop = 10;
+    public const int MaxTop = 100;
+
+    /// <summary><see cref="SearchCount.Assets"/>: photos and videos, one per content (D-014). Required.</summary>
+    [JsonRequired]
+    public string Count { get; init; } = SearchCount.Assets;
+
+    /// <summary>Absent or null for the total only; otherwise one of <see cref="SearchGroupBy"/>.</summary>
+    public string? GroupBy { get; init; }
+
+    /// <summary>At most this many groups, the largest first; 10 when absent.</summary>
+    public int? Top { get; init; }
+
+    public int EffectiveTop => Top ?? DefaultTop;
+}
+
+public static class SearchCount
+{
+    public const string Assets = "assets";
+}
+
+/// <summary>The groupings of a count: the capture year and month (month of the year, 1-12), the kind, the city, the source.</summary>
+public static class SearchGroupBy
+{
+    public const string Year = "year";
+    public const string Month = "month";
+    public const string Kind = "kind";
+    public const string City = "city";
+    public const string Source = "source";
+
+    public static readonly IReadOnlyList<string> All = [Year, Month, Kind, City, Source];
 }
 
 public static class SearchSort
@@ -68,8 +110,13 @@ public sealed record SearchFilters
     [JsonIgnore]
     public bool IsEmpty => this == new SearchFilters();
 
+    /// <summary>True when a date, year, month or "on this day" filter is set: undated assets cannot match it.</summary>
     [JsonIgnore]
-    internal bool HasTimeFilter => DateFrom is not null || DateTo is not null || Years is not null || Months is not null || OnThisDay is not null;
+    public bool HasTimeFilter => DateFrom is not null || DateTo is not null || Years is not null || Months is not null || OnThisDay is not null;
+
+    /// <summary>The same filters without the time ones, and only undated assets: what a time filter leaves out.</summary>
+    [JsonIgnore]
+    public SearchFilters UndatedInstead => this with { DateFrom = null, DateTo = null, Years = null, Months = null, OnThisDay = null, UndatedOnly = true };
 
     // Records compare lists by reference; equality here is by content, so a parsed query equals the one written.
     public bool Equals(SearchFilters? other) =>
@@ -223,6 +270,24 @@ public static class SearchQueryJson
         if (query.Limit is < 1 or > SearchQuery.MaxLimit)
         {
             return string.Create(CultureInfo.InvariantCulture, $"limit must be between 1 and {SearchQuery.MaxLimit}.");
+        }
+
+        if (query.Aggregate is { } aggregate)
+        {
+            if (aggregate.Count != SearchCount.Assets)
+            {
+                return $"aggregate.count must be '{SearchCount.Assets}'.";
+            }
+
+            if (aggregate.GroupBy is { } groupBy && !SearchGroupBy.All.Contains(groupBy))
+            {
+                return $"aggregate.groupBy must be one of {string.Join(", ", SearchGroupBy.All.Select(g => $"'{g}'"))}.";
+            }
+
+            if (aggregate.Top is < 1 or > SearchAggregate.MaxTop)
+            {
+                return string.Create(CultureInfo.InvariantCulture, $"aggregate.top must be between 1 and {SearchAggregate.MaxTop}.");
+            }
         }
 
         var filters = query.Filters ?? throw new InvalidOperationException("filters is required.");

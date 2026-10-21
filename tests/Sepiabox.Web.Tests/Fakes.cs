@@ -65,6 +65,18 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
     /// <summary>Thrown by every search, such as the text model being unavailable.</summary>
     public Exception? SearchFailure { get; init; }
 
+    /// <summary>What every count returns; null, as for a count with a description.</summary>
+    public Sepiabox.Catalog.Search.CountResult? CountResult { get; init; }
+
+    /// <summary>The counts asked for, in order.</summary>
+    public List<Sepiabox.Catalog.Search.SearchQuery> Counts { get; } = [];
+
+    public Task<Sepiabox.Catalog.Search.CountResult?> CountAsync(Sepiabox.Catalog.Search.SearchQuery query, CancellationToken cancellationToken = default)
+    {
+        Counts.Add(query);
+        return Task.FromResult(CountResult);
+    }
+
     public Task<SearchPage> SearchAsync(Sepiabox.Catalog.Search.SearchQuery query, CancellationToken cancellationToken = default)
     {
         Searches.Add(query);

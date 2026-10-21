@@ -37,7 +37,7 @@ public sealed class AnthropicQuestionTranslatorTests
         var format = request["output_config"]!["format"]!;
         Assert.Equal("json_schema", format["type"]!.GetValue<string>());
         Assert.Equal(
-            ["filters", "limit", "sort"],
+            ["aggregate", "filters", "limit", "sort"],
             format["schema"]!["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
         // The stable prompt is cached; the variable part is in the user message after it.
         var system = Assert.Single(request["system"]!.AsArray());
@@ -323,6 +323,10 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.Contains(examples, e => e["filters"]!["places"] is not null && (e["filters"]!["years"] ?? e["filters"]!["dateFrom"]) is not null);
         Assert.Contains(examples, e => e["filters"]!["sources"] is not null && e["filters"]!["years"] is not null);
         Assert.DoesNotContain(examples, e => e["filters"]!["undatedOnly"] is JsonValue v && !v.GetValue<bool>());
+        // Counting, with a total, a grouping and a top, in both languages (S-026).
+        Assert.Contains(examples, e => e["aggregate"] is { } a && a["groupBy"] is null);
+        Assert.Contains(examples, e => e["aggregate"]?["top"] is not null);
+        Assert.Contains(examples, e => e["aggregate"]?["groupBy"]?.GetValue<string>() == "month");
     }
 
     [Fact]

@@ -31,6 +31,15 @@ public sealed record SearchHit(
 /// <summary>The assets found, up to the query's limit; <see cref="HasMore"/> says whether more matched.</summary>
 public sealed record SearchResult(IReadOnlyList<SearchHit> Hits, bool HasMore);
 
+/// <summary>One group of a count: its key (a year, a month 1-12, a kind, a city or a source; null for none) and its size.</summary>
+public sealed record CountGroup(string? Key, int Count);
+
+/// <summary>
+/// A count (S-026): the matching assets' total, the largest groups when grouped, and, for a query with a time filter,
+/// how many assets match the other filters but have no date (they cannot match a time filter).
+/// </summary>
+public sealed record CountResult(int Total, IReadOnlyList<CountGroup> Groups, int? Undated);
+
 /// <summary>
 /// Runs the search DSL (S-013) with plain EF Core (D-051): every value goes to the database as a parameter, never
 /// into SQL text. Filters are combined with AND; the values of one list with OR.
@@ -124,6 +133,54 @@ public sealed class SearchService(
         await transaction.CommitAsync(cancellationToken);
         return rows;
     }
+
+    /// <summary>
+    /// Counts what the query matches (S-026, D-075), exactly, with plain EF Core grouping (D-051). Null for a query with
+    /// a description: its matches depend on a similarity threshold, so no number is given in the MVP (D-070).
+    /// </summary>
+    public async Task<CountResult?> CountAsync(SearchQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        if (query.Filters.Visual is not null)
+        {
+            return null;
+        }
+
+        var assets = Filtered(query);
+        var total = await assets.CountAsync(cancellationToken);
+        var aggregate = query.Aggregate ?? new SearchAggregate();
+        var groups = aggregate.GroupBy switch
+        {
+            null => [],
+            SearchGroupBy.Year => Numbered(await assets.GroupBy(a => a.CapturedAt == null ? (int?)null : a.CapturedAt.Value.Year)
+                .Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken), g => (g.Key, g.Count)),
+            SearchGroupBy.Month => Numbered(await assets.GroupBy(a => a.CapturedAt == null ? (int?)null : a.CapturedAt.Value.Month)
+                .Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken), g => (g.Key, g.Count)),
+            SearchGroupBy.Kind => [.. (await assets.GroupBy(a => a.Kind).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                .Select(g => new CountGroup(g.Key, g.Count))],
+            SearchGroupBy.City => [.. (await assets.GroupBy(a => a.PlaceCity).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                .Select(g => new CountGroup(g.Key, g.Count))],
+            // An asset found on two drives counts once in each; twice on one drive, once.
+            SearchGroupBy.Source => [.. (await assets.SelectMany(a => a.Sources.Select(s => new { a.Id, s.Name })).Distinct()
+                .GroupBy(x => x.Name).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                .Select(g => new CountGroup(g.Key, g.Count))],
+            _ => throw new InvalidOperationException($"Unknown groupBy '{aggregate.GroupBy}'."),
+        };
+        int? undated = query.Filters.HasTimeFilter
+            ? await Filter(db.Assets.AsNoTracking(), query.Filters.UndatedInstead).CountAsync(cancellationToken)
+            : null;
+        return new CountResult(total, [.. Largest(groups).Take(aggregate.EffectiveTop)], undated);
+    }
+
+    private static List<CountGroup> Numbered<T>(IEnumerable<T> groups, Func<T, (int? Key, int Count)> select) =>
+        [.. groups.Select(select).Select(g => new CountGroup(g.Key?.ToString(CultureInfo.InvariantCulture), g.Count))];
+
+    // Largest first; between equal counts, years and months in order and names alphabetically, "none" last.
+    private static IEnumerable<CountGroup> Largest(IEnumerable<CountGroup> groups) =>
+        groups.OrderByDescending(g => g.Count)
+            .ThenBy(g => g.Key is null)
+            .ThenBy(g => int.TryParse(g.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : int.MaxValue)
+            .ThenBy(g => g.Key, StringComparer.Ordinal);
 
     /// <summary>Today's date where the family is, for "on this day".</summary>
     public DateOnly Today() =>

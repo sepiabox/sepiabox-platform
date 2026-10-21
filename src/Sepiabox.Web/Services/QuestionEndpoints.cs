@@ -17,7 +17,13 @@ public static class QuestionEndpoints
 
     public sealed record Request(string? Question);
 
-    public sealed record Response(JsonElement Query, IReadOnlyList<SearchEndpoints.Item> Items, bool HasMore);
+    /// <summary>The query the question became, and its answer as <c>/api/search</c> gives it (items, or a count, S-026).</summary>
+    public sealed record Response(
+        JsonElement Query,
+        IReadOnlyList<SearchEndpoints.Item> Items,
+        bool HasMore,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] SearchEndpoints.CountBody? Count = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? NotCounted = null);
 
     public static IEndpointRouteBuilder MapQuestionEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -88,15 +94,16 @@ public static class QuestionEndpoints
             dsl = document.RootElement.Clone();
         }
 
-        if (query.Filters.IsEmpty)
+        // "How many items do we have?" counts the whole library; a list of everything is not an answer.
+        if (query.Filters.IsEmpty && query.Aggregate is null)
         {
             return Problem(text["Ask_NothingToFilter"], StatusCodes.Status422UnprocessableEntity, dsl);
         }
 
-        SearchPage page;
+        SearchEndpoints.Response answer;
         try
         {
-            page = await library.SearchAsync(query, http.RequestAborted);
+            answer = await SearchEndpoints.AnswerAsync(query, library, text, http.RequestAborted);
         }
         catch (VisualSearchUnavailableException)
         {
@@ -105,8 +112,7 @@ public static class QuestionEndpoints
             return Problem(text["Search_DescribeUnavailable"], StatusCodes.Status503ServiceUnavailable, dsl, "filters.visual");
         }
 
-        return Results.Ok(new Response(
-            dsl, [.. page.Items.Select(i => new SearchEndpoints.Item(i.Id, i.Kind, i.CapturedAt, i.DurationSeconds, i.HasThumbnail))], page.HasMore));
+        return Results.Ok(new Response(dsl, answer.Items, answer.HasMore, answer.Count, answer.NotCounted));
     }
 
     private static IResult Problem(string detail, int status, JsonElement? query = null, string? field = null)
