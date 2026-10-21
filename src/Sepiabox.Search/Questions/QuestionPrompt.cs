@@ -22,6 +22,12 @@ public static class QuestionPrompt
     /// </summary>
     public const int MaxOptionalProperties = 24;
 
+    /// <summary>
+    /// The most properties with a union type (<c>anyOf</c>, or a type array such as <c>["string", "null"]</c>) the output
+    /// format may have: structured outputs' "Schema complexity limits" allow 16 across all schemas of a request (D-085).
+    /// </summary>
+    public const int MaxUnionTypeProperties = 16;
+
     // What structured outputs supports (Anthropic's JSON schema limitations): anything else in the DSL schema must be
     // either a constraint the DSL's own validation checks afterwards (dropped here) or a reason to fail at once, never
     // a keyword sent to the API, which would refuse every question.
@@ -270,22 +276,16 @@ public static class QuestionPrompt
     public static string WithoutNulls(string answer)
     {
         ArgumentNullException.ThrowIfNull(answer);
-        JsonNode? node;
         try
         {
-            node = JsonNode.Parse(answer);
+            return JsonNode.Parse(answer) is JsonObject node && RemoveNulls(node) ? node.ToJsonString() : answer;
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
+            // Not JSON, or an object with a repeated key (which JsonObject refuses as it is read): passed on as written,
+            // so the validator refuses it and the model is asked again with the reason.
             return answer;
         }
-
-        if (node is not JsonObject)
-        {
-            return answer;
-        }
-
-        return RemoveNulls(node) ? node.ToJsonString() : answer;
     }
 
     // True when something was removed.
@@ -371,21 +371,32 @@ public static class QuestionPrompt
         }
     }
 
+    // The property's schema allowing null as well: null added to its type and to its enum; a const, or a schema without a
+    // type, wrapped in anyOf with {"type": "null"}, since neither can take null otherwise.
     private static JsonObject Nullable(JsonObject schema)
     {
+        if (schema["const"] is not null || schema["type"] is null)
+        {
+            // A copy: the schema still belongs to its properties map, and a node has one parent.
+            return new JsonObject { ["anyOf"] = new JsonArray(schema.DeepClone(), new JsonObject { ["type"] = "null" }) };
+        }
+
         switch (schema["type"])
         {
             case JsonValue type:
                 schema["type"] = new JsonArray(type.GetValue<string>(), "null");
-                return schema;
+                break;
             case JsonArray types when !types.Any(t => t?.GetValue<string>() == "null"):
                 types.Add("null");
-                return schema;
-            case JsonArray:
-                return schema;
-            default:
-                return new JsonObject { ["anyOf"] = new JsonArray(schema, new JsonObject { ["type"] = "null" }) };
+                break;
         }
+
+        if (schema["enum"] is JsonArray values && !values.Any(v => v is null))
+        {
+            values.Add(null);
+        }
+
+        return schema;
     }
 
     // A schema object is checked keyword by keyword; a "properties" or "$defs" map is walked without checking its keys,
