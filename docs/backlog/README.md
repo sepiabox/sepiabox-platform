@@ -168,21 +168,21 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 **Demonstrable increment:** Existing storage code goes through the project's own interfaces and originals upload through them, with behaviour unchanged ([D-051](../decisions.md)); a Google Drive account can be connected; blurry photos and bursts are listed and photos similar to a selected region are found.
 
-**Tracks** ([D-090](../decisions.md)): the two tracks run in parallel, one implementer each, and no story of one depends on a story of the other. **Track A:** portability refactor of the storage code (ingest, worker, web storage layer). **Track B:** Google Drive connection, blurry photos and bursts, region search (web and search). Stories are listed in the order of each track.
+**Tracks** ([D-090](../decisions.md)): the two tracks run in parallel, one implementer each, and no story of one depends on a story of the other. **Track A:** portability refactor of the storage code (ingest, worker, web storage layer), then region search on the new interface (it reads previews through that same storage code). **Track B:** Google Drive connection, blurry photos and bursts. Stories are listed in the order of each track.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status | Track |
 |---|---|---|---|---|---|---|---|
 | S-050 | [Put blob storage behind the project's own interface](S-050-put-blob-storage-behind-the-project-s.md) | Foundation | S-007, S-008, S-009, S-033 | High | M | `todo` | A |
 | S-051 | [Upload originals through the storage interface](S-051-upload-originals-through-the-storage-interface.md) | Foundation | S-050, S-063 | Medium | M | `todo` | A |
+| S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `todo` | A |
 | S-037 | [Connect a Google Drive account](S-037-connect-a-google-drive-account.md) | Cloud sources | S-010 | Medium | M | `todo` | B |
 | S-027 | [Find blurry photos and bursts](S-027-find-blurry-photos-and-bursts.md) | Organization | S-005, S-013 | Low | M | `todo` | B |
-| S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `todo` | B |
 
 ### Sprint 15 — Cloud processing, source deletion, export and Takeout
 
-**Demonstrable increment:** Files that arrive in the cloud are processed by the worker; everything that came only from one named source can be deleted safely; the full export as a zip works. In parallel, `sepiabox-ingest process --export <kind>` reads an export's dates, places, captions and albums, the app shows captions and albums and filters by album ([D-053](../decisions.md)), and a Google Takeout export shows up in the timeline with its metadata, in either mode.
+**Demonstrable increment:** Files that arrive in the cloud are processed by the worker; everything that came only from one named source can be deleted safely; the full export as a zip works. In parallel, `sepiabox-ingest process --export <kind>` reads an export's dates, places, captions and albums ([D-053](../decisions.md)), and a Google Takeout export shows up in the timeline with its metadata, in either mode.
 
-**Tracks** ([D-090](../decisions.md)): the two tracks run in parallel, one implementer each, and no story of one depends on a story of the other. **Track A:** worker, catalog and export (cloud processing, deletion, full export). **Track B:** export metadata in `sepiabox-ingest`, the Takeout importer and the album view. Stories are listed in the order of each track.
+**Tracks** ([D-090](../decisions.md)): the two tracks run in parallel, one implementer each, and no story of one depends on a story of the other. **Track A:** worker, catalog and export (cloud processing, deletion, full export). **Track B:** export metadata in `sepiabox-ingest` and the Takeout importer. Stories are listed in the order of each track.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status | Track |
 |---|---|---|---|---|---|---|---|
@@ -191,18 +191,18 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010, S-051, S-063 | Medium | S | `todo` | A |
 | S-045 | [Read metadata from photo exports during process](S-045-read-metadata-from-photo-exports-during-process.md) | Import exports | S-004, S-043 | Medium | M | `todo` | B |
 | S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
-| S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` | B |
 
 ### Sprint 16 — Drive and OneDrive sync, Apple Photos and social exports
 
-**Demonstrable increment:** Photos from Google Drive and OneDrive show up in the timeline; an Apple Photos / iCloud export, and Instagram and Facebook downloads, show up in the timeline with their captions and albums, in either mode.
+**Demonstrable increment:** Photos from Google Drive and OneDrive show up in the timeline, and the app shows captions and albums and filters by album; an Apple Photos / iCloud export, and Instagram and Facebook downloads, show up in the timeline with their captions and albums, in either mode.
 
-**Tracks** ([D-090](../decisions.md)): the two tracks run in parallel, one implementer each, and no story of one depends on a story of the other. **Track A:** cloud source sync (worker and web). **Track B:** export importers in `sepiabox-ingest`. Stories are listed in the order of each track.
+**Tracks** ([D-090](../decisions.md)): the two tracks run in parallel, one implementer each, and no story of one depends on a story of the other. **Track A:** cloud source sync (worker and web), then the caption and album view (after the export and source deletion of Sprint 15, which it extends). **Track B:** export importers in `sepiabox-ingest`. Stories are listed in the order of each track.
 
 | Story | Title | Epic | Depends on | Priority | Size | Status | Track |
 |---|---|---|---|---|---|---|---|
 | S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036, S-064 | Medium | M | `todo` | A |
 | S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010, S-064 | Medium | M | `todo` | A |
+| S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` | A |
 | S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
 | S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
 | S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `todo` | B |
