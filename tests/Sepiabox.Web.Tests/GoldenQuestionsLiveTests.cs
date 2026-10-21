@@ -10,7 +10,7 @@ namespace Sepiabox.Web.Tests;
 /// <summary>
 /// The golden set against the real Anthropic API (S-025, D-054): every question, in both languages, must mean its
 /// expected query, which is checked by running both on the fixture catalog. Never in CI (Category=LiveApi); run
-/// with <c>ANTHROPIC_API_KEY</c> before the story is done. <c>SEPIABOX_RECORD_GOLDEN=1</c> also refreshes the
+/// with <c>SEPIABOX_ANTHROPIC_API_KEY</c> before the story is done. <c>SEPIABOX_RECORD_GOLDEN=1</c> also refreshes the
 /// recorded responses CI replays.
 /// </summary>
 [Collection(CatalogGroup.Name)]
@@ -109,12 +109,13 @@ public sealed class GoldenQuestionsLiveTests(CatalogFixture catalog, ITestOutput
 }
 
 /// <summary>
-/// A test that calls the real Anthropic API: skipped without <c>ANTHROPIC_API_KEY</c> (the agents' environment has
+/// A test that calls the real Anthropic API: skipped without <c>SEPIABOX_ANTHROPIC_API_KEY</c> (the agents' environment has
 /// it, CI never runs Category=LiveApi). The key is only ever sent to the API, never written anywhere.
 /// </summary>
 internal sealed class LiveApiFactAttribute : FactAttribute
 {
-    public const string KeyVariable = "ANTHROPIC_API_KEY";
+    // Not ANTHROPIC_API_KEY: Claude Code reserves that name for its own sign-in and keeps it out of the agents' sessions.
+    public const string KeyVariable = "SEPIABOX_ANTHROPIC_API_KEY";
 
     public LiveApiFactAttribute()
     {

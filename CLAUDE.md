@@ -73,7 +73,7 @@ New projects follow the names in `docs/architecture.md` and are added to `Sepiab
 - xUnit with `Assert`; bUnit for Blazor components; Testcontainers for PostgreSQL and Azurite.
 - Test names follow `Does_something_when_condition`.
 - Tests that need Docker, FFmpeg or ML models are marked `[Trait("Category", "Integration")]`; CI runs them on Linux only.
-- Tests that call a paid external API (the Anthropic golden run, S-025) are marked `[Trait("Category", "LiveApi")]`, skip without `ANTHROPIC_API_KEY` and never run in CI.
+- Tests that call a paid external API (the Anthropic golden run, S-025) are marked `[Trait("Category", "LiveApi")]`, skip without `SEPIABOX_ANTHROPIC_API_KEY` and never run in CI.
 - Small binary fixtures live in `tests/<Project>.Tests/TestData/`; generate larger media in the test instead of committing it.
 
 ## Backlog workflow
