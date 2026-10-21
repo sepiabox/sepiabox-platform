@@ -1,6 +1,7 @@
 using Sepiabox.Ingest;
 using Sepiabox.Ingest.Models;
 using Sepiabox.Ingest.Processing;
+using Sepiabox.Ingest.Reporting;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Search.Models;
@@ -15,6 +16,9 @@ const string Usage = """
       upload <dir> --destination local|azure
                                      Send a process work folder to Blob Storage: originals, then
                                      thumbnails and videos, then manifests. Running again resumes.
+      report <dir>... [--json <file>]
+                                     Count the unique photos and videos in process work folders, per
+                                     year and kind, as the catalog will. Give the folders in upload order.
       models download                Download the ML models (CLIP, faces) and check their SHA-256.
 
     Options for scan:
@@ -37,6 +41,9 @@ const string Usage = """
                             Windows, ~/.sepiabox/models elsewhere (or SEPIABOX_MODELS).
       --only <names>        Only these models, separated by commas (the web's image needs only
                             clip-vit-b32-text,clip-bpe-vocab).
+
+    Options for report:
+      --json <file>         Also write the numbers as JSON (docs/schemas/ingest-report.v1.json).
 
     Options for upload:
       --destination local   Azurite, or the connection string in SEPIABOX_BLOB_CONNECTION.
@@ -64,6 +71,7 @@ try
         "scan" => await RunScan(args[1..], cancellation.Token),
         "process" => RunProcess(args[1..], cancellation.Token),
         "upload" => await RunUpload(args[1..], cancellation.Token),
+        "report" => RunReport(args[1..], cancellation.Token),
         "models" => await RunModels(args[1..], cancellation.Token),
         _ => UsageError($"Unknown command '{args[0]}'."),
     };
@@ -160,6 +168,11 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
 
     return result.Problems.Count == 0 ? 0 : 1;
 }
+
+static int RunReport(string[] args, CancellationToken cancellationToken) =>
+    ReportOptions.TryParse(args, out var options, out var error)
+        ? ReportCommand.Run(options, Console.Out, Console.Error, cancellationToken)
+        : UsageError(error);
 
 static async Task<int> RunModels(string[] args, CancellationToken cancellationToken)
 {
