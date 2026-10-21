@@ -191,6 +191,18 @@ public sealed class PhotoDetailTests : LocalizedContext
         Assert.Empty(page.FindAll("p.similar a"));
     }
 
+    [Theory]
+    [InlineData(Cultures.English, "This video has not been analysed yet.")]
+    [InlineData(Cultures.BrazilianPortuguese, "Este vídeo ainda não foi analisado.")]
+    public void Says_the_video_has_not_been_analysed_yet_when_a_video_has_no_embedding(string culture, string expected)
+    {
+        using var language = Cultures.Use(culture);
+
+        var page = RenderDetail(Details.Video(Ids.Of(2)));
+
+        Assert.Equal(expected, page.Find("p.similar").TextContent);
+    }
+
     [Fact]
     public void Says_the_photo_has_not_been_analysed_yet_in_brazilian_portuguese_when_it_has_no_embedding()
     {

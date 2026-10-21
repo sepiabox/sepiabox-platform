@@ -25,16 +25,19 @@ public sealed class VisualSearchUnavailableException(string message, Exception? 
 
 /// <summary>
 /// A search for photos similar to an asset (S-017, D-086) cannot run: the asset has no stored CLIP embedding yet
-/// (<see cref="Exists"/>), or the catalog has no such asset.
+/// (<see cref="Exists"/>, and <see cref="Kind"/> says whether it is a photo or a video), or the catalog has no such asset.
 /// </summary>
-public sealed class AssetNotAnalysedException(string assetId, bool exists)
-    : Exception(exists
+public sealed class AssetNotAnalysedException(string assetId, string? kind)
+    : Exception(kind is not null
         ? $"Asset {assetId} has not been analysed yet: it has no embedding to compare with."
         : $"No asset has the id {assetId}.")
 {
     public string AssetId { get; } = assetId;
 
-    public bool Exists { get; } = exists;
+    /// <summary>The asset's kind (<c>photo</c> or <c>video</c>); null when the catalog has no such asset.</summary>
+    public string? Kind { get; } = kind;
+
+    public bool Exists => Kind is not null;
 }
 
 /// <summary>
@@ -113,7 +116,8 @@ public static class PgvectorSimilarity
             .FirstOrDefaultAsync(cancellationToken);
         return stored is not null
             ? stored.ToArray()
-            : throw new AssetNotAnalysedException(assetId, await db.Assets.AnyAsync(a => a.Id == assetId, cancellationToken));
+            : throw new AssetNotAnalysedException(
+                assetId, await db.Assets.Where(a => a.Id == assetId).Select(a => a.Kind).FirstOrDefaultAsync(cancellationToken));
     }
 
     /// <summary>The first pgvector version with iterative index scans (<c>hnsw.iterative_scan</c>).</summary>

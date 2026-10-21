@@ -109,7 +109,65 @@ public sealed class SimilarPhotosTests(CatalogFixture catalog)
         Assert.Equal(System.Net.HttpStatusCode.Conflict, apiUnanalysed.StatusCode);
     }
 
+    [Theory]
+    [InlineData(SimilarityMode.Ranking)]
+    [InlineData(SimilarityMode.Exact)]
+    public async Task Orders_equally_similar_assets_by_id(SimilarityMode mode)
+    {
+        await using var db = await LibraryAsync();
+        // Two copies of one picture's embedding, the later id stored first.
+        var tied = FakeQueryEmbedder.Axis(1, 0.7f, 2, 0.714f);
+        await AddAsync(db, 9, 2020, "photo", tied);
+        await AddAsync(db, 8, 2020, "photo", tied);
+
+        var result = await new SearchService(db, s_clock).ExecuteAsync(Similar(1), mode);
+
+        var ids = result.Hits.Select(h => h.Id).ToList();
+        Assert.Equal(ids.IndexOf(Ids.Of(8)) + 1, ids.IndexOf(Ids.Of(9)));
+        Assert.Equal(result.Hits[ids.IndexOf(Ids.Of(8))].Score, result.Hits[ids.IndexOf(Ids.Of(9))].Score);
+        Assert.Equal([Ids.Of(2), Ids.Of(3), Ids.Of(8), Ids.Of(9), Ids.Of(4), Ids.Of(5), Ids.Of(6)], ids);
+    }
+
+    [Fact]
+    public async Task Finds_a_video_among_a_photo_s_similar_ones_and_the_photos_similar_to_the_video()
+    {
+        string connection;
+        await using (var db = await LibraryAsync())
+        {
+            // A video whose poster is nearly photo 1.
+            await AddAsync(db, 10, 2020, "video", FakeQueryEmbedder.Axis(1, 0.99f, 2, 0.14f));
+            var service = new SearchService(db, s_clock);
+
+            var likePhoto = await service.ExecuteAsync(Similar(1));
+            var likeVideo = await service.ExecuteAsync(Similar(10));
+
+            Assert.Equal(Ids.Of(10), likePhoto.Hits[0].Id);
+            Assert.Equal("video", likePhoto.Hits[0].Kind);
+            Assert.Equal(Ids.Of(1), likeVideo.Hits[0].Id);
+            Assert.DoesNotContain(Ids.Of(10), likeVideo.Hits.Select(h => h.Id));
+            connection = catalog.ConnectionStringFor(db);
+        }
+
+        await using var web = new WebFactory(connection);
+        using var http = web.CreateSignedInClient();
+
+        var detail = await http.GetStringAsync(new Uri($"/photos/{Ids.Of(10)}", UriKind.Relative));
+        var html = await http.GetStringAsync(new Uri(SearchLinks.Timeline(Similar(10))[1..], UriKind.Relative));
+
+        Assert.Contains($"href=\"{SearchLinks.Timeline(Similar(10))}\">Similar</a>", detail, StringComparison.Ordinal);
+        Assert.Contains("Most similar to the photo", html, StringComparison.Ordinal);
+        Assert.True(html.IndexOf($"photos/{Ids.Of(1)}", StringComparison.Ordinal) < html.IndexOf($"photos/{Ids.Of(2)}", StringComparison.Ordinal));
+    }
+
     private static SearchQuery Similar(int n) => SearchLinks.Similar(Ids.Of(n));
+
+    private static async Task AddAsync(CatalogDbContext db, int n, int year, string kind, float[] vector)
+    {
+        db.Assets.Add(Asset(n, year, kind));
+        db.AssetEmbeddings.Add(Embedding(n, vector));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+    }
 
     // Photo 1 (2020) on axis 1; 2 (2020) about 0.95 similar to it; 3 (2019) about 0.9; 4 (2020) 0.6; 5 (2020)
     // orthogonal; 6 (2020) opposite; 7 (2020) without an embedding.
@@ -133,11 +191,11 @@ public sealed class SimilarPhotosTests(CatalogFixture catalog)
     private static AssetEmbedding Embedding(int n, float[] vector) =>
         new() { AssetId = Ids.Of(n), Model = PgvectorSimilarity.ModelKey, Embedding = new Pgvector.Vector(vector) };
 
-    private static Asset Asset(int n, int year) => new()
+    private static Asset Asset(int n, int year, string kind = "photo") => new()
     {
         Id = Ids.Of(n),
-        Kind = "photo",
-        ContentType = "image/jpeg",
+        Kind = kind,
+        ContentType = kind == "video" ? "video/mp4" : "image/jpeg",
         SizeBytes = 1000,
         CapturedAt = new DateTime(year, 1, n),
         ImportedAt = DateTimeOffset.UnixEpoch,

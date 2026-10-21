@@ -119,7 +119,8 @@ public static class SearchChips
             chips.Add(new SearchChip(label, query with { Aggregate = null }));
         }
 
-        if (query.Aggregate is null && query.Limit != SearchQuery.DefaultLimit)
+        // A search for similar ones raises its limit with "Show more" (S-017): how many it shows is not a filter to remove.
+        if (query.Aggregate is null && query.Limit != SearchQuery.DefaultLimit && f.SimilarTo is null)
         {
             chips.Add(new SearchChip(text["Chip_Limit", query.Limit], query with { Limit = SearchQuery.DefaultLimit }));
         }

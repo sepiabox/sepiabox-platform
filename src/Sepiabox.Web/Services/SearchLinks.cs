@@ -14,6 +14,9 @@ public sealed record FilterFields(int? Year, int? Month, string? Kind, string? C
 
     /// <summary>The family's places chosen (S-014): taken in any of them.</summary>
     public IReadOnlyList<string> SavedPlaces { get; init; } = [];
+
+    /// <summary>The photo whose similar ones are shown (S-017), which the bar keeps while it narrows them.</summary>
+    public SimilarToFilter? SimilarTo { get; init; }
 }
 
 /// <summary>
@@ -23,6 +26,11 @@ public sealed record FilterFields(int? Year, int? Month, string? Kind, string? C
 public static class SearchLinks
 {
     public const string QueryParameter = "q";
+
+    /// <summary>The bar's hidden fields for a search for similar ones (S-017): the asset's id, and the number asked for.</summary>
+    public const string SimilarParameter = "similar";
+
+    public const string SimilarLimitParameter = "similar-limit";
 
     /// <summary>The "On this day" shortcut: today's day and month in every earlier year.</summary>
     public static SearchQuery OnThisDay { get; } = new() { Filters = new SearchFilters { OnThisDay = new OnThisDayFilter() } };
@@ -48,10 +56,17 @@ public static class SearchLinks
         string? text = null,
         IEnumerable<string?>? people = null,
         bool me = false,
-        IEnumerable<string?>? savedPlaces = null)
+        IEnumerable<string?>? savedPlaces = null,
+        string? similar = null,
+        string? similarLimit = null)
     {
         var names = Names(people);
         var places = Names(savedPlaces);
+        var visual = Description(text) is { } t ? new VisualFilter { Text = t } : null;
+        // A description typed in the bar is a new search by similarity, which replaces the one to a photo (D-086).
+        var similarTo = visual is null && similar is not null && AssetIds.IsValid(similar)
+            ? new SimilarToFilter { AssetId = similar, Limit = Number(similarLimit, 1, SearchQuery.MaxLimit) }
+            : null;
         var filters = new SearchFilters
         {
             Years = Number(year, SearchQueryJson.MinYear, SearchQueryJson.MaxYear) is { } y ? [y] : null,
@@ -59,11 +74,15 @@ public static class SearchLinks
             Kinds = kind is AssetKinds.Photo or AssetKinds.Video ? [kind] : null,
             Places = Name(city) is { } c ? new PlaceFilter { Cities = [c] } : null,
             Sources = Name(source) is { } s ? [s] : null,
-            Visual = Description(text) is { } t ? new VisualFilter { Text = t } : null,
+            Visual = visual,
+            SimilarTo = similarTo,
             People = names.Count > 0 || me ? new PeopleFilter { All = names.Count > 0 ? names : null, IncludeMe = me } : null,
             SavedPlaces = places.Count > 0 ? places : null,
         };
-        return new SearchQuery { Filters = filters };
+        // As many as were asked for: the query's own limit would otherwise cap a raised one (SearchQuery.ResultLimit).
+        return similarTo?.Limit is > SearchQuery.DefaultLimit and var raised
+            ? new SearchQuery { Filters = filters, Limit = raised }
+            : new SearchQuery { Filters = filters };
     }
 
     private static List<string> Names(IEnumerable<string?>? values) =>
@@ -84,6 +103,7 @@ public static class SearchLinks
             People = filters?.People?.All ?? [],
             Me = filters?.People?.IncludeMe ?? false,
             SavedPlaces = filters?.SavedPlaces ?? [],
+            SimilarTo = filters?.SimilarTo,
         };
     }
 

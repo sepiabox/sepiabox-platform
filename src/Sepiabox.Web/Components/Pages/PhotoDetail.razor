@@ -66,7 +66,7 @@
             }
             else
             {
-                <p class="similar muted" role="status">@Text["Similar_NotAnalysed"]</p>
+                <p class="similar muted" role="status">@SimilarSearch.NotAnalysed(_asset.Kind, Text)</p>
             }
 
             @if (_asset.People.Count > 0)

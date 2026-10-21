@@ -23,7 +23,7 @@
 - pgvector `<=>` operator.
 
 ### Status
-- `doing` (2026-10-21): implemented and tested (D-086). The translator's output format and prompt are unchanged, so no golden recording is needed.
+- `done` (2026-10-21): implemented and tested (D-086), with the review's fixes ("Show more", the filter bar keeping the search, the video's own message). The translator's output format and prompt are unchanged, so no golden recording is needed.
 
 ### Expected tests
 - Integration (PostgreSQL): order, exclusion, filters. bUnit: message when there is no embedding.

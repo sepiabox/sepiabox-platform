@@ -841,7 +841,13 @@
     <value>Esta foto ainda não foi analisada.</value>
   </data>
   <data name="Similar_UnknownAsset" xml:space="preserve">
-    <value>Esta foto não está na biblioteca.</value>
+    <value>Esta foto ou este vídeo não está na biblioteca.</value>
+  </data>
+  <data name="Similar_NotAnalysedVideo" xml:space="preserve">
+    <value>Este vídeo ainda não foi analisado.</value>
+  </data>
+  <data name="Similar_ShowMore" xml:space="preserve">
+    <value>Mostrar mais</value>
   </data>
   <data name="Search_MostSimilarToPhoto" xml:space="preserve">
     <value>Mais parecidas com a foto</value>

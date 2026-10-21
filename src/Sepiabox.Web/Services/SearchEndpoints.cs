@@ -96,7 +96,7 @@ public static class SearchEndpoints
         {
             // Similar photos to one without an embedding yet (409: it may have one later), or to no asset (404) (S-017).
             return Results.Problem(
-                detail: missing.Exists ? text["Similar_NotAnalysed"] : text["Similar_UnknownAsset"],
+                detail: SimilarSearch.Message(missing, text),
                 statusCode: missing.Exists ? StatusCodes.Status409Conflict : StatusCodes.Status404NotFound,
                 extensions: new Dictionary<string, object?> { ["field"] = "filters.similarTo.assetId" });
         }

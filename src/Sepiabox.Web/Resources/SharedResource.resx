@@ -890,7 +890,15 @@
     <comment>Shown instead of "Similar" while the photo has no CLIP embedding, and on a search for photos similar to it.</comment>
   </data>
   <data name="Similar_UnknownAsset" xml:space="preserve">
-    <value>This photo is not in the library.</value>
+    <value>This photo or video is not in the library.</value>
+  </data>
+  <data name="Similar_NotAnalysedVideo" xml:space="preserve">
+    <value>This video has not been analysed yet.</value>
+    <comment>The same for a video, whose embedding comes from its poster.</comment>
+  </data>
+  <data name="Similar_ShowMore" xml:space="preserve">
+    <value>Show more</value>
+    <comment>Link under the photos most similar to one photo: the same search with more results.</comment>
   </data>
   <data name="Search_MostSimilarToPhoto" xml:space="preserve">
     <value>Most similar to the photo</value>

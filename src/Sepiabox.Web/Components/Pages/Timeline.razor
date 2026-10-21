@@ -79,7 +79,15 @@ else if (_filtered)
                 }
             </ul>
         </section>
-        @if (_results.HasMore)
+        @if (_query.Filters.SimilarTo is not null)
+        {
+            @* With no threshold there are always more similar ones: offer the next step, up to the DSL's maximum (D-086). *@
+            @if (_results.HasMore && SimilarSearch.More(_query) is { } more)
+            {
+                <p class="more"><a href="@SearchLinks.Timeline(more)">@Text["Similar_ShowMore"]</a></p>
+            }
+        }
+        else if (_results.HasMore)
         {
             <p class="more muted">@Text["Search_FirstResults", _results.Items.Count]</p>
         }
@@ -162,6 +170,13 @@ else
     [SupplyParameterFromQuery(Name = "place")]
     public string[]? SavedPlaces { get; set; }
 
+    /// <summary>The photo whose similar ones the bar narrows (S-017), carried in a hidden field.</summary>
+    [SupplyParameterFromQuery(Name = SearchLinks.SimilarParameter)]
+    public string? Similar { get; set; }
+
+    [SupplyParameterFromQuery(Name = SearchLinks.SimilarLimitParameter)]
+    public string? SimilarLimit { get; set; }
+
     /// <summary>The question the search came from, shown again in the box (S-025).</summary>
     [SupplyParameterFromQuery(Name = AskedParameter)]
     public string? Asked { get; set; }
@@ -230,7 +245,8 @@ else
         if (FilterSubmitted is not null)
         {
             // One address per set of filters, so the URL can be copied and opened again.
-            Navigation.NavigateTo(SearchLinks.Timeline(SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces)));
+            Navigation.NavigateTo(SearchLinks.Timeline(
+                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit)));
             return;
         }
 
@@ -279,7 +295,7 @@ else
             catch (AssetNotAnalysedException missing)
             {
                 // "Similar" on a photo without an embedding yet, or a link to one no longer in the catalog (S-017).
-                _peopleMessage = missing.Exists ? Text["Similar_NotAnalysed"] : Text["Similar_UnknownAsset"];
+                _peopleMessage = SimilarSearch.Message(missing, Text);
             }
         }
         else if (!_invalid)
