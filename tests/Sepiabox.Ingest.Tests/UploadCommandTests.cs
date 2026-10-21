@@ -434,6 +434,70 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Assert.True(uploaded.Embeddings.ContainsKey(ClipImageEmbedder.ModelKey));
     }
 
+    [Fact]
+    public async Task A_720p_version_made_again_with_sound_replaces_the_one_an_earlier_build_made_without_sound()
+    {
+        var ffmpeg = Pipeline.Video.FfmpegTools.Find(null) ?? throw new InvalidOperationException("This test needs ffmpeg and ffprobe on the PATH.");
+        var folder = Path.GetDirectoryName(ffmpeg.Ffmpeg)!;
+        var clip = Path.Combine(_drive.Path, "MOV002.MOD");
+        RunTool(ffmpeg.Ffmpeg,
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc=duration=1:size=176x144:rate=25",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1:sample_rate=48000",
+            "-c:v", "mpeg2video", "-c:a", "ac3", "-b:a", "192k", "-f", "vob", clip,
+        ]);
+        var options = new ProcessOptions(_drive.Path, _work.Path, "HD da Ana", FfmpegFolder: folder, ModelFolder: TestModels.None);
+        ProcessCommand.Run(options);
+        var manifest = ManifestJson.Deserialize(File.ReadAllText(Assert.Single(Directory.GetFiles(Path.Combine(_work.Path, "manifests"), "*.json"))));
+        var proxy = Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p");
+        // As a build with D-084 left it after an NVENC failure, and uploaded it: no sound, its sound not recorded.
+        var local = Path.Combine(_work.Path, proxy.Path);
+        RunTool(ffmpeg.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", local, "-map", "0:v", "-c", "copy", "-f", "mp4", local + ".silent"]);
+        File.Move(local + ".silent", local, overwrite: true);
+        using (var state = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(_work.Path, "state.db")};Pooling=False"))
+        {
+            state.Open();
+            using var forget = state.CreateCommand();
+            forget.CommandText = "UPDATE files SET sound = NULL";
+            forget.ExecuteNonQuery();
+        }
+
+        Assert.Empty((await Upload()).Problems);
+        var blob = Service.GetBlobContainerClient(BlobLayout.DerivativesContainer).GetBlobClient(BlobLayout.DerivativeBlobName(manifest.Id, proxy));
+        var silentSize = (await blob.GetPropertiesAsync()).Value.ContentLength;
+
+        var redone = ProcessCommand.Run(options);
+        var second = await Upload();
+
+        Assert.Equal(1, redone.Processed);
+        Assert.Empty(second.Problems);
+        var stored = Path.Combine(_work.Path, "stored-proxy.mp4");
+        await blob.DownloadToAsync(stored);
+        Assert.NotEqual(silentSize, new FileInfo(stored).Length);
+        Assert.Equal("audio", RunTool(ffmpeg.Ffprobe, ["-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_type", "-of", "csv=p=0", stored]).Trim());
+        // The manifest in storage still names the same 720p version, now with sound.
+        var manifestBlob = Service.GetBlobContainerClient(BlobLayout.ManifestsContainer).GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id));
+        var merged = ManifestJson.Deserialize((await manifestBlob.DownloadContentAsync()).Value.Content.ToString());
+        Assert.Equal(proxy, Assert.Single(merged.Derivatives, d => d.Name == "proxy-720p"));
+    }
+
+    private static string RunTool(string tool, IEnumerable<string> arguments)
+    {
+        var info = new System.Diagnostics.ProcessStartInfo(tool) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var argument in arguments)
+        {
+            info.ArgumentList.Add(argument);
+        }
+
+        using var process = System.Diagnostics.Process.Start(info)!;
+        var errors = process.StandardError.ReadToEndAsync();
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"{Path.GetFileName(tool)} failed: {errors.Result}");
+        return output;
+    }
+
     /// <summary>Reads any manifest without checking it, so tests can reach the checks behind the schema.</summary>
     private sealed class AcceptsAnyManifest : IManifestValidator
     {

@@ -12,3 +12,7 @@ Diff: `origin/main...a4cb278`. Atlas reproduced the failure with the test's reci
 | P3 | Atlas | `2>&1 \| Tee-Object` is the wrong logging recipe on Windows PowerShell 5.1 | ✅ Yes (`324f1a4`) | operations.md: `\| Tee-Object -FilePath process-log.txt`, stdout only, and why |
 | P4 | Atlas | The test's byte surgery could throw on a tiny packet | ✅ Yes (`324f1a4`) | Guard |
 | P4 | Atlas | The quoted FFmpeg message is shortened | — | Accepted: "received no packets" is the phrase to search for |
+
+## Later
+
+D-087 found that the owner's failures were an NVENC encoder that could not open (the NVIDIA driver was older than FFmpeg's NVENC API), not empty sound: FFmpeg's last line, "received no packets", is the same for both. The retry without sound now follows only a sound stream that decodes to nothing, `--hw nvenc` is checked on a generated clip before a run, and videos this rule made without sound are redone.

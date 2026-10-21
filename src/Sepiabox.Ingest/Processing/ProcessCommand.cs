@@ -160,6 +160,13 @@ public static class ProcessCommand
 
         var ffmpeg = FfmpegTools.Find(options.FfmpegFolder);
         var video = hooks?.Video ?? (ffmpeg is null ? null : new VideoProcessor(ffmpeg, options.Encoder));
+        // An encoder chosen for speed (--hw nvenc) is tried on a generated clip before any file (D-087): one that cannot
+        // encode, such as NVENC with a driver older than FFmpeg needs, stops the run with FFmpeg's message, rather than
+        // failing every video or quietly falling back to libx264.
+        if (video is VideoProcessor { Encoder: not VideoEncoder.Software } processor)
+        {
+            processor.CheckEncoder(output, cancellationToken);
+        }
 
         using var state = new StateStore(Path.Combine(output, "state.db"));
         var stopwatch = Stopwatch.StartNew();
@@ -378,12 +385,67 @@ public static class ProcessCommand
             if (unchanged && previous!.Status == FileStatus.Done
                 && previous.Sha256 is { } doneSha256 && File.Exists(ManifestPath(manifestFolder, doneSha256)))
             {
+                // A video done by a build before D-087 may have lost working sound to D-084's fallback: when its 720p
+                // version has none, it is made again, from the hash already known, as a failed file is.
+                if (kind == MediaKind.Video && previous.Sound is null && video is not null && LostSound(previous, doneSha256))
+                {
+                    return new Plan(file, kind, previous, null, null, null, StreamedSha256: doneSha256) { RedoProxy = true };
+                }
+
                 o.Skipped++;
                 // The model may have been downloaded, or --faces given, after this file was processed: both come
                 // from the thumbnails in the work folder, so the drive is not read again.
                 return embedder is not null || faces is not null
                     ? new Plan(file, kind, previous, null, null, doneSha256)
                     : null;
+            }
+
+            // Checked once: what is found is recorded, so it is not checked again. The source is only read when its 720p
+            // version has no sound: its header, and up to its first sound frame (to its end only when no frame decodes).
+            bool LostSound(FileState done, string sha256)
+            {
+                var proxy = Path.Combine(output, DerivativeFolder(sha256), VideoProcessor.ProxyName + ".mp4");
+                if (!File.Exists(proxy))
+                {
+                    return false;
+                }
+
+                bool hasSound;
+                try
+                {
+                    hasSound = video.HasSound(proxy, stop.Token);
+                }
+                catch (VideoProcessingException)
+                {
+                    // A 720p version ffprobe cannot read is made again too.
+                    return true;
+                }
+
+                if (hasSound)
+                {
+                    SaveState(done with { Sound = VideoSound.Kept });
+                    return false;
+                }
+
+                // A silent 720p version lost something only when the source's sound decodes: a source without sound,
+                // or whose sound does not decode, is recorded as it is, without making the same silent version again.
+                VideoSound source;
+                try
+                {
+                    source = video.CheckSound(file.Path, stop.Token);
+                }
+                catch (VideoProcessingException)
+                {
+                    // Unreadable right now: nothing is recorded, and the next run checks again.
+                    return false;
+                }
+
+                if (source != VideoSound.Kept)
+                {
+                    SaveState(done with { Sound = source });
+                }
+
+                return source == VideoSound.Kept;
             }
 
             // Nothing about an unchanged file can make a video stream appear, short of a newer FFmpeg: that is
@@ -542,10 +604,10 @@ public static class ProcessCommand
 
             // A changed file also touches the content it had before, whose manifest loses this path.
             List<string> keys = plan.Previous?.Sha256 is { } before && before != sha256 ? [sha256, before] : [sha256];
-            return (keys, () => ProcessFile(file, plan.Kind, o, plan.Previous, sha256, plan.Content));
+            return (keys, () => ProcessFile(file, plan.Kind, o, plan.Previous, sha256, plan.Content, plan.RedoProxy));
         }
 
-        void ProcessFile(FoundFile file, MediaKind kind, FileOutcome o, FileState? previous, string sha256, byte[]? content)
+        void ProcessFile(FoundFile file, MediaKind kind, FileOutcome o, FileState? previous, string sha256, byte[]? content, bool redoProxy)
         {
             var modifiedTicks = file.ModifiedAt.UtcTicks;
             try
@@ -562,7 +624,8 @@ public static class ProcessCommand
                 }
 
                 var described = Describe(manifestFolder, sha256, kind, file, source, clock, content);
-                var (manifest, status, derivativeProblem, noVideo, withoutSound) = AddDerivatives(output, file, described, content, video, stop.Token);
+                var (manifest, status, derivativeProblem, noVideo, withoutSound, sound) =
+                    AddDerivatives(output, file, described, content, video, redoProxy, stop.Token);
                 if (withoutSound is not null)
                 {
                     o.WithoutSound.Add(new ScanProblem(file.Path, withoutSound));
@@ -598,8 +661,12 @@ public static class ProcessCommand
                     CountFaces(o, facesOutcome);
                 }
 
-                // NotVideo is remembered too, with its reason, so an unchanged file is not read again.
-                SaveState(new FileState(file.Path, file.Size, modifiedTicks, sha256, status, noVideo));
+                // NotVideo is remembered too, with its reason, so an unchanged file is not read again. A video whose 720p
+                // version could not be made again keeps the one it had and stays done, unchecked, so the next run tries
+                // again (D-087).
+                SaveState(redoProxy && status == FileStatus.Failed
+                    ? new FileState(file.Path, file.Size, modifiedTicks, sha256, FileStatus.Done)
+                    : new FileState(file.Path, file.Size, modifiedTicks, sha256, status, noVideo, sound));
 
                 switch (status)
                 {
@@ -753,15 +820,16 @@ public static class ProcessCommand
     }
 
     /// <summary>
-    /// Generates the derivatives the manifest is still missing. Problem is set when the status is Failed, NoVideo
-    /// when it is NotVideo, and WithoutSound when a video's 720p version was made without sound (D-084).
+    /// Generates the derivatives the manifest is still missing, or a video's again with <paramref name="redo"/> (D-087).
+    /// Problem is set when the status is Failed, NoVideo when it is NotVideo, WithoutSound when a video's 720p version
+    /// was made without sound (D-084), and Sound when a video's derivatives were made.
     /// </summary>
-    private static (Manifest Manifest, FileStatus Status, string? Problem, NoVideoReason? NoVideo, string? WithoutSound) AddDerivatives(
-        string output, FoundFile file, Manifest manifest, byte[]? content, IVideoProcessor? video, CancellationToken cancellationToken)
+    private static (Manifest Manifest, FileStatus Status, string? Problem, NoVideoReason? NoVideo, string? WithoutSound, VideoSound? Sound) AddDerivatives(
+        string output, FoundFile file, Manifest manifest, byte[]? content, IVideoProcessor? video, bool redo, CancellationToken cancellationToken)
     {
-        if (manifest.Derivatives.Count > 0)
+        if (manifest.Derivatives.Count > 0 && !(redo && video is not null && manifest.Kind == MediaKind.Video))
         {
-            return (manifest, FileStatus.Done, null, null, null);
+            return (manifest, FileStatus.Done, null, null, null, null);
         }
 
         var folder = DerivativeFolder(manifest.Id);
@@ -780,18 +848,18 @@ public static class ProcessCommand
                     thumbnails = ThumbnailGenerator.Generate(stream, output, folder, ThumbnailGenerator.PhotoSizes);
                 }
 
-                return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null, null, null);
+                return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null, null, null, null);
             }
 
             // Checked without FFmpeg, whose module support depends on how it was built.
             if (TrackerModule.IsTrackerModule(file.Path))
             {
-                return (manifest, FileStatus.NotVideo, null, NoVideoReason.TrackerModule, null);
+                return (manifest, FileStatus.NotVideo, null, NoVideoReason.TrackerModule, null, null);
             }
 
             if (video is null)
             {
-                return (manifest, FileStatus.Pending, null, null, null);
+                return (manifest, FileStatus.Pending, null, null, null, null);
             }
 
             var probe = video.Probe(file.Path, cancellationToken);
@@ -804,16 +872,16 @@ public static class ProcessCommand
                 // MetadataExtractor misses some containers' positions (an MP4's loci box), which ffprobe reads.
                 Location = manifest.Location ?? probe.Location,
                 Derivatives = generated.Derivatives,
-            }, FileStatus.Done, null, null, generated.WithoutSoundBecause);
+            }, FileStatus.Done, null, null, generated.WithoutSoundBecause, generated.Sound);
         }
         catch (NoVideoStreamException ex)
         {
-            return (manifest, FileStatus.NotVideo, null, ex.Reason, null);
+            return (manifest, FileStatus.NotVideo, null, ex.Reason, null, null);
         }
         catch (Exception ex) when (ex is MagickException or VideoProcessingException)
         {
             var what = manifest.Kind == MediaKind.Photo ? "thumbnails" : "the poster and 720p version";
-            return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}", null, null);
+            return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}", null, null, null);
         }
     }
 
@@ -888,7 +956,11 @@ public static class ProcessCommand
         byte[]? Content,
         Exception? ReadError,
         string? UnchangedSha256,
-        string? StreamedSha256 = null);
+        string? StreamedSha256 = null)
+    {
+        /// <summary>A done video whose 720p version is made again, because an earlier build may have dropped its sound (D-087).</summary>
+        public bool RedoProxy { get; init; }
+    }
 
     /// <summary>What one file added to the run's result, kept apart so the result is gathered in the order files were found.</summary>
     private sealed class FileOutcome
