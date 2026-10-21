@@ -333,6 +333,18 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.Contains("\"last summer\" has no visual", QuestionPrompt.System, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Prompt_turns_named_holidays_into_their_days_in_both_languages()
+    {
+        // The live run answered "Natal de 2019 em Lisboa" with the whole year 2019.
+        Assert.Contains("Christmas/Natal 24-25 December", QuestionPrompt.System, StringComparison.Ordinal);
+        Assert.Contains("St John's/São João 23-24 June", QuestionPrompt.System, StringComparison.Ordinal);
+        Assert.Contains("Never just the year.", QuestionPrompt.System, StringComparison.Ordinal);
+        const string Example = "\"Natal de 2018 no Porto\" -> "
+            + """{"filters": {"dateFrom": "2018-12-24", "dateTo": "2018-12-25", "places": {"cities": ["Porto"]}}}""";
+        Assert.Contains(Example, QuestionPrompt.System, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("""{"type": "object", "additionalProperties": false, "properties": {"a": {"type": "string", "contentEncoding": "base64"}}}""", "contentEncoding")]
     [InlineData("""{"type": "object", "additionalProperties": false, "properties": {"a": {"type": "string", "format": "regex"}}}""", "regex")]

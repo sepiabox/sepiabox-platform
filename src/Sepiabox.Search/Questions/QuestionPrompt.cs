@@ -77,7 +77,12 @@ public static class QuestionPrompt
           month" is the calendar month before today's; "last summer" (and other seasons) is the most recent one that
           ended before today. Seasons are the meteorological ones of the hemisphere of the context's time zone (for
           Europe: spring March-May, summer June-August, autumn September-November, winter December-February, which
-          spans two years). "Christmas" is 24-25 December.
+          spans two years).
+        - A named holiday or feast is its days, as dateFrom and dateTo in the year asked (or the most recent one that
+          ended before today when no year is given), in either language: Christmas/Natal 24-25 December; Christmas
+          Eve/Véspera de Natal 24 December; New Year's Eve/Réveillon 31 December; New Year's Day/Ano Novo 1 January;
+          St John's/São João 23-24 June; Easter/Páscoa Good Friday to Easter Sunday of that year; Carnival/Carnaval
+          the Saturday before Ash Wednesday to Shrove Tuesday of that year. Never just the year.
         - "On this day", "today in other years", "neste dia", "hoje em outros anos" is {"onThisDay": {}}; "a year ago
           today", "há um ano", "faz 3 anos hoje" is {"onThisDay": {"yearsAgo": N}}.
         - Places: use the stored English name from the context's city list ("Lisboa" is "Lisbon", "Porto" stays "Porto");
@@ -108,6 +113,8 @@ public static class QuestionPrompt
         "tudo da Espanha em 2021" -> {"filters": {"years": [2021], "places": {"countries": ["ES"]}}}
         "beach pictures from Brazil" -> {"filters": {"kinds": ["photo"], "places": {"countries": ["BR"]}, "visual": {"text": "beach"}}}
         "fotos da praia em Lisboa em agosto de 2022" -> {"filters": {"kinds": ["photo"], "years": [2022], "months": [8], "places": {"cities": ["Lisbon"]}, "visual": {"text": "beach"}}}
+        "Natal de 2018 no Porto" -> {"filters": {"dateFrom": "2018-12-24", "dateTo": "2018-12-25", "places": {"cities": ["Porto"]}}}
+        "New Year's Eve 2016 videos" -> {"filters": {"kinds": ["video"], "dateFrom": "2016-12-31", "dateTo": "2016-12-31"}}
         "o que aconteceu neste dia" -> {"filters": {"onThisDay": {}}}
         "photos from exactly 5 years ago today" -> {"filters": {"kinds": ["photo"], "onThisDay": {"yearsAgo": 5}}}
         "tudo do HD da Ana em 2018 e 2019" -> {"filters": {"years": [2018, 2019], "sources": ["HD da Ana"]}}
