@@ -57,7 +57,10 @@ public static class SearchCount
     public const string Assets = "assets";
 }
 
-/// <summary>The groupings of a count: the capture year and month (month of the year, 1-12), the kind, the city, the source.</summary>
+/// <summary>
+/// The groupings of a count: the capture year and month (month of the year, 1-12), the kind, the city, the source, and
+/// the named person in the photo (S-021).
+/// </summary>
 public static class SearchGroupBy
 {
     public const string Year = "year";
@@ -65,8 +68,9 @@ public static class SearchGroupBy
     public const string Kind = "kind";
     public const string City = "city";
     public const string Source = "source";
+    public const string Person = "person";
 
-    public static readonly IReadOnlyList<string> All = [Year, Month, Kind, City, Source];
+    public static readonly IReadOnlyList<string> All = [Year, Month, Kind, City, Source, Person];
 }
 
 public static class SearchSort
@@ -99,6 +103,9 @@ public sealed record SearchFilters
     /// <summary>Source names, such as the drive's name given to <c>process</c>.</summary>
     public IReadOnlyList<string>? Sources { get; init; }
 
+    /// <summary>People who are all in the photo (S-021): named ones, and the signed-in user's own person.</summary>
+    public PeopleFilter? People { get; init; }
+
     /// <summary>
     /// A description in English matched against the photos' CLIP embeddings (S-016); results are then ordered by
     /// similarity, most similar first, and <see cref="SearchQuery.Sort"/> is not used.
@@ -126,13 +133,30 @@ public sealed record SearchFilters
         other is not null
         && Same(Kinds, other.Kinds) && DateFrom == other.DateFrom && DateTo == other.DateTo
         && Same(Years, other.Years) && Same(Months, other.Months) && OnThisDay == other.OnThisDay
-        && Equals(Places, other.Places) && Same(Sources, other.Sources) && UndatedOnly == other.UndatedOnly
+        && Equals(Places, other.Places) && Same(Sources, other.Sources) && Equals(People, other.People) && UndatedOnly == other.UndatedOnly
         && Visual == other.Visual;
 
     public override int GetHashCode() => HashCode.Combine(DateFrom, DateTo, OnThisDay, Places, UndatedOnly);
 
     internal static bool Same<T>(IReadOnlyList<T>? a, IReadOnlyList<T>? b) =>
         a is null ? b is null : b is not null && a.SequenceEqual(b);
+}
+
+/// <summary>
+/// People in the photo (S-021, D-080): every one of <see cref="All"/> (names as the family wrote them, matched ignoring
+/// case) and, with <see cref="IncludeMe"/>, the person the signed-in user said "This is me" for (D-018). Only faces
+/// counted for a person put them in a photo; excluded ones and those marked not a face never do (D-077, D-079).
+/// </summary>
+public sealed record PeopleFilter
+{
+    public IReadOnlyList<string>? All { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IncludeMe { get; init; }
+
+    public bool Equals(PeopleFilter? other) => other is not null && SearchFilters.Same(All, other.All) && IncludeMe == other.IncludeMe;
+
+    public override int GetHashCode() => HashCode.Combine(All?.Count, IncludeMe);
 }
 
 /// <summary>Search by description (S-016, D-070).</summary>
@@ -309,6 +333,8 @@ public static class SearchQueryJson
             ?? List("filters.places.cities", filters.Places?.Cities, Name)
             ?? List("filters.places.countries", filters.Places?.Countries, code => code.Length == 2 && code.All(char.IsAsciiLetterUpper) ? null : "must be a two-letter country code such as 'PT'")
             ?? List("filters.sources", filters.Sources, Name)
+            ?? List("filters.people.all", filters.People?.All, Name)
+            ?? (filters.People is { All: null, IncludeMe: false } ? "filters.people needs all, includeMe or both." : null)
             ?? Visual(filters.Visual)
             ?? (filters.UndatedOnly && filters.HasTimeFilter
                 ? "filters.undatedOnly cannot be combined with dateFrom, dateTo, years, months or onThisDay."

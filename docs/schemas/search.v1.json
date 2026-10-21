@@ -73,6 +73,20 @@
           "maxItems": 50,
           "items": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
         },
+        "people": {
+          "description": "People who are all in the photo (S-021): every name in all (people's names as the family wrote them, matched ignoring case; an unknown name is an error) and, with includeMe, the signed-in user's own person (\"This is me\"). At least one of the two.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "all": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
+            },
+            "includeMe": { "type": "boolean" }
+          }
+        },
         "visual": {
           "description": "A description in English matched against the photos' CLIP embeddings (S-016, D-070); results are ordered by similarity, most similar first, and sort is not used.",
           "type": "object",
@@ -107,10 +121,10 @@
       "properties": {
         "count": { "enum": ["assets"] },
         "groupBy": {
-          "description": "Absent or null for the total only. year and month are the capture year and the month of the year (1-12) on the camera's wall clock; an asset with several sources counts in each source.",
-          "enum": ["year", "month", "kind", "city", "source", null]
+          "description": "Absent or null for the total only. year and month are the capture year and the month of the year (1-12) on the camera's wall clock; an asset with several sources counts in each source; person is each named person in the photos, once per photo, without the people the filters name.",
+          "enum": ["year", "month", "kind", "city", "source", "person", null]
         },
-        "top": { "description": "Only with groupBy: the largest this many groups. Absent: every year, month or kind group in its own order, or the largest 10 cities or sources.", "type": "integer", "minimum": 1, "maximum": 100 }
+        "top": { "description": "Only with groupBy: the largest this many groups. Absent: every year, month or kind group in its own order, or the largest 10 cities, sources or people.", "type": "integer", "minimum": 1, "maximum": 100 }
       }
     }
   }

@@ -58,6 +58,27 @@
         </select>
     </label>
 
+    @if (People.Any() || Options.MeLinked || Fields.Me)
+    {
+        @* Several people: a photo with all of them (S-021); a plain multiple select, no script needed. *@
+        <label class="people-filter">
+            <span>@Text["Filter_People"]</span>
+            <select name="person" multiple size="@Math.Min(4, Math.Max(2, People.Count()))">
+                @foreach (var person in People)
+                {
+                    <option value="@person" selected="@(Fields.People.Contains(person, StringComparer.OrdinalIgnoreCase))">@person</option>
+                }
+            </select>
+        </label>
+        @if (Options.MeLinked || Fields.Me)
+        {
+            <label class="me">
+                <input type="checkbox" name="me" value="1" checked="@Fields.Me" />
+                <span>@Text["Filter_Me"]</span>
+            </label>
+        }
+    }
+
     @if (DescribeAvailable)
     {
         <label class="describe">
@@ -99,6 +120,8 @@
     private IEnumerable<string> Cities => With(Options.Cities, Fields.City);
 
     private IEnumerable<string> Sources => With(Options.Sources, Fields.Source);
+
+    private IEnumerable<string> People => Fields.People.Aggregate((IEnumerable<string>)Options.People, (all, name) => With([.. all], name));
 
     private static IEnumerable<string> With(IReadOnlyList<string> values, string? value) =>
         value is null || values.Contains(value, StringComparer.OrdinalIgnoreCase) ? values : values.Append(value);

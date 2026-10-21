@@ -36,6 +36,8 @@ if (SearchSetup.WarmUp(builder.Configuration, builder.Environment))
 {
     builder.Services.AddHostedService<TextModelWarmUp>();
 }
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 builder.Services.AddScoped<IPeopleEditor, PeopleEditor>();
 builder.Services.AddScoped<IFaceSettings, FaceSettings>();

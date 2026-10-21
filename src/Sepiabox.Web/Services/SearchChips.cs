@@ -68,6 +68,19 @@ public static class SearchChips
             Add(text["Chip_Sources", string.Join(", ", sources)], f with { Sources = null });
         }
 
+        if (f.People is { } people)
+        {
+            if (people.All is { } names)
+            {
+                Add(text["Chip_People", string.Join(", ", names)], f with { People = PeopleOrNone(people with { All = null }) });
+            }
+
+            if (people.IncludeMe)
+            {
+                Add(text["Chip_Me"], f with { People = PeopleOrNone(people with { IncludeMe = false }) });
+            }
+        }
+
         if (f.Visual is { } visual)
         {
             Add(text["Chip_Visual", visual.Text], f with { Visual = null });
@@ -98,6 +111,9 @@ public static class SearchChips
 
         return chips;
     }
+
+    // A people filter with no names and no "me" is no filter at all.
+    private static PeopleFilter? PeopleOrNone(PeopleFilter people) => people.All is null && !people.IncludeMe ? null : people;
 
     // A place filter with neither list is no filter at all.
     private static PlaceFilter? Places(PlaceFilter places) => places.Cities is null && places.Countries is null ? null : places;
