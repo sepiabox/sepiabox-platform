@@ -244,6 +244,26 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
         Assert.Equal(2, published.Declarations("Microsoft.KeyVault/vaults").Count);
     }
 
+    [Fact]
+    public void No_parameter_publishes_a_default_value_that_would_hide_its_azd_config()
+    {
+        // azd resolves a parameter with a published default.value from AZURE_<NAME> or the default alone, and
+        // never from the environment's infra.parameters, where the owner and the Deploy workflow set them (D-072).
+        // Generated defaults (the PostgreSQL passwords) are read from infra.parameters and are fine.
+        var parameters = published.Manifest["resources"]!.AsObject()
+            .Where(r => r.Value!["type"]?.GetValue<string>() == "parameter.v0")
+            .ToList();
+        var withValue = parameters
+            .Where(r => r.Value!["inputs"]?["value"]?["default"]?["value"] is not null)
+            .Select(r => r.Key);
+
+        // Guards the check itself: a manifest read wrongly would find no parameters and pass.
+        Assert.Equal(
+            ["customDomain", "customDomainBinding", "pg-app-password", "pg-password", "pg-username", "uploaderPrincipalIds"],
+            parameters.Select(r => r.Key).Order(StringComparer.Ordinal));
+        Assert.Empty(withValue);
+    }
+
     private JsonObject Generate(string parameter) =>
         published.Resource(parameter)["inputs"]!["value"]!["default"]!["generate"]!.AsObject();
 

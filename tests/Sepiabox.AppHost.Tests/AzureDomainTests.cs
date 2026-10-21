@@ -6,10 +6,12 @@ public sealed class AzureDomainTests(PublishedInfrastructure published) : IClass
     private const string Web = "web-containerapp.module.bicep";
 
     [Fact]
-    public void Custom_domain_parameters_default_to_none_and_disabled()
+    public void Custom_domain_parameters_publish_no_default_so_azd_reads_them_from_its_config()
     {
-        Assert.Equal("", Default(AzureInfrastructure.CustomDomainParameter));
-        Assert.Equal("Disabled", Default(AzureInfrastructure.CustomDomainBindingParameter));
+        // With a published default azd uses it, or AZURE_CUSTOM_DOMAIN, and never infra.parameters (D-072);
+        // scripts/deploy.sh sets the "none" values instead.
+        Assert.Null(Default(AzureInfrastructure.CustomDomainParameter));
+        Assert.Null(Default(AzureInfrastructure.CustomDomainBindingParameter));
         Assert.Equal("{customDomain.value}", published.ModuleParameters[Web]["customdomain_value"]!.GetValue<string>());
         Assert.Equal("{customDomainBinding.value}", published.ModuleParameters[Web]["customdomainbinding_value"]!.GetValue<string>());
     }
@@ -60,6 +62,5 @@ public sealed class AzureDomainTests(PublishedInfrastructure published) : IClass
             StringComparison.Ordinal);
     }
 
-    private string Default(string parameter) =>
-        published.Resource(parameter)["inputs"]!["value"]!["default"]!["value"]!.GetValue<string>();
+    private System.Text.Json.Nodes.JsonNode? Default(string parameter) => published.Resource(parameter)["inputs"]!["value"]!["default"];
 }
