@@ -1,5 +1,5 @@
 {
-  "description": "Responses replayed by the golden test in CI (S-025). Refreshed from the live run (SEPIABOX_RECORD_GOLDEN=1); until the first live run they are the expected queries themselves, so CI checks the parsing path only.",
+  "description": "Responses replayed by the golden test in CI (S-025): the real model's answers from the last live run (SEPIABOX_RECORD_GOLDEN=1), which rewrites this file.",
   "source": "live",
   "model": "claude-haiku-5-5",
   "recordedAt": "2026-10-21",

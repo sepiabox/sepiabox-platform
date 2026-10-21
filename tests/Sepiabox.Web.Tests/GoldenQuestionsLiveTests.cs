@@ -90,6 +90,7 @@ public sealed class GoldenQuestionsLiveTests(CatalogFixture catalog, ITestOutput
     {
         var path = GoldenQuestions.PathOf(GoldenQuestions.RecordedFileName);
         var root = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        root["description"] = "Responses replayed by the golden test in CI (S-025): the real model's answers from the last live run (SEPIABOX_RECORD_GOLDEN=1), which rewrites this file.";
         root["source"] = "live";
         root["model"] = model;
         root["recordedAt"] = DateTime.UtcNow.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
