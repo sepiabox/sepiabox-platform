@@ -29,7 +29,7 @@ public sealed class GoldenQuestionsTests
         Assert.Equal(Golden.Questions.Count, Golden.Questions.Select(q => q.Id).Distinct().Count());
         var covered = Golden.Questions.SelectMany(q => q.Covers).ToHashSet();
         Assert.Superset(
-            new HashSet<string> { "dates", "range", "on this day", "places", "Lisboa", "countries", "kinds", "sources", "descriptions", "undated" },
+            new HashSet<string> { "dates", "range", "on this day", "places", "Lisboa", "countries", "kinds", "sources", "descriptions", "undated", "people", "me" },
             covered);
         // At least 10 counting questions (S-026), by year, kind, place, source and "on this day".
         var counting = Golden.Questions.Where(q => q.Expected.Contains("\"aggregate\"", StringComparison.Ordinal)).ToList();
@@ -77,6 +77,9 @@ public sealed class GoldenQuestionsTests
         Assert.Equal(["Celular do Bruno", "HD da Ana"], context.Lists.Single(l => l.DslField == "filters.sources").Values);
         Assert.Contains("Lisbon", context.Lists.Single(l => l.DslField == "filters.places.cities").Values);
         Assert.Equal(["BR", "ES", "PT"], context.Lists.Single(l => l.DslField == "filters.places.countries").Values);
+        // People's names, never an address (D-080).
+        Assert.Equal(["Ana", "Bruno", "Carla", "Pedro"], context.Lists.Single(l => l.DslField == "filters.people.all").Values);
+        Assert.DoesNotContain(context.Lists.SelectMany(l => l.Values), v => v.Contains('@', StringComparison.Ordinal));
     }
 
     /// <summary>The recorded responses, by "id/en" and "id/pt".</summary>

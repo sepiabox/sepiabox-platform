@@ -653,4 +653,37 @@
   <data name="Merge_ExplainCards" xml:space="preserve">
     <value>The faces of the person on the left move to the one on the right; the one on the left no longer exists.</value>
   </data>
+  <data name="List_And" xml:space="preserve">
+    <value>{0} and {1}</value>
+  </data>
+  <data name="Search_UnknownPeople" xml:space="preserve">
+    <value>No one is called {0}.</value>
+  </data>
+  <data name="Search_MeNotLinked" xml:space="preserve">
+    <value>You have not marked “This is me” on anyone yet. Find yourself on People and mark “This is me”.</value>
+  </data>
+  <data name="Chip_People" xml:space="preserve">
+    <value>With: {0}</value>
+  </data>
+  <data name="Chip_Me" xml:space="preserve">
+    <value>With me</value>
+  </data>
+  <data name="Group_Person" xml:space="preserve">
+    <value>person</value>
+  </data>
+  <data name="Count_ByPerson" xml:space="preserve">
+    <value>{0} by person</value>
+  </data>
+  <data name="Count_WithPeople" xml:space="preserve">
+    <value> with {0}</value>
+  </data>
+  <data name="Filter_People" xml:space="preserve">
+    <value>People</value>
+  </data>
+  <data name="Filter_Me" xml:space="preserve">
+    <value>With me</value>
+  </data>
+  <data name="Detail_People" xml:space="preserve">
+    <value>People</value>
+  </data>
 </root>

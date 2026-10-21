@@ -162,11 +162,13 @@ public sealed class QuestionService(
         }
 
         var options = await library.GetFilterOptionsAsync(cancellationToken);
-        // Later stories add people, personal places and occasion types here (S-021, S-014, S-024).
+        // People's names, never an e-mail address or who said "This is me" (D-080); later stories add personal places
+        // and occasion types here (S-014, S-024).
         var context = QuestionContext.For(today, zone.Id)
             .Add("sources", "filters.sources", options.Sources)
             .Add("cities", "filters.places.cities", options.Cities)
             .Add("countries", "filters.places.countries", options.Countries ?? [])
+            .Add("people", "filters.people.all", options.People)
             .Build();
 
         var translation = await translator.TranslateAsync(cleaned, context, cancellationToken);
