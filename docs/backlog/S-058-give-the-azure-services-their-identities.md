@@ -29,6 +29,7 @@ S-032 creates the resources. The web and the worker jobs then need managed ident
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), after adding the Container Apps default host's `/signin-google` and `/signin-microsoft` redirect URIs to the OAuth clients, when I sign in with Google on `https://<default host>`, restart the web revision and reload the page, then I am still signed in; and an account not on `Access:Emails` lands on the no-access page. (S-035 repeats this on `app.sepiabox.com`.)
 
 ### Technical notes
+- The uploader roles were not effective in Azure until D-072: azd ignored `uploaderPrincipalIds` from `infra.parameters` while it published a default. Owner check (`az role assignment list --assignee <id> --role "Storage Blob Data Contributor" --all`) after the first deploy with that fix.
 - Sign-in (S-010, D-048): the data protection key ring and the sign-in secrets are what D-048 (14) left to S-032; they are this story's half.
 - Portability (D-051): Key Vault is a configuration source or a Container Apps secret reference added in the composition root; no code calls `SecretClient`.
 - Decisions: D-004, D-039, D-048, D-051, D-052.

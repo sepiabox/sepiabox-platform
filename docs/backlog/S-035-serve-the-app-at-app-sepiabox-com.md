@@ -23,6 +23,7 @@ The Google login shows the domain; `app.sepiabox.com` inspires more trust than t
 - [ ] Given a real deploy (manual, owner acceptance in `docs/operations.md`), when I sign in with Google and with Microsoft on `https://app.sepiabox.com` (after adding its `/signin-google` and `/signin-microsoft` redirect URIs to the OAuth clients), then sign-in works, and an account not on `Access:Emails` lands on the no-access page.
 
 ### Technical notes
+- Not effective in Azure until D-072: azd ignored `customDomain` and `customDomainBinding` from `infra.parameters` while they published a default. Owner check (steps 3 and 4 of "Custom domain" in `docs/operations.md`) after the first deploy with that fix.
 - Human step: DNS at GoDaddy.
 
 ### Expected tests

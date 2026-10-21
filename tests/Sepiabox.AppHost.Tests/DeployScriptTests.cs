@@ -43,8 +43,33 @@ public sealed class DeployScriptTests : IDisposable
                 exit 1
               fi
             fi
+            if [ "$1 $2 $3" = "env config set" ]; then
+              echo "${4#infra.parameters.}=$5" >> "$CALLS.config"
+            fi
+            if [ "$1 $2 $3" = "env config get" ]; then
+              # STUB_CONFIG holds the infra.parameters the environment already has, as name=value words, and
+              # the script's own sets follow; azd prints a value as JSON.
+              for entry in $STUB_CONFIG $(cat "$CALLS.config" 2>/dev/null); do
+                if [ "${entry%%=*}" = "${4#infra.parameters.}" ]; then
+                  echo "\"${entry#*=}\""
+                  exit 0
+                fi
+              done
+              echo "ERROR: no value at path '$4'" >&2
+              exit 1
+            fi
             if [ "$1 $2" = "env get-value" ]; then
               case "$3" in
+                AZURE_CUSTOM_DOMAIN*|AZURE_UPLOADER_PRINCIPAL_IDS)
+                  # STUB_DOTENV holds the azd environment's other values, as name=value words.
+                  for entry in $STUB_DOTENV; do
+                    if [ "${entry%%=*}" = "$3" ]; then
+                      echo "${entry#*=}"
+                      exit 0
+                    fi
+                  done
+                  echo "ERROR: key '$3' not found in the environment values" >&2
+                  exit 1 ;;
                 AZURE_ENV_NAME) echo "$STUB_ENV_NAME" ;;
                 AZURE_LOCATION) echo "$STUB_LOCATION" ;;
                 AZURE_CONTAINER_REGISTRY_ENDPOINT) echo "sepiaboxacr.azurecr.io" ;;
@@ -75,6 +100,9 @@ public sealed class DeployScriptTests : IDisposable
                 fi
                 if [ "$STUB_PG_STATE" != "MISSING" ]; then echo "$STUB_PG_STATE"; fi ;;
               "containerapp job start"*) echo "$STUB_EXECUTION" ;;
+              "containerapp hostname list"*)
+                if [ "$STUB_HOSTNAMES" = "FAIL" ]; then exit 1; fi
+                for host in $STUB_HOSTNAMES; do echo "$host"; done ;;
               "acr repository show"*)
                 if [ "$STUB_MODELS_IMAGE" = "MISSING" ]; then exit 1; fi ;;
               "servicebus queue update"*"--status Active"*)
@@ -301,6 +329,82 @@ public sealed class DeployScriptTests : IDisposable
     }
 
     [UnixFact]
+    public async Task Deploy_gives_unset_azd_parameters_their_none_values_before_provisioning()
+    {
+        var result = await RunDeployAsync("Succeeded");
+
+        Assert.Equal(0, result.ExitCode);
+        // azd reads them only from infra.parameters (D-072); unset, --no-prompt would stop the deploy.
+        var calls = Calls().Select(call => call.TrimEnd()).ToList();
+        var provision = calls.IndexOf("azd provision --no-prompt");
+        foreach (var set in new[]
+        {
+            "azd env config set infra.parameters.customDomain",
+            "azd env config set infra.parameters.customDomainBinding Disabled",
+            "azd env config set infra.parameters.uploaderPrincipalIds",
+        })
+        {
+            Assert.InRange(calls.IndexOf(set), 0, provision);
+        }
+    }
+
+    [UnixFact]
+    public async Task Deploy_keeps_the_azd_parameters_the_owner_set()
+    {
+        var result = await RunDeployAsync("Succeeded", config: "customDomain= customDomainBinding=Disabled uploaderPrincipalIds=");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("azd env config set", StringComparison.Ordinal));
+    }
+
+    [UnixTheory]
+    [InlineData("AZURE_CUSTOM_DOMAIN=app.example.com", null)]
+    [InlineData("AZURE_UPLOADER_PRINCIPAL_IDS=00000000-0000-0000-0000-00000000000a", null)]
+    [InlineData("", "AZURE_CUSTOM_DOMAIN_BINDING")]
+    [InlineData("", "AZURE_CUSTOM_DOMAIN")]
+    public async Task Deploy_refuses_an_azure_value_that_would_override_the_azd_parameters(string dotenv, string? shellVariable)
+    {
+        // Even empty in the shell: azd's deploy would use it instead of infra.parameters.
+        var result = await RunDeployAsync(
+            "Succeeded", dotenv: dotenv, extra: shellVariable is null ? null : new() { [shellVariable] = "" });
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("delete its line from .azure/<environment>/.env", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("azd provision", StringComparison.Ordinal)
+            || call.StartsWith("azd env config set", StringComparison.Ordinal)
+            || call.StartsWith("az servicebus", StringComparison.Ordinal));
+    }
+
+    [UnixTheory]
+    [InlineData("", "SniEnabled")]
+    [InlineData("sepiabox-web.example.com", "SniEnabled")]
+    [InlineData("FAIL", "SniEnabled")]
+    // Set by hand locally in another case; the workflow normalizes it, deploy.sh must not rely on that.
+    [InlineData("", "snienabled")]
+    public async Task Deploy_refuses_to_bind_a_custom_domain_the_web_does_not_have_yet(string hostnames, string binding)
+    {
+        var result = await RunDeployAsync(
+            "Succeeded", config: $"customDomain=app.example.com customDomainBinding={binding} uploaderPrincipalIds=", hostnames: hostnames);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("set SniEnabled and deploy again", result.Error, StringComparison.Ordinal);
+        Assert.Contains("az containerapp hostname list --name sepiabox-web --resource-group rg-sepiabox --query [].name --output tsv", Calls());
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("azd provision", StringComparison.Ordinal)
+            || call.StartsWith("az servicebus", StringComparison.Ordinal));
+    }
+
+    [UnixTheory]
+    [InlineData("customDomain=app.example.com customDomainBinding=SniEnabled uploaderPrincipalIds=", "sepiabox-web.example.com App.Example.com")]
+    [InlineData("customDomain=app.example.com customDomainBinding=Disabled uploaderPrincipalIds=", "")]
+    public async Task Deploy_provisions_a_custom_domain_once_its_host_name_is_on_the_web_or_while_unbound(string config, string hostnames)
+    {
+        var result = await RunDeployAsync("Succeeded", config: config, hostnames: hostnames);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("azd provision --no-prompt", Calls());
+    }
+
+    [UnixFact]
     public async Task Deploy_succeeds_on_the_first_provision_when_azd_has_no_resource_group_yet()
     {
         var result = await RunDeployAsync("Succeeded", resourceGroup: "", postgresState: "NO_GROUP");
@@ -503,8 +607,12 @@ public sealed class DeployScriptTests : IDisposable
         string resume = "",
         string modelsImage = "PRESENT",
         string download = "",
-        string registry = "") =>
-        RunAsync("bash", [Path.Combine(Repository.Root, "scripts", "deploy.sh")], new()
+        string registry = "",
+        string config = "",
+        string dotenv = "",
+        string hostnames = "",
+        Dictionary<string, string>? extra = null) =>
+        RunAsync("bash", [Path.Combine(Repository.Root, "scripts", "deploy.sh")], With(extra, new()
         {
             ["SEPIABOX_REGISTRY"] = registry,
             ["PATH"] = _stubs + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
@@ -514,6 +622,9 @@ public sealed class DeployScriptTests : IDisposable
             ["STUB_LOCATION"] = location,
             ["STUB_RESOURCE_GROUP"] = resourceGroup,
             ["STUB_PG_STATE"] = postgresState,
+            ["STUB_CONFIG"] = config,
+            ["STUB_DOTENV"] = dotenv,
+            ["STUB_HOSTNAMES"] = hostnames,
             ["STUB_EXECUTION"] = execution,
             ["STUB_STOP"] = stop,
             ["STUB_FAILING_DEPLOY"] = failingDeploy,
@@ -523,7 +634,17 @@ public sealed class DeployScriptTests : IDisposable
             ["STUB_DOWNLOAD"] = download,
             ["SEPIABOX_MIGRATE_TIMEOUT_SECONDS"] = timeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["SEPIABOX_MIGRATE_POLL_SECONDS"] = "0.1",
-        });
+        }));
+
+    private static Dictionary<string, string> With(Dictionary<string, string>? extra, Dictionary<string, string> environment)
+    {
+        foreach (var (name, value) in extra ?? [])
+        {
+            environment[name] = value;
+        }
+
+        return environment;
+    }
 
     private static async Task<ProcessResult> RunAsync(string fileName, string[] arguments, Dictionary<string, string> environment)
     {
@@ -531,6 +652,12 @@ public sealed class DeployScriptTests : IDisposable
         foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);
+        }
+
+        // The deploy script refuses these (D-072): none may leak in from the shell that runs the tests.
+        foreach (var name in new[] { "AZURE_CUSTOM_DOMAIN", "AZURE_CUSTOM_DOMAIN_BINDING", "AZURE_UPLOADER_PRINCIPAL_IDS" })
+        {
+            start.Environment.Remove(name);
         }
 
         foreach (var (name, value) in environment)

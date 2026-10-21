@@ -166,9 +166,11 @@ else
 
     // The web's custom domain (S-035, D-065), empty for none. Set after the DNS records exist, first with the
     // binding Disabled (the host name is added), then SniEnabled (domain.bicep creates the managed certificate
-    // and the web binds it); docs/operations.md has the steps.
-    var customDomain = builder.AddParameter(AzureInfrastructure.CustomDomainParameter, "", publishValueAsDefault: true);
-    var customDomainBinding = builder.AddParameter(AzureInfrastructure.CustomDomainBindingParameter, "Disabled", publishValueAsDefault: true);
+    // and the web binds it); docs/operations.md has the steps. No published default: azd would then read only
+    // AZURE_CUSTOM_DOMAIN and ignore the environment's infra.parameters (D-072); scripts/deploy.sh and the Deploy
+    // workflow always set these, empty and Disabled for none.
+    var customDomain = builder.AddParameter(AzureInfrastructure.CustomDomainParameter);
+    var customDomainBinding = builder.AddParameter(AzureInfrastructure.CustomDomainBindingParameter);
     builder.AddBicepTemplate("domain", "Bicep/domain.bicep")
         .WithParameter("environmentName", environment.GetOutput("AZURE_CONTAINER_APPS_ENVIRONMENT_NAME"))
         .WithParameter("customDomain", customDomain)
@@ -176,7 +178,8 @@ else
         .WithParameter("certificateName", AzureInfrastructure.CustomDomainCertificateName);
 
     // What the role helpers cannot scope: the key ring's container and key, and the uploaders (D-062).
-    var uploaders = builder.AddParameter(AzureInfrastructure.UploaderPrincipalIdsParameter, "", publishValueAsDefault: true);
+    // Like the custom domain, without a published default (D-072).
+    var uploaders = builder.AddParameter(AzureInfrastructure.UploaderPrincipalIdsParameter);
     var access = builder.AddBicepTemplate("access", "Bicep/access.bicep")
         .WithParameter("storageName", storage.GetOutput("name"))
         .WithParameter("vaultName", vault.GetOutput("name"))
