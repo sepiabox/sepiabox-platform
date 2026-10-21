@@ -126,7 +126,7 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
     var result = ProcessCommand.Run(options, progress, cancellationToken);
     Console.Error.WriteLine();
 
-    Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, left out {result.NotVideo:N0}, embeddings added {result.Embedded:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
+    Console.WriteLine($"Processed {result.Processed:N0}, unchanged {result.Skipped:N0}, videos pending {result.VideosPending:N0}, left out {result.NotVideo:N0}, made without sound {result.WithoutSound.Count:N0}, embeddings added {result.Embedded:N0}, failed {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
     if (options.Faces)
     {
         Console.WriteLine($"Faces: {result.FacesFound:N0} found in {result.FacesChecked:N0} photos and videos checked.");
@@ -144,6 +144,7 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
 
     // Next to the problems, on the same output: not failures, but never catalogued, so each one can be checked.
     LeftOutReport.Write(result.LeftOut, options.ListLeftOut, Console.Out);
+    WithoutSoundReport.Write(result.WithoutSound, Console.Out);
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");

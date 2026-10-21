@@ -31,6 +31,7 @@ public class VideoProcessingTests
         var result = Process(drive, work);
 
         Assert.Empty(result.Problems);
+        Assert.Empty(result.WithoutSound);
         var manifest = Assert.Single(ReadManifests(work));
         Assert.Equal((1920, 1080), (manifest.Width, manifest.Height));
         Assert.InRange(manifest.DurationSeconds!.Value, 2.9, 3.2);
@@ -352,6 +353,34 @@ public class VideoProcessingTests
         Assert.Equal(["poster", "thumb-256", "proxy-720p"], manifest.Derivatives.Select(d => d.Name));
         var proxy = Path.Combine(work.Path, Assert.Single(manifest.Derivatives, d => d.Name == "proxy-720p").Path);
         Assert.Equal(["video"], StreamTypes(proxy));
+        // Shown in the run's output, since the fallback also follows failures that are not about sound.
+        var silent = Assert.Single(result.WithoutSound);
+        Assert.Equal(Path.Combine(drive.Path, "MOV001.MOD"), silent.Path);
+        Assert.Contains("received no packets", silent.Reason, StringComparison.Ordinal);
+    }
+
+    [UnixFact]
+    public void Lists_a_video_made_without_sound_after_a_failure_that_was_not_about_sound()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        MakeVideo(Path.Combine(drive.Path, "party.mp4"), 640, 360, seconds: 1);
+        // A one-off encoder error on the transcode with sound: the fallback must not drop good sound unseen.
+        TestTools.FakeTool(tools, "ffprobe", $"exec '{s_tools.Ffprobe}' \"$@\"");
+        TestTools.FakeTool(tools, "ffmpeg", $$"""
+            case "$*" in
+              *0:a:0?*) echo '[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)' >&2; exit 1;;
+            esac
+            exec '{{s_tools.Ffmpeg}}' "$@"
+            """);
+
+        var result = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: tools.Path, ModelFolder: TestModels.None));
+
+        Assert.Empty(result.Problems);
+        var silent = Assert.Single(result.WithoutSound);
+        Assert.Equal(Path.Combine(drive.Path, "party.mp4"), silent.Path);
+        Assert.Equal("ffmpeg failed: [h264_nvenc @ 0x1] OpenEncodeSessionEx failed: out of memory (10)", silent.Reason);
     }
 
     [UnixFact]
@@ -378,6 +407,7 @@ public class VideoProcessingTests
 
         Assert.Empty(second.Problems);
         Assert.Equal((1, 1), (second.Processed, second.Skipped));
+        Assert.Equal([Path.Combine(drive.Path, "MOV001.MOD")], second.WithoutSound.Select(v => v.Path));
         Assert.All(ReadManifests(work), manifest => Assert.Contains(manifest.Derivatives, d => d.Name == "proxy-720p"));
     }
 
@@ -640,6 +670,11 @@ public class VideoProcessingTests
             // After the PES header: the substream id, the frame count and the first access unit pointer, then AC-3.
             var end = Math.Min(bytes.Length, i + 6 + ((bytes[i + 4] << 8) | bytes[i + 5]));
             var start = i + 9 + bytes[i + 8] + 4;
+            if (start >= end)
+            {
+                continue;
+            }
+
             Array.Clear(bytes, start, end - start);
             blanked++;
             i = end - 1;
