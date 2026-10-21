@@ -18,7 +18,7 @@ The MVP's goal (D-053): take the data from the external drive to the cloud, ask 
 
 ### Acceptance criteria
 - [x] Given the fixture library and recorded translator responses, when the end-to-end test runs in CI, then every golden counting question's answer equals the expected number, and a mismatch fails with the question and both numbers. *(`MvpAcceptanceTests` in `tests/Sepiabox.Acceptance.Tests`, D-076: 8 questions × 2 languages pass on the recorded responses, which are the expected queries until the recording run; a wrong response fails with lines such as `photos-by-year/pt "quantas fotos por ano?": group 2005: expected 3 (report), answered 1`.)*
-- [ ] Given the same test with the real API (`Category=LiveApi`), when it runs before `done`, then every answer matches, compared by meaning as in S-025 (one recorded retry per question); the result goes in the PR.
+- [x] Given the same test with the real API (`Category=LiveApi`), when it runs before `done`, then every answer matches, compared by meaning as in S-025 (one recorded retry per question); the result goes in the PR. *(Recording run 2026-10-21 on 5ec375a: `Model claude-haiku-5-5, 2026-10-21: 16/16 answered right, 0 after a retry ().`; the CI replay passes on the recorded responses.)*
 - [x] Given the fixture's exact duplicate, then it counts once in both `report` and the answer (unique assets, not files); given its folder-dated files, they count in their year; given its truly undated files, the time-filtered answers say "N items have no date" with N equal to `report`'s undated count; given its videos with locations, they count in their city. *(One test each: the duplicate, the 1901 folder-dated photos, the undated count of a time-filtered answer for photos and for all items, and the Lisbon and Porto videos.)*
 - [x] Given `docs/operations.md`, then it lists the owner's acceptance on the real data (questions to ask and how to compare them with `sepiabox-ingest report`). *("MVP acceptance": the commands, the import checks, the questions in both languages and a table to fill in.)*
 
@@ -47,7 +47,7 @@ In a session that has `SEPIABOX_ANTHROPIC_API_KEY`, Docker, and `ffmpeg` and `ff
 If the run fails, keep the story `blocked` (the recorded file is unchanged, so there is nothing to commit) and report the misses: they are prompt or question fixes for a review iteration.
 
 ### Status
-- `blocked` (2026-10-21): everything is implemented and tested (D-076) but the required live run with recording (D-054), above.
+- `done` (2026-10-21): implemented and tested (D-076); the required live run with recording (D-054) passed 16/16.
 
 ### Expected tests
 - The end-to-end test, recorded (CI) and live (before `done`).
