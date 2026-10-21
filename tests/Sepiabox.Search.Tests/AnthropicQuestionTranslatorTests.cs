@@ -283,6 +283,56 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.Equal(["text"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
     }
 
+    [Fact]
+    public void Output_schema_lets_dates_places_sources_and_a_description_go_together()
+    {
+        var schema = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
+        var filters = schema["properties"]!["filters"]!;
+
+        // Nothing ties one filter to another in the grammar (undatedOnly against dates is SearchQueryJson's rule).
+        var text = filters.ToJsonString();
+        foreach (var combinator in new[] { "anyOf", "oneOf", "allOf", "\"not\"", "dependent", "if" })
+        {
+            Assert.DoesNotContain(combinator, text, StringComparison.Ordinal);
+        }
+
+        Assert.Null(filters["required"]);
+        Assert.Null(schema["required"]);
+        // A query with all of them, written in the schema's order, uses only its properties.
+        var everything = JsonNode.Parse("""
+            {"filters": {"kinds": ["photo"], "years": [2020], "months": [1], "places": {"cities": ["Rio de Janeiro"], "countries": ["BR"]},
+             "sources": ["HD da Ana"], "visual": {"text": "beach"}}, "sort": "capturedAtAsc", "limit": 5}
+            """)!;
+        AssertInSchemaOrder(everything, schema);
+    }
+
+    [Fact]
+    public void Every_example_in_the_prompt_writes_its_fields_in_the_schema_s_order()
+    {
+        // Structured outputs produce the properties in the schema's order: a date written after a place in an example
+        // teaches the model to lose it (the first live golden run lost every date next to a place or a source).
+        var schema = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
+        var examples = QuestionPrompt.System.Split('\n')
+            .Where(line => line.Contains(" -> {", StringComparison.Ordinal))
+            .Select(line => JsonNode.Parse(line[(line.IndexOf(" -> ", StringComparison.Ordinal) + 4)..])!)
+            .ToList();
+
+        Assert.True(examples.Count >= 15, $"{examples.Count} examples.");
+        Assert.All(examples, example => AssertInSchemaOrder(example, schema));
+        // Places and sources together with dates, in both languages.
+        Assert.Contains(examples, e => e["filters"]!["places"] is not null && (e["filters"]!["years"] ?? e["filters"]!["dateFrom"]) is not null);
+        Assert.Contains(examples, e => e["filters"]!["sources"] is not null && e["filters"]!["years"] is not null);
+        Assert.DoesNotContain(examples, e => e["filters"]!["undatedOnly"] is JsonValue v && !v.GetValue<bool>());
+    }
+
+    [Fact]
+    public void Prompt_says_the_order_and_when_not_to_write_undated_or_a_description()
+    {
+        Assert.Contains("always write the dates before the places and sources", QuestionPrompt.System, StringComparison.Ordinal);
+        Assert.Contains("never write it as false", QuestionPrompt.System, StringComparison.Ordinal);
+        Assert.Contains("\"last summer\" has no visual", QuestionPrompt.System, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("""{"type": "object", "additionalProperties": false, "properties": {"a": {"type": "string", "contentEncoding": "base64"}}}""", "contentEncoding")]
     [InlineData("""{"type": "object", "additionalProperties": false, "properties": {"a": {"type": "string", "format": "regex"}}}""", "regex")]
@@ -317,6 +367,27 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.Equal(QuestionContextBuilder.MaxValuesPerList, cities.Count);
         Assert.Contains("Lisbon", cities);
         Assert.DoesNotContain(cities, c => c.Equals("lisbon", StringComparison.Ordinal) || c.Length == 0 || c.Contains('\0', StringComparison.Ordinal));
+    }
+
+    // Every key is one of the schema's properties, and they come in the schema's order, at every level.
+    private static void AssertInSchemaOrder(JsonNode value, JsonNode schema)
+    {
+        if (value is not JsonObject obj || schema["properties"] is not JsonObject properties)
+        {
+            return;
+        }
+
+        var order = properties.Select(p => p.Key).ToList();
+        var keys = obj.Select(p => p.Key).ToList();
+        Assert.All(keys, key => Assert.Contains(key, order));
+        Assert.Equal(keys.OrderBy(order.IndexOf), keys);
+        foreach (var (key, child) in obj)
+        {
+            if (child is not null)
+            {
+                AssertInSchemaOrder(child, properties[key]!);
+            }
+        }
     }
 
     // A stand-in for SearchQueryJson.TryParse: an object with only filters, sort and limit, and months 1-12.
