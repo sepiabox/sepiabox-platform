@@ -11,6 +11,9 @@ public sealed record FilterFields(int? Year, int? Month, string? Kind, string? C
 
     /// <summary>"With me": the signed-in user's own person.</summary>
     public bool Me { get; init; }
+
+    /// <summary>The family's places chosen (S-014): taken in any of them.</summary>
+    public IReadOnlyList<string> SavedPlaces { get; init; } = [];
 }
 
 /// <summary>
@@ -33,9 +36,18 @@ public static class SearchLinks
     /// a hand-edited URL may hold anything.
     /// </summary>
     public static SearchQuery FromFields(
-        string? year, string? month, string? kind, string? city, string? source, string? text = null, IEnumerable<string?>? people = null, bool me = false)
+        string? year,
+        string? month,
+        string? kind,
+        string? city,
+        string? source,
+        string? text = null,
+        IEnumerable<string?>? people = null,
+        bool me = false,
+        IEnumerable<string?>? savedPlaces = null)
     {
-        var names = (people ?? []).Select(Name).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).Take(SearchQueryJson.MaxListLength).ToList();
+        var names = Names(people);
+        var places = Names(savedPlaces);
         var filters = new SearchFilters
         {
             Years = Number(year, SearchQueryJson.MinYear, SearchQueryJson.MaxYear) is { } y ? [y] : null,
@@ -45,9 +57,13 @@ public static class SearchLinks
             Sources = Name(source) is { } s ? [s] : null,
             Visual = Description(text) is { } t ? new VisualFilter { Text = t } : null,
             People = names.Count > 0 || me ? new PeopleFilter { All = names.Count > 0 ? names : null, IncludeMe = me } : null,
+            SavedPlaces = places.Count > 0 ? places : null,
         };
         return new SearchQuery { Filters = filters };
     }
+
+    private static List<string> Names(IEnumerable<string?>? values) =>
+        [.. (values ?? []).Select(Name).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).Take(SearchQueryJson.MaxListLength)];
 
     /// <summary>The bar's fields for a query: a field shows a value only when the query has exactly one there.</summary>
     public static FilterFields ToFields(SearchQuery? query)
@@ -63,6 +79,7 @@ public static class SearchLinks
         {
             People = filters?.People?.All ?? [],
             Me = filters?.People?.IncludeMe ?? false,
+            SavedPlaces = filters?.SavedPlaces ?? [],
         };
     }
 

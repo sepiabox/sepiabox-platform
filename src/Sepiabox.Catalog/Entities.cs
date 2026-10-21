@@ -296,3 +296,22 @@ public static class FaceDataDeletionScopes
     /// <summary>"Delete face data" on one person: that person and their faces.</summary>
     public const string Person = "person";
 }
+
+/// <summary>
+/// A place only the family knows (S-014, D-083): "Beach house", "Grandma's". Its name is unique ignoring case; at most
+/// one place is the home, a flag rather than a name, so it works in any language (D-050).
+/// </summary>
+public sealed class SavedPlace
+{
+    public long Id { get; set; }
+
+    public required string Name { get; set; }
+
+    /// <summary>The centre, a WGS 84 point (SRID 4326): X is longitude, Y is latitude.</summary>
+    public required NetTopologySuite.Geometries.Point Location { get; set; }
+
+    /// <summary>How far from <see cref="Location"/> a photo still counts as taken there, in metres.</summary>
+    public int RadiusM { get; set; }
+
+    public bool IsHome { get; set; }
+}

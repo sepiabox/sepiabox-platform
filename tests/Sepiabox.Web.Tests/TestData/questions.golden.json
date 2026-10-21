@@ -1,11 +1,27 @@
 {
-  "description": "S-025 golden questions. Each question, in English and in Brazilian Portuguese, with the search DSL it means on the fixed day below. Results are compared on the fixture catalog in this file, not as JSON text. Visual concepts stand for CLIP embeddings: the tests' embedder maps English descriptions to them by keyword. People (S-021) are faces of named people in the assets; \"me\" is the signed-in user, linked to one of them (\"This is me\").",
+  "description": "S-025 golden questions. Each question, in English and in Brazilian Portuguese, with the search DSL it means on the fixed day below. Results are compared on the fixture catalog in this file, not as JSON text. Visual concepts stand for CLIP embeddings: the tests' embedder maps English descriptions to them by keyword. People (S-021) are faces of named people in the assets; \"me\" is the signed-in user, linked to one of them (\"This is me\"). Saved places (S-014) are the family's own places, with made-up coordinates; an asset's location is its latitude and longitude.",
   "today": "2026-10-20",
   "timeZone": "Europe/Lisbon",
   "me": {
     "name": "Carla",
     "email": "carla@example.com"
   },
+  "savedPlaces": [
+    {
+      "name": "Casa",
+      "lat": 38.74,
+      "lon": -9.16,
+      "radiusM": 300,
+      "home": true
+    },
+    {
+      "name": "Casa da praia",
+      "lat": 38.96,
+      "lon": -9.41,
+      "radiusM": 500,
+      "home": false
+    }
+  ],
   "visualConcepts": {
     "snow": [
       "snow"
@@ -44,7 +60,11 @@
       "city": "Lisbon",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        38.7405,
+        -9.1605
+      ]
     },
     {
       "n": 2,
@@ -55,6 +75,10 @@
       "source": "HD da Ana",
       "concepts": [
         "sunset"
+      ],
+      "location": [
+        38.7398,
+        -9.1597
       ]
     },
     {
@@ -85,7 +109,11 @@
       "city": "Lisbon",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        38.7402,
+        -9.161
+      ]
     },
     {
       "n": 6,
@@ -114,6 +142,10 @@
       "people": [
         "Carla",
         "Pedro"
+      ],
+      "location": [
+        41.1496,
+        -8.611
       ]
     },
     {
@@ -127,6 +159,10 @@
       "people": [
         "Ana",
         "Pedro"
+      ],
+      "location": [
+        41.15,
+        -8.61
       ]
     },
     {
@@ -139,6 +175,10 @@
       "concepts": [],
       "people": [
         "Ana"
+      ],
+      "location": [
+        41.149,
+        -8.612
       ]
     },
     {
@@ -148,7 +188,11 @@
       "city": "Porto",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        41.151,
+        -8.609
+      ]
     },
     {
       "n": 11,
@@ -157,7 +201,11 @@
       "city": "Porto",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        41.148,
+        -8.613
+      ]
     },
     {
       "n": 12,
@@ -183,6 +231,10 @@
       "source": "HD da Ana",
       "concepts": [
         "snow"
+      ],
+      "location": [
+        40.4168,
+        -3.7038
       ]
     },
     {
@@ -233,6 +285,10 @@
       "source": "HD da Ana",
       "concepts": [
         "beach"
+      ],
+      "location": [
+        -22.9068,
+        -43.1729
       ]
     },
     {
@@ -274,7 +330,11 @@
       "city": "Porto",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        41.1505,
+        -8.6105
+      ]
     },
     {
       "n": 22,
@@ -283,7 +343,11 @@
       "city": "Lisbon",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        38.741,
+        -9.159
+      ]
     },
     {
       "n": 23,
@@ -292,7 +356,11 @@
       "city": "Lisbon",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        38.7223,
+        -9.1393
+      ]
     },
     {
       "n": 24,
@@ -310,7 +378,11 @@
       "city": "Porto",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        41.145,
+        -8.615
+      ]
     },
     {
       "n": 26,
@@ -337,7 +409,11 @@
       "city": "Porto",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        41.153,
+        -8.608
+      ]
     },
     {
       "n": 29,
@@ -346,7 +422,11 @@
       "city": "Lisbon",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        38.7395,
+        -9.1603
+      ]
     },
     {
       "n": 30,
@@ -359,6 +439,10 @@
       "people": [
         "Carla",
         "Bruno"
+      ],
+      "location": [
+        41.1495,
+        -8.6115
       ]
     },
     {
@@ -377,7 +461,11 @@
       "city": null,
       "country": null,
       "source": "Celular do Bruno",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        38.9601,
+        -9.4102
+      ]
     },
     {
       "n": 33,
@@ -424,7 +512,11 @@
       "city": "Lisbon",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        38.7169,
+        -9.1399
+      ]
     },
     {
       "n": 38,
@@ -433,7 +525,11 @@
       "city": null,
       "country": null,
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        38.9603,
+        -9.4104
+      ]
     },
     {
       "n": 39,
@@ -442,7 +538,11 @@
       "city": null,
       "country": null,
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        38.9598,
+        -9.4097
+      ]
     },
     {
       "n": 40,
@@ -484,6 +584,10 @@
       "source": "HD da Ana",
       "concepts": [
         "mountain"
+      ],
+      "location": [
+        40.42,
+        -3.7
       ]
     },
     {
@@ -518,7 +622,11 @@
       "city": null,
       "country": null,
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "location": [
+        38.9605,
+        -9.411
+      ]
     },
     {
       "n": 47,
@@ -1581,6 +1689,132 @@
             "all": [
               "Ana"
             ]
+          }
+        },
+        "aggregate": {
+          "count": "assets"
+        }
+      }
+    },
+    {
+      "id": "places-beach-house",
+      "covers": [
+        "saved places"
+      ],
+      "en": "photos at the beach house",
+      "pt": "fotos na casa da praia",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ],
+          "savedPlaces": [
+            "Casa da praia"
+          ]
+        }
+      }
+    },
+    {
+      "id": "places-home-2019",
+      "covers": [
+        "saved places",
+        "home",
+        "dates"
+      ],
+      "en": "photos at home in 2019",
+      "pt": "fotos em casa em 2019",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ],
+          "years": [
+            2019
+          ],
+          "savedPlaces": [
+            "Casa"
+          ]
+        }
+      }
+    },
+    {
+      "id": "places-far-from-home",
+      "covers": [
+        "distance",
+        "home"
+      ],
+      "en": "photos more than 100 km from home",
+      "pt": "fotos a mais de 100 km de casa",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ],
+          "distanceFrom": {
+            "home": true,
+            "minKm": 100
+          }
+        }
+      }
+    },
+    {
+      "id": "places-near-home",
+      "covers": [
+        "distance",
+        "home"
+      ],
+      "en": "photos within 5 km of home",
+      "pt": "fotos a até 5 km de casa",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ],
+          "distanceFrom": {
+            "home": true,
+            "maxKm": 5
+          }
+        }
+      }
+    },
+    {
+      "id": "places-beach-house-over-the-years",
+      "covers": [
+        "saved places",
+        "by year",
+        "counting"
+      ],
+      "en": "the beach house over the years",
+      "pt": "a casa da praia ao longo dos anos",
+      "expected": {
+        "filters": {
+          "savedPlaces": [
+            "Casa da praia"
+          ]
+        },
+        "aggregate": {
+          "count": "assets",
+          "groupBy": "year"
+        }
+      }
+    },
+    {
+      "id": "places-count-far-videos",
+      "covers": [
+        "distance",
+        "home",
+        "counting"
+      ],
+      "en": "how many videos were taken more than 100 km from home?",
+      "pt": "quantos vídeos foram feitos a mais de 100 km de casa?",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "video"
+          ],
+          "distanceFrom": {
+            "home": true,
+            "minKm": 100
           }
         },
         "aggregate": {

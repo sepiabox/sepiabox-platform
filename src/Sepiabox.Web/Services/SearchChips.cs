@@ -63,6 +63,16 @@ public static class SearchChips
             Add(text["Chip_Countries", string.Join(", ", countries.Select(Country))], f with { Places = Places(f.Places with { Countries = null }) });
         }
 
+        if (f.SavedPlaces is { } savedPlaces)
+        {
+            Add(text["Chip_SavedPlaces", string.Join(", ", savedPlaces)], f with { SavedPlaces = null });
+        }
+
+        if (f.DistanceFrom is { } distance)
+        {
+            Add(Distance(text, distance), f with { DistanceFrom = null });
+        }
+
         if (f.Sources is { } sources)
         {
             Add(text["Chip_Sources", string.Join(", ", sources)], f with { Sources = null });
@@ -110,6 +120,20 @@ public static class SearchChips
         }
 
         return chips;
+    }
+
+    // "More than 100 km from home", "Up to 5 km from Beach house", "100–500 km from home".
+    private static string Distance(IStringLocalizer<SharedResource> text, DistanceFilter distance)
+    {
+        var from = distance.Home ? text["Chip_Home"].Value : distance.Place ?? string.Empty;
+        string Km(double km) => km.ToString("0.##", CultureInfo.CurrentCulture);
+        return (distance.MinKm, distance.MaxKm) switch
+        {
+            ({ } min, { } max) => text["Chip_DistanceBetween", Km(min), Km(max), from],
+            ({ } min, null) => text["Chip_DistanceMin", Km(min), from],
+            (null, { } max) => text["Chip_DistanceMax", Km(max), from],
+            _ => from,
+        };
     }
 
     // A people filter with no names and no "me" is no filter at all.

@@ -31,6 +31,12 @@ internal sealed class GoldenQuestions
         TimeZone = root["timeZone"]!.GetValue<string>();
         MeName = root["me"]!["name"]!.GetValue<string>();
         MeEmail = root["me"]!["email"]!.GetValue<string>();
+        SavedPlaces = [.. root["savedPlaces"]!.AsArray().Select(p => new GoldenPlace(
+            p!["name"]!.GetValue<string>(),
+            p["lat"]!.GetValue<double>(),
+            p["lon"]!.GetValue<double>(),
+            p["radiusM"]!.GetValue<int>(),
+            p["home"]!.GetValue<bool>()))];
         Concepts = root["visualConcepts"]!.AsObject()
             .Select((p, i) => new Concept(p.Key, i, [.. p.Value!.AsArray().Select(k => k!.GetValue<string>())]))
             .ToList();
@@ -42,7 +48,10 @@ internal sealed class GoldenQuestions
             a["country"]?.GetValue<string>(),
             a["source"]!.GetValue<string>(),
             [.. a["concepts"]!.AsArray().Select(c => c!.GetValue<string>())],
-            a["people"] is JsonArray people ? [.. people.Select(p => p!.GetValue<string>())] : []))];
+            a["people"] is JsonArray people ? [.. people.Select(p => p!.GetValue<string>())] : [])
+        {
+            Location = a["location"] is JsonArray location ? (location[0]!.GetValue<double>(), location[1]!.GetValue<double>()) : null,
+        })];
         Questions = [.. root["questions"]!.AsArray().Select(q => new GoldenQuestion(
             q!["id"]!.GetValue<string>(),
             q["en"]!.GetValue<string>(),
@@ -62,6 +71,9 @@ internal sealed class GoldenQuestions
 
     public IReadOnlyList<Concept> Concepts { get; }
 
+    /// <summary>The family's own places (S-014), with made-up coordinates; one is the home.</summary>
+    public IReadOnlyList<GoldenPlace> SavedPlaces { get; }
+
     public IReadOnlyList<GoldenAsset> Catalog { get; }
 
     public IReadOnlyList<GoldenQuestion> Questions { get; }
@@ -80,6 +92,8 @@ internal sealed class GoldenQuestions
         .Add("sources", "filters.sources", Catalog.Select(a => a.Source))
         .Add("cities", "filters.places.cities", Catalog.Where(a => a.City is not null).Select(a => a.City!))
         .Add("countries", "filters.places.countries", Catalog.Where(a => a.Country is not null).Select(a => s_countryCodes[a.Country!]))
+        .Add("saved places", "filters.savedPlaces", SavedPlaces.Select(p => p.Name))
+        .Add("home place", "filters.savedPlaces", SavedPlaces.Where(p => p.Home).Select(p => p.Name))
         .Add("people", "filters.people.all", Catalog.SelectMany(a => a.People))
         .Build();
 
@@ -97,6 +111,7 @@ internal sealed class GoldenQuestions
                 SizeBytes = 1000,
                 CapturedAt = asset.Date?.ToDateTime(new TimeOnly(12, 0)),
                 PlaceCity = asset.City,
+                Location = asset.Location is var (latitude, longitude) ? new Point(longitude, latitude) { SRID = 4326 } : null,
                 PlaceCountry = asset.Country,
                 ImportedAt = DateTimeOffset.UnixEpoch,
                 UpdatedAt = DateTimeOffset.UnixEpoch,
@@ -137,6 +152,17 @@ internal sealed class GoldenQuestions
                     Assignment = FaceAssignments.Auto,
                 });
             }
+        }
+
+        foreach (var place in SavedPlaces)
+        {
+            db.SavedPlaces.Add(new SavedPlace
+            {
+                Name = place.Name,
+                Location = new Point(place.Longitude, place.Latitude) { SRID = 4326 },
+                RadiusM = place.RadiusM,
+                IsHome = place.Home,
+            });
         }
 
         var id = 1L;
@@ -199,7 +225,13 @@ internal sealed class GoldenQuestions
     public sealed record Concept(string Name, int Axis, IReadOnlyList<string> Keywords);
 
     public sealed record GoldenAsset(
-        int N, string Kind, DateOnly? Date, string? City, string? Country, string Source, IReadOnlyList<string> Concepts, IReadOnlyList<string> People);
+        int N, string Kind, DateOnly? Date, string? City, string? Country, string Source, IReadOnlyList<string> Concepts, IReadOnlyList<string> People)
+    {
+        /// <summary>Where it was taken (S-014), made up; null for most assets.</summary>
+        public (double Latitude, double Longitude)? Location { get; init; }
+    }
+
+    public sealed record GoldenPlace(string Name, double Latitude, double Longitude, int RadiusM, bool Home);
 
     public sealed record GoldenQuestion(string Id, string English, string Portuguese, string Expected, IReadOnlyList<string> Covers)
     {

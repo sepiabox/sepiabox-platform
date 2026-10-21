@@ -44,6 +44,25 @@ public sealed class UnknownPeopleException(IReadOnlyList<string> missing, bool m
         }.Where(part => part is not null));
 }
 
+/// <summary>
+/// A search names saved places the catalog does not have (S-014): <see cref="Missing"/> lists them, as written;
+/// <see cref="HomeMissing"/> says it asked for the distance from home and no place is the home.
+/// </summary>
+public sealed class UnknownPlacesException(IReadOnlyList<string> missing, bool homeMissing)
+    : Exception(Describe(missing, homeMissing))
+{
+    public IReadOnlyList<string> Missing { get; } = missing;
+
+    public bool HomeMissing { get; } = homeMissing;
+
+    private static string Describe(IReadOnlyList<string> missing, bool homeMissing) =>
+        string.Join(" ", new[]
+        {
+            missing.Count > 0 ? $"No saved place is called {string.Join(", ", missing)}." : null,
+            homeMissing ? "No saved place is marked as home." : null,
+        }.Where(part => part is not null));
+}
+
 /// <summary>One asset a search found; <see cref="Score"/> is its cosine similarity to the description, for a visual search.</summary>
 public sealed record SearchHit(
     string Id, string Kind, DateTime? CapturedAt, double? DurationSeconds, string? PlaceCity, string? PlaceCountry, double? Score = null);
@@ -127,6 +146,30 @@ public sealed class SearchService(
     }
 
     /// <summary>
+    /// Checks that every saved place the filters name exists (ignoring case) and, for the distance from home, that a
+    /// place is the home; otherwise <see cref="UnknownPlacesException"/>. Run before a search or a count.
+    /// </summary>
+    public async Task ResolvePlacesAsync(SearchFilters filters, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filters);
+        var missing = new List<string>();
+        foreach (var name in (filters.SavedPlaces ?? []).Concat(filters.DistanceFrom?.Place is { } place ? [place] : []))
+        {
+            string[] lowered = [NameKey(name)];
+            if (!missing.Contains(name) && !await db.SavedPlaces.AnyAsync(p => lowered.Contains(p.Name.ToLower()), cancellationToken))
+            {
+                missing.Add(name);
+            }
+        }
+
+        var homeMissing = filters.DistanceFrom is { Home: true } && !await db.SavedPlaces.AnyAsync(p => p.IsHome, cancellationToken);
+        if (missing.Count > 0 || homeMissing)
+        {
+            throw new UnknownPlacesException(missing, homeMissing);
+        }
+    }
+
+    /// <summary>
     /// The assets the query's filters match, in no particular order and without its limit: for a caller that orders
     /// by something else, such as visual similarity (S-016).
     /// </summary>
@@ -184,6 +227,7 @@ public sealed class SearchService(
         ArgumentNullException.ThrowIfNull(byDate);
         ArgumentNullException.ThrowIfNull(bySimilarity);
         await ResolvePeopleAsync(query.Filters, cancellationToken);
+        await ResolvePlacesAsync(query.Filters, cancellationToken);
         if (query.Filters.Visual is not { } visual)
         {
             return await byDate(Query(query)).Take(query.Limit + 1).ToListAsync(cancellationToken);
@@ -227,6 +271,7 @@ public sealed class SearchService(
         }
 
         var named = await ResolvePeopleAsync(query.Filters, cancellationToken);
+        await ResolvePlacesAsync(query.Filters, cancellationToken);
         var assets = Filtered(query);
         var total = await assets.CountAsync(cancellationToken);
         var aggregate = query.Aggregate ?? new SearchAggregate();
@@ -339,6 +384,19 @@ public sealed class SearchService(
             // The catalog keeps the country's name (D-066); GeoNames maps codes to the same names.
             var names = db.GeoNames.Where(g => countries.Contains(g.CountryCode) && g.CountryName != null).Select(g => g.CountryName);
             assets = assets.Where(a => a.PlaceCountry != null && names.Contains(a.PlaceCountry));
+        }
+
+        if (filters.SavedPlaces is { } savedPlaces)
+        {
+            var lowered = savedPlaces.Select(NameKey).Distinct().ToList();
+            assets = PostgisDistance.InAny(assets, db.SavedPlaces.Where(p => lowered.Contains(p.Name.ToLower())));
+        }
+
+        if (filters.DistanceFrom is { } distance)
+        {
+            string[] lowered = [distance.Place is { } name ? NameKey(name) : string.Empty];
+            var centre = distance.Home ? db.SavedPlaces.Where(p => p.IsHome) : db.SavedPlaces.Where(p => lowered.Contains(p.Name.ToLower()));
+            assets = PostgisDistance.Between(assets, centre, distance.MinKm * 1000, distance.MaxKm * 1000);
         }
 
         if (filters.Sources is { } sources)

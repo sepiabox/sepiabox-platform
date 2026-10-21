@@ -32,6 +32,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<FaceDataDeletion> FaceDataDeletions => Set<FaceDataDeletion>();
 
+    public DbSet<SavedPlace> SavedPlaces => Set<SavedPlace>();
+
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options
@@ -155,6 +157,17 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             face.HasOne<Asset>().WithMany().HasForeignKey(f => f.AssetId).OnDelete(DeleteBehavior.Cascade);
             face.HasIndex(f => f.AssetId);
             face.HasIndex(f => f.PersonId);
+        });
+
+        modelBuilder.Entity<SavedPlace>(place =>
+        {
+            place.ToTable("saved_places");
+            place.Property(p => p.Name).HasMaxLength(200);
+            place.Property(p => p.Location).HasColumnType("geography (Point, 4326)");
+            // Names are unique ignoring case through an index on lower(name), which the SavedPlaces migration creates in
+            // SQL; at most one home (S-014).
+            place.HasIndex(p => p.IsHome).IsUnique().HasFilter("is_home").HasDatabaseName("ix_saved_places_home");
+            place.ToTable(t => t.HasCheckConstraint("ck_saved_places_radius_m", "radius_m BETWEEN 10 AND 50000"));
         });
 
         modelBuilder.Entity<Setting>(setting =>

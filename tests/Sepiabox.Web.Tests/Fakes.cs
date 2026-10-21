@@ -331,3 +331,32 @@ internal sealed class FakeFaceSettings : IFaceSettings
         return Task.FromResult(PersonFound);
     }
 }
+
+internal sealed class FakeSavedPlaces : ISavedPlaces
+{
+    public List<SavedPlaceSummary> Places { get; } = [];
+
+    public Sepiabox.Catalog.SavedPlaces.SavedPlaceOutcome Outcome { get; set; } = Sepiabox.Catalog.SavedPlaces.SavedPlaceOutcome.Done;
+
+    public List<string> Calls { get; } = [];
+
+    public Task<IReadOnlyList<SavedPlaceSummary>> ListAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SavedPlaceSummary>>([.. Places]);
+
+    public Task<Sepiabox.Catalog.SavedPlaces.SavedPlaceOutcome> CreateAsync(
+        string? name, double latitude, double longitude, int radiusM, bool isHome, CancellationToken cancellationToken = default) =>
+        Record(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"create {name} {latitude} {longitude} {radiusM} {isHome}"));
+
+    public Task<Sepiabox.Catalog.SavedPlaces.SavedPlaceOutcome> UpdateAsync(
+        long id, string? name, int radiusM, bool isHome, CancellationToken cancellationToken = default) =>
+        Record(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"update {id} {name} {radiusM} {isHome}"));
+
+    public Task<Sepiabox.Catalog.SavedPlaces.SavedPlaceOutcome> DeleteAsync(long id, CancellationToken cancellationToken = default) =>
+        Record(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"delete {id}"));
+
+    private Task<Sepiabox.Catalog.SavedPlaces.SavedPlaceOutcome> Record(string call)
+    {
+        Calls.Add(call);
+        return Task.FromResult(Outcome);
+    }
+}

@@ -27,7 +27,7 @@ public sealed class CatalogAppRoleTests(CatalogFixture fixture)
         await using var app = await ConnectAsync(catalog, Password);
 
         Assert.Equal(0L, await ScalarAsync(app, "SELECT count(*) FROM assets"));
-        foreach (var table in new[] { "assets", "asset_sources", "derivatives", "asset_embeddings", "manifest_imports", "people", "faces", "settings", "erased_faces", "face_data_deletions" })
+        foreach (var table in new[] { "assets", "asset_sources", "derivatives", "asset_embeddings", "manifest_imports", "people", "faces", "settings", "erased_faces", "face_data_deletions", "saved_places" })
         {
             foreach (var privilege in new[] { "SELECT", "INSERT", "UPDATE", "DELETE" })
             {

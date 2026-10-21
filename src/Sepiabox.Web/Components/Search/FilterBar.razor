@@ -58,6 +58,20 @@
         </select>
     </label>
 
+    @if (SavedPlaces.Any())
+    {
+        @* The family's places (S-014): taken in any of them. *@
+        <label class="saved-places-filter">
+            <span>@Text["Filter_SavedPlaces"]</span>
+            <select name="place" multiple size="@Math.Min(4, Math.Max(2, SavedPlaces.Count()))">
+                @foreach (var place in SavedPlaces)
+                {
+                    <option value="@place" selected="@(Fields.SavedPlaces.Contains(place, StringComparer.OrdinalIgnoreCase))">@place</option>
+                }
+            </select>
+        </label>
+    }
+
     @if (People.Any() || Options.MeLinked || Fields.Me)
     {
         @* Several people: a photo with all of them (S-021); a plain multiple select, no script needed. *@
@@ -122,6 +136,8 @@
     private IEnumerable<string> Sources => With(Options.Sources, Fields.Source);
 
     private IEnumerable<string> People => Fields.People.Aggregate((IEnumerable<string>)Options.People, (all, name) => With([.. all], name));
+
+    private IEnumerable<string> SavedPlaces => Fields.SavedPlaces.Aggregate((IEnumerable<string>)Options.SavedPlaces, (all, name) => With([.. all], name));
 
     private static IEnumerable<string> With(IReadOnlyList<string> values, string? value) =>
         value is null || values.Contains(value, StringComparer.OrdinalIgnoreCase) ? values : values.Append(value);

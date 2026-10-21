@@ -33,6 +33,9 @@ public sealed record AssetDetail(
 {
     /// <summary>The people in it (S-021): those with a counted face, named ones first, by name.</summary>
     public IReadOnlyList<AssetPerson> People { get; init; } = [];
+
+    /// <summary>Where it was taken, as latitude and longitude, for "Save this place" (S-014); null without a location.</summary>
+    public (double Latitude, double Longitude)? Location { get; init; }
 }
 
 /// <summary>A person in a photo; <see cref="Name"/> is null while they are unnamed.</summary>
@@ -53,6 +56,12 @@ public sealed record FilterOptions(
 
     /// <summary>Whether the signed-in user said "This is me" for someone, so "me" can be filtered on.</summary>
     public bool MeLinked { get; init; }
+
+    /// <summary>The family's places (S-014), by name in display order; read on every request, since they change.</summary>
+    public IReadOnlyList<string> SavedPlaces { get; init; } = [];
+
+    /// <summary>The name of the place marked as home, if any.</summary>
+    public string? HomePlace { get; init; }
 }
 
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
@@ -251,6 +260,7 @@ public sealed class LibraryQueries(
             PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry))
         {
             People = [.. people.OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
+            Location = asset.Location is { } point ? (point.Y, point.X) : null,
         };
     }
 
@@ -397,12 +407,16 @@ public sealed class LibraryQueries(
             .ToListAsync(cancellationToken);
         var me = Me();
         var meLinked = me is not null && await db.People.AsNoTracking().AnyAsync(p => p.UserEmail == me, cancellationToken);
+        // The family's places change at any time too (S-014).
+        var places = await db.SavedPlaces.AsNoTracking().Select(p => new { p.Name, p.IsHome }).ToListAsync(cancellationToken);
         return options with
         {
             Cities = [.. options.Cities.Order(byName)],
             Sources = [.. options.Sources.Order(byName)],
             People = [.. people.Order(byName)],
             MeLinked = meLinked,
+            SavedPlaces = [.. places.Select(p => p.Name).Order(byName)],
+            HomePlace = places.FirstOrDefault(p => p.IsHome)?.Name,
         };
     }
 

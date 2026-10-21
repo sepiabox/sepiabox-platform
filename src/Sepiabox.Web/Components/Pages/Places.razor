@@ -1,0 +1,222 @@
+@page "/places"
+@inject ISavedPlaces SavedPlaceList
+@inject NavigationManager Navigation
+@using System.Globalization
+@using Sepiabox.Catalog.Search
+@using Sepiabox.Catalog.SavedPlaces
+@* The family's places (S-014, D-083), in static server rendering with POST forms answered by a redirect back here
+   with a note, as the person page (S-020). A photo's "Save this place" opens it with the photo's latitude and
+   longitude filled in. *@
+
+<PageTitle>@Text["Places_Heading"] · Sepiabox</PageTitle>
+
+<h1 class="page-heading">@Text["Places_Heading"]</h1>
+
+@if (NoteText is { } note)
+{
+    <p class="note" role="status">@note</p>
+}
+
+@if (_deleting is { } deleting)
+{
+    <section class="confirm-delete">
+        <p class="note">@Text["Places_DeleteExplain", deleting.Name]</p>
+        <form method="post" @formname="delete" @onsubmit="DeleteAsync" class="confirm">
+            <AntiforgeryToken />
+            <input type="hidden" name="DeleteId" value="@deleting.Id.ToString(CultureInfo.InvariantCulture)" />
+            <button type="submit">@Text["Places_DeleteConfirm"]</button>
+            <a href="places">@Text["Settings_Cancel"]</a>
+        </form>
+    </section>
+}
+
+<section class="new-place">
+    <h2>@Text["Places_New"]</h2>
+    <form method="post" @formname="create" @onsubmit="CreateAsync" class="create">
+        <AntiforgeryToken />
+        <label>
+            <span>@Text["Places_Name"]</span>
+            <input type="text" name="NewName" maxlength="@SearchQueryJson.MaxNameLength" required />
+        </label>
+        <label>
+            <span>@Text["Places_Latitude"]</span>
+            <input type="text" name="NewLatitude" inputmode="decimal" value="@Lat" required />
+        </label>
+        <label>
+            <span>@Text["Places_Longitude"]</span>
+            <input type="text" name="NewLongitude" inputmode="decimal" value="@Lon" required />
+        </label>
+        <label>
+            <span>@Text["Places_Radius"]</span>
+            <input type="number" name="NewRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@SavedPlaceEditor.DefaultRadiusM" />
+        </label>
+        <label class="home">
+            <input type="checkbox" name="NewHome" value="1" />
+            <span>@Text["Places_IsHome"]</span>
+        </label>
+        <button type="submit">@Text["Places_Save"]</button>
+    </form>
+    <p class="hint muted">@Text["Places_Hint"]</p>
+</section>
+
+@if (_places is { Count: > 0 } places)
+{
+    <ul class="saved-places">
+        @foreach (var place in places)
+        {
+            <li class="saved-place">
+                <h2>
+                    @place.Name
+                    @if (place.IsHome)
+                    {
+                        @(" ")<span class="home-mark">@Text["Places_HomeMark"]</span>
+                    }
+                </h2>
+                <p class="muted small coordinates">@Coordinates(place)</p>
+                <p class="links">
+                    <a href="@SearchLinks.Timeline(Photos(place))">@Text["Places_Photos"]</a>
+                    <a href="@SearchLinks.Timeline(OverTheYears(place))" class="over-the-years">@Text["Places_OverTheYears"]</a>
+                </p>
+                @* One form name per place: a page's forms must have different names. *@
+                <form method="post" @formname="@($"edit-{place.Id.ToString(CultureInfo.InvariantCulture)}")" @onsubmit="() => UpdateAsync(place.Id)" class="edit">
+                    <AntiforgeryToken />
+                    <label>
+                        <span>@Text["Places_Name"]</span>
+                        <input type="text" name="EditName" value="@place.Name" maxlength="@SearchQueryJson.MaxNameLength" required />
+                    </label>
+                    <label>
+                        <span>@Text["Places_Radius"]</span>
+                        <input type="number" name="EditRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@place.RadiusM" />
+                    </label>
+                    <label class="home">
+                        <input type="checkbox" name="EditHome" value="1" checked="@place.IsHome" />
+                        <span>@Text["Places_IsHome"]</span>
+                    </label>
+                    <button type="submit">@Text["Places_Update"]</button>
+                    <a href="places?delete=@place.Id.ToString(CultureInfo.InvariantCulture)" class="small delete">@Text["Places_Delete"]</a>
+                </form>
+            </li>
+        }
+    </ul>
+}
+else
+{
+    <p class="empty">@Text["Places_None"]</p>
+}
+
+@code {
+    // What a note in the address may say, and its text: nothing else from the address is shown.
+    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    {
+        ["created"] = "Places_Done_Created",
+        ["updated"] = "Places_Done_Updated",
+        ["deleted"] = "Places_Done_Deleted",
+        [nameof(SavedPlaceOutcome.NotFound)] = "Places_Error_NotFound",
+        [nameof(SavedPlaceOutcome.NameTaken)] = "Places_Error_NameTaken",
+        [nameof(SavedPlaceOutcome.NameInvalid)] = "Places_Error_NameInvalid",
+        [nameof(SavedPlaceOutcome.LocationInvalid)] = "Places_Error_LocationInvalid",
+        [nameof(SavedPlaceOutcome.RadiusInvalid)] = "Places_Error_RadiusInvalid",
+    };
+
+    [SupplyParameterFromQuery(Name = PersonLinks.NoteParameter)]
+    public string? Note { get; set; }
+
+    /// <summary>From a photo's "Save this place": its latitude and longitude, as invariant numbers.</summary>
+    [SupplyParameterFromQuery(Name = "lat")]
+    public string? Lat { get; set; }
+
+    [SupplyParameterFromQuery(Name = "lon")]
+    public string? Lon { get; set; }
+
+    /// <summary>The place whose deletion is asked: a confirmation shows first.</summary>
+    [SupplyParameterFromQuery(Name = "delete")]
+    public long? Delete { get; set; }
+
+    [SupplyParameterFromForm(FormName = "create")]
+    public string? NewName { get; set; }
+
+    [SupplyParameterFromForm(FormName = "create")]
+    public string? NewLatitude { get; set; }
+
+    [SupplyParameterFromForm(FormName = "create")]
+    public string? NewLongitude { get; set; }
+
+    [SupplyParameterFromForm(FormName = "create")]
+    public string? NewRadius { get; set; }
+
+    [SupplyParameterFromForm(FormName = "create")]
+    public string? NewHome { get; set; }
+
+    // Bound from whichever place's form was sent (each has its own name).
+    [SupplyParameterFromForm]
+    public string? EditName { get; set; }
+
+    [SupplyParameterFromForm]
+    public string? EditRadius { get; set; }
+
+    [SupplyParameterFromForm]
+    public string? EditHome { get; set; }
+
+    [SupplyParameterFromForm(FormName = "delete")]
+    public string? DeleteId { get; set; }
+
+    private IReadOnlyList<SavedPlaceSummary>? _places;
+    private SavedPlaceSummary? _deleting;
+
+    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key)
+        ? key == "Places_Error_RadiusInvalid"
+            ? Text[key, SavedPlaceEditor.MinRadiusM, SavedPlaceEditor.MaxRadiusM].Value
+            : Text[key].Value
+        : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _places = await SavedPlaceList.ListAsync();
+        _deleting = Delete is { } id ? _places.FirstOrDefault(p => p.Id == id) : null;
+    }
+
+    private string Coordinates(SavedPlaceSummary place) =>
+        Text[
+            "Places_Coordinates",
+            place.Latitude.ToString("0.#####", CultureInfo.CurrentCulture),
+            place.Longitude.ToString("0.#####", CultureInfo.CurrentCulture),
+            place.RadiusM.ToString("N0", CultureInfo.CurrentCulture)].Value;
+
+    private static SearchQuery Photos(SavedPlaceSummary place) =>
+        new() { Filters = new SearchFilters { SavedPlaces = [place.Name] } };
+
+    // Grouped by year, each year linking to its photos (S-026's count rows).
+    private static SearchQuery OverTheYears(SavedPlaceSummary place) =>
+        Photos(place) with { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Year } };
+
+    private async Task CreateAsync()
+    {
+        var outcome = Coordinate(NewLatitude) is { } latitude && Coordinate(NewLongitude) is { } longitude
+            ? await SavedPlaceList.CreateAsync(NewName, latitude, longitude, Radius(NewRadius), NewHome == "1")
+            : SavedPlaceOutcome.LocationInvalid;
+        Answer(outcome, "created");
+    }
+
+    private async Task UpdateAsync(long id) =>
+        Answer(await SavedPlaceList.UpdateAsync(id, EditName, Radius(EditRadius), EditHome == "1"), "updated");
+
+    private async Task DeleteAsync()
+    {
+        var outcome = long.TryParse(DeleteId, NumberStyles.None, CultureInfo.InvariantCulture, out var id)
+            ? await SavedPlaceList.DeleteAsync(id)
+            : SavedPlaceOutcome.NotFound;
+        Answer(outcome, "deleted");
+    }
+
+    private void Answer(SavedPlaceOutcome outcome, string done) =>
+        Navigation.NavigateTo($"places?{PersonLinks.NoteParameter}={(outcome == SavedPlaceOutcome.Done ? done : outcome.ToString())}");
+
+    // Typed by hand or copied from a map: "38.7223", "38,7223" or "-9.1393"; anything else is not a coordinate.
+    private static double? Coordinate(string? value) =>
+        double.TryParse(value?.Trim().Replace(',', '.'), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number)
+            ? number
+            : null;
+
+    private static int Radius(string? value) =>
+        int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var radius) ? radius : SavedPlaceEditor.DefaultRadiusM;
+}
