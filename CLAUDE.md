@@ -50,7 +50,7 @@ tests/
 docs/
   architecture.md, decisions.md, operations.md
   backlog/             one file per story plus the index
-.github/workflows/ci.yml      lint (format, actionlint, ShellCheck), tests (Linux + Windows), integration (Linux)
+.github/workflows/ci.yml      lint (format, actionlint, ShellCheck), tests (Linux + Windows), integration (Linux), web-image (Linux: always on main, on PRs only when its inputs change)
 .github/workflows/deploy.yml  deploy main to Azure after green CI or by hand: OIDC, production approval, scripts/deploy.sh
 ```
 
