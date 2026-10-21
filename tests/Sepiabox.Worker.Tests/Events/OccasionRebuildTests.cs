@@ -175,6 +175,76 @@ public sealed class OccasionRebuildTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task The_larger_part_of_a_split_keeps_the_id_and_the_type_goes_with_the_new_one()
+    {
+        // Ten photos in an hour; the first is then moved 10 hours earlier, so it becomes an occasion of its own.
+        await using var db = await CatalogWithAsync(Enumerable.Range(1, 10).Select(n => Asset(n, n % 6)).ToArray());
+        await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+        var original = await db.Occasions.SingleAsync();
+        original.Type = "wedding";
+        await db.SaveChangesAsync();
+        (await db.Assets.SingleAsync(a => a.Id == Id(1))).CapturedAt = s_start.AddHours(-10);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+
+        Assert.Equal((1, 1, 0), (result.Created, result.Updated, result.Removed));
+        var kept = await db.Occasions.AsNoTracking().SingleAsync(o => o.Id == original.Id);
+        Assert.Equal(9, kept.AssetCount);
+        Assert.Equal(9, await db.OccasionAssets.CountAsync(l => l.EventId == original.Id));
+        // One photo left it, so the nine are not the same occasion as before: no type until it is classified again.
+        Assert.Null(kept.Type);
+        var alone = await db.Occasions.AsNoTracking().SingleAsync(o => o.Id != original.Id);
+        Assert.Equal(new[] { Id(1) }, await db.OccasionAssets.Where(l => l.EventId == alone.Id).Select(l => l.AssetId).ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task Equal_halves_of_a_split_give_the_lower_id_to_the_earlier_part()
+    {
+        await using var db = await CatalogWithAsync(Asset(1, 0), Asset(2, 1), Asset(3, 2), Asset(4, 3));
+        await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+        var id = await db.Occasions.Select(o => o.Id).SingleAsync();
+        // A gap of 10 hours between the second and the third photo.
+        foreach (var n in new[] { 3, 4 })
+        {
+            (await db.Assets.SingleAsync(a => a.Id == Id(n))).CapturedAt = s_start.AddHours(10 + n);
+        }
+
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+
+        var parts = await db.Occasions.AsNoTracking().OrderBy(o => o.StartsAt).ToListAsync();
+        Assert.Equal(id, parts[0].Id);
+        Assert.True(parts[1].Id > id);
+        Assert.Equal([[Id(1), Id(2)], [Id(3), Id(4)]], await AssetsPerOccasionAsync(db));
+    }
+
+    [Fact]
+    public async Task A_part_whose_only_candidate_id_went_to_a_larger_part_gets_a_new_id()
+    {
+        // Occasion A holds photos 1 to 3 (hours 0 to 2) and occasion B photos 4 and 5 (hours 20 and 21).
+        await using var db = await CatalogWithAsync(Asset(1, 0), Asset(2, 1), Asset(3, 2), Asset(4, 20), Asset(5, 21));
+        await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+        var ids = await db.Occasions.OrderBy(o => o.StartsAt).Select(o => o.Id).ToListAsync();
+        // Photo 3 moves to hour 12, 11 hours after photo 2 and 8 before photo 4, so it stands alone. It shares only A
+        // with the old occasions, and A's id goes to photos 1 and 2, which share more of it.
+        (await db.Assets.SingleAsync(a => a.Id == Id(3))).CapturedAt = s_start.AddHours(12);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        await new OccasionRebuild(db).RunAsync(CancellationToken.None);
+
+        var after = await db.Occasions.AsNoTracking().OrderBy(o => o.StartsAt).ToListAsync();
+        Assert.Equal(3, after.Count);
+        Assert.Equal(ids[0], after[0].Id);
+        Assert.Equal(ids[1], after[2].Id);
+        Assert.DoesNotContain(after[1].Id, ids);
+    }
+
+    [Fact]
     public async Task Two_occasions_that_merge_keep_the_first_ones_id_and_the_other_goes()
     {
         await using var db = await CatalogWithAsync(Asset(1, 0), Asset(2, 8));

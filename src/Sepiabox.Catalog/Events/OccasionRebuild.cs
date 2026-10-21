@@ -12,12 +12,14 @@ public sealed record OccasionRebuildResult(int Occasions, int Assets, int Create
 /// </summary>
 /// <remarks>
 /// The result depends only on the assets, so a second run changes nothing. An occasion keeps the id (the filter
-/// <c>eventIds</c> and the pages' links use it) of the existing occasion that shares most assets with it, the lowest id
-/// when equally many, unless an earlier occasion already took that id, and then it gets a new one. Its type (S-024) is
-/// kept only when its assets are exactly the same, since a changed occasion may be another kind. Undated assets are in
-/// no occasion. Runs in one transaction, under an advisory lock so two rebuilds never overlap; assets imported
-/// meanwhile are picked up by the next run, and an asset deleted meanwhile fails the run on its foreign key and rolls
-/// it back, so running it again is the fix.
+/// <c>eventIds</c> and the pages' links use it) of the existing occasion it shares most assets with: pairs of a new
+/// grouping and an existing occasion are taken in order of shared assets (most first), then the lower id, then the
+/// earlier grouping, each grouping and each id once. So the larger part of a split keeps the id; a grouping whose best
+/// id went elsewhere takes its next best unclaimed one, or a new id. Its type (S-024) is kept only when its assets are
+/// exactly the same, since a changed occasion may be another kind. Undated assets are in no occasion. Runs in one
+/// transaction, under an advisory lock so two rebuilds never overlap; assets imported meanwhile are picked up by the
+/// next run, and an asset deleted meanwhile fails the run on its foreign key and rolls it back, so running it again is
+/// the fix.
 /// </remarks>
 public sealed class OccasionRebuild(CatalogDbContext db)
 {
@@ -43,18 +45,19 @@ public sealed class OccasionRebuild(CatalogDbContext db)
         var eventOfAsset = links.ToDictionary(l => l.AssetId, l => l.EventId, StringComparer.Ordinal);
         var assetsOfEvent = links.GroupBy(l => l.EventId).ToDictionary(g => g.Key, g => g.Count());
 
-        var claimed = new HashSet<long>();
+        var matched = MatchIds(drafts, eventOfAsset, existing.Keys);
         var created = 0;
         var updated = 0;
         var occasions = new List<(Occasion Occasion, EventDraft Draft)>();
-        foreach (var draft in drafts)
+        for (var i = 0; i < drafts.Count; i++)
         {
-            var anchor = BestOverlap(draft, eventOfAsset);
-            if (anchor != 0 && existing.TryGetValue(anchor, out var reused) && claimed.Add(anchor))
+            var draft = drafts[i];
+            if (matched.TryGetValue(i, out var id))
             {
                 // The existing occasion with most of these assets: the same occasion, with its type only if no asset came or went.
-                updated += Apply(reused, draft, sameAssets: assetsOfEvent.GetValueOrDefault(anchor) == draft.AssetIds.Count
-                    && draft.AssetIds.All(id => eventOfAsset.GetValueOrDefault(id) == anchor)) ? 1 : 0;
+                var reused = existing[id];
+                updated += Apply(reused, draft, sameAssets: assetsOfEvent.GetValueOrDefault(id) == draft.AssetIds.Count
+                    && draft.AssetIds.All(asset => eventOfAsset.GetValueOrDefault(asset) == id)) ? 1 : 0;
                 occasions.Add((reused, draft));
             }
             else
@@ -88,7 +91,7 @@ public sealed class OccasionRebuild(CatalogDbContext db)
         }
 
         var removed = 0;
-        foreach (var gone in existing.Values.Where(o => !claimed.Contains(o.Id)))
+        foreach (var gone in existing.Values.Where(o => !matched.ContainsValue(o.Id)))
         {
             db.Occasions.Remove(gone);
             removed++;
@@ -108,15 +111,36 @@ public sealed class OccasionRebuild(CatalogDbContext db)
         return new OccasionRebuildResult(drafts.Count, wanted.Count, created, updated, removed);
     }
 
-    // The existing occasion holding most of the draft's assets, the lowest id when tied; 0 when none holds any.
-    private static long BestOverlap(EventDraft draft, Dictionary<string, long> eventOfAsset) =>
-        draft.AssetIds
-            .Select(id => eventOfAsset.GetValueOrDefault(id))
-            .Where(id => id != 0)
-            .GroupBy(id => id)
-            .OrderByDescending(g => g.Count()).ThenBy(g => g.Key)
-            .Select(g => g.Key)
-            .FirstOrDefault();
+    // Which existing occasion each grouping takes the id of, by index. Every (grouping, existing occasion) pair that shares
+    // assets is a candidate; the pair sharing most assets goes first, then the lower id, then the earlier grouping, and a
+    // grouping or an id is used once. So the larger part of a split keeps the id, a grouping whose best id went to a larger
+    // one falls back to its next-best unclaimed id, and one with none left gets a new id.
+    private static Dictionary<int, long> MatchIds(
+        IReadOnlyList<EventDraft> drafts, Dictionary<string, long> eventOfAsset, IEnumerable<long> existingIds)
+    {
+        var known = existingIds.ToHashSet();
+        var pairs = new List<(int Draft, long Id, int Shared)>();
+        for (var i = 0; i < drafts.Count; i++)
+        {
+            pairs.AddRange(drafts[i].AssetIds
+                .Select(asset => eventOfAsset.GetValueOrDefault(asset))
+                .Where(known.Contains)
+                .GroupBy(id => id)
+                .Select(g => (i, g.Key, g.Count())));
+        }
+
+        var taken = new Dictionary<int, long>();
+        var used = new HashSet<long>();
+        foreach (var (draft, id, _) in pairs.OrderByDescending(p => p.Shared).ThenBy(p => p.Id).ThenBy(p => p.Draft))
+        {
+            if (!taken.ContainsKey(draft) && used.Add(id))
+            {
+                taken[draft] = id;
+            }
+        }
+
+        return taken;
+    }
 
     // True when the occasion changed. The type survives only an occasion whose assets are exactly the same.
     private static bool Apply(Occasion occasion, EventDraft draft, bool sameAssets)
