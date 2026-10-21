@@ -14,4 +14,7 @@ public static class MediaFile
         using var stream = OpenRead(path);
         return Convert.ToHexStringLower(SHA256.HashData(stream));
     }
+
+    /// <summary>The same for a file already read into memory, so it is read from the drive only once.</summary>
+    public static string Sha256Hex(ReadOnlySpan<byte> content) => Convert.ToHexStringLower(SHA256.HashData(content));
 }

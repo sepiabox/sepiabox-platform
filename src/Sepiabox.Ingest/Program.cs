@@ -35,6 +35,9 @@ const string Usage = """
       --list-left-out       List every file earlier runs left out, not just how many.
       --faces               Also find faces, so people can be recognised. Off by default: faces are
                             biometric data. A later run with --faces adds them from the work folder.
+      --jobs <n>            Process n files at once (1 to 64). Default: half the processors. The drive is
+                            still read by one reader, front to back; the result is the same for any n.
+      --video-jobs <n>      Videos read and transcoded at once. Default: 1.
 
     Options for models download:
       --models <folder>     Where to put the models. Default: %LOCALAPPDATA%\Sepiabox\models on

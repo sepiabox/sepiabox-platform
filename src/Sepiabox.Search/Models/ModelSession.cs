@@ -6,6 +6,12 @@ namespace Sepiabox.Search.Models;
 public sealed record ModelInput(string Name, IReadOnlyList<int>? Shape = null);
 
 /// <summary>
+/// How a session uses the processor: <paramref name="IntraOpThreads"/> threads for one run, and whether they spin
+/// while they wait for work. <c>process --jobs</c> runs several sessions at once, which share the processors (D-078).
+/// </summary>
+public sealed record ModelThreads(int IntraOpThreads, bool AllowSpinning);
+
+/// <summary>
 /// Opens a pinned model with ONNX Runtime (D-044): the file must exist, match its SHA-256 and have the outputs the
 /// caller reads and the inputs it feeds. Anything else is a warning, never an exception, so a run goes on without
 /// what the model computes.
@@ -22,6 +28,7 @@ public static class ModelSession
     /// <param name="inputs">Inputs the caller feeds; a model without one of them, or with another shape, is refused.</param>
     /// <param name="outputs">Outputs the caller reads; a model without one of them is refused.</param>
     /// <param name="warning">Why no session was opened.</param>
+    /// <param name="threads">The threads it may use; null for ONNX Runtime's defaults.</param>
     public static InferenceSession? TryOpen(
         string modelFolder,
         ModelInfo model,
@@ -30,7 +37,8 @@ public static class ModelSession
         string remedy,
         IReadOnlyCollection<ModelInput> inputs,
         IReadOnlyCollection<string> outputs,
-        out string? warning)
+        out string? warning,
+        ModelThreads? threads = null)
     {
         var path = ModelFolder.PathOf(modelFolder, model);
         if (!File.Exists(path))
@@ -59,6 +67,12 @@ public static class ModelSession
             // Errors only: the SFace export lists its weights as graph inputs, and ONNX Runtime warns about each one
             // on every run, which would bury the run's own output.
             using var options = new SessionOptions { LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR };
+            if (threads is not null)
+            {
+                options.IntraOpNumThreads = Math.Max(1, threads.IntraOpThreads);
+                options.AddSessionConfigEntry("session.intra_op.allow_spinning", threads.AllowSpinning ? "1" : "0");
+            }
+
             session = new InferenceSession(path, options);
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException or BadImageFormatException)

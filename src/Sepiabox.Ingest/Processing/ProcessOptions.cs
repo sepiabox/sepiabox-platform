@@ -12,6 +12,8 @@ namespace Sepiabox.Ingest.Processing;
 /// <param name="RetryLeftOut">Read again the files earlier runs left out as holding no video, even when unchanged.</param>
 /// <param name="ListLeftOut">List every file left out by earlier runs, not just how many.</param>
 /// <param name="Faces">Detect faces (S-018). Off by default: faces are biometric data, so the user opts in.</param>
+/// <param name="Jobs">Files processed at once (<c>--jobs</c>); null for <see cref="DefaultJobs"/>.</param>
+/// <param name="VideoJobs">Videos read from the drive at once (<c>--video-jobs</c>); null for 1.</param>
 public sealed record ProcessOptions(
     string Root,
     string OutputPath,
@@ -21,8 +23,26 @@ public sealed record ProcessOptions(
     string? ModelFolder = null,
     bool RetryLeftOut = false,
     bool ListLeftOut = false,
-    bool Faces = false)
+    bool Faces = false,
+    int? Jobs = null,
+    int? VideoJobs = null)
 {
+    /// <summary>The most files <c>--jobs</c> may process at once.</summary>
+    public const int MaxJobs = 64;
+
+    /// <summary>Half the logical processors, at least 1: the work is CPU-bound, and the machine stays usable (D-078).</summary>
+    public static int DefaultJobs => Math.Max(1, Environment.ProcessorCount / 2);
+
+    /// <summary>Files processed at once: <c>--jobs</c>, or <see cref="DefaultJobs"/>.</summary>
+    public int EffectiveJobs => Jobs ?? DefaultJobs;
+
+    /// <summary>
+    /// Videos read from the drive at once (hashed, probed or transcoded): <c>--video-jobs</c>, 1 by default, since a
+    /// video is too large to read ahead into memory, FFmpeg already uses every core, and a hard disk is slower when two
+    /// files are read at once. Never more than <see cref="EffectiveJobs"/>.
+    /// </summary>
+    public int EffectiveVideoJobs => Math.Min(VideoJobs ?? 1, EffectiveJobs);
+
     public static bool TryParse(
         IReadOnlyList<string> args,
         [NotNullWhen(true)] out ProcessOptions? options,
@@ -38,12 +58,14 @@ public sealed record ProcessOptions(
         var retryLeftOut = false;
         var listLeftOut = false;
         var faces = false;
+        int? jobs = null;
+        int? videoJobs = null;
 
         for (var i = 0; i < args.Count; i++)
         {
             switch (args[i])
             {
-                case "--out" or "--source-name" or "--ffmpeg" or "--hw" or "--models" when i + 1 >= args.Count:
+                case "--out" or "--source-name" or "--ffmpeg" or "--hw" or "--models" or "--jobs" or "--video-jobs" when i + 1 >= args.Count:
                     error = $"{args[i]} needs a value.";
                     return false;
 
@@ -73,6 +95,26 @@ public sealed record ProcessOptions(
 
                 case "--faces":
                     faces = true;
+                    break;
+
+                case "--jobs" or "--video-jobs":
+                    var name = args[i];
+                    if (!int.TryParse(args[++i], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var count)
+                        || count < 1 || count > MaxJobs)
+                    {
+                        error = $"{name} needs a whole number from 1 to {MaxJobs}.";
+                        return false;
+                    }
+
+                    if (name == "--jobs")
+                    {
+                        jobs = count;
+                    }
+                    else
+                    {
+                        videoJobs = count;
+                    }
+
                     break;
 
                 case "--hw" when args[i + 1] == "nvenc":
@@ -112,7 +154,7 @@ public sealed record ProcessOptions(
 
         options = new ProcessOptions(
             root, outputPath, string.IsNullOrWhiteSpace(sourceName) ? null : sourceName.Trim(), ffmpegFolder, encoder, modelFolder,
-            retryLeftOut, listLeftOut, faces);
+            retryLeftOut, listLeftOut, faces, jobs, videoJobs);
         error = null;
         return true;
     }

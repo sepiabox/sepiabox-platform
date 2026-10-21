@@ -30,7 +30,12 @@ internal sealed class FakeFaceDetector : IFaceDetector
             throw failure;
         }
 
-        Detected.Add(path);
+        // process runs files in parallel (D-078).
+        lock (Detected)
+        {
+            Detected.Add(path);
+        }
+
         return Faces;
     }
 }

@@ -54,6 +54,30 @@ public class ProcessOptionsTests
     }
 
     [Fact]
+    public void Reads_the_jobs_and_defaults_to_half_the_processors_and_one_video()
+    {
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work", "--jobs", "4", "--video-jobs", "2"], out var options, out _));
+        Assert.Equal((4, 2), (options.EffectiveJobs, options.EffectiveVideoJobs));
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work"], out var defaults, out _));
+        Assert.Equal((Math.Max(1, Environment.ProcessorCount / 2), 1), (defaults.EffectiveJobs, defaults.EffectiveVideoJobs));
+        // Never more videos at once than files.
+        Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work", "--jobs", "1", "--video-jobs", "3"], out var capped, out _));
+        Assert.Equal(1, capped.EffectiveVideoJobs);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("65")]
+    [InlineData("-1")]
+    [InlineData("two")]
+    [InlineData("1.5")]
+    public void Refuses_jobs_that_are_not_1_to_64(string value)
+    {
+        Assert.False(ProcessOptions.TryParse(["E:\\", "--out", "work", "--jobs", value], out _, out var error));
+        Assert.Equal("--jobs needs a whole number from 1 to 64.", error);
+    }
+
+    [Fact]
     public void Detects_faces_only_when_asked_with_faces()
     {
         Assert.True(ProcessOptions.TryParse(["E:\\", "--out", "work", "--faces"], out var options, out _));

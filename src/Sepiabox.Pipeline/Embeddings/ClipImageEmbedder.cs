@@ -31,21 +31,21 @@ public sealed class ClipImageEmbedder : IImageEmbedder, IDisposable
     int IImageEmbedder.Dimensions => Dimensions;
 
     /// <summary>The pinned CLIP model in <paramref name="modelFolder"/>; see the other overload.</summary>
-    public static ClipImageEmbedder? TryCreate(string modelFolder, out string? warning) =>
-        TryCreate(modelFolder, ModelCatalog.Get(ModelCatalog.ClipVision), out warning);
+    public static ClipImageEmbedder? TryCreate(string modelFolder, out string? warning, ModelThreads? threads = null) =>
+        TryCreate(modelFolder, ModelCatalog.Get(ModelCatalog.ClipVision), out warning, threads);
 
     /// <summary>
     /// Loads <paramref name="model"/> from <paramref name="modelFolder"/>, or returns null with a warning that
     /// says why: the file is missing, its SHA-256 is not the pinned one, ONNX Runtime cannot load it, or it has
     /// no <see cref="OutputName"/> output. A run goes on without embeddings rather than failing every photo.
     /// </summary>
-    public static ClipImageEmbedder? TryCreate(string modelFolder, ModelInfo model, out string? warning)
+    public static ClipImageEmbedder? TryCreate(string modelFolder, ModelInfo model, out string? warning, ModelThreads? threads = null)
     {
         const string Download =
             "Run `sepiabox-ingest models download` and process again: embeddings are added from the work folder "
             + "without reading the drive again.";
         var session = ModelSession.TryOpen(
-            modelFolder, model, "The CLIP model", "so no embeddings were computed", Download, [], [OutputName], out warning);
+            modelFolder, model, "The CLIP model", "so no embeddings were computed", Download, [], [OutputName], out warning, threads);
         return session is null ? null : new ClipImageEmbedder(session);
     }
 
