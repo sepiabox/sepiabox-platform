@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 # A new push to a pull request cancels its older, now pointless run; runs on main always finish, since Deploy
-# waits for them (D-090).
+# waits for them (D-081).
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -21,6 +21,7 @@ env:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -53,6 +54,8 @@ jobs:
   # Tests that need Docker, FFmpeg or ML models. Linux only: Windows runners have no Linux Docker.
   integration:
     runs-on: ubuntu-latest
+    # About 6 minutes since D-081; a hang fails the run instead of billing up to the 6-hour default.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -72,7 +75,7 @@ jobs:
         with:
           path: ~/.sepiabox/models
           key: models-${{ hashFiles('models/models.json') }}
-      # The web image tests run in the web-image job below, only when their inputs change (D-090).
+      # The web image tests run in the web-image job below, only when their inputs change (D-081).
       - run: dotnet test Sepiabox.slnx --configuration Release --filter "Category=Integration&Category!=WebImage"
         env:
           # Model tests are skipped on machines without the models; in CI a missing model is a failure.
@@ -80,9 +83,10 @@ jobs:
 
   # The web's image as a deploy builds it (WebImageTests, S-056): the models image with the real CLIP text model and
   # two web releases on it. It runs on every push to main, so Deploy never ships an image it did not check, and on a
-  # pull request only when it changes what goes into that image (D-090, issue #55); otherwise the job ends in seconds.
+  # pull request only when it changes what goes into that image (D-081, issue #55); otherwise the job ends in seconds.
   web-image:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -97,12 +101,16 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # The web and what it is built from, the models image and its script, the pinned models, the model
-          # download the script runs, the AppHost, the test itself and this workflow.
-          pattern='^(src/Sepiabox\.(Web|AppHost|Search|Catalog|ServiceDefaults)/|src/Sepiabox\.Ingest/(Program\.cs|Models/)'
-          pattern+='|infra/web-models/|scripts/web-models\.sh$|models/|tests/Sepiabox\.AppHost\.Tests/(WebImageTests\.cs|Sepiabox\.AppHost\.Tests\.csproj)$'
-          pattern+='|Directory\.Build\.props$|\.gitattributes$|\.github/workflows/ci\.yml$)'
-          if git diff --name-only HEAD^1 HEAD | grep -E "$pattern"; then
+          # The web and what it is built from, the models image and its script, the pinned models, the ingest that
+          # downloads them (and the pipeline it builds with), the AppHost, the tests and their shared code, and this workflow.
+          pattern='^(src/Sepiabox\.(Web|AppHost|Search|Catalog|ServiceDefaults|Ingest|Pipeline)/'
+          pattern+='|infra/web-models/|scripts/web-models\.sh$|models/|tests/Sepiabox\.AppHost\.Tests/|tests/Shared/'
+          pattern+='|Directory\.Build\.props$|\.gitattributes$|\.gitignore$|\.github/workflows/ci\.yml$)'
+          # Fails safe: without the diff, the test runs.
+          if ! changed=$(git diff --name-only HEAD^1 HEAD); then
+            echo "::warning::Could not list this pull request's changes; running the web image tests."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif grep -E "$pattern" <<< "$changed"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "No change reaches the web image; WebImageTests run on main after the merge."
