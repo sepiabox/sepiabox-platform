@@ -34,6 +34,11 @@
                 }
             </tbody>
         </table>
+        @if (Count.AllGroups > Count.Groups.Count)
+        {
+            @* Only the largest are shown: say so, as the rows then add up to less than the total. *@
+            <p class="muted shown">@Text["Count_Shown", Count.Groups.Count.ToString("N0", CultureInfo.CurrentCulture), Count.AllGroups.ToString("N0", CultureInfo.CurrentCulture)]</p>
+        }
         <p class="sentence">@CountAnswers.Sentence(Query, Count.Total, Text)</p>
     }
 

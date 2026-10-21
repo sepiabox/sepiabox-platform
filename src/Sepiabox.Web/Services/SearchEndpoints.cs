@@ -17,8 +17,11 @@ public static class SearchEndpoints
 
     public sealed record Item(string Id, string Kind, DateTime? CapturedAt, double? DurationSeconds, bool HasThumbnail);
 
-    /// <summary>A count (S-026): the total, the largest groups, and the undated assets a time filter leaves out.</summary>
-    public sealed record CountBody(int Total, IReadOnlyList<CountGroup> Groups, int? Undated);
+    /// <summary>
+    /// A count (S-026): the total, the groups shown, how many groups there are in all (more when only the largest are
+    /// shown), and the undated assets a time filter leaves out.
+    /// </summary>
+    public sealed record CountBody(int Total, IReadOnlyList<CountGroup> Groups, int GroupCount, int? Undated);
 
     /// <summary>
     /// The items found, or for a query with <c>aggregate</c> its <see cref="Count"/> (and no items); a count with a
@@ -95,7 +98,7 @@ public static class SearchEndpoints
         ArgumentNullException.ThrowIfNull(text);
         if (query.Aggregate is not null && await library.CountAsync(query, cancellationToken) is { } count)
         {
-            return new Response([], false, new CountBody(count.Total, count.Groups, count.Undated));
+            return new Response([], false, new CountBody(count.Total, count.Groups, count.AllGroups, count.Undated));
         }
 
         var page = await library.SearchAsync(query, cancellationToken);

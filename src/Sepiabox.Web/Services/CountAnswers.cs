@@ -101,7 +101,7 @@ public static class CountAnswers
 
         if (filters.Sources is [var source])
         {
-            about += text["Count_InPlace", source];
+            about += text["Count_FromSource", source];
         }
 
         if (filters.UndatedOnly)

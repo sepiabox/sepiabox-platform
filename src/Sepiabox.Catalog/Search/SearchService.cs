@@ -35,10 +35,15 @@ public sealed record SearchResult(IReadOnlyList<SearchHit> Hits, bool HasMore);
 public sealed record CountGroup(string? Key, int Count);
 
 /// <summary>
-/// A count (S-026): the matching assets' total, the largest groups when grouped, and, for a query with a time filter,
-/// how many assets match the other filters but have no date (they cannot match a time filter).
+/// A count (S-026): the matching assets' total, the groups shown when grouped, and, for a query with a time filter,
+/// how many assets match the other filters but have no date (they cannot match a time filter). <see cref="GroupCount"/>
+/// is how many groups there are in all, more than <see cref="Groups"/> when only the largest are shown.
 /// </summary>
-public sealed record CountResult(int Total, IReadOnlyList<CountGroup> Groups, int? Undated);
+public sealed record CountResult(int Total, IReadOnlyList<CountGroup> Groups, int? Undated, int? GroupCount = null)
+{
+    /// <summary>Every group, shown or not.</summary>
+    public int AllGroups => GroupCount ?? Groups.Count;
+}
 
 /// <summary>
 /// Runs the search DSL (S-013) with plain EF Core (D-051): every value goes to the database as a parameter, never
@@ -174,7 +179,7 @@ public sealed class SearchService(
         var ordered = aggregate.Top is null && aggregate.GroupBy is SearchGroupBy.Year or SearchGroupBy.Month or SearchGroupBy.Kind
             ? InKeyOrder(groups).Take(SearchAggregate.MaxTop)
             : Largest(groups).Take(aggregate.EffectiveTop);
-        return new CountResult(total, [.. ordered], undated);
+        return new CountResult(total, [.. ordered], undated, groups.Count);
     }
 
     // Years and months in order, photos before videos, "no date" last.

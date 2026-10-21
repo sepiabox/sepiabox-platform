@@ -485,4 +485,10 @@
   <data name="Count_WithoutDate" xml:space="preserve">
     <value> without a date</value>
   </data>
+  <data name="Count_Shown" xml:space="preserve">
+    <value>Showing the {0} largest of {1}.</value>
+  </data>
+  <data name="Count_FromSource" xml:space="preserve">
+    <value> from {0}</value>
+  </data>
 </root>

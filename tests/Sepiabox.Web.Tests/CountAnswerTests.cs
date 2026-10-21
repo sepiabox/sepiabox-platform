@@ -64,8 +64,8 @@ public sealed class CountAnswerTests : LocalizedContext
     }
 
     [Theory]
-    [InlineData(Cultures.English, "3,214 items without a date", "12 photos in HD da Ana")]
-    [InlineData(Cultures.BrazilianPortuguese, "3.214 itens sem data", "12 fotos em HD da Ana")]
+    [InlineData(Cultures.English, "3,214 items without a date", "12 photos from HD da Ana")]
+    [InlineData(Cultures.BrazilianPortuguese, "3.214 itens sem data", "12 fotos de HD da Ana")]
     public void Says_without_a_date_and_the_source_when_the_count_has_them(string culture, string undated, string source)
     {
         using var language = Cultures.Use(culture);
@@ -99,6 +99,23 @@ public sealed class CountAnswerTests : LocalizedContext
         Assert.Equal([2017], year.Filters.Years!);
         Assert.Equal(["Lisbon"], year.Filters.Places!.Cities!);
         Assert.Null(year.Aggregate);
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "Showing the 2 largest of 25.")]
+    [InlineData(Cultures.BrazilianPortuguese, "Mostrando os 2 maiores de 25.")]
+    public void Says_when_only_the_largest_groups_are_shown(string culture, string note)
+    {
+        using var language = Cultures.Use(culture);
+        var query = new SearchQuery { Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.City } };
+
+        var cut = Render<AnswerCard>(p => p.Add(c => c.Query, query)
+            .Add(c => c.Count, new CountResult(40, [new CountGroup("Lisbon", 9), new CountGroup("Porto", 7)], null, 25)));
+        var whole = Render<AnswerCard>(p => p.Add(c => c.Query, query)
+            .Add(c => c.Count, new CountResult(16, [new CountGroup("Lisbon", 9), new CountGroup("Porto", 7)], null, 2)));
+
+        Assert.Equal(note, cut.Find(".shown").TextContent);
+        Assert.Empty(whole.FindAll(".shown"));
     }
 
     [Theory]
@@ -187,6 +204,7 @@ public sealed partial class CountPageTests
         var count = body.RootElement.GetProperty("count");
         Assert.Equal(10, count.GetProperty("total").GetInt32());
         Assert.Equal(3, count.GetProperty("undated").GetInt32());
+        Assert.Equal(2, count.GetProperty("groupCount").GetInt32());
         Assert.Equal("""[{"key":"2017","count":4},{"key":null,"count":2}]""", count.GetProperty("groups").GetRawText());
         Assert.Empty(body.RootElement.GetProperty("items").EnumerateArray());
         Assert.Empty(library.Searches);

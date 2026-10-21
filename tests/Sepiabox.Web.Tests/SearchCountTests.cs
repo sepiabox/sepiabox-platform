@@ -131,6 +131,21 @@ public sealed class SearchCountTests(CatalogFixture catalog)
 
         Assert.Equal(Enumerable.Range(3, 10).Reverse().Select(c => $"City {c:D2}"), cities!.Groups.Select(g => g.Key));
         Assert.Equal(["City 12", "City 11"], topTwo!.Groups.Select(g => g.Key));
+        Assert.Equal((12, 12), (cities.GroupCount, topTwo.GroupCount));
+    }
+
+    [Fact]
+    public async Task Shows_the_largest_10_of_25_cities_and_says_there_are_25()
+    {
+        var assets = Enumerable.Range(1, 25).Select(c => Asset(c, new DateTime(2020, 1, 1), city: $"City {c:D2}")).ToArray();
+        await using var db = await CatalogWithAsync(assets);
+
+        var count = await CountAsync(db, new SearchFilters(), new SearchAggregate { GroupBy = SearchGroupBy.City });
+
+        Assert.Equal(25, count!.Total);
+        Assert.Equal(10, count.Groups.Count);
+        Assert.Equal(25, count.GroupCount);
+        Assert.Equal(25, count.AllGroups);
     }
 
     [Fact]
