@@ -1,23 +1,26 @@
 ## S-063 — Process and upload a source in index-only mode
 **Epic:** Local ingest
-**Depends on:** S-005, S-006, S-007, S-008, S-015, S-018, S-040, S-051
+**Depends on:** S-005, S-006, S-007, S-008, S-015, S-018
 **Priority:** Medium
 **Size:** M
 
 ### Context
-The family wants to search libraries whose originals already live somewhere else (the external drive, a Google Takeout, an iCloud copy, an Instagram download) without copying those originals into Sepiabox (D-088). In **index-only mode** the originals stay where they are and are never uploaded. Everything else goes to the cloud as usual: thumbnails, previews, embeddings, faces, metadata and manifests. The catalog records that the original is not stored and where it lives. The previews are larger, so they can stand in for the original on screen. This is D-023's reference mode, available for any source that `process` reads.
+The family wants to search libraries whose originals already live somewhere else (the external drive, a Google Takeout, an iCloud copy, an Instagram download) without copying those originals into Sepiabox (D-088). In **index-only mode** the originals stay where they are and are never uploaded. Everything else goes to the cloud as usual: thumbnails, previews, embeddings, faces, metadata and manifests. The catalog records that the original is not stored and where it lives. The previews are larger, so they can stand in for the original on screen. This is D-023's reference mode, available for any source that `process` reads. The owner knows that in this mode Sepiabox keeps no copy of the original: if the drive or the source loses it, Sepiabox cannot give it back (D-088).
 
 ### Scope
 - **The option.** `sepiabox-ingest process <folder> --out <work folder> --index-only`, named like the other `process` options (`--faces`, `--retry-left-out`).
   - The mode belongs to the work folder. The first `process` run records it in the work folder's state (`state.db`), and every later run on that `--out` follows it.
+  - A work folder made before this story has no recorded mode. It counts as keeping originals, and the first run of this build records that mode. `--index-only` on it is refused like any other mode change. This is the owner's existing work folder of about 86,000 files.
   - A later `process` run on the same `--out` that asks for the other mode stops before reading any file, with the usage exit code and the message "This work folder is index-only (or: keeps originals); use a new --out for the other mode." This avoids mixing two preview sizes and two upload rules in one folder.
   - `upload` has no option of its own: it follows the mode the work folder recorded.
-  - Combines with every other `process` option, including `--export <kind>` (S-045) and `--faces`.
+  - Combines with every other `process` option, including `--faces`, and `--export <kind>` once S-045 exists (tested in S-046 to S-049).
+  - It warns once, at the start of an index-only run: "Index-only: the originals stay where they are and Sepiabox keeps no copy of them."
 - **Larger previews in index-only mode.**
   - Photos get `preview-2048`: WebP, long side 2048 px, never upscaled, the same quality setting as `preview-1280`. It replaces `preview-1280` in that work folder.
   - Videos get `proxy-1080p`: H.264, fitted inside 1920×1080 in either orientation, sides even, never upscaled, with the same encoder settings and sound rules as the 720p version (D-029, D-084, D-087). It replaces `proxy-720p`.
   - `thumb-256` and the video `poster` (1280) are unchanged.
   - Embeddings (S-015) and faces (S-018) read the largest preview the manifest lists (`preview-2048`, else `preview-1280`, else the poster), so they work in both modes. Faces' boxes stay relative (0..1), so a 2048 preview needs no change to them.
+  - Accepted: the same bytes processed in both modes get an embedding and faces computed from different previews (2048 and 1280 px), slightly different numbers. When the manifests merge, the embeddings keep the later side (D-036) and the faces follow D-047's rule, which keeps one side's faces. Neither is wrong.
 - **Manifest** (schema stays v1; only optional fields are added, as D-046 and D-047 did):
   - `originalStored` (boolean): `false` when the work folder is index-only. Absent means `true`, so manifests written before this story keep their meaning.
   - On each source: optional `url` (an `https://` address, at most 2,000 characters): the original's address at its source, when the source provides one. This story only writes the field and carries it through. The export readers fill it in (S-046, S-048).
@@ -30,7 +33,7 @@ The family wants to search libraries whose originals already live somewhere else
 - **Catalog.**
   - A migration adds `assets.original_stored` (boolean, not null, default `true` for existing rows) and `asset_sources.url` (text, null).
   - The importer maps both. The original stays stored once any manifest says so.
-- **Full export (S-040).** `originals.txt` lists only the originals Sepiabox stores. `catalog.json` carries each asset's `originalStored` and each source's `url`, so an export says where every index-only original lives.
+- **Older builds.** Older `sepiabox-ingest` and `sepiabox-worker` builds reject manifests with unknown properties (`ManifestValidator`). Add a note to `operations.md`: update every computer that runs `sepiabox-ingest` and deploy the worker before the first index-only upload, as for D-046 and D-047.
 
 ### Switching a source between modes
 - **Index-only → keeping originals: supported**, with no new code.
@@ -54,12 +57,12 @@ The family wants to search libraries whose originals already live somewhere else
 
   and the schema validates them.
 - [ ] Given a 1000×750 photo, then `preview-2048` is 1000×750 (no upscaling).
+- [ ] Given a work folder made before this story (its state has no recorded mode), when `process` runs on it without `--index-only`, then it carries on as before and records the mode as keeping originals; when it runs with `--index-only`, then it stops before reading any file, with the usage exit code and the message.
 - [ ] Given an index-only work folder, when `process` runs on it again without `--index-only`, then it stops before reading any file, with the usage exit code and the message, and the work folder is unchanged; and the same the other way round.
 - [ ] Given an index-only work folder, when `upload` runs with the source folder deleted, then derivatives and manifests are uploaded, nothing is written to `originals`, there is no problem, and the summary counts the originals left at their source.
 - [ ] Given an asset uploaded in full mode and the same bytes later uploaded from an index-only work folder (and the other order), then the stored manifest and the catalog say the original is stored, and the asset lists both sources.
-- [ ] Given a manifest whose source has a `url`, when it is imported, then `asset_sources.url` holds it; a manifest without `originalStored` imports as stored.
+- [ ] Given a manifest with `originalStored: false` and a source `url`, when the worker's import (`sepiabox-worker import --once`) runs, then it accepts the manifest, `assets.original_stored` is false and `asset_sources.url` holds the url; a manifest without `originalStored` imports as stored.
 - [ ] Given a model folder and `--faces`, when `process --index-only` runs, then the embedding and the faces are computed from `preview-2048`.
-- [ ] Given an index-only asset, when the full export (S-040) runs, then `originals.txt` has no line for it and `catalog.json` lists its sources with their `url`.
 
 ### Technical notes
 - **Names.** `ThumbnailGenerator` gains a size list for index-only (`preview-2048`). `VideoScale.Fit` already takes `longest`/`shortest` (1920/1080). `DerivativeNames` (web) learns the two new names; S-064 shows them.
@@ -68,9 +71,10 @@ The family wants to search libraries whose originals already live somewhere else
   - Videos: the 1080p version at CRF 28 is about 3–4 Mbit/s, so about **1.5–2 GB per hour (about €0.04 a month)**, against about 0.7 GB per hour for 720p.
   - So 100,000 photos and 100 hours of video come to about 230 GB, about €5 a month: a tenth of the €50 ceiling (D-008).
 - **Upload state.** No work-folder files are added beyond the previews. The upload state's fingerprint rule is unchanged.
+- **Later stories.** S-051 moves `upload` behind `IBlobStore` and keeps this behaviour (its existing tests include these). S-040's full export learns about index-only assets.
 - **Schema.** Update `docs/schemas/manifest.v1.json`: `originalStored` at the root and `url` on sources, with the pattern `^https://` and a maximum length.
 - Record the merge rule in D-088 if the implementation refines it, and describe `--index-only` and switching modes in `operations.md`.
-- Decisions: D-004, D-008, D-015, D-023, D-029, D-036, D-046, D-051, D-053, D-087, D-088.
+- Decisions: D-004, D-008, D-015, D-023, D-029, D-036, D-046, D-047, D-053, D-087, D-088.
 
 ### Expected tests
 - **Unit:**

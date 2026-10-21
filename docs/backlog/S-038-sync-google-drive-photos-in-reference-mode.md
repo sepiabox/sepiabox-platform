@@ -1,6 +1,6 @@
 ## S-038 — Sync Google Drive photos in reference mode
 **Epic:** Cloud sources
-**Depends on:** S-037, S-036
+**Depends on:** S-037, S-036, S-064
 **Priority:** Medium
 **Size:** M
 
@@ -12,7 +12,8 @@ With the account connected, Drive photos appear alongside the HD ones, without d
 - Each new file is downloaded to `incoming` with metadata (source google-drive, fileId, path, reference mode).
 - File removed in Drive → source marked as removed.
 - Same content already from the HD → only gains a source (no new asset).
-- Photo detail: "Open original" downloads from Drive through the server.
+- Reference mode (D-023): the original is not kept in Sepiabox; the asset is recorded as `originalStored: false` (S-063) unless another source stored it.
+- Photo detail: in the source list of S-064, a Google Drive source gets "Open original", which downloads from Drive through the server.
 
 ### Out of scope
 - Google Photos (restricted API).
@@ -22,6 +23,7 @@ With the account connected, Drive photos appear alongside the HD ones, without d
 - [ ] Given a second sync with 1 change, then only 1 blob lands.
 - [ ] Given a removed file, then the source is marked as removed.
 - [ ] Given content identical to an HD asset, then the asset gains a source and is not duplicated.
+- [ ] Given a synced Drive photo whose original is not stored, when its detail page renders, then the S-064 source list shows "Open original" for the Drive source, and it downloads through the server.
 
 ### Technical notes
 - Container Apps Job cron in the AppHost.

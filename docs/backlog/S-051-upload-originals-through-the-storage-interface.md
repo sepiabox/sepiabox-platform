@@ -23,6 +23,7 @@ After S-050, `sepiabox-ingest upload` is the last code that uses the Blob SDK di
 
 ### Technical notes
 - Block ids, block size (8 MB) and parallelism stay as they are; the interface takes blocks as they are read so the file is still read once.
+- Index-only work folders (S-063, D-088) upload no originals; that behaviour and its tests stay as they are.
 - Decisions: D-004, D-030, D-031, D-051.
 
 ### Expected tests
