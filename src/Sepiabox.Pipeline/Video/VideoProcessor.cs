@@ -94,11 +94,20 @@ public sealed record FfmpegTools(string Ffmpeg, string Ffprobe)
     }
 }
 
+/// <summary>What <c>process</c> needs from a video processor; tests stand in for FFmpeg with it.</summary>
+public interface IVideoProcessor
+{
+    VideoProbe Probe(string path, CancellationToken cancellationToken = default);
+
+    IReadOnlyList<ManifestDerivative> Generate(
+        string sourcePath, string workFolder, string relativeFolder, VideoProbe probe, CancellationToken cancellationToken = default);
+}
+
 /// <summary>
 /// Makes what the web shows for a video (D-015): a WebP poster and thumbnail taken at 10% of the
 /// duration, and a 720p H.264 version with metadata removed. Originals are only read.
 /// </summary>
-public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = VideoEncoder.Software)
+public sealed class VideoProcessor(FfmpegTools tools, VideoEncoder encoder = VideoEncoder.Software) : IVideoProcessor
 {
     public const string ProxyName = "proxy-720p";
     public const string ProxyContentType = "video/mp4";

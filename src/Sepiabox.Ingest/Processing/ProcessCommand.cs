@@ -65,19 +65,36 @@ public static class ProcessCommand
     {
         // A wrong folder fails before the model is checked, which can take seconds the first time.
         var (root, output) = Resolve(options);
+        var models = options.ModelFolder ?? ModelFolder.Default();
+        var threads = ThreadsFor(options.EffectiveJobs);
+        using var embedder = ClipImageEmbedder.TryCreate(models, out var embedderWarning, threads);
+        string? facesWarning = null;
+        using var faces = options.Faces ? FaceDetector.TryCreate(models, out facesWarning, threads) : null;
         // Each job resizes with its share of the processors, rather than every job with all of them (D-078); the
-        // pixels are the same whatever the thread count.
-        if (options.EffectiveJobs > 1)
+        // pixels are the same whatever the thread count. Put back afterwards, for whatever runs next in this process.
+        var magickThreads = ResourceLimits.Thread;
+        if (threads is not null)
         {
-            ResourceLimits.Thread = (ulong)Math.Max(1, Environment.ProcessorCount / options.EffectiveJobs);
+            ResourceLimits.Thread = (ulong)threads.IntraOpThreads;
         }
 
-        var models = options.ModelFolder ?? ModelFolder.Default();
-        using var embedder = ClipImageEmbedder.TryCreate(models, out var embedderWarning);
-        string? facesWarning = null;
-        using var faces = options.Faces ? FaceDetector.TryCreate(models, out facesWarning) : null;
-        return Run(options, root, output, embedder, embedderWarning, faces, facesWarning, TimeProvider.System, filesDone, cancellationToken);
+        try
+        {
+            return Run(
+                options, root, output, embedder, embedderWarning, faces, facesWarning, TimeProvider.System, filesDone, null, cancellationToken);
+        }
+        finally
+        {
+            ResourceLimits.Thread = magickThreads;
+        }
     }
+
+    /// <summary>
+    /// With more than one job, each model session and each Magick step gets its share of the processors, and ONNX
+    /// Runtime's threads do not spin while they wait, which only burns the processors the other jobs need (D-078).
+    /// </summary>
+    internal static ModelThreads? ThreadsFor(int jobs) =>
+        jobs > 1 ? new ModelThreads(Math.Max(1, Environment.ProcessorCount / jobs), AllowSpinning: false) : null;
 
     /// <summary>
     /// The same with a given embedder, or none; <paramref name="embedderWarning"/> says why there is none.
@@ -93,11 +110,13 @@ public static class ProcessCommand
         TimeProvider? clock = null,
         IFaceDetector? faces = null,
         string? facesWarning = null,
+        ProcessHooks? hooks = null,
         CancellationToken cancellationToken = default)
     {
         var (root, output) = Resolve(options);
         return Run(
-            options, root, output, embedder, embedderWarning, faces, facesWarning, clock ?? TimeProvider.System, filesDone, cancellationToken);
+            options, root, output, embedder, embedderWarning, faces, facesWarning, clock ?? TimeProvider.System, filesDone, hooks,
+            cancellationToken);
     }
 
     /// <summary>The folder to read, which must exist, and the work folder, both as full paths.</summary>
@@ -114,6 +133,7 @@ public static class ProcessCommand
         string? facesWarning,
         TimeProvider clock,
         IProgress<int>? filesDone,
+        ProcessHooks? hooks,
         CancellationToken cancellationToken)
     {
         // Faces are biometric data: without --faces nothing looks for them, whatever detector was passed in.
@@ -127,7 +147,7 @@ public static class ProcessCommand
         var outputPrefix = Path.TrimEndingDirectorySeparator(output) + Path.DirectorySeparatorChar;
 
         var ffmpeg = FfmpegTools.Find(options.FfmpegFolder);
-        var video = ffmpeg is null ? null : new VideoProcessor(ffmpeg, options.Encoder);
+        var video = hooks?.Video ?? (ffmpeg is null ? null : new VideoProcessor(ffmpeg, options.Encoder));
 
         using var state = new StateStore(Path.Combine(output, "state.db"));
         var stopwatch = Stopwatch.StartNew();
@@ -221,20 +241,22 @@ public static class ProcessCommand
             }
         }
 
-        // A bounded pipeline (D-078). This thread finds the files, reads each one's state and, for a photo to describe,
-        // reads the whole photo into memory, in the order the files were found: the drive (often a USB hard disk) is
-        // read by one reader, from front to back, and each photo once, for its hash, its metadata and its thumbnails.
-        // Up to ReadAheadBytes of photos wait in memory. Each file then goes to a task that hashes it and waits its
-        // turn for its content: files are registered by content id in the order they were found, and a file waits for
-        // the files found before it with the same content (or the content it had before), so copies of the same bytes
-        // are described exactly as a sequential run describes them. At most `jobs` files are processed at once, and
-        // at most VideoJobs videos are read from the drive (hashed, probed or transcoded) at once, since they are too
-        // large to hold in memory. At most 4 × jobs files are in flight.
+        // A bounded pipeline (D-078). This thread finds the files, reads each one's state and, in the order the files
+        // were found, reads each photo to describe into memory (up to ReadAheadBytes waiting) or hashes a video (or a
+        // photo too large to hold) as a stream: the drive, often a USB hard disk, is read front to back by this one
+        // reader, and a photo only once, for its hash, its metadata and its thumbnails. Each file then goes to a task
+        // that waits its turn for its content: files are registered by content id in the order they were found, and a
+        // file waits for the files found before it with the same content (or the content it had before), so copies of
+        // the same bytes are described exactly as a sequential run describes them. At most `jobs` files are processed
+        // at once, and at most VideoJobs of them are videos (or large photos), which read the drive again to be
+        // described and transcoded; a file waits for that turn before it takes a job slot, so a long transcode never
+        // holds up photos that are ready. At most 4 × jobs files are in flight.
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var inFlight = new SemaphoreSlim(jobs * 4);
         using var working = new SemaphoreSlim(jobs);
         using var videoReads = new SemaphoreSlim(options.EffectiveVideoJobs);
-        var readAhead = new ByteBudget(ReadAheadBytes);
+        var readAheadLimit = hooks?.ReadAheadBytes ?? ReadAheadBytes;
+        var readAhead = new ByteBudget(readAheadLimit);
         var tails = new Dictionary<string, Task>(StringComparer.Ordinal);
         var tasks = new List<Task>();
         var progressLock = new object();
@@ -273,6 +295,7 @@ public static class ProcessCommand
                 Plan? plan;
                 try
                 {
+                    hooks?.BeforeRead?.Invoke(file.Path);
                     plan = Decide(file, kind, outcome);
                 }
                 catch (Exception ex)
@@ -367,12 +390,22 @@ public static class ProcessCommand
                 return null;
             }
 
-            if (kind != MediaKind.Photo)
+            // A video, or a photo larger than the whole read-ahead (a huge TIFF or PSB), is hashed here, streamed, so
+            // the drive is still hashed by this one reader in order, and read again in its task, streamed as before,
+            // never into one array. Hashing it here also means a long transcode never holds up the files after it.
+            if (kind != MediaKind.Photo || file.Size > readAheadLimit)
             {
-                return new Plan(file, kind, previous, null, null, null);
+                try
+                {
+                    return new Plan(file, kind, previous, null, null, null, MediaFile.Sha256Hex(file.Path));
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    return new Plan(file, kind, previous, null, ex, null);
+                }
             }
 
-            // Waits while ReadAheadBytes of photos are already in memory (a larger photo is read once the others are done).
+            // Waits while the photos already in memory and this one would pass the read-ahead budget.
             readAhead.Wait(file.Size, stop.Token);
             try
             {
@@ -399,7 +432,7 @@ public static class ProcessCommand
                 {
                     if (plan is not null)
                     {
-                        (keys, work) = await PrepareAsync(plan, o);
+                        (keys, work) = Prepare(plan, o);
                     }
                 }
                 finally
@@ -430,31 +463,34 @@ public static class ProcessCommand
                         return;
                     }
 
-                    await working.WaitAsync(stop.Token);
+                    // A video, or a photo too large to read ahead, is read from the drive while it is described, probed
+                    // and transcoded. Its turn for that comes first: a job slot held while waiting for it would stop
+                    // photos that are ready.
+                    var streamed = plan!.Content is null && plan.UnchangedSha256 is null;
+                    if (streamed)
+                    {
+                        await videoReads.WaitAsync(stop.Token);
+                    }
+
                     try
                     {
-                        // A video is read from the drive while it is described, probed and transcoded.
-                        var readsVideo = plan!.Kind != MediaKind.Photo && plan.UnchangedSha256 is null;
-                        if (readsVideo)
-                        {
-                            await videoReads.WaitAsync(stop.Token);
-                        }
-
+                        await working.WaitAsync(stop.Token);
                         try
                         {
+                            hooks?.BeforeWork?.Invoke(plan.File.Path);
                             work();
                         }
                         finally
                         {
-                            if (readsVideo)
-                            {
-                                videoReads.Release();
-                            }
+                            working.Release();
                         }
                     }
                     finally
                     {
-                        working.Release();
+                        if (streamed)
+                        {
+                            videoReads.Release();
+                        }
                     }
                 }
             }
@@ -464,9 +500,9 @@ public static class ProcessCommand
             }
         }
 
-        // In the task: the file's hash, from memory for a photo and from the drive for a video, then the content ids it
-        // touches and the work to do on them.
-        async Task<(IReadOnlyList<string> Keys, Action? Work)> PrepareAsync(Plan plan, FileOutcome o)
+        // In the task: the file's hash (from memory for a photo; a streamed file was hashed by the reader), then the
+        // content ids it touches and the work to do on them.
+        (IReadOnlyList<string> Keys, Action? Work) Prepare(Plan plan, FileOutcome o)
         {
             var file = plan.File;
             if (plan.UnchangedSha256 is { } doneSha256)
@@ -482,22 +518,7 @@ public static class ProcessCommand
                     throw readError;
                 }
 
-                if (plan.Content is { } content)
-                {
-                    sha256 = MediaFile.Sha256Hex(content);
-                }
-                else
-                {
-                    await videoReads.WaitAsync(stop.Token);
-                    try
-                    {
-                        sha256 = MediaFile.Sha256Hex(file.Path);
-                    }
-                    finally
-                    {
-                        videoReads.Release();
-                    }
-                }
+                sha256 = plan.Content is { } content ? MediaFile.Sha256Hex(content) : plan.StreamedSha256!;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -718,7 +739,7 @@ public static class ProcessCommand
     /// NoVideo when it is NotVideo.
     /// </summary>
     private static (Manifest Manifest, FileStatus Status, string? Problem, NoVideoReason? NoVideo) AddDerivatives(
-        string output, FoundFile file, Manifest manifest, byte[]? content, VideoProcessor? video, CancellationToken cancellationToken)
+        string output, FoundFile file, Manifest manifest, byte[]? content, IVideoProcessor? video, CancellationToken cancellationToken)
     {
         if (manifest.Derivatives.Count > 0)
         {
@@ -812,6 +833,13 @@ public static class ProcessCommand
 
     private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
 
+    /// <summary>
+    /// Test seams: a stand-in for FFmpeg, a call before the reader reads a file, another before its work starts (after
+    /// its turn came), and another read-ahead budget.
+    /// </summary>
+    internal sealed record ProcessHooks(
+        IVideoProcessor? Video = null, Action<string>? BeforeWork = null, long? ReadAheadBytes = null, Action<string>? BeforeRead = null);
+
     /// <summary>Photos read ahead and waiting in memory at most, so a slow step never lets the reader fill the memory.</summary>
     internal const long ReadAheadBytes = 256L * 1024 * 1024;
 
@@ -836,7 +864,13 @@ public static class ProcessCommand
     /// not be read), or the content id of an unchanged file that only needs its embedding or faces.
     /// </summary>
     private sealed record Plan(
-        FoundFile File, MediaKind Kind, FileState? Previous, byte[]? Content, Exception? ReadError, string? UnchangedSha256);
+        FoundFile File,
+        MediaKind Kind,
+        FileState? Previous,
+        byte[]? Content,
+        Exception? ReadError,
+        string? UnchangedSha256,
+        string? StreamedSha256 = null);
 
     /// <summary>What one file added to the run's result, kept apart so the result is gathered in the order files were found.</summary>
     private sealed class FileOutcome
@@ -869,8 +903,8 @@ public static class ProcessCommand
     }
 
     /// <summary>
-    /// Bytes of photos in memory: the reader waits while the budget is spent, except that one photo larger than the
-    /// whole budget is still read, once nothing else is held.
+    /// Bytes of photos in memory: the reader waits while the budget is spent. Larger photos never come here: they are
+    /// streamed.
     /// </summary>
     private sealed class ByteBudget(long limit)
     {

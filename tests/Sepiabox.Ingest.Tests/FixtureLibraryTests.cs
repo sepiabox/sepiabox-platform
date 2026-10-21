@@ -189,6 +189,49 @@ public sealed class FixtureLibraryTests
     }
 
     [Fact]
+    public void Gives_the_same_result_with_embeddings_and_faces_with_four_jobs_as_with_one()
+    {
+        using var drive = new TempFolder();
+        using var sequential = new TempFolder();
+        using var parallel = new TempFolder();
+        FixtureLibrary.Write(drive.Path, Seed, s_tools.Ffmpeg);
+
+        var one = WithFakes(drive, sequential, jobs: 1);
+        var four = WithFakes(drive, parallel, jobs: 4);
+
+        Assert.Equal(Files(sequential, "manifests"), Files(parallel, "manifests"));
+        Assert.Equal(Files(sequential, "derivatives"), Files(parallel, "derivatives"));
+        Assert.True(one.Embedded > 0 && one.FacesFound > 0 && one.EmbeddingProblems.Count > 0 && one.FaceProblems.Count > 0);
+        Assert.Equal(
+            (one.Processed, one.Skipped, one.VideosPending, one.Embedded, one.FacesChecked, one.FacesFound, one.Warning),
+            (four.Processed, four.Skipped, four.VideosPending, four.Embedded, four.FacesChecked, four.FacesFound, four.Warning));
+        Assert.Equal(one.Problems, four.Problems);
+        Assert.Equal(one.EmbeddingProblems, four.EmbeddingProblems);
+        Assert.Equal(one.FaceProblems, four.FaceProblems);
+        Assert.Equal(one.LeftOut, four.LeftOut);
+    }
+
+    [AnyModelFact]
+    public void Computes_byte_identical_embeddings_and_faces_with_four_jobs_and_capped_model_threads()
+    {
+        // The real models: with more than one job each ONNX session gets its share of the processors and no spinning
+        // (D-078), which must not change a single value. CI has the models; elsewhere what is there is compared.
+        using var drive = new TempFolder();
+        using var sequential = new TempFolder();
+        using var parallel = new TempFolder();
+        FixtureLibrary.Write(drive.Path, Seed, s_tools.Ffmpeg);
+        // A real face too, public domain (D-047), so faces are found and embedded.
+        File.Copy(TestDataPath("face-portrait.jpg"), Path.Combine(drive.Path, "face-portrait.jpg"));
+
+        var one = ProcessCommand.Run(Options(drive, sequential, jobs: 1) with { ModelFolder = TestModels.Folder, Faces = true });
+        var four = ProcessCommand.Run(Options(drive, parallel, jobs: 4) with { ModelFolder = TestModels.Folder, Faces = true });
+
+        Assert.Equal(Files(sequential, "manifests"), Files(parallel, "manifests"));
+        Assert.Equal((one.Embedded, one.FacesFound), (four.Embedded, four.FacesFound));
+        Assert.True(one.Embedded > 0 || one.FacesFound > 0, "Neither model ran.");
+    }
+
+    [Fact]
     public void Resumes_where_it_stopped_when_a_parallel_run_is_cancelled()
     {
         using var drive = new TempFolder();
@@ -217,6 +260,31 @@ public sealed class FixtureLibraryTests
 
     private static ProcessResult Process(TempFolder drive, TempFolder work, int? jobs = null) => ProcessCommand.Run(Options(drive, work, jobs));
 
+    // Fake models, one failing for one photo each, so embeddings, faces and their problems are all compared.
+    private static ProcessResult WithFakes(TempFolder drive, TempFolder work, int jobs)
+    {
+        // Keyed on the asset id (the derivative's folder), so the same assets fail in both runs whatever the order.
+        static bool IdEndsIn(string derivative, string digits) =>
+            digits.Contains(Path.GetFileName(Path.GetDirectoryName(derivative))![^1], StringComparison.Ordinal);
+        var embedder = new FakeEmbedder { Failure = path => IdEndsIn(path, "0123") ? new InvalidOperationException("broken") : null };
+        var faces = new FakeFaceDetector { Failure = path => IdEndsIn(path, "abcd") ? new InvalidOperationException("broken") : null };
+        return ProcessCommand.Run(Options(drive, work, jobs) with { Faces = true }, embedder, embedderWarning: null, faces: faces);
+    }
+
+    private static string TestDataPath(string name)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, "tests", "Sepiabox.Pipeline.Tests", "TestData", name);
+            if (File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        throw new FileNotFoundException(name);
+    }
+
     private static ProcessOptions Options(TempFolder drive, TempFolder work, int? jobs = null) =>
         new(drive.Path, work.Path, "HD", FfmpegFolder: Path.GetDirectoryName(s_tools.Ffmpeg), ModelFolder: TestModels.None, Jobs: jobs);
 
@@ -241,4 +309,16 @@ public sealed class FixtureLibraryTests
 
     private static List<Manifest> ReadManifests(TempFolder work) =>
         [.. Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json").Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];
+}
+
+/// <summary>A fact that needs CLIP or the face models: skipped when neither is downloaded, unless CI requires them.</summary>
+internal sealed class AnyModelFactAttribute : FactAttribute
+{
+    public AnyModelFactAttribute()
+    {
+        if (!TestModels.ClipAvailable && !TestModels.FacesAvailable && !TestModels.Required)
+        {
+            Skip = $"No model is in {TestModels.Folder}; run `sepiabox-ingest models download`.";
+        }
+    }
 }

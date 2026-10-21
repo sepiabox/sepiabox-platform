@@ -58,7 +58,7 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
     /// Loads both pinned models from <paramref name="modelFolder"/>, or returns null with a warning that says why,
     /// as <see cref="ModelSession.TryOpen"/> does. A run goes on without faces rather than failing every photo.
     /// </summary>
-    public static FaceDetector? TryCreate(string modelFolder, out string? warning)
+    public static FaceDetector? TryCreate(string modelFolder, out string? warning, ModelThreads? threads = null)
     {
         const string Consequence = "so no faces were detected";
         const string Download =
@@ -66,7 +66,7 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
             + "without reading the drive again.";
         var detector = ModelSession.TryOpen(
             modelFolder, ModelCatalog.Get(ModelCatalog.YuNet), "The YuNet face detection model", Consequence, Download,
-            s_detectorInputs, YuNet.OutputNames, out warning);
+            s_detectorInputs, YuNet.OutputNames, out warning, threads);
         if (detector is null)
         {
             return null;
@@ -77,7 +77,7 @@ public sealed class FaceDetector : IFaceDetector, IDisposable
         {
             recognizer = ModelSession.TryOpen(
                 modelFolder, ModelCatalog.Get(ModelCatalog.SFace), "The SFace face recognition model", Consequence, Download,
-                s_recognizerInputs, [RecognizerOutput], out warning);
+                s_recognizerInputs, [RecognizerOutput], out warning, threads);
             if (recognizer is null)
             {
                 detector.Dispose();
