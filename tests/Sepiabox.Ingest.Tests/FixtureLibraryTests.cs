@@ -168,9 +168,76 @@ public sealed class FixtureLibraryTests
             file => Path.GetRelativePath(folder.Path, file).Replace('\\', '/'),
             file => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file)))), StringComparer.Ordinal);
 
-    private static ProcessResult Process(TempFolder drive, TempFolder work) =>
-        ProcessCommand.Run(new ProcessOptions(
-            drive.Path, work.Path, "HD", FfmpegFolder: Path.GetDirectoryName(s_tools.Ffmpeg), ModelFolder: TestModels.None));
+    [Fact]
+    public void Writes_the_same_manifests_and_derivatives_with_four_jobs_as_with_one()
+    {
+        using var drive = new TempFolder();
+        using var sequential = new TempFolder();
+        using var parallel = new TempFolder();
+        FixtureLibrary.Write(drive.Path, Seed, s_tools.Ffmpeg);
+        // The library has a copy of the same bytes, which the two runs must describe alike.
+        var one = Process(drive, sequential, jobs: 1);
+        var four = Process(drive, parallel, jobs: 4);
+
+        Assert.Equal(Files(sequential, "manifests"), Files(parallel, "manifests"));
+        Assert.Equal(Files(sequential, "derivatives"), Files(parallel, "derivatives"));
+        Assert.Equal(
+            (one.Processed, one.Skipped, one.VideosPending, one.Embedded, one.Problems.Count),
+            (four.Processed, four.Skipped, four.VideosPending, four.Embedded, four.Problems.Count));
+        Assert.Equal(one.LeftOut, four.LeftOut);
+        Assert.Equal(one.Problems, four.Problems);
+    }
+
+    [Fact]
+    public void Resumes_where_it_stopped_when_a_parallel_run_is_cancelled()
+    {
+        using var drive = new TempFolder();
+        using var interrupted = new TempFolder();
+        using var whole = new TempFolder();
+        FixtureLibrary.Write(drive.Path, Seed, s_tools.Ffmpeg);
+        using var cancel = new CancellationTokenSource();
+        // Ctrl+C after a few files: the files in flight finish or are dropped, never half written.
+        var progress = new Progress(count =>
+        {
+            if (count == 3)
+            {
+                cancel.Cancel();
+            }
+        });
+
+        Assert.ThrowsAny<OperationCanceledException>(() => ProcessCommand.Run(Options(drive, interrupted, jobs: 4), progress, cancel.Token));
+        var resumed = Process(drive, interrupted, jobs: 4);
+        Process(drive, whole, jobs: 1);
+
+        Assert.Empty(resumed.Problems);
+        Assert.True(resumed.Skipped > 0, "The resumed run read again what the interrupted one had finished.");
+        Assert.Equal(Files(whole, "manifests"), Files(interrupted, "manifests"));
+        Assert.Equal(Files(whole, "derivatives"), Files(interrupted, "derivatives"));
+    }
+
+    private static ProcessResult Process(TempFolder drive, TempFolder work, int? jobs = null) => ProcessCommand.Run(Options(drive, work, jobs));
+
+    private static ProcessOptions Options(TempFolder drive, TempFolder work, int? jobs = null) =>
+        new(drive.Path, work.Path, "HD", FfmpegFolder: Path.GetDirectoryName(s_tools.Ffmpeg), ModelFolder: TestModels.None, Jobs: jobs);
+
+    // Every file under the work folder's subfolder, by relative path, with its SHA-256: byte-identical or not.
+    private static SortedDictionary<string, string> Files(TempFolder work, string folder)
+    {
+        var root = Path.Combine(work.Path, folder);
+        var files = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            files[Path.GetRelativePath(root, file)] = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(file)));
+        }
+
+        return files;
+    }
+
+    // Reports on the calling thread, unlike System.Progress, so the cancellation happens at a known count.
+    private sealed class Progress(Action<int> report) : IProgress<int>
+    {
+        public void Report(int value) => report(value);
+    }
 
     private static List<Manifest> ReadManifests(TempFolder work) =>
         [.. Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json").Select(file => ManifestJson.Deserialize(File.ReadAllText(file)))];

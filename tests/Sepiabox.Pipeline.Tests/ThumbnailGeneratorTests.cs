@@ -29,6 +29,28 @@ public class ThumbnailGeneratorTests
     }
 
     [Fact]
+    public void Writes_the_preview_exactly_as_when_each_size_came_from_the_original()
+    {
+        // The preview is what the embeddings and faces are computed from (D-047): making the thumbnail from it must
+        // not change it by a single byte (D-078).
+        using var temp = new TempFolder();
+        var photo = temp.Write("photo.jpg", TestPhotos.Sized(3000, 2000));
+
+        var derivatives = ThumbnailGenerator.Generate(photo, temp.Path, Folder, ThumbnailGenerator.PhotoSizes);
+
+        using var original = new MagickImage(photo);
+        original.AutoOrient();
+        original.Strip();
+        using var preview = original.Clone();
+        preview.Resize(new MagickGeometry(1280, 1280) { Greater = true });
+        preview.Quality = ThumbnailGenerator.Quality;
+        var expected = Path.Combine(temp.Path, "expected.webp");
+        preview.Write(expected, MagickFormat.WebP);
+        Assert.Equal(File.ReadAllBytes(expected), File.ReadAllBytes(Path.Combine(temp.Path, derivatives[1].Path)));
+        Assert.Equal(("thumb-256", 256, 171), (derivatives[0].Name, derivatives[0].Width, derivatives[0].Height));
+    }
+
+    [Fact]
     public void Applies_the_exif_orientation_to_the_pixels()
     {
         using var temp = new TempFolder();
