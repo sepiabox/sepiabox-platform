@@ -14,4 +14,18 @@ Diff: `main...fix/brand-alignment` at `4e155f0` (platform), `de64148` (site), `d
 | P4 | Atlas | The site README does not name the brand files that MIT does not cover | ✅ Yes (iteration 2) | List `assets/symbol.svg`, `assets/favicon.svg` and `assets/symbol-small-light.svg` |
 | P4 | Atlas | The site uses European Portuguese forms ("sítios", "logótipo", "Secções", "À chegada", "As suas fotos…") | ✅ Yes (iteration 2): English plus pt-BR | Owner's decision: `index.html` in English, `pt-br/index.html` in Brazilian Portuguese, an EN / PT-BR switch with `hreflang`; the owner also had the GitHub link and every open-source mention removed from the site (the web app's UI has none) |
 
-Decision: no findings open → pull requests.
+Decision: only P4 rows, fixed together with the owner's language decision → iteration 2.
+
+## Iteration 2
+
+Diff: `fix/brand-alignment` from `4e155f0` to `138b9ec` (platform), `de64148` to `08425cb` (site), `d0aeb1b` to `20d080c` (brand).
+
+| Priority | Source | Short description | Resolved? | How to fix |
+|---|---|---|---|---|
+| P2 | Atlas | The site's copy presents features that are not built yet (sources, steps, example questions, privacy points) | Open | Waiting on the owner: mark unbuilt features as "coming soon" or keep the full vision |
+| P3 | Atlas | The site README still described a single Portuguese page | ✅ Yes (iteration 3) | Describe the English `index.html` and the pt-BR `pt-br/index.html` sharing `styles.css` and `assets/`, and that the Pages workflow publishes `pt-br/` |
+| P4 | Atlas | pt-BR wording: "Ligue o HD", "centro de dados" | ✅ Yes (iteration 3) | "Conecte o HD externo", "data center" |
+| P4 | Atlas | The site's `symbol-small-light.svg` had no source in `sepiabox-brand` | ✅ Yes (iteration 3) | Added to `sepiabox-brand/assets` byte for byte and listed in its README |
+| P4 | Spock | The EN / PT-BR links had no accessible names | ✅ Yes (iteration 3) | `aria-label="English"` and `aria-label="Português (Brasil)"`; the switch test finds the links by those names |
+
+Decision: P2 open, waiting on the owner's decision.
