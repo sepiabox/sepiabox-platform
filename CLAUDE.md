@@ -79,9 +79,10 @@ New projects follow the names in `docs/architecture.md` and are added to `Sepiab
 
 ## Backlog workflow
 
-The full cycle (story selection, the Atlas + Spock review, priorities, iteration limit, CI, merge, blocked stories and the Agent Log) is in [docs/process.md](docs/process.md). In short:
+The full cycle (story selection, the Atlas + Spock (+ DaVinci) review, priorities, iteration limit, CI, merge, blocked stories and the Agent Log) is in [docs/process.md](docs/process.md). In short:
 
-1. Take the first `todo` story in [docs/backlog/README.md](docs/backlog/README.md) whose dependencies are all `done`; finish the current sprint before starting the next, with no order overrides (D-054).
+1. Take the next `todo` story of your track (A or B from Sprint 13, D-090) in [docs/backlog/README.md](docs/backlog/README.md), in the order listed, whose dependencies are all `done`; finish the current sprint (both tracks) before starting the next (D-054, D-090).
+   Two implementers, Tesla and Edison, work in parallel, each in its own worktree on one track; the PR is opened as a draft at iteration 1. Atlas and Spock review every story, and DaVinci also reviews stories that change the UI (process.md).
 2. Work on a branch `story/S-XXX-short-slug`, one story per PR.
 3. In that PR, set the story's status in the index (`doing` while open, `done` when the PR completes it, `blocked` with the reason when a human step from `docs/operations.md` is missing).
 4. When something is not specified, choose the simplest conventional option and record it in `docs/decisions.md` (next D-number: date, decision, alternatives, reason).

@@ -296,7 +296,7 @@ The application role `sepiabox_web` can read the cities but not change them: loa
 
 ## Importing exports (after the MVP)
 
-Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from their official exports (D-053, Sprints 20–22; with `--index-only`, D-088, their originals stay in the export folder), which only the account owner can request:
+Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from their official exports (D-053, Sprints 15–16, renumbered by D-090; with `--index-only`, D-088, their originals stay in the export folder), which only the account owner can request:
 
 | Source | How to get it |
 |---|---|

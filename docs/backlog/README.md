@@ -11,9 +11,9 @@ Backlog meant to be executed by autonomous agents. Each story is a small vertica
 
 Statuses: `todo` · `doing` · `blocked` · `done`.
 
-**Sprints** ([D-054](../decisions.md)): a sprint is finished completely before the next one starts, and stories are taken in the order below, within the current sprint; there are no order overrides. A `todo` story whose dependency is `blocked` becomes `blocked` ("depends on S-XXX"). A story whose only open items are manual owner checks is `done` once its automated criteria pass; the manual checks go to [`operations.md`](../operations.md) as owner acceptance. Each sprint fits in about 4 hours of agent work including the Atlas + Spock reviews (2 stories M + M, or up to 3 when some are S). Sprints 1–2 were re-cut from the work already done.
+**Sprints** ([D-054](../decisions.md)): a sprint is finished completely before the next one starts, and stories are taken in the order below, within the current sprint; there are no order overrides. A `todo` story whose dependency is `blocked` becomes `blocked` ("depends on S-XXX"). A story whose only open items are manual owner checks is `done` once its automated criteria pass; the manual checks go to [`operations.md`](../operations.md) as owner acceptance. Sprints 3–12 fit in about 4 hours of agent work including the Atlas + Spock reviews (2 stories M + M, or up to 3 when some are S). From Sprint 13 the team is two implementers working in parallel ([D-090](../decisions.md)): each sprint is twice that size, as two independent **tracks** (A and B) of 2–3 stories, about 4 hours each, one implementer per track; the sprint is finished when both tracks are. Within a track, stories are taken in the order listed. Sprints 1–2 were re-cut from the work already done.
 
-**MVP** ([D-053](../decisions.md)): Sprints 1–9. Take the data from the external drive to the cloud, ask questions about the imported photos and videos, and get correct answers. The only source in the MVP is the external drive (local folders and drives). Sprints 10–22 come after the MVP and do not start while an MVP story is `blocked`.
+**MVP** ([D-053](../decisions.md)): Sprints 1–9. Take the data from the external drive to the cloud, ask questions about the imported photos and videos, and get correct answers. The only source in the MVP is the external drive (local folders and drives). Sprints 10–16 come after the MVP and do not start while an MVP story is `blocked`.
 
 **UI text** ([D-050](../decisions.md)): from S-044 on, every story writes the text the user sees as resources in English and Brazilian Portuguese, and uses English routes. Portuguese strings quoted in stories are the `pt-BR` translation.
 
@@ -150,96 +150,62 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-017 | [Show more photos similar to this one](S-017-show-more-photos-similar-to-this-one.md) | Search | S-015, S-013 | Medium | S | `done` |
 | S-060 | [Refresh video locations in processed work folders](S-060-refresh-video-locations-in-processed-work-folders.md) | Local ingest | S-053 | Low | S | `done` |
 
-### Sprint 13 — Index-only mode
+### Sprint 13 — Index-only mode, occasions and storage view
 
-**Demonstrable increment:** `sepiabox-ingest process --index-only` keeps the originals where they are: `upload` sends 2048 px previews, 1080p videos, embeddings, faces and manifests but no original; the detail page shows the larger preview and where the original lives, with a link when the source has one. The owner placed it right after Sprint 12 ([D-088](../decisions.md)).
+**Demonstrable increment:** Index-only mode (`sepiabox-ingest process --index-only`) keeps the originals where they are: `upload` sends 2048 px previews, 1080p videos, embeddings, faces and manifests but no original; the detail page shows the larger preview and where the original lives, with a link when the source has one ([D-088](../decisions.md)); the library page shows the space each source takes. In parallel, photos are grouped into typed occasions and "How many weddings did we go to in 2026?" is answered.
 
-| Story | Title | Epic | Depends on | Priority | Size | Status |
-|---|---|---|---|---|---|---|
-| S-063 | [Process and upload a source in index-only mode](S-063-process-and-upload-a-source-in-index-only.md) | Local ingest | S-005, S-006, S-007, S-008, S-015, S-018 | Medium | M | `todo` |
-| S-064 | [Show where an index-only original lives](S-064-show-where-an-index-only-original-lives.md) | Web app | S-063, S-011, S-044 | Medium | S | `todo` |
+**Tracks** ([D-090](../decisions.md)): the two tracks run in parallel, one implementer each, and no story of one depends on a story of the other. **Track A:** index-only mode in `sepiabox-ingest`, then the detail page and the storage view. **Track B:** occasions in the catalog, search and questions. Stories are listed in the order of each track.
 
-### Sprint 14 — Occasions
+| Story | Title | Epic | Depends on | Priority | Size | Status | Track |
+|---|---|---|---|---|---|---|---|
+| S-063 | [Process and upload a source in index-only mode](S-063-process-and-upload-a-source-in-index-only.md) | Local ingest | S-005, S-006, S-007, S-008, S-015, S-018 | Medium | M | `todo` | A |
+| S-064 | [Show where an index-only original lives](S-064-show-where-an-index-only-original-lives.md) | Web app | S-063, S-011, S-044 | Medium | S | `todo` | A |
+| S-028 | [See the library's storage and sources](S-028-see-the-library-s-storage-and-sources.md) | Organization | S-026 | Low | S | `todo` | A |
+| S-023 | [Group photos into occasions](S-023-group-photos-into-occasions.md) | Occasions | S-012 | Medium | M | `todo` | B |
+| S-024 | [Classify occasions by type](S-024-classify-occasions-by-type.md) | Occasions | S-023, S-016, S-026, S-014 | Medium | M | `todo` | B |
 
-**Demonstrable increment:** Photos are grouped into typed occasions; ask "How many weddings did we go to in 2026?".
+### Sprint 14 — Portability, Google Drive and tidying the library
 
-| Story | Title | Epic | Depends on | Priority | Size | Status |
-|---|---|---|---|---|---|---|
-| S-023 | [Group photos into occasions](S-023-group-photos-into-occasions.md) | Occasions | S-012 | Medium | M | `todo` |
-| S-024 | [Classify occasions by type](S-024-classify-occasions-by-type.md) | Occasions | S-023, S-016, S-026, S-014 | Medium | M | `todo` |
+**Demonstrable increment:** Existing storage code goes through the project's own interfaces and originals upload through them, with behaviour unchanged ([D-051](../decisions.md)); a Google Drive account can be connected; blurry photos and bursts are listed and photos similar to a selected region are found.
 
-### Sprint 15 — Organization
+**Tracks** ([D-090](../decisions.md)): the two tracks run in parallel, one implementer each, and no story of one depends on a story of the other. **Track A:** portability refactor of the storage code (ingest, worker, web storage layer), then region search on the new interface (it reads previews through that same storage code). **Track B:** Google Drive connection, blurry photos and bursts. Stories are listed in the order of each track.
 
-**Demonstrable increment:** See blurry photos, bursts and the space each source takes.
+| Story | Title | Epic | Depends on | Priority | Size | Status | Track |
+|---|---|---|---|---|---|---|---|
+| S-050 | [Put blob storage behind the project's own interface](S-050-put-blob-storage-behind-the-project-s.md) | Foundation | S-007, S-008, S-009, S-033 | High | M | `todo` | A |
+| S-051 | [Upload originals through the storage interface](S-051-upload-originals-through-the-storage-interface.md) | Foundation | S-050, S-063 | Medium | M | `todo` | A |
+| S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `todo` | A |
+| S-037 | [Connect a Google Drive account](S-037-connect-a-google-drive-account.md) | Cloud sources | S-010 | Medium | M | `todo` | B |
+| S-027 | [Find blurry photos and bursts](S-027-find-blurry-photos-and-bursts.md) | Organization | S-005, S-013 | Low | M | `todo` | B |
 
-| Story | Title | Epic | Depends on | Priority | Size | Status |
-|---|---|---|---|---|---|---|
-| S-027 | [Find blurry photos and bursts](S-027-find-blurry-photos-and-bursts.md) | Organization | S-005, S-013 | Low | M | `todo` |
-| S-028 | [See the library's storage and sources](S-028-see-the-library-s-storage-and-sources.md) | Organization | S-026 | Low | S | `todo` |
+### Sprint 15 — Cloud processing, source deletion, export and Takeout
 
-### Sprint 16 — Portability refactor
+**Demonstrable increment:** Files that arrive in the cloud are processed by the worker; everything that came only from one named source can be deleted safely; the full export as a zip works. In parallel, `sepiabox-ingest process --export <kind>` reads an export's dates, places, captions and albums ([D-053](../decisions.md)), and a Google Takeout export shows up in the timeline with its metadata, in either mode.
 
-**Demonstrable increment:** Existing storage code goes through the project's own interfaces (D-051); behaviour unchanged.
+**Tracks** ([D-090](../decisions.md)): the two tracks run in parallel, one implementer each, and no story of one depends on a story of the other. **Track A:** worker, catalog and export (cloud processing, deletion, full export). **Track B:** export metadata in `sepiabox-ingest` and the Takeout importer. Stories are listed in the order of each track.
 
-| Story | Title | Epic | Depends on | Priority | Size | Status |
-|---|---|---|---|---|---|---|
-| S-050 | [Put blob storage behind the project's own interface](S-050-put-blob-storage-behind-the-project-s.md) | Foundation | S-007, S-008, S-009, S-033 | High | M | `todo` |
-| S-051 | [Upload originals through the storage interface](S-051-upload-originals-through-the-storage-interface.md) | Foundation | S-050, S-063 | Medium | M | `todo` |
+| Story | Title | Epic | Depends on | Priority | Size | Status | Track |
+|---|---|---|---|---|---|---|---|
+| S-036 | [Process files that arrive in the cloud without a manifest](S-036-process-files-that-arrive-in-the-cloud.md) | Cloud sources | S-033, S-006, S-015, S-050 | Medium | M | `todo` | A |
+| S-057 | [Delete a source's assets from the library](S-057-delete-a-source-s-assets-from-the.md) | Cloud catalog | S-008, S-050, S-058 | Medium | M | `todo` | A |
+| S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010, S-051, S-063 | Medium | S | `todo` | A |
+| S-045 | [Read metadata from photo exports during process](S-045-read-metadata-from-photo-exports-during-process.md) | Import exports | S-004, S-043 | Medium | M | `todo` | B |
+| S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
 
-### Sprint 17 — Cloud sources I
+### Sprint 16 — Drive and OneDrive sync, Apple Photos and social exports
 
-**Demonstrable increment:** Files that arrive in the cloud are processed by the worker; a Google Drive account can be connected.
+**Demonstrable increment:** Photos from Google Drive and OneDrive show up in the timeline, and the app shows captions and albums and filters by album; an Apple Photos / iCloud export, and Instagram and Facebook downloads, show up in the timeline with their captions and albums, in either mode.
 
-| Story | Title | Epic | Depends on | Priority | Size | Status |
-|---|---|---|---|---|---|---|
-| S-036 | [Process files that arrive in the cloud without a manifest](S-036-process-files-that-arrive-in-the-cloud.md) | Cloud sources | S-033, S-006, S-015, S-050 | Medium | M | `todo` |
-| S-037 | [Connect a Google Drive account](S-037-connect-a-google-drive-account.md) | Cloud sources | S-010 | Medium | M | `todo` |
+**Tracks** ([D-090](../decisions.md)): the two tracks run in parallel, one implementer each, and no story of one depends on a story of the other. **Track A:** cloud source sync (worker and web), then the caption and album view (after the export and source deletion of Sprint 15, which it extends). **Track B:** export importers in `sepiabox-ingest`. Stories are listed in the order of each track.
 
-### Sprint 18 — Cloud sources II
-
-**Demonstrable increment:** Photos from Google Drive and OneDrive show up in the timeline.
-
-| Story | Title | Epic | Depends on | Priority | Size | Status |
-|---|---|---|---|---|---|---|
-| S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036, S-064 | Medium | M | `todo` |
-| S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010, S-064 | Medium | M | `todo` |
-
-### Sprint 19 — Export, undoing an upload and region search
-
-**Demonstrable increment:** Full export as a zip; everything that came only from one named source can be deleted safely; find photos similar to a selected region.
-
-| Story | Title | Epic | Depends on | Priority | Size | Status |
-|---|---|---|---|---|---|---|
-| S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010, S-051, S-063 | Medium | S | `todo` |
-| S-057 | [Delete a source's assets from the library](S-057-delete-a-source-s-assets-from-the.md) | Cloud catalog | S-008, S-050, S-058 | Medium | M | `todo` |
-| S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `todo` |
-
-### Sprint 20 — Import exports I
-
-**Demonstrable increment:** `sepiabox-ingest process --export <kind>` reads an export's dates, places, captions and albums; the app shows captions and albums and filters by album ([D-053](../decisions.md)).
-
-| Story | Title | Epic | Depends on | Priority | Size | Status |
-|---|---|---|---|---|---|---|
-| S-045 | [Read metadata from photo exports during process](S-045-read-metadata-from-photo-exports-during-process.md) | Import exports | S-004, S-043 | Medium | M | `todo` |
-| S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` |
-
-### Sprint 21 — Import exports II
-
-**Demonstrable increment:** A Google Takeout and an Apple Photos / iCloud export show up in the timeline with their metadata, in either mode; in index-only mode a Google Photos item links back to Google Photos.
-
-| Story | Title | Epic | Depends on | Priority | Size | Status |
-|---|---|---|---|---|---|---|
-| S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` |
-| S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` |
-
-### Sprint 22 — Import exports III
-
-**Demonstrable increment:** Instagram and Facebook downloads show up in the timeline with their captions and albums.
-
-| Story | Title | Epic | Depends on | Priority | Size | Status |
-|---|---|---|---|---|---|---|
-| S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` |
-| S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `todo` |
+| Story | Title | Epic | Depends on | Priority | Size | Status | Track |
+|---|---|---|---|---|---|---|---|
+| S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036, S-064 | Medium | M | `todo` | A |
+| S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010, S-064 | Medium | M | `todo` | A |
+| S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` | A |
+| S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
+| S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
+| S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `todo` | B |
 
 ## Epics
 
@@ -262,9 +228,9 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 ## Validation
 
-- **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-062 were added with D-050, D-051, D-053 and the reviews of D-054, and S-063–S-064 with D-088; the sprints were re-cut by D-054, and D-088 put index-only mode in Sprint 13, right after Sprint 12, at the owner's choice); there are no cycles and no forward dependencies (checked by script when this index is generated).
+- **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-062 were added with D-050, D-051, D-053 and the reviews of D-054, and S-063–S-064 with D-088; the sprints were re-cut by D-054, D-088 put index-only mode right after Sprint 12 at the owner's choice, and D-090 regrouped Sprints 13–16 into two parallel tracks); there are no cycles and no forward dependencies: a story's dependencies sit in an earlier sprint or earlier in the same track, and no story depends on the other track of its sprint (checked by script when this index is generated).
 - **Size:** 22 stories S, 42 M, none L.
-- **Sprints:** 22 sprints. Sprints 3–22 hold 2 or 3 stories each (M + M, or up to 3 when some are S, D-054); Sprints 1 (11 stories) and 2 (7) gather the work done before D-054.
+- **Sprints:** 16 sprints. Sprints 3–12 hold 2 or 3 stories each (M + M, or up to 3 when some are S, D-054); Sprints 13–16 hold two tracks of 2–3 stories each, 5 or 6 stories per sprint (D-090); Sprints 1 (11 stories) and 2 (7) gather the work done before D-054.
 - **Decisions covered:** D-001 to D-024 in [`decisions.md`](../decisions.md) are applied: each is cited in the technical notes of at least one story, except D-021, which this backlog itself applies.
 - Story status is kept up to date by each story's PR (see [How to use](#how-to-use)).
 
@@ -272,7 +238,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 | Topic | Reason |
 |---|---|
-| Dropbox | Not used by the family today; the source model (S-037 to S-039) allows adding it later. Google Photos, Apple Photos / iCloud, Instagram and Facebook are now covered by Sprints 20–22 through their exports (D-053), with index-only mode (Sprint 13, D-088) for keeping their originals where they are. |
+| Dropbox | Not used by the family today; the source model (S-037 to S-039) allows adding it later. Google Photos, Apple Photos / iCloud, Instagram and Facebook are now covered by Sprints 15–16 through their exports (D-053), with index-only mode (Sprint 13, D-088) for keeping their originals where they are. |
 | A local UI for pre-processing (a future epic) | A nicer desktop interface for `scan`, `process --export` and `upload` (progress, problems, choosing folders). For now the `sepiabox-ingest` console is enough. |
 | Mobile apps and Sign in with Apple | Phase 3; Apple sign-in only makes sense with the iOS app (D-006). |
 | Dedicated object and clothing detection ("red dress") | In v1 covered by CLIP visual search (S-016, S-041); a dedicated detector is phase 3. |
@@ -287,7 +253,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 ## Summary
 
 - **Epics:** 14
-- **Sprints:** 22
+- **Sprints:** 16 (Sprints 13–16 with two parallel tracks, D-090)
 - **Stories:** 64
-- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (36 stories), with the external drive as the only source; Sprints 10–22 (28 stories) come after it. The MVP is done (all 36 stories); its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
-- **Critical path (13 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-032 → S-058 → S-033 → S-050 → S-036 → S-038, and others as long: the same chain ending in S-036 → S-039, or in S-050 → S-051 → S-040. Index-only mode (S-063, S-064) depends only on done stories, so it adds nothing to it (D-088).
+- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (36 stories), with the external drive as the only source; Sprints 10–16 (28 stories) come after it. The MVP is done (all 36 stories); its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
+- **Critical path (13 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-032 → S-058 → S-033 → S-050 → S-036 → S-038, and others as long: the same chain ending in S-036 → S-039, or in S-050 → S-051 → S-040. Index-only mode (S-063, S-064) depends only on done stories, so it adds nothing to it (D-088). With the parallel tracks of D-090 the chain runs through Sprints 14 (S-050), 15 (S-036) and 16 (S-038 or S-039), so Sprints 14–16 are the shortest possible plan.

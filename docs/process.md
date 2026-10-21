@@ -1,6 +1,6 @@
 # Autonomous development cycle
 
-How agents deliver the backlog without waiting for a person. Read `CLAUDE.md`, `docs/architecture.md` and `docs/decisions.md` first. When something is ambiguous, choose the simplest, most conservative option, record it in `docs/decisions.md` and carry on.
+How agents deliver the backlog without waiting for a person. Since 2026-10-21 there are two implementers, Tesla and Edison, working in parallel (D-090); the orchestrator coordinates them and talks to the owner. Read `CLAUDE.md`, `docs/architecture.md` and `docs/decisions.md` first. When something is ambiguous, choose the simplest, most conservative option, record it in `docs/decisions.md` and carry on.
 
 ## Rules that are never broken
 
@@ -10,10 +10,23 @@ How agents deliver the backlog without waiting for a person. Read `CLAUDE.md`, `
 - No `--force` on shared branches; `main`'s history is never rewritten.
 - At most **6 development → review iterations** per story (raised from 4 by the owner on 2026-10-19). When the limit is reached the story becomes `blocked` with the full report, and work moves on to the next one.
 
+## Two implementers
+
+Tesla and Edison each work in their own git worktree, on one story at a time, on its own `story/S-XXX-<slug>` branch (D-090). From Sprint 13 a sprint has two tracks, A and B, listed in the backlog index: one implementer takes a track, and stories inside a track are taken in the listed order. No story depends on the other track of its sprint, so the two never wait for each other. An implementer may start the next story of its track while the current one waits for review or CI; a story that depends on one still in review starts only once that one is merged. The owner allows moving from one sprint to the next without asking (2026-10-21).
+
+Parallel branches always collide somewhere, so:
+
+- **Branching.** The next story branches from `main`, never from a story still in review (a story that depends on one in review waits, as above). After a merge, the other open branches merge `main` in with a merge commit; no rebase or force-push of a pushed branch.
+- **Migrations.** Two branches that each add a migration both change `CatalogDbContextModelSnapshot.cs`. The second to merge merges `main`, deletes its own branch-only migration and regenerates it with `dotnet ef migrations add` (D-033 allows regenerating a migration that is not on `main`); the snapshot is never merged by hand.
+- **Decision numbers.** The orchestrator assigns each story its D-number when handing it out; when two still collide, the second to merge renumbers its own and keeps `docs/decisions.md` in numeric order.
+- **Small shared files.** A conflict in the backlog index's status column or in `docs/operations.md` keeps both sides.
+
+**DaVinci** reviews the user interface and experience of every story that changes what a person sees or does in the web app (pages, components, user text in both languages, empty, loading and error states, accessibility, the brand, 1024 px and phones), in parallel with Atlas and Spock and with the same priorities. Stories without a visible change skip DaVinci.
+
 ## Step 0 — Pick the story
 
 1. Update `main`.
-2. Take the next `todo` story **of the current sprint** in `docs/backlog/README.md` whose dependencies are all `done`, in backlog order. The current sprint is the first one with a story not yet `done` or `blocked`; the next sprint starts only when it is finished, and there are no order overrides (D-054). Sprints after the MVP do not start while any MVP story is `blocked`: report it in the Agent Log and stop (D-054).
+2. Take the next `todo` story **of your track in the current sprint** (before Sprint 13, of the current sprint) in `docs/backlog/README.md` whose dependencies are all `done`, in backlog order. The current sprint is the first one with a story not yet `done` or `blocked`; the next sprint starts only when both its tracks are finished, and there are no order overrides (D-054, D-090). The owner has allowed moving to the next sprint without asking, so the orchestrator does not wait for approval. Sprints after the MVP do not start while any MVP story is `blocked`: report it in the Agent Log and stop (D-054).
 3. Set it to `doing` and create the branch.
 4. If nothing is eligible but some stories are `blocked`, go to "End of the cycle". A `todo` story whose dependency is `blocked` is set to `blocked` too, with the reason "depends on S-XXX" (D-054).
 
@@ -71,10 +84,11 @@ The table, for every iteration, is kept in `docs/reviews/S-XXX.md`.
 
 - Any P0/P1 open, or a P2 without justification → back to Step 1 (one more iteration).
 - Otherwise → open follow-up issues for unresolved P3s and go to Step 4.
+- When only P3/P4 findings remain after a fix iteration, there is no full re-review: the orchestrator checks the fixes against the diff and CI, and the story goes to Step 4. The exception: a fix that changes a migration, the manifest schema or its merge, the question translator's prompt or output format, or the golden set gets a quick re-check by the reviewer who raised it.
 
 ## Step 4 — Pull request and CI
 
-1. Push the branch and open the PR: title `S-XXX: <title>`, the story file, a summary of the change, the decisions taken and the final review table.
+1. Push the branch and open the PR as a **draft** at iteration 1, so CI runs during the reviews. Title `S-XXX: <title>`, the story file, a summary of the change, the decisions taken and the review table, kept up to date at each iteration. Mark it ready for review when Step 3 sends the story here.
 2. Follow the workflows until they finish.
 3. Classify any failure:
    - **Code failure** (tests, lint, build, breakage caused by the diff) → Step 1 on the same branch (one more iteration; then Step 2 again on the new diff only).
