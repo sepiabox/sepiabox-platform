@@ -763,12 +763,15 @@ main {
 .occasion-thumbs img {
     display: block;
     width: 100%;
+    /* The img's height attribute would otherwise win over the aspect ratio and give tall strips. */
+    height: auto;
     aspect-ratio: 1;
     object-fit: cover;
 }
 
 .occasion-thumbs .placeholder {
     grid-column: 1 / -1;
+    min-height: 100px;
 }
 
 .occasion-link:focus-visible {
