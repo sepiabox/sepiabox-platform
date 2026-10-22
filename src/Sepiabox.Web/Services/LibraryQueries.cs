@@ -170,6 +170,9 @@ public interface ILibraryQueries
     /// </summary>
     Task<OccasionsPage> GetOccasionsPageAsync(int page, string? type = null, CancellationToken cancellationToken = default);
 
+    /// <summary>The occasion each of the assets is in (S-041); an asset in none is not in the result. Thumbnails are not read.</summary>
+    Task<IReadOnlyDictionary<string, OccasionSummary>> GetOccasionsOfAsync(IReadOnlyCollection<string> assetIds, CancellationToken cancellationToken = default);
+
     /// <summary>Null when the catalog has no occasion with that id. Its thumbnails are not read.</summary>
     Task<OccasionSummary?> GetOccasionAsync(long id, CancellationToken cancellationToken = default);
 
@@ -220,7 +223,8 @@ public sealed class LibraryQueries(
     SearchOptions? searchOptions = null,
     FilterOptionsCache? filterOptions = null,
     IQueryEmbedder? embedder = null,
-    ICurrentUser? user = null) : ILibraryQueries
+    ICurrentUser? user = null,
+    IRegionEmbedder? regionEmbedder = null) : ILibraryQueries
 {
     public const int PageSize = 200;
 
@@ -340,6 +344,25 @@ public sealed class LibraryQueries(
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var occasion = await db.Occasions.AsNoTracking().SingleOrDefaultAsync(o => o.Id == id, cancellationToken);
         return occasion is null ? null : Summary(occasion, [], await HiddenCountsAsync(db, [id], cancellationToken));
+    }
+
+    public async Task<IReadOnlyDictionary<string, OccasionSummary>> GetOccasionsOfAsync(
+        IReadOnlyCollection<string> assetIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(assetIds);
+        if (assetIds.Count == 0)
+        {
+            return new Dictionary<string, OccasionSummary>();
+        }
+
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var ids = assetIds.ToArray();
+        var rows = await (
+            from link in db.OccasionAssets.AsNoTracking()
+            join occasion in db.Occasions.AsNoTracking() on link.EventId equals occasion.Id
+            where ids.Contains(link.AssetId)
+            select new { link.AssetId, Occasion = occasion }).ToListAsync(cancellationToken);
+        return rows.ToDictionary(r => r.AssetId, r => Summary(r.Occasion, [], []));
     }
 
     // An occasion's count is of what its page shows: photos set aside (S-027) are in the occasion but not in its grid.
@@ -645,7 +668,7 @@ public sealed class LibraryQueries(
     // The signed-in user's address as "This is me" stores it (lower-cased, S-020).
     private string? Me() => user?.Email is { } email && !string.IsNullOrWhiteSpace(email) ? email.Trim().ToLowerInvariant() : null;
 
-    private SearchService Search(CatalogDbContext db) => new(db, clock ?? TimeProvider.System, searchOptions, embedder, user?.Email);
+    private SearchService Search(CatalogDbContext db) => new(db, clock ?? TimeProvider.System, searchOptions, embedder, user?.Email, regionEmbedder);
 
     private async Task<FilterOptions> LoadFilterOptionsAsync(CancellationToken cancellationToken)
     {

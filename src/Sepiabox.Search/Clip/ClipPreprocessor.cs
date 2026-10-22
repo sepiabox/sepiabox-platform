@@ -1,6 +1,6 @@
 using ImageMagick;
 
-namespace Sepiabox.Pipeline.Embeddings;
+namespace Sepiabox.Search.Clip;
 
 /// <summary>
 /// Turns an image into CLIP ViT-B/32's input, as OpenAI's preprocessing does: shorter side resized to 224
@@ -39,7 +39,7 @@ public static class ClipPreprocessor
 
         using var pixels = image.GetPixels();
         return pixels.ToByteArray(PixelMapping.RGB)
-            ?? throw new EmbeddingException("The image has no pixels.");
+            ?? throw new InvalidOperationException("The image has no pixels.");
     }
 
     /// <summary>

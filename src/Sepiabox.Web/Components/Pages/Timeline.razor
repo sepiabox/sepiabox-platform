@@ -45,7 +45,7 @@
 }
 else if (_describeUnavailable)
 {
-    <p class="empty" role="alert">@Text["Search_DescribeUnavailable"] <a href="./">@Text["Filter_Clear"]</a></p>
+    <p class="empty" role="alert">@(_query?.Filters.SimilarToRegion is null ? Text["Search_DescribeUnavailable"] : Text["Region_Unavailable"]) <a href="./">@Text["Filter_Clear"]</a></p>
 }
 else if (_peopleMessage is not null)
 {
@@ -69,6 +69,37 @@ else if (_filtered)
     else if (_results.Items.Count == 0)
     {
         <p class="empty">@Text["Search_NoResults"] <a href="./">@Text["Filter_Clear"]</a></p>
+    }
+    else if (_query?.Filters.SimilarToRegion is not null)
+    {
+        @* Photos like a part of a photo (S-041): by occasion, the occasion of the most similar photo first, and in each the
+           most similar first. *@
+        <h2 class="region-heading">@Text["Search_MostSimilarToRegion"]</h2>
+        @foreach (var group in _groups)
+        {
+            <section class="month">
+                <h3>
+                    @if (group.Occasion is { } occasion)
+                    {
+                        <a href="occasions/@occasion.Id">@Text.OccasionTitle(occasion.PlaceLabel, occasion.StartsAt, occasion.EndsAt)</a>
+                    }
+                    else
+                    {
+                        @Text["Search_NotInOccasion"]
+                    }
+                </h3>
+                <ul class="grid">
+                    @foreach (var item in group.Items)
+                    {
+                        <li><MediaCard Item="item" Href="@DetailLink(item)" /></li>
+                    }
+                </ul>
+            </section>
+        }
+        @if (_results.HasMore && SimilarSearch.More(_query) is { } moreRegion)
+        {
+            <p class="more"><a href="@SearchLinks.Timeline(moreRegion)">@Text["Similar_ShowMore"]</a></p>
+        }
     }
     else if (_query?.Filters.Visual is not null || _query?.Filters.SimilarTo is not null)
     {
@@ -180,6 +211,16 @@ else
     [SupplyParameterFromQuery(Name = SearchLinks.SimilarLimitParameter)]
     public string? SimilarLimit { get; set; }
 
+    /// <summary>The part of a photo whose similar ones the bar narrows (S-041), carried in hidden fields.</summary>
+    [SupplyParameterFromQuery(Name = SearchLinks.RegionAssetParameter)]
+    public string? RegionAsset { get; set; }
+
+    [SupplyParameterFromQuery(Name = SearchLinks.RegionBoxParameter)]
+    public string? RegionBox { get; set; }
+
+    [SupplyParameterFromQuery(Name = SearchLinks.RegionLimitParameter)]
+    public string? RegionLimit { get; set; }
+
     /// <summary>The occasions the bar narrows (S-023), carried in hidden fields.</summary>
     [SupplyParameterFromQuery(Name = SearchLinks.EventParameter)]
     public string[]? EventIds { get; set; }
@@ -219,6 +260,7 @@ else
     private bool _filtered;
     private bool _invalid;
     private bool _describeUnavailable;
+    private IReadOnlyList<OccasionGroup> _groups = [];
     private string? _peopleMessage;
     private bool _asked;
 
@@ -275,11 +317,12 @@ else
         {
             // One address per set of filters, so the URL can be copied and opened again.
             Navigation.NavigateTo(SearchLinks.Timeline(
-                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit, EventIds, SourceEq, SourceGte, Blurry, IncludeHidden)));
+                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit, EventIds, SourceEq, SourceGte, RegionAsset, RegionBox, RegionLimit, Blurry, IncludeHidden)));
             return;
         }
 
         (_page, _results, _query, _filtered, _invalid, _describeUnavailable, _count) = (null, null, null, false, false, false, null);
+        _groups = [];
         _peopleMessage = null;
         if (!string.IsNullOrEmpty(SearchQueryParameter))
         {
@@ -304,6 +347,11 @@ else
                 if (_count is null)
                 {
                     _results = await Library.SearchAsync(_query);
+                    if (_query.Filters.SimilarToRegion is not null)
+                    {
+                        var occasionOf = await Library.GetOccasionsOfAsync([.. _results.Items.Select(i => i.Id)]);
+                        _groups = OccasionGroups.Group(_results.Items, occasionOf);
+                    }
                 }
             }
             catch (VisualSearchUnavailableException)

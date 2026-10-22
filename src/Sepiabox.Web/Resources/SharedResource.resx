@@ -1385,4 +1385,49 @@
   <data name="Ask_TimedOut" xml:space="preserve">
     <value>Still waiting. You can keep waiting or try again.</value>
   </data>
+  <data name="Chip_SimilarToRegion" xml:space="preserve">
+    <value>Similar to part of a photo</value>
+    <comment>Chip that removes a search for photos like a part of one photo (S-041).</comment>
+  </data>
+  <data name="Search_MostSimilarToRegion" xml:space="preserve">
+    <value>Most similar to the part of the photo, by occasion</value>
+    <comment>Heading of the photos most similar to a part of a photo, in groups by occasion.</comment>
+  </data>
+  <data name="Search_NotInOccasion" xml:space="preserve">
+    <value>Not in an occasion</value>
+    <comment>Heading of the results that are in no occasion (undated ones, S-041).</comment>
+  </data>
+  <data name="Region_Select" xml:space="preserve">
+    <value>Select a part of the photo</value>
+    <comment>Button on the photo detail that starts drawing a rectangle on the preview (S-041).</comment>
+  </data>
+  <data name="Region_Hint" xml:space="preserve">
+    <value>Press “Select a part of the photo”, then drag on the photo to draw a rectangle (a roughly square one works best). With the keyboard: Enter starts a rectangle, the arrow keys move it, Shift with the arrow keys resizes it, Ctrl or Alt makes the steps bigger and Escape clears the selection. On a touch screen, press the button again to scroll the page.</value>
+  </data>
+  <data name="Region_FrameLabel" xml:space="preserve">
+    <value>Photo area: press Enter to start a selection</value>
+  </data>
+  <data name="Region_StatusSelected" xml:space="preserve">
+    <value>Selected area: {0}% wide, {1}% tall.</value>
+    <comment>Read out when a selection is finished; {0} and {1} are filled in by region.js (S-041).</comment>
+  </data>
+  <data name="Region_StatusNone" xml:space="preserve">
+    <value>No area selected.</value>
+  </data>
+  <data name="Region_Find" xml:space="preserve">
+    <value>Find photos like this part</value>
+  </data>
+  <data name="Region_Clear" xml:space="preserve">
+    <value>Clear selection</value>
+  </data>
+  <data name="Region_Unavailable" xml:space="preserve">
+    <value>Searching by part of a photo isn't available right now.</value>
+  </data>
+  <data name="Layout_More" xml:space="preserve">
+    <value>More</value>
+    <comment>The header's disclosure for the pages used now and then.</comment>
+  </data>
+  <data name="Layout_MoreCurrentLabel" xml:space="preserve">
+    <value>{0}: {1}, current page</value>
+  </data>
 </root>

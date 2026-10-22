@@ -110,10 +110,13 @@ public static class AzureInfrastructure
     /// <summary>Where the web's image carries the CLIP text model and tokenizer (S-056, D-071).</summary>
     public const string WebModelFolder = "/models";
 
-    /// <summary>The web's size (D-055): room for the ~250 MB text model loaded next to the app, at the smallest CPU.</summary>
-    public const double WebCpu = 0.5;
+    /// <summary>
+    /// The web's size (D-055, D-099): room for the ~250 MB text model and, since S-041, the ~350 MB image model loaded next
+    /// to the app. Container Apps pairs 1 vCPU with 2 GiB, the smallest size above 1 GiB.
+    /// </summary>
+    public const double WebCpu = 1.0;
 
-    public const string WebMemory = "1Gi";
+    public const string WebMemory = "2Gi";
 
     /// <summary>The azd parameter with the web's custom domain, empty for none (S-035).</summary>
     public const string CustomDomainParameter = "customDomain";

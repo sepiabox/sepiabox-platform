@@ -7,12 +7,13 @@ namespace Sepiabox.AppHost.Tests;
 public sealed class AzureWebModelTests(PublishedInfrastructure published) : IClassFixture<PublishedInfrastructure>
 {
     [Fact]
-    public void Web_has_1_gib_of_memory_and_scales_to_zero_when_published()
+    public void Web_has_2_gib_of_memory_and_scales_to_zero_when_published()
     {
         var web = published.The("Microsoft.App/containerApps");
 
-        Assert.Contains("memory: '1Gi'", web.Block("resources"), StringComparison.Ordinal);
-        Assert.Contains("cpu: json('0.5')", web.Block("resources"), StringComparison.Ordinal);
+        // Room for the text model and the image model next to the app (D-099); 2 GiB is what Container Apps pairs with 1 vCPU.
+        Assert.Contains("memory: '2Gi'", web.Block("resources"), StringComparison.Ordinal);
+        Assert.Contains("cpu: 1", web.Block("resources"), StringComparison.Ordinal);
         Assert.Contains("minReplicas: 0", web.Block("scale"), StringComparison.Ordinal);
         Assert.Contains("maxReplicas: 1", web.Block("scale"), StringComparison.Ordinal);
     }
@@ -47,7 +48,7 @@ public sealed class AzureWebModelTests(PublishedInfrastructure published) : ICla
         var script = File.ReadAllText(Path.Combine(Repository.Root, "scripts", "web-models.sh"));
         var models = File.ReadAllText(Path.Combine(Repository.Root, "models", "models.json"));
 
-        foreach (var (name, file) in new[] { ("clip-vit-b32-text", "clip-vit-b32-text.onnx"), ("clip-bpe-vocab", "clip-bpe-simple-vocab-16e6.txt.gz") })
+        foreach (var (name, file) in new[] { ("clip-vit-b32-text", "clip-vit-b32-text.onnx"), ("clip-bpe-vocab", "clip-bpe-simple-vocab-16e6.txt.gz"), ("clip-vit-b32-vision", "clip-vit-b32-vision.onnx") })
         {
             Assert.Contains($"\"name\": \"{name}\"", models, StringComparison.Ordinal);
             Assert.Contains($"\"file\": \"{file}\"", models, StringComparison.Ordinal);
@@ -95,6 +96,7 @@ public sealed class WebModelsImageTests
             {
                 ["clip-vit-b32-text.onnx"] = RandomNumberGenerator.GetBytes(4096),
                 ["clip-bpe-simple-vocab-16e6.txt.gz"] = RandomNumberGenerator.GetBytes(1024),
+                ["clip-vit-b32-vision.onnx"] = RandomNumberGenerator.GetBytes(2048),
                 ["models.json"] = File.ReadAllBytes(Path.Combine(Repository.Root, "models", "models.json")),
             };
             foreach (var (name, bytes) in files)

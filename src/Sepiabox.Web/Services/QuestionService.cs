@@ -135,6 +135,7 @@ public sealed class QuestionService(
     public static string? Validate(string json) =>
         !SearchQueryJson.TryParse(json, out var query, out var error) ? error
         : query.Filters.SimilarTo is not null ? "filters.similarTo is not part of an answer: a question cannot name an asset."
+        : query.Filters.SimilarToRegion is not null ? "filters.similarToRegion is not part of an answer: a question cannot name a photo and a box."
         : query.Filters.Quality is not null ? "filters.quality is not part of an answer: the organize page shows blurry photos."
         : query.Filters.IncludeHidden ? "filters.includeHidden is not part of an answer: a question never asks for what was set aside."
         : query.Filters.EventIds is not null ? "filters.eventIds is not part of an answer: a question cannot name an occasion."
