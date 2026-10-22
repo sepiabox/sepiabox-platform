@@ -14,7 +14,20 @@
         });
     });
 
+    // Safari does not focus a link or button when it is clicked, so a click inside the menu can make the focus leave it
+    // for a moment; while the pointer is pressed inside, that is not leaving.
+    let pressedInside = false;
+    document.addEventListener("pointerdown", (event) => {
+        pressedInside = event.target instanceof Element && event.target.closest("details[data-more]") !== null;
+    });
+    document.addEventListener("pointerup", () => { pressedInside = false; });
+    document.addEventListener("pointercancel", () => { pressedInside = false; });
+
     document.addEventListener("focusout", (event) => {
+        if (pressedInside) {
+            return;
+        }
+
         const more = event.target instanceof Element ? event.target.closest("details[data-more]") : null;
         // relatedTarget is null when the focus leaves the page, which closes it too; a click inside keeps it (relatedTarget is inside).
         if (more?.open && !(event.relatedTarget instanceof Node && more.contains(event.relatedTarget))) {

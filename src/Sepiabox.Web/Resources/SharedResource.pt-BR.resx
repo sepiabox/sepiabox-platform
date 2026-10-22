@@ -1328,6 +1328,6 @@
     <comment>The header's disclosure for the pages used now and then.</comment>
   </data>
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
-    <value>{0}, página atual: {1}</value>
+    <value>{0}: {1}, página atual</value>
   </data>
 </root>

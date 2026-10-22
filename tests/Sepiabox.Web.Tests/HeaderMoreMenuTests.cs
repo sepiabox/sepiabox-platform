@@ -72,14 +72,41 @@ public sealed class HeaderMoreMenuTests : LocalizedContext
     }
 
     [Theory]
-    [InlineData(Cultures.English, "/places", "More, current page: Places")]
-    [InlineData(Cultures.BrazilianPortuguese, "/storage", "Mais, página atual: Armazenamento")]
+    [InlineData(Cultures.English, "/places", "More: Places, current page")]
+    [InlineData(Cultures.BrazilianPortuguese, "/storage", "Mais: Armazenamento, página atual")]
     public void Names_the_current_page_in_the_summary_s_accessible_name_only_when_it_is_inside(string culture, string address, string label)
     {
         using var _ = Cultures.Use(culture);
 
         Assert.Equal(label, Open(address).Find("header summary").GetAttribute("aria-label"));
         Assert.Null(Open("/people").Find("header summary").GetAttribute("aria-label"));
+    }
+
+    [Theory]
+    [InlineData("/People", "people")]
+    [InlineData("/OCCASIONS/4", "occasions")]
+    [InlineData("/people#faces", "people")]
+    [InlineData("/people/3?x=1#top", "people")]
+    public void Marks_the_page_whatever_the_case_of_the_address_and_ignoring_a_fragment(string address, string href)
+    {
+        var header = Open(address).Find("header");
+
+        Assert.Equal(href, Assert.Single(header.QuerySelectorAll("a[aria-current=page]")).GetAttribute("href"));
+    }
+
+    [Fact]
+    public void Marks_a_page_inside_the_disclosure_in_any_case_too()
+    {
+        var header = Open("/Places#top").Find("header");
+
+        Assert.Equal("places", Assert.Single(header.QuerySelectorAll("a[aria-current=page]")).GetAttribute("href"));
+        Assert.Contains("nav-more-active", header.QuerySelector("summary")!.ClassList);
+    }
+
+    [Fact]
+    public void The_panel_can_hold_the_focus_so_a_click_on_its_padding_keeps_it_inside()
+    {
+        Assert.Equal("-1", Open("/").Find("header .nav-more-list").GetAttribute("tabindex"));
     }
 
     [Fact]
