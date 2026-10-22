@@ -222,6 +222,182 @@ public sealed class ExportGeneratorTests(CatalogFixture fixture)
         Assert.Equal([ExportStatuses.Failed, ExportStatuses.Running], (await db.ExportRequests.AsNoTracking().OrderBy(e => e.Id).ToListAsync()).Select(r => r.Status));
     }
 
+    [Fact]
+    public async Task A_finished_or_failed_request_that_started_long_ago_is_left_exactly_as_it_was()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var done = new ExportRequest
+        {
+            RequestedAt = s_now.AddHours(-9),
+            RequestedBy = "ana@example.com",
+            Status = ExportStatuses.Done,
+            StartedAt = s_now.AddHours(-8),
+            FinishedAt = s_now.AddHours(-7),
+            BlobName = "2026-10-01-1.zip",
+            SizeBytes = 1234,
+            Assets = 3,
+        };
+        var failed = new ExportRequest
+        {
+            RequestedAt = s_now.AddHours(-6),
+            RequestedBy = "ana@example.com",
+            Status = ExportStatuses.Failed,
+            StartedAt = s_now.AddHours(-5),
+            FinishedAt = s_now.AddHours(-4),
+            Error = "The export could not be written (IOException). Ask for it again.",
+        };
+        db.ExportRequests.AddRange(done, failed);
+        await db.SaveChangesAsync();
+
+        await Generator(db).RunPendingAsync(CancellationToken.None);
+
+        db.ChangeTracker.Clear();
+        var rows = await db.ExportRequests.AsNoTracking().OrderBy(e => e.Id).ToListAsync();
+        Assert.Equal([ExportStatuses.Done, ExportStatuses.Failed], rows.Select(r => r.Status));
+        Assert.Equal(("2026-10-01-1.zip", 1234L, 3, null), (rows[0].BlobName, rows[0].SizeBytes, rows[0].Assets, rows[0].Error));
+        Assert.Equal(done.FinishedAt!.Value.ToUnixTimeMilliseconds(), rows[0].FinishedAt!.Value.ToUnixTimeMilliseconds());
+        Assert.Equal(failed.Error, rows[1].Error);
+        Assert.Equal(failed.FinishedAt!.Value.ToUnixTimeMilliseconds(), rows[1].FinishedAt!.Value.ToUnixTimeMilliseconds());
+    }
+
+    [Fact]
+    public async Task Does_nothing_and_changes_nothing_while_another_run_holds_the_export_lock()
+    {
+        await using var db = await SeedAsync();
+        var request = await RequestAsync(db, includeFaces: false);
+        await using var other = new Npgsql.NpgsqlConnection(fixture.ConnectionStringFor(db));
+        await other.OpenAsync();
+        await using (var lockCommand = new Npgsql.NpgsqlCommand($"SELECT pg_advisory_lock({ExportGenerator.ExportLockKey})", other))
+        {
+            await lockCommand.ExecuteNonQueryAsync();
+        }
+
+        var before = (await fixture.Store.ListAsync("exports").ToListAsync()).Select(b => b.Name).Order().ToList();
+
+        var written = await Generator(db).RunPendingAsync(CancellationToken.None);
+
+        Assert.Equal(0, written);
+        db.ChangeTracker.Clear();
+        var row = await db.ExportRequests.AsNoTracking().SingleAsync(e => e.Id == request.Id);
+        Assert.Equal((ExportStatuses.Requested, null, null), (row.Status, row.StartedAt, row.BlobName));
+        Assert.Equal(before, (await fixture.Store.ListAsync("exports").ToListAsync()).Select(b => b.Name).Order());
+    }
+
+    [Fact]
+    public async Task The_error_stored_for_a_failed_write_names_the_exception_type_and_nothing_of_its_message()
+    {
+        await using var db = await SeedAsync();
+        var failing = await RequestAsync(db, includeFaces: false);
+        var store = new ThrowingStore(new AzureBlobStore(fixture.Blobs, TimeProvider.System, ExportGenerator.OriginalLinkLifetime), new IOException("cannot write /secret/library/path/zip.tmp for ana@example.com"));
+
+        await new ExportGenerator(db, store, TimeProvider.System, NullLogger.Instance).RunPendingAsync(CancellationToken.None);
+
+        db.ChangeTracker.Clear();
+        var error = (await db.ExportRequests.AsNoTracking().SingleAsync(e => e.Id == failing.Id)).Error!;
+        Assert.Contains("IOException", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("/secret", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("ana@example.com", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_catalog_counts_only_faces_that_count_names_each_person_once_orders_faces_by_position_and_sources_by_name_and_says_hidden_and_home()
+    {
+        await using var db = await SeedAsync();
+        var bruno = new Person { Name = "Bruno", UserEmail = null, FaceCount = 0 };
+        var carla = new Person { Name = "Carla", UserEmail = null, FaceCount = 0 };
+        db.People.AddRange(bruno, carla);
+        db.Assets.Add(new Asset
+        {
+            Id = "a4",
+            Kind = "photo",
+            ContentType = "image/jpeg",
+            SizeBytes = 10,
+            Hidden = true,
+            ImportedAt = s_now,
+            UpdatedAt = s_now,
+            Sources =
+            [
+                new AssetSource { AssetId = "a4", Type = "local", Name = "Zeta", Path = "b.jpg", ModifiedAt = s_now },
+                new AssetSource { AssetId = "a4", Type = "local", Name = "Alfa", Path = "z.jpg", ModifiedAt = s_now },
+                new AssetSource { AssetId = "a4", Type = "local", Name = "Alfa", Path = "a.jpg", ModifiedAt = s_now },
+            ],
+        });
+        db.SavedPlaces.Add(new SavedPlace { Name = "Casa", Location = new Point(-9.0, 38.0) { SRID = 4326 }, RadiusM = 100, IsHome = true });
+        await db.SaveChangesAsync();
+        var embedding = new Vector(new float[128]);
+        db.Faces.AddRange(
+            new Face { AssetId = "a4", Box = [0.7, 0.1, 0.1, 0.1], Score = 0.9, Embedding = embedding, Person = bruno, Assignment = FaceAssignments.Manual },
+            new Face { AssetId = "a4", Box = [0.1, 0.1, 0.1, 0.1], Score = 0.8, Embedding = embedding, Person = bruno, Assignment = FaceAssignments.Auto },
+            new Face { AssetId = "a4", Box = [0.4, 0.1, 0.1, 0.1], Score = 0.7, Embedding = embedding, Person = carla, Assignment = FaceAssignments.Excluded },
+            new Face { AssetId = "a4", Box = [0.9, 0.1, 0.1, 0.1], Score = 0.6, Embedding = embedding, Person = carla, Assignment = FaceAssignments.NotFace });
+        await db.SaveChangesAsync();
+        var request = await RequestAsync(db, includeFaces: true);
+
+        await Generator(db).RunPendingAsync(CancellationToken.None);
+
+        var (catalog, _, _) = await ReadZipAsync(db, request);
+        using var json = JsonDocument.Parse(catalog);
+        var asset = json.RootElement.GetProperty("assets").EnumerateArray().Single(a => a.GetProperty("id").GetString() == "a4");
+        // Bruno once (two faces that count), Carla not at all (excluded, not a face).
+        Assert.Equal(["Bruno"], asset.GetProperty("people").EnumerateArray().Select(p => p.GetString()));
+        // The faces by position from the left, all four, with their assignment.
+        Assert.Equal([0.1, 0.4, 0.7, 0.9], asset.GetProperty("faces").EnumerateArray().Select(f => f.GetProperty("box")[0].GetDouble()));
+        Assert.Equal(["auto", "excluded", "manual", "not_face"], asset.GetProperty("faces").EnumerateArray().Select(f => f.GetProperty("assignment").GetString()));
+        Assert.Equal(["Alfa/a.jpg", "Alfa/z.jpg", "Zeta/b.jpg"], asset.GetProperty("sources").EnumerateArray().Select(s => s.GetProperty("name").GetString() + "/" + s.GetProperty("path").GetString()));
+        Assert.True(asset.GetProperty("hidden").GetBoolean());
+        Assert.False(json.RootElement.GetProperty("assets")[0].GetProperty("hidden").GetBoolean());
+        var places = json.RootElement.GetProperty("savedPlaces").EnumerateArray().ToDictionary(p => p.GetProperty("name").GetString()!, p => p.GetProperty("home").GetBoolean());
+        Assert.Equal((true, false), (places["Casa"], places["Casa da praia"]));
+    }
+
+    [Fact]
+    public async Task The_file_name_of_an_original_is_the_last_part_of_its_path_with_tabs_and_line_breaks_made_spaces_and_the_asset_id_when_nothing_is_left()
+    {
+        await using var db = await SeedAsync();
+        foreach (var (id, path) in new[] { ("a4", "dir/with\ttab.jpg"), ("a5", "x/line\nbreak.jpg"), ("a6", "folder/"), ("a7", "C:\\Fotos\\win.jpg"), ("a8", " \t ") })
+        {
+            db.Assets.Add(new Asset
+            {
+                Id = id,
+                Kind = "photo",
+                ContentType = "image/jpeg",
+                SizeBytes = 10,
+                ImportedAt = s_now,
+                UpdatedAt = s_now,
+                Sources = [new AssetSource { AssetId = id, Type = "local", Name = "HD", Path = path, ModifiedAt = s_now }],
+            });
+        }
+
+        await db.SaveChangesAsync();
+        var request = await RequestAsync(db, includeFaces: false);
+
+        await Generator(db).RunPendingAsync(CancellationToken.None);
+
+        var (_, originals, _) = await ReadZipAsync(db, request);
+        var names = originals.Split('\n', StringSplitOptions.RemoveEmptyEntries).Where(l => !l.StartsWith('#')).Select(l => l.Split('\t')).ToDictionary(p => p[0], p => p[1]);
+        Assert.All(originals.Split('\n', StringSplitOptions.RemoveEmptyEntries).Where(l => !l.StartsWith('#')), line => Assert.Equal(3, line.Split('\t').Length));
+        Assert.Equal("with tab.jpg", names["a4"]);
+        Assert.Equal("line break.jpg", names["a5"]);
+        Assert.Equal("a6", names["a6"]);
+        Assert.Equal("win.jpg", names["a7"]);
+        Assert.Equal("a8", names["a8"]);
+    }
+
+    [Fact]
+    public async Task The_readme_of_an_export_with_face_data_says_so_and_warns_that_it_is_biometric()
+    {
+        await using var db = await SeedAsync();
+        var request = await RequestAsync(db, includeFaces: true);
+        await Generator(db).RunPendingAsync(CancellationToken.None);
+
+        var (_, _, readme) = await ReadZipAsync(db, request);
+
+        Assert.Contains("Face data is included", readme, StringComparison.Ordinal);
+        Assert.Contains("biometric data; keep this zip private", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("Face data (face boxes and embeddings) is not included", readme, StringComparison.Ordinal);
+        Assert.Contains("Os dados de rostos estão incluídos", readme, StringComparison.Ordinal);
+    }
+
     private ExportGenerator Generator(CatalogDbContext db) =>
         new(db, new AzureBlobStore(fixture.Blobs, TimeProvider.System, ExportGenerator.OriginalLinkLifetime), TimeProvider.System, NullLogger.Instance);
 
@@ -311,6 +487,11 @@ public sealed class ExportGeneratorTests(CatalogFixture fixture)
         await fixture.Store.WriteAsync("originals", "a1", BinaryData.FromBytes([1]), "image/jpeg", BlobWriteCondition.Always);
         await fixture.Store.WriteAsync("originals", "a2", BinaryData.FromBytes([2]), "video/quicktime", BlobWriteCondition.Always);
         return db;
+    }
+
+    private sealed class ThrowingStore(IBlobStore inner, Exception exception) : DelegatingBlobStore(inner)
+    {
+        public override IStagedUpload BeginUpload(string container, string name) => throw exception;
     }
 
     private sealed class FailOnceStore(IBlobStore inner) : DelegatingBlobStore(inner)

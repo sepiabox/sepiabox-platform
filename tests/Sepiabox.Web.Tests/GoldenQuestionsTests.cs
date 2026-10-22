@@ -156,6 +156,35 @@ public sealed class GoldenQuestionsCatalogTests(CatalogFixture catalog)
         Assert.Empty(misses);
     }
 
+    // The fixture's explicit sizes (S-028) and second sources decide these numbers: a set of the right size but the wrong
+    // items, or sizes that were all the same, would give others (every other asset is 1000 bytes).
+    [Fact]
+    public async Task The_size_questions_find_the_bytes_the_fixture_gives_the_right_items()
+    {
+        var golden = GoldenQuestions.Load();
+        await using var db = await golden.SeedAsync(catalog);
+
+        var videos2019 = await golden.FindAsync(db, golden.Questions.Single(q => q.Id == "storage-videos-2019").Expected);
+        var photos2019 = await golden.FindAsync(db, golden.Questions.Single(q => q.Id == "storage-photos-2019").Expected);
+        var several = await golden.FindAsync(db, golden.Questions.Single(q => q.Id == "storage-in-several-sources").Expected);
+        var perYear = await golden.FindAsync(db, golden.Questions.Single(q => q.Id == "storage-per-year").Expected);
+
+        Assert.Contains("total=2", videos2019);
+        Assert.Contains("bytes=14000", videos2019);
+        Assert.Contains("total=6", photos2019);
+        Assert.Contains("bytes=12500", photos2019);
+        Assert.Contains("total=8", several);
+        Assert.Contains("bytes=22500", several);
+        // Per group too, not just the total: 2019 is eight assets of 26,500 bytes, 2018 three of 5,500 and 2024 four of 10,700.
+        Assert.Contains("bytes=80500", perYear);
+        Assert.Contains("2019=8", perYear);
+        Assert.Contains("2019.bytes=26500", perYear);
+        Assert.Contains("2018.bytes=5500", perYear);
+        Assert.Contains("2024.bytes=10700", perYear);
+        Assert.Contains("2020.bytes=4000", perYear);
+        Assert.Contains("(none).bytes=2000", perYear);
+    }
+
     [Fact]
     public async Task The_fixture_catalog_tells_the_golden_queries_apart()
     {

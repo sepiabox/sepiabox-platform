@@ -92,15 +92,19 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
     }
 
     [Fact]
-    public void Storage_deletes_exports_after_seven_days_when_published()
+    public void Storage_has_one_lifecycle_policy_with_a_rule_for_incoming_after_thirty_days_and_one_for_exports_after_seven_when_published()
     {
-        var policy = published.The("Microsoft.Storage/storageAccounts/managementPolicies");
+        // One policy per account, always named default: a second resource would replace the first, so every story's rule is in this one.
+        var policy = Assert.Single(published.Declarations("Microsoft.Storage/storageAccounts/managementPolicies"));
 
         Assert.Equal("'default'", policy.Property("name"));
+        Assert.Contains("'incoming/'", policy.Body, StringComparison.Ordinal);
         Assert.Contains("'exports/'", policy.Body, StringComparison.Ordinal);
         Assert.DoesNotContain("'originals/'", policy.Body, StringComparison.Ordinal);
+        Assert.Contains("daysAfterModificationGreaterThan: 30", policy.Body, StringComparison.Ordinal);
         Assert.Contains("daysAfterModificationGreaterThan: 7", policy.Body, StringComparison.Ordinal);
-        Assert.Single(System.Text.RegularExpressions.Regex.Matches(policy.Body, "delete:"));
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Count(policy.Body, "delete:"));
+        Assert.Equal(30, AzureInfrastructure.IncomingRetentionDays);
         Assert.Equal(7, AzureInfrastructure.ExportRetentionDays);
     }
 

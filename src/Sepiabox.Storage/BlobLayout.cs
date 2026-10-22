@@ -11,6 +11,9 @@ public static class BlobLayout
     public const string DerivativesContainer = "derivatives";
     public const string ManifestsContainer = "manifests";
 
+    /// <summary>Files that arrive from a cloud source without a manifest, until the worker has processed them (S-036).</summary>
+    public const string IncomingContainer = "incoming";
+
     public static string ManifestBlobName(string assetId) => assetId + ".json";
 
     /// <summary><c>&lt;sha256&gt;/thumb-256.webp</c>: the work-folder file name under the asset's id.</summary>

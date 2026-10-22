@@ -37,8 +37,20 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
                 "export-identity: Storage Blob Data Contributor on containers exports",
                 "export-identity: Storage Blob Data Reader on containers originals",
                 "export-identity: Storage Blob Delegator on storageAccounts storage",
+                // The admin job deletes a source's blobs (S-057, D-108) from three containers, never account-wide: that would reach
+                // the web's key ring and `incoming`.
+                "admin-identity: Storage Blob Data Contributor on containers derivatives",
+                "admin-identity: Storage Blob Data Contributor on containers manifests",
+                "admin-identity: Storage Blob Data Contributor on containers originals",
                 // The faces job rewrites manifests, and nothing else in storage (S-022).
                 "faces-identity: Storage Blob Data Contributor on containers manifests",
+                // The process job (S-036) reads and deletes incoming, copies originals, writes derivatives and manifests: those four containers.
+                "process-identity: Storage Blob Data Contributor on containers derivatives",
+                "process-identity: Storage Blob Data Contributor on containers incoming",
+                "process-identity: Storage Blob Data Contributor on containers manifests",
+                "process-identity: Storage Blob Data Contributor on containers originals",
+                // ... and receives from the incoming queue, which KEDA reads with the Manage claim.
+                "process-identity: Azure Service Bus Data Owner on queues incoming",
                 // The uploaders, one assignment per id in uploaderPrincipalIds.
                 "id: Storage Blob Data Contributor on storageAccounts storage",
                 // The import jobs read blobs and the queue; KEDA reads its length with the Manage claim (D-063).
@@ -48,6 +60,7 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
                 "migrate-identity: Key Vault Secrets User on vaults database-vault",
                 // Event Grid's system topic delivers storage events to the queue (S-033).
                 "storageEvents.identity.principalId: Azure Service Bus Data Sender on queues manifests",
+                "storageEvents.identity.principalId: Azure Service Bus Data Sender on queues incoming",
                 // The web reads blobs, writes only the key ring, reads the owner's secrets and uses one key.
                 "web-identity: Key Vault Crypto User on keys dataprotection",
                 "web-identity: Key Vault Secrets User on vaults vault",
@@ -84,7 +97,7 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
     public void Owner_secrets_reach_only_the_web_and_only_from_key_vault_when_published()
     {
         var webEnvironment = Environment("web");
-        var jobKeys = new[] { "migrate", "import", "import-all", "geonames", "faces", "export" }.SelectMany(job => Environment(job).Keys).ToList();
+        var jobKeys = new[] { "migrate", "import", "import-all", "geonames", "faces", "process", "admin", "export" }.SelectMany(job => Environment(job).Keys).ToList();
 
         // Key Vault is the web's configuration source: Auth--Google--ClientId is Auth:Google:ClientId (D-051).
         Assert.Equal("{vault.connectionString}", webEnvironment["ConnectionStrings__vault"]);

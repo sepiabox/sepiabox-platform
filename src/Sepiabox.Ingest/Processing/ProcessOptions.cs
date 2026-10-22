@@ -10,7 +10,7 @@ namespace Sepiabox.Ingest.Processing;
 /// <param name="FfmpegFolder">Folder with <c>ffmpeg</c> and <c>ffprobe</c>; null to look on the PATH.</param>
 /// <param name="Encoder">H.264 encoder for the 720p versions.</param>
 /// <param name="ModelFolder">Folder with the downloaded models; null for the default (<c>models download</c>).</param>
-/// <param name="RetryLeftOut">Read again the files earlier runs left out as holding no video, even when unchanged.</param>
+/// <param name="RetryLeftOut">Read again the files earlier runs left out as holding no video, and the photos they found damaged, even when unchanged.</param>
 /// <param name="ListLeftOut">List every file left out by earlier runs, not just how many.</param>
 /// <param name="Faces">Detect faces (S-018). Off by default: faces are biometric data, so the user opts in.</param>
 /// <param name="Jobs">Files processed at once (<c>--jobs</c>); null for <see cref="DefaultJobs"/>.</param>

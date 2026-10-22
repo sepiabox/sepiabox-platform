@@ -36,6 +36,30 @@ public sealed class ExportRequestsTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Refuses_a_request_while_another_is_being_written()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.ExportRequests.Add(new ExportRequest { RequestedAt = s_clock.GetUtcNow(), RequestedBy = "ana@example.com", Status = ExportStatuses.Running, StartedAt = s_clock.GetUtcNow() });
+        await db.SaveChangesAsync();
+        var exports = Exports(catalog, db, new RecordingLinks());
+
+        Assert.False(await exports.RequestAsync("bruno@example.com", includeFaceData: false));
+
+        Assert.Single(await exports.RecentAsync());
+    }
+
+    [Fact]
+    public void A_zip_is_expired_at_the_very_moment_its_retention_ends_and_not_a_tick_before()
+    {
+        var request = new ExportRequest { RequestedAt = s_clock.GetUtcNow().AddDays(-9), RequestedBy = "x", FinishedAt = s_clock.GetUtcNow().AddDays(-8), Status = ExportStatuses.Done };
+        var keptUntil = ExportRequests.KeptUntil(request);
+
+        Assert.Equal(request.FinishedAt!.Value.AddDays(ExportRequest.RetentionDays), keptUntil);
+        Assert.True(ExportRequests.Expired(request, keptUntil));
+        Assert.False(ExportRequests.Expired(request, keptUntil.AddTicks(-1)));
+    }
+
+    [Fact]
     public async Task Two_requests_at_the_same_moment_make_only_one_because_the_database_allows_one_active()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();
@@ -203,6 +227,26 @@ public sealed class ExportPageTests : LocalizedContext
         Assert.Contains("deleted after 7 days", page.Find("p.small").TextContent, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(true, "yes", true)]
+    [InlineData(true, null, false)]
+    [InlineData(false, "yes", false)]
+    public async Task Asks_for_face_data_only_when_the_form_said_so_and_recognition_is_on_when_it_is_posted(bool recognitionOn, string? posted, bool asked)
+    {
+        // A form posted while recognition is off (the box was there when the page was opened) is asked without face data: the check is the server's.
+        _faces.State = new Sepiabox.Catalog.People.FaceRecognitionState(recognitionOn, recognitionOn ? null : DateTimeOffset.UnixEpoch, null);
+        var http = new DefaultHttpContext
+        {
+            User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity([new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Email, "ana@example.com")], "test")),
+        };
+        var page = Render<ExportData>(p => p.AddCascadingValue<HttpContext>(http));
+        page.Instance.IncludeFaceData = posted;
+
+        await page.InvokeAsync(() => (Task)typeof(ExportData).GetMethod("RequestAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(page.Instance, null)!);
+
+        Assert.Equal([("ana@example.com", asked)], _exports.Requested);
+    }
+
     [Fact]
     public void Says_so_in_brazilian_portuguese_and_shows_only_the_notes_it_knows()
     {
@@ -243,7 +287,13 @@ public sealed class ExportPageTests : LocalizedContext
 
         public Task<IReadOnlyList<ExportRequest>> RecentAsync(CancellationToken cancellationToken = default) => Task.FromResult(Recent);
 
-        public Task<bool> RequestAsync(string email, bool includeFaceData, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public List<(string Email, bool IncludeFaceData)> Requested { get; } = [];
+
+        public Task<bool> RequestAsync(string email, bool includeFaceData, CancellationToken cancellationToken = default)
+        {
+            Requested.Add((email, includeFaceData));
+            return Task.FromResult(true);
+        }
 
         public Task<Uri?> DownloadAsync(long id, CancellationToken cancellationToken = default)
         {

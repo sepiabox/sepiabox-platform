@@ -92,7 +92,7 @@
           "items": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
         },
         "sourceCount": {
-          "description": "How many different sources the item was found in (S-028, D-093): eq is exactly that many (1 is \"in only one source\"), gte at least that many (2 is \"in several\"). Exactly one of eq and gte. The same source name twice counts once. Source names are compared exactly as stored, case-sensitively, unlike sources, which ignores case. Never part of the question translator's output format.",
+          "description": "How many different sources the item was found in (S-028, D-093): eq is exactly that many (1 is \"in only one source\"), gte at least that many (2 is \"in several\"). Exactly one of eq and gte. The same source name twice counts once. Source names are compared exactly as stored, case-sensitively, unlike sources, which ignores case. Written by the question translator, required but nullable in its output format (D-103).",
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -175,7 +175,7 @@
           "type": "boolean"
         },
         "quality": {
-          "description": "Photos by sharpness (S-027, D-098): blurry true for those below the configured threshold (Search:BlurryBelow, 100 by default), false for the sharper ones. Assets that were not measured, such as videos, never match. Never part of the question translator's output format.",
+          "description": "Photos by sharpness (S-027, D-098): blurry true for those below the configured threshold (Search:BlurryBelow, 100 by default), false for the sharper ones. Assets that were not measured, such as videos, never match. Written by the question translator, required but nullable in its output format (D-103).",
           "type": "object",
           "additionalProperties": false,
           "required": ["blurry"],
@@ -184,7 +184,7 @@
           }
         },
         "includeHidden": {
-          "description": "Also the assets the family set aside on the organize page (S-027); without it they are left out of every search and count. Never part of the question translator's output format.",
+          "description": "Also the assets the family set aside on the organize page (S-027); without it they are left out of every search and count. Written by the question translator, required but nullable in its output format (D-103).",
           "type": "boolean"
         }
       }
@@ -206,7 +206,7 @@
           "enum": ["year", "month", "kind", "city", "source", "person", "eventType", null]
         },
         "sum": {
-          "description": "Also add up the sizes of the matching items (S-028, D-093): bytes is the size of the originals. Not together with groupBy person. Never part of the question translator's output format.",
+          "description": "Also add up the sizes of the matching items (S-028, D-093): bytes is the size of the originals. Not together with groupBy person. Written by the question translator, required but nullable in its output format (D-103).",
           "enum": ["bytes"]
         },
         "top": { "description": "Only with groupBy: the largest this many groups. Absent: every year, month or kind group in its own order, or the largest 10 cities, sources or people.", "type": "integer", "minimum": 1, "maximum": 100 }

@@ -67,7 +67,10 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
         try
         {
             var current = (await Blob(container, name).DownloadContentAsync(cancellationToken)).Value;
-            return new BlobContent(current.Content, Unquoted(current.Details.ETag), current.Details.LastModified);
+            return new BlobContent(current.Content, Unquoted(current.Details.ETag), current.Details.LastModified)
+            {
+                Metadata = new Dictionary<string, string>(current.Details.Metadata),
+            };
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
@@ -151,8 +154,74 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
         }
     }
 
+    public async Task<BlobWriteResult> WriteAsync(
+        string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        var options = new BlobUploadOptions
+        {
+            HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
+            Metadata = new Dictionary<string, string>(metadata),
+            Conditions = condition.Kind switch
+            {
+                BlobWriteConditionKind.IfNew => new BlobRequestConditions { IfNoneMatch = ETag.All },
+                BlobWriteConditionKind.IfVersion => new BlobRequestConditions { IfMatch = new ETag(Quoted(condition.Version!)) },
+                _ => null,
+            },
+        };
+        try
+        {
+            var written = (await Blob(container, name).UploadAsync(content, options, cancellationToken)).Value;
+            return new BlobWriteResult(BlobWriteStatus.Written, Unquoted(written.ETag));
+        }
+        catch (RequestFailedException ex) when (condition.Kind != BlobWriteConditionKind.Always && LostTheCondition(ex, condition))
+        {
+            return new BlobWriteResult(BlobWriteStatus.ConditionNotMet);
+        }
+    }
+
+    public async Task<BlobInfo?> DownloadToAsync(string container, string name, Stream stream, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        try
+        {
+            var download = (await Blob(container, name).DownloadStreamingAsync(cancellationToken: cancellationToken)).Value;
+            await using (download.Content)
+            {
+                await download.Content.CopyToAsync(stream, cancellationToken);
+            }
+
+            var details = download.Details;
+            return new BlobInfo(
+                details.ContentLength, Unquoted(details.ETag), details.LastModified, details.ContentType ?? "application/octet-stream",
+                new Dictionary<string, string>(details.Metadata));
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+    }
+
     public async Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default) =>
         (await Blob(container, name).DeleteIfExistsAsync(cancellationToken: cancellationToken)).Value;
+
+    public async Task<BlobDeleteStatus> DeleteIfVersionAsync(string container, string name, string version, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(version);
+        try
+        {
+            await Blob(container, name).DeleteAsync(
+                DeleteSnapshotsOption.IncludeSnapshots, new BlobRequestConditions { IfMatch = new ETag(Quoted(version)) }, cancellationToken);
+            return BlobDeleteStatus.Deleted;
+        }
+        catch (RequestFailedException ex) when (ex.Status is 412 or 404)
+        {
+            // A condition on a blob that is not there fails with 412 in the emulator and 404 in Azure: look, so that a blob
+            // that is gone is told from one that changed.
+            return await Blob(container, name).ExistsAsync(cancellationToken) ? BlobDeleteStatus.ConditionNotMet : BlobDeleteStatus.NotFound;
+        }
+    }
 
     public async Task<Uri> CreateReadUrlAsync(
         string container, string name, DateTimeOffset expiresOn, BlobReadUrlOptions? options = null,
@@ -215,8 +284,13 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
             _blockIds.Add(id);
         }
 
-        public async Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default)
+        public Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default) =>
+            CommitAsync(contentType, storageClass, new Dictionary<string, string>(), cancellationToken);
+
+        public async Task CommitAsync(
+            string contentType, BlobStorageClass storageClass, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(metadata);
             if (_committed)
             {
                 throw new InvalidOperationException("The upload is already committed.");
@@ -227,6 +301,7 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
                 new CommitBlockListOptions
                 {
                     HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
+                    Metadata = new Dictionary<string, string>(metadata),
                     AccessTier = storageClass == BlobStorageClass.Cold ? AccessTier.Cold : (AccessTier?)null,
                 },
                 cancellationToken);
