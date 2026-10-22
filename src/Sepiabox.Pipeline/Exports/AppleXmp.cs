@@ -100,19 +100,24 @@ public static partial class AppleXmp
         }
 
         var result = Math.Abs(numbers[0]) + (numbers.Count > 1 ? numbers[1] / 60 : 0) + (numbers.Count > 2 ? numbers[2] / 3600 : 0);
-        var negative = numbers[0] < 0 || m.Groups[1].Value.StartsWith('-');
-        var letter = m.Groups[4].Success ? m.Groups[4].Value : reference?.Trim();
-        if (!string.IsNullOrEmpty(letter))
+        var signed = m.Groups[1].Value.StartsWith('-');
+        var inValue = m.Groups[4].Success ? char.ToUpperInvariant(m.Groups[4].Value[0]) : (char?)null;
+        var asReference = !string.IsNullOrWhiteSpace(reference) ? char.ToUpperInvariant(reference.Trim()[0]) : (char?)null;
+        if ((inValue is { } v && !hemispheres.Contains(v, StringComparison.Ordinal))
+            || (asReference is { } r && !hemispheres.Contains(r, StringComparison.Ordinal))
+            || (inValue is { } x && asReference is { } y && x != y))
         {
-            var upper = char.ToUpperInvariant(letter[0]);
-            if (!hemispheres.Contains(upper, StringComparison.Ordinal))
-            {
-                return null;
-            }
-
-            negative = upper == hemispheres[1];
+            return null;
         }
 
+        // A hemisphere letter and a minus sign that disagree would flip the place across the globe: refused, not guessed.
+        var letter = inValue ?? asReference;
+        if (signed && letter is { } l && l != hemispheres[1])
+        {
+            return null;
+        }
+
+        var negative = signed || letter == hemispheres[1];
         return result <= limit && double.IsFinite(result) ? (negative ? -result : result) : null;
     }
 

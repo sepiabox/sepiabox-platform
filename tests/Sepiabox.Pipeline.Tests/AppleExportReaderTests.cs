@@ -259,6 +259,77 @@ public sealed class AppleExportReaderTests : IDisposable
     }
 
     [Fact]
+    public void Gives_neither_of_two_files_with_the_same_name_the_album_that_lists_that_name()
+    {
+        Put("One/IMG_0001.HEIC");
+        Put("Two/IMG_0001.HEIC");
+        Put("IMG_0002.HEIC");
+        Text("Albums/Holidays.csv", "Images\nIMG_0001.HEIC\nIMG_0002.HEIC\n");
+
+        var scan = Read();
+
+        Assert.Empty(scan.Find("One/IMG_0001.HEIC")!.Albums);
+        Assert.Empty(scan.Find("Two/IMG_0001.HEIC")!.Albums);
+        Assert.Equal(["Holidays"], scan.Find("IMG_0002.HEIC")!.Albums);
+    }
+
+    [Fact]
+    public void Does_not_take_a_csv_outside_an_albums_folder_for_an_album_and_normalizes_the_name_of_one_inside()
+    {
+        Put("IMG_0001.HEIC");
+        Text("Lists/Holidays.csv", "Images\nIMG_0001.HEIC\n");
+        Text("Albums/Fami\u0301lia .csv", "Images\nIMG_0001.HEIC\n");
+
+        var albums = Read().Find("IMG_0001.HEIC")!.Albums;
+
+        Assert.Equal(["Fam\u00edlia"], albums);
+    }
+
+    [Fact]
+    public void Treats_a_dash_in_the_deleted_column_as_not_deleted()
+    {
+        Put("a.heic");
+        Text("Photo Details.csv", $"{Header}\na.heic,x,N,N,-,,0,\n");
+
+        var scan = Read();
+
+        Assert.False(scan.IsLeftOut("a.heic"));
+        Assert.NotNull(scan.Find("a.heic"));
+        Assert.DoesNotContain(scan.Warnings, w => w.Contains("deleted", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(10, 5, false)]
+    [InlineData(11, 6, true)]
+    [InlineData(10, 6, true)]
+    [InlineData(9, 9, false)]
+    public void Warns_that_most_rows_are_deleted_only_past_half_of_at_least_ten_rows(int rows, int deletedRows, bool warns)
+    {
+        var csv = new StringBuilder(Header + "\n");
+        for (var n = 1; n <= rows; n++)
+        {
+            Put($"IMG_{n:0000}.HEIC");
+            csv.Append(CultureInfo.InvariantCulture, $"IMG_{n:0000}.HEIC,x,N,N,{(n <= deletedRows ? "Y" : "N")},,0,\n");
+        }
+
+        Text("Photo Details.csv", csv.ToString());
+
+        Assert.Equal(warns, Read().Warnings.Any(w => w.StartsWith("Most rows", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Counts_a_sidecar_over_four_megabytes_as_unreadable_and_keeps_the_file()
+    {
+        Put("big.heic");
+        _export.Write("big.heic.xmp", Encoding.UTF8.GetBytes(XmpText($"<!--{new string('x', 4 * 1024 * 1024 + 10)}--><dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">too big</rdf:li></rdf:Alt></dc:description>")));
+
+        var scan = Read();
+
+        Assert.Null(scan.Find("big.heic")!.Caption);
+        Assert.Contains(scan.Warnings, w => w.Contains("1 .xmp sidecars could not be read", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Does_not_take_a_folder_name_as_an_album()
     {
         Put("2018-05-23 Beach/IMG_0001.HEIC");
