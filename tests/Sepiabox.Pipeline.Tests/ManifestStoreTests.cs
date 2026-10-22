@@ -317,6 +317,19 @@ public abstract class ManifestStoreTests
 
         private IBlobStore Inner => test.Backing;
 
+        public bool IsStoreFailure(Exception exception) => Inner.IsStoreFailure(exception);
+
+        public Task CreateContainerAsync(string container, CancellationToken cancellationToken = default) =>
+            Inner.CreateContainerAsync(container, cancellationToken);
+
+        public Task<long?> GetSizeAsync(string container, string name, CancellationToken cancellationToken = default) =>
+            Inner.GetSizeAsync(container, name, cancellationToken);
+
+        public Task<DateTimeOffset?> GetServerTimeAsync(string container, CancellationToken cancellationToken = default) =>
+            Inner.GetServerTimeAsync(container, cancellationToken);
+
+        public IStagedUpload BeginUpload(string container, string name) => Inner.BeginUpload(container, name);
+
         public Task<bool> ContainerExistsAsync(string container, CancellationToken cancellationToken = default) =>
             Inner.ContainerExistsAsync(container, cancellationToken);
 

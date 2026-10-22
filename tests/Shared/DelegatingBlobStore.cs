@@ -9,6 +9,19 @@ internal class DelegatingBlobStore(IBlobStore inner) : IBlobStore
 {
     protected IBlobStore Inner { get; } = inner;
 
+    public virtual bool IsStoreFailure(Exception exception) => Inner.IsStoreFailure(exception);
+
+    public virtual Task CreateContainerAsync(string container, CancellationToken cancellationToken = default) =>
+        Inner.CreateContainerAsync(container, cancellationToken);
+
+    public virtual Task<long?> GetSizeAsync(string container, string name, CancellationToken cancellationToken = default) =>
+        Inner.GetSizeAsync(container, name, cancellationToken);
+
+    public virtual Task<DateTimeOffset?> GetServerTimeAsync(string container, CancellationToken cancellationToken = default) =>
+        Inner.GetServerTimeAsync(container, cancellationToken);
+
+    public virtual IStagedUpload BeginUpload(string container, string name) => Inner.BeginUpload(container, name);
+
     public virtual Task<bool> ContainerExistsAsync(string container, CancellationToken cancellationToken = default) =>
         Inner.ContainerExistsAsync(container, cancellationToken);
 

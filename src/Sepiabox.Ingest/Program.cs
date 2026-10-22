@@ -6,6 +6,7 @@ using Sepiabox.Ingest.Scanning;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Video;
 using Sepiabox.Search.Models;
+using Sepiabox.Storage.Azure;
 
 const string Usage = """
     Usage: sepiabox-ingest <command> [options]
@@ -176,6 +177,15 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
     return result.Problems.Count == 0 ? 0 : 1;
 }
 
+// The one place that knows where blobs live: Azure with the signed-in identity, or the local emulator (D-051).
+static AzureBlobStore CreateBlobStore(UploadOptions options) => new(options.Destination switch
+{
+    UploadDestination.Azure => new Azure.Storage.Blobs.BlobServiceClient(
+        new Uri($"https://{options.Account}.blob.core.windows.net"), new Azure.Identity.DefaultAzureCredential()),
+    _ => new Azure.Storage.Blobs.BlobServiceClient(
+        Environment.GetEnvironmentVariable(UploadCommand.ConnectionVariable) ?? "UseDevelopmentStorage=true"),
+});
+
 static async Task<int> RunUpload(string[] args, CancellationToken cancellationToken)
 {
     if (!UploadOptions.TryParse(args, out var options, out var error))
@@ -184,7 +194,8 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
     }
 
     var progress = new ConsoleProgress<long>(bytes => Console.Error.Write($"\r{ScanReport.FormatBytes(bytes)} sent..."));
-    var result = await UploadCommand.RunAsync(options, UploadCommand.CreateClient(options), progress, cancellationToken);
+    using var store = CreateBlobStore(options);
+    var result = await UploadCommand.RunAsync(options, store, progress, cancellationToken);
     Console.Error.WriteLine();
 
     Console.WriteLine($"{result.Assets:N0} assets: uploaded {result.Uploaded:N0} files ({ScanReport.FormatBytes(result.Bytes)}), already there {result.Skipped:N0}, {(result.IndexOnly ? $"originals left at their source {result.OriginalsLeftAtSource:N0}, " : "")}problems {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");

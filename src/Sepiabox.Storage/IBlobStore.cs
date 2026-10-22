@@ -67,14 +67,60 @@ public sealed record BlobWriteResult(BlobWriteStatus Status, string? Version = n
 /// <param name="ContentType">Answer with this content type instead of the one stored.</param>
 public sealed record BlobReadUrlOptions(string? DownloadFileName = null, string? ContentType = null);
 
+/// <summary>How a blob is kept, and so what it costs to keep and to read (D-004).</summary>
+public enum BlobStorageClass
+{
+    /// <summary>The store's own default: Hot on Azure.</summary>
+    Default,
+
+    /// <summary>Cheap to keep and dear to read: the originals, which are read rarely. A store that has no such class (Azurite, memory) keeps the blob as usual.</summary>
+    Cold,
+}
+
 /// <summary>
-/// The blobs the project reads and writes (S-050, D-051): an Azure Blob Storage implementation, and an in-memory one for
-/// tests. It has only what a caller needs today; S-051 adds the staged upload and the access tier.
+/// A blob being written block by block (S-051, D-030): the caller reads its source once, hashes it as it goes and
+/// commits only if the hash is the one it expects. Blocks go in the order they are appended; nothing is visible in the
+/// container until <see cref="CommitAsync"/>, and an upload that is disposed without being committed leaves no blob.
+/// </summary>
+public interface IStagedUpload : IAsyncDisposable
+{
+    /// <summary>Adds the next block (the bytes are copied or sent before this returns, so the caller may reuse them).</summary>
+    Task AppendAsync(ReadOnlyMemory<byte> block, CancellationToken cancellationToken = default);
+
+    /// <summary>Makes the blob from the blocks appended so far, replacing one that is there. An upload commits once.</summary>
+    Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// The blobs the project reads and writes (S-050, S-051, D-051): an Azure Blob Storage implementation, and an in-memory
+/// one for tests. It has only what a caller needs today.
 /// </summary>
 public interface IBlobStore
 {
     /// <summary>Whether the container exists.</summary>
     Task<bool> ContainerExistsAsync(string container, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether <paramref name="exception"/> is the store failing a request (a refused call, a timeout, a connection that
+    /// closed) rather than a bug in the caller, so that a caller with many things to do can report this one and go on.
+    /// </summary>
+    bool IsStoreFailure(Exception exception) => false;
+
+    /// <summary>Creates the container unless it is there.</summary>
+    Task CreateContainerAsync(string container, CancellationToken cancellationToken = default);
+
+    /// <summary>The size in bytes of the blob, or null when it is not there (nor its container).</summary>
+    Task<long?> GetSizeAsync(string container, string name, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The time on the store's own clock, as it answers a request about the container (the <c>Date</c> header in Azure,
+    /// in whole seconds), for <c>upload</c> to compare with the computer's (D-081); null when the store does not say.
+    /// The container must exist.
+    /// </summary>
+    Task<DateTimeOffset?> GetServerTimeAsync(string container, CancellationToken cancellationToken = default);
+
+    /// <summary>Starts writing a blob in blocks. Nothing reaches the store until the first block, and no blob until the commit.</summary>
+    IStagedUpload BeginUpload(string container, string name);
 
     /// <summary>The blob, or null when it is not there (nor its container).</summary>
     Task<BlobContent?> ReadAsync(string container, string name, CancellationToken cancellationToken = default);

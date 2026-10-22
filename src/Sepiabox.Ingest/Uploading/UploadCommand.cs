@@ -1,20 +1,12 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Security.Cryptography;
-using System.Text;
-using Azure;
-using Azure.Identity;
-using Azure.Storage;
-using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
-using Azure.Storage.Blobs.Specialized;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Storage;
 using Sepiabox.Storage;
-using Sepiabox.Storage.Azure;
 
 namespace Sepiabox.Ingest.Uploading;
 
@@ -65,24 +57,17 @@ public static class UploadCommand
     /// </summary>
     public static readonly TimeSpan MaxClockSkew = TimeSpan.FromMinutes(5);
 
-    public static BlobServiceClient CreateClient(UploadOptions options) => options.Destination switch
-    {
-        UploadDestination.Azure => new BlobServiceClient(
-            new Uri($"https://{options.Account}.blob.core.windows.net"), new DefaultAzureCredential()),
-        _ => new BlobServiceClient(Environment.GetEnvironmentVariable(ConnectionVariable) ?? "UseDevelopmentStorage=true"),
-    };
-
     public static Task<UploadResult> RunAsync(
         UploadOptions options,
-        BlobServiceClient service,
+        IBlobStore store,
         IProgress<long>? bytesSent = null,
         CancellationToken cancellationToken = default) =>
-        RunAsync(options, service, bytesSent, new ManifestValidator(), cancellationToken);
+        RunAsync(options, store, bytesSent, new ManifestValidator(), cancellationToken);
 
     /// <summary>Takes the validator as a parameter so tests can reach the checks that the schema runs first.</summary>
     internal static async Task<UploadResult> RunAsync(
         UploadOptions options,
-        BlobServiceClient service,
+        IBlobStore store,
         IProgress<long>? bytesSent,
         IManifestValidator validator,
         CancellationToken cancellationToken,
@@ -96,28 +81,22 @@ public static class UploadCommand
             throw new DirectoryNotFoundException($"{workFolder} is not a work folder written by process.");
         }
 
-        var containers = new Containers(
-            service.GetBlobContainerClient(BlobLayout.OriginalsContainer),
-            service.GetBlobContainerClient(BlobLayout.DerivativesContainer),
-            service.GetBlobContainerClient(BlobLayout.ManifestsContainer));
-        foreach (var container in new[] { containers.Originals, containers.Derivatives, containers.Manifests })
+        foreach (var container in new[] { BlobLayout.OriginalsContainer, BlobLayout.DerivativesContainer, BlobLayout.ManifestsContainer })
         {
-            await container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+            await store.CreateContainerAsync(container, cancellationToken);
         }
 
-        await CheckClockAsync(containers.Manifests, clock ?? TimeProvider.System, cancellationToken);
+        await CheckClockAsync(store, BlobLayout.ManifestsContainer, clock ?? TimeProvider.System, cancellationToken);
 
         using var state = new UploadState(databasePath);
-        // Manifests go through the project's own interface (D-036); S-051 moves the rest of upload behind it too.
-        using var blobStore = new AzureBlobStore(service, clock);
         var run = new Run(
             workFolder,
-            containers,
+            store,
             state,
-            // Azurite does not know the Cold tier, so it is only set on real accounts.
-            options.Destination == UploadDestination.Azure ? AccessTier.Cold : (AccessTier?)null,
+            // Azurite does not know the Cold tier, so it is only asked for on real accounts.
+            options.Destination == UploadDestination.Azure ? BlobStorageClass.Cold : BlobStorageClass.Default,
             validator,
-            new ManifestStore(validator, blobStore),
+            new ManifestStore(validator, store),
             bytesSent,
             clock ?? TimeProvider.System,
             state.Mode == WorkFolderMode.IndexOnly);
@@ -140,14 +119,14 @@ public static class UploadCommand
 
     /// <summary>
     /// Refuses to upload when this computer's clock is more than <see cref="MaxClockSkew"/> from the storage server's,
-    /// read from the <c>Date</c> header of a request to it.
+    /// as it answers a request to it (<see cref="IBlobStore.GetServerTimeAsync"/>).
     /// </summary>
-    internal static async Task CheckClockAsync(BlobContainerClient container, TimeProvider clock, CancellationToken cancellationToken)
+    internal static async Task CheckClockAsync(IBlobStore store, string container, TimeProvider clock, CancellationToken cancellationToken)
     {
         var before = clock.GetUtcNow();
-        var response = (await container.GetPropertiesAsync(cancellationToken: cancellationToken)).GetRawResponse();
+        var serverTime = await store.GetServerTimeAsync(container, cancellationToken);
         var after = clock.GetUtcNow();
-        if (response.Headers.Date is not { } server)
+        if (serverTime is not { } server)
         {
             return;
         }
@@ -199,13 +178,11 @@ public static class UploadCommand
             && !inside.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
     }
 
-    private sealed record Containers(BlobContainerClient Originals, BlobContainerClient Derivatives, BlobContainerClient Manifests);
-
     private sealed class Run(
         string workFolder,
-        Containers containers,
+        IBlobStore store,
         UploadState state,
-        AccessTier? originalTier,
+        BlobStorageClass originalClass,
         IManifestValidator validator,
         ManifestStore manifestStore,
         IProgress<long>? bytesSent,
@@ -269,7 +246,7 @@ public static class UploadCommand
                 foreach (var (derivative, file) in derivativeFiles)
                 {
                     var blobName = BlobLayout.DerivativeBlobName(manifest.Id, derivative.Path);
-                    await UploadWorkFileAsync(containers.Derivatives, blobName, file, derivative.ContentType, cancellationToken);
+                    await UploadWorkFileAsync(BlobLayout.DerivativesContainer, blobName, file, derivative.ContentType, cancellationToken);
                 }
 
                 await UploadManifestAsync(manifest, manifestPath, fingerprint, cancellationToken);
@@ -284,27 +261,26 @@ public static class UploadCommand
 
         /// <summary>
         /// What one asset can fail with without saying anything about the others: files, permissions,
-        /// storage, JSON, an operation cancelled that the user did not cancel (an Azure SDK timeout), and the
-        /// AggregateException Azure.Core's RetryPolicy throws when every try failed with one of those.
-        /// Anything else is a bug and stops the run.
+        /// storage (<see cref="IBlobStore.IsStoreFailure"/>), JSON, an operation cancelled that the user did not cancel
+        /// (a storage SDK timeout), and the AggregateException an SDK's retry policy throws when every try failed with
+        /// one of those. Anything else is a bug and stops the run.
         /// </summary>
-        private static bool IsAssetFailure(Exception ex) => ex switch
+        private bool IsAssetFailure(Exception ex) => ex switch
         {
             AggregateException aggregate => aggregate.Flatten().InnerExceptions is { Count: > 0 } inner && inner.All(IsAssetFailure),
-            _ => ex is IOException or UnauthorizedAccessException or RequestFailedException or System.Text.Json.JsonException
-                or InvalidDataException or OperationCanceledException,
+            _ => ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException
+                or InvalidDataException or OperationCanceledException || store.IsStoreFailure(ex),
         };
 
         private async Task<bool> UploadOriginalAsync(Manifest manifest, CancellationToken cancellationToken)
         {
-            var blob = containers.Originals.GetBlockBlobClient(manifest.Id);
             if (state.IsUploaded(BlobLayout.OriginalsContainer, manifest.Id, manifest.Id))
             {
                 Interlocked.Increment(ref _skipped);
                 return true;
             }
 
-            if (await ExistingSizeAsync(blob, cancellationToken) == manifest.SizeBytes)
+            if (await store.GetSizeAsync(BlobLayout.OriginalsContainer, manifest.Id, cancellationToken) == manifest.SizeBytes)
             {
                 state.MarkUploaded(BlobLayout.OriginalsContainer, manifest.Id, manifest.Id);
                 Interlocked.Increment(ref _skipped);
@@ -318,7 +294,7 @@ public static class UploadCommand
                 return false;
             }
 
-            if (new FileInfo(source).Length != manifest.SizeBytes || !await UploadVerifiedAsync(blob, source, manifest, cancellationToken))
+            if (new FileInfo(source).Length != manifest.SizeBytes || !await StageFileAsync(BlobLayout.OriginalsContainer, manifest.Id, source, manifest.ContentType, originalClass, manifest.Id, cancellationToken))
             {
                 AddProblem(source, "Changed since it was processed; not uploaded. Run process again first.");
                 return false;
@@ -329,25 +305,23 @@ public static class UploadCommand
             return true;
         }
 
-        // The original is read once: hashed while its blocks are staged, and committed only if it still
-        // has the content the manifest describes. On a mismatch the staged blocks are simply abandoned.
-        private async Task<bool> UploadVerifiedAsync(BlockBlobClient blob, string path, Manifest manifest, CancellationToken cancellationToken)
+        // The file is read once: hashed while its blocks are staged, and committed only if it has the content the
+        // expected hash describes (none: always). On a mismatch the upload is disposed uncommitted and leaves no blob (D-030).
+        private async Task<bool> StageFileAsync(
+            string container, string blobName, string path, string contentType, BlobStorageClass storageClass, string? expectedHash,
+            CancellationToken cancellationToken)
         {
             await using var stream = MediaFile.OpenRead(path);
+            await using var upload = store.BeginUpload(container, blobName);
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = ArrayPool<byte>.Shared.Rent(BlockSize);
-            var blockIds = new List<string>();
             try
             {
                 int read;
                 while ((read = await stream.ReadAtLeastAsync(buffer.AsMemory(0, BlockSize), BlockSize, throwOnEndOfStream: false, cancellationToken)) > 0)
                 {
                     hash.AppendData(buffer, 0, read);
-                    // Block IDs must all have the same length within a blob.
-                    var blockId = Convert.ToBase64String(Encoding.ASCII.GetBytes(blockIds.Count.ToString("D8", System.Globalization.CultureInfo.InvariantCulture)));
-                    using var block = new MemoryStream(buffer, 0, read, writable: false);
-                    await blob.StageBlockAsync(blockId, block, cancellationToken: cancellationToken);
-                    blockIds.Add(blockId);
+                    await upload.AppendAsync(buffer.AsMemory(0, read), cancellationToken);
                     AddBytes(read);
                 }
             }
@@ -356,24 +330,17 @@ public static class UploadCommand
                 ArrayPool<byte>.Shared.Return(buffer);
             }
 
-            if (Convert.ToHexStringLower(hash.GetHashAndReset()) != manifest.Id)
+            if (expectedHash is not null && Convert.ToHexStringLower(hash.GetHashAndReset()) != expectedHash)
             {
                 return false;
             }
 
-            await blob.CommitBlockListAsync(
-                blockIds,
-                new CommitBlockListOptions
-                {
-                    HttpHeaders = new BlobHttpHeaders { ContentType = manifest.ContentType },
-                    AccessTier = originalTier,
-                },
-                cancellationToken);
+            await upload.CommitAsync(contentType, storageClass, cancellationToken);
             return true;
         }
 
         private async Task UploadWorkFileAsync(
-            BlobContainerClient container, string blobName, string path, string contentType, CancellationToken cancellationToken)
+            string container, string blobName, string path, string contentType, CancellationToken cancellationToken)
         {
             var file = new FileInfo(path);
             if (!file.Exists)
@@ -383,41 +350,22 @@ public static class UploadCommand
 
             // Work-folder files are rewritten in place by process, so size and write time tell when one changed.
             var fingerprint = $"{file.Length}:{file.LastWriteTimeUtc.Ticks}";
-            if (state.IsUploaded(container.Name, blobName, fingerprint))
+            if (state.IsUploaded(container, blobName, fingerprint))
             {
                 Interlocked.Increment(ref _skipped);
                 return;
             }
 
-            var blob = container.GetBlobClient(blobName);
-            if (await ExistingSizeAsync(blob, cancellationToken) == file.Length)
+            if (await store.GetSizeAsync(container, blobName, cancellationToken) == file.Length)
             {
-                state.MarkUploaded(container.Name, blobName, fingerprint);
+                state.MarkUploaded(container, blobName, fingerprint);
                 Interlocked.Increment(ref _skipped);
                 return;
             }
 
-            long reported = 0;
-            await blob.UploadAsync(
-                path,
-                new BlobUploadOptions
-                {
-                    HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
-                    TransferOptions = new StorageTransferOptions
-                    {
-                        InitialTransferSize = BlockSize,
-                        MaximumTransferSize = BlockSize,
-                        MaximumConcurrency = 1,
-                    },
-                    ProgressHandler = new Progress(total =>
-                    {
-                        AddBytes(total - reported);
-                        reported = total;
-                    }),
-                },
-                cancellationToken);
+            await StageFileAsync(container, blobName, path, contentType, BlobStorageClass.Default, expectedHash: null, cancellationToken);
 
-            state.MarkUploaded(container.Name, blobName, fingerprint);
+            state.MarkUploaded(container, blobName, fingerprint);
             Interlocked.Increment(ref _uploaded);
         }
 
@@ -464,19 +412,6 @@ public static class UploadCommand
             state.MarkUploaded(BlobLayout.ManifestsContainer, blobName, fingerprint);
         }
 
-        private static async Task<long?> ExistingSizeAsync(BlobBaseClient blob, CancellationToken cancellationToken)
-        {
-            try
-            {
-                var properties = await blob.GetPropertiesAsync(cancellationToken: cancellationToken);
-                return properties.Value.ContentLength;
-            }
-            catch (RequestFailedException ex) when (ex.Status == 404)
-            {
-                return null;
-            }
-        }
-
         private void AddBytes(long count) => bytesSent?.Report(Interlocked.Add(ref _bytes, count));
 
         private void AddProblem(string path, string reason)
@@ -486,11 +421,5 @@ public static class UploadCommand
                 Problems.Add(new ScanProblem(path, reason));
             }
         }
-    }
-
-    // Reports synchronously, unlike System.Progress<T>, so the byte count is never read out of order.
-    private sealed class Progress(Action<long> report) : IProgress<long>
-    {
-        public void Report(long value) => report(value);
     }
 }
