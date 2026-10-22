@@ -116,6 +116,16 @@
         }
       }
     },
+    "quality": {
+      "description": "Optional (S-027, D-098): how sharp a photo is and its perceptual hash, measured from its preview. sharpness is the variance of the Laplacian of the grayscale image at 512 px (higher is sharper); dhash is the 64-bit difference hash as 16 lower-case hex characters. Absent for a video and for a photo not measured yet.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sharpness", "dhash"],
+      "properties": {
+        "sharpness": { "type": "number", "minimum": 0 },
+        "dhash": { "type": "string", "pattern": "^[0-9a-f]{16}$" }
+      }
+    },
     "originalStored": {
       "description": "Optional (S-063, D-088): false when the original stays at its source and is never uploaded (an index-only work folder). Absent means true, so manifests written before the field existed keep their meaning.",
       "type": "boolean"

@@ -114,6 +114,11 @@ h1:focus {
     outline: none;
 }
 
+/* An author display rule (flex, grid) beats the hidden attribute, so an element made visible by a script only would show without it. */
+[hidden] {
+    display: none !important;
+}
+
 .visually-hidden {
     position: absolute !important;
     width: 1px !important;
@@ -546,6 +551,10 @@ main {
 .user {
     font-family: var(--font-mono);
     font-size: 0.875rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 18rem;
+    white-space: nowrap;
 }
 
 .sign-out {
@@ -854,4 +863,124 @@ main {
 
 .storage-assets .size {
     font-variant-numeric: tabular-nums;
+}
+
+.organize-views {
+    display: flex;
+    gap: 16px;
+    margin: 12px 0;
+}
+
+.organize-form .organize-submit {
+    margin-top: 24px;
+}
+
+.organize-form .grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+}
+
+.bulk {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0 16px;
+}
+
+.burst h2 {
+    margin: 24px 0 8px;
+    font-size: 1.1rem;
+}
+
+.organize-item {
+    position: relative;
+    display: grid;
+    gap: 2px;
+}
+
+.organize-item input {
+    width: 22px;
+    height: 22px;
+    margin: 0;
+}
+
+.organize-item .check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    cursor: pointer;
+}
+
+.sharpest-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    padding: 1px 8px;
+    background: var(--developer);
+    color: var(--white);
+    font-size: 0.8rem;
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+/* The connected accounts (S-037): one block per account, its counts and its actions. */
+.connections {
+    display: grid;
+    gap: 16px;
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+}
+
+.connection {
+    padding: 16px;
+    background: var(--white);
+    border: 1px solid var(--mat);
+    border-radius: 4px;
+}
+
+.connection p {
+    margin: 0 0 8px;
+}
+
+.connection-account {
+    overflow-wrap: anywhere;
+}
+
+.connection-account .status {
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    background: var(--chip);
+    color: var(--cyanotype);
+}
+
+.connection-account .status-expired {
+    background: transparent;
+    border: 1px solid var(--sepia);
+    color: var(--sepia);
+}
+
+.connection .counts span {
+    margin-right: 16px;
+}
+
+.connection-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
+}
+
+.button.secondary {
+    background: transparent;
+    color: var(--cyanotype);
+    border: 1px solid var(--cyanotype);
+}
+
+.button.secondary:hover:not(:disabled) {
+    background: var(--chip);
+    color: var(--cyanotype-hover);
 }
