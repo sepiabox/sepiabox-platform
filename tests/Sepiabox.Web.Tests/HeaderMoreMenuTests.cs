@@ -19,7 +19,7 @@ public sealed class HeaderMoreMenuTests : LocalizedContext
     {
         var header = Open("/").Find("header");
 
-        var more = header.QuerySelector("details.more")!;
+        var more = header.QuerySelector("details.nav-more")!;
         Assert.False(more.HasAttribute("open"));
         Assert.Equal(["organize", "places", "sources", "storage"], more.QuerySelectorAll("a.nav-link").Select(a => a.GetAttribute("href")));
         var visible = header.QuerySelectorAll("a.nav-link").Where(a => !more.Contains(a)).Select(a => a.GetAttribute("href"));
@@ -37,7 +37,7 @@ public sealed class HeaderMoreMenuTests : LocalizedContext
         var header = Open("/").Find("header");
 
         Assert.Equal(more, header.QuerySelector("summary")!.TextContent.Trim());
-        Assert.Equal([organize, places, sources, storage], header.QuerySelectorAll(".more-list a").Select(a => a.TextContent));
+        Assert.Equal([organize, places, sources, storage], header.QuerySelectorAll(".nav-more-list a").Select(a => a.TextContent));
     }
 
     [Theory]
@@ -50,8 +50,8 @@ public sealed class HeaderMoreMenuTests : LocalizedContext
         var header = Open(address).Find("header");
 
         Assert.Equal(href, Assert.Single(header.QuerySelectorAll("a[aria-current=page]")).GetAttribute("href"));
-        Assert.DoesNotContain("more-active", header.QuerySelector("summary")!.ClassList);
-        Assert.Empty(header.QuerySelectorAll(".more-current"));
+        Assert.DoesNotContain("nav-more-active", header.QuerySelector("summary")!.ClassList);
+        Assert.Empty(header.QuerySelectorAll(".nav-more-current"));
     }
 
     [Theory]
@@ -66,8 +66,29 @@ public sealed class HeaderMoreMenuTests : LocalizedContext
         var header = Open(address).Find("header");
 
         Assert.Equal(href, Assert.Single(header.QuerySelectorAll("a[aria-current=page]")).GetAttribute("href"));
-        Assert.Contains("more-active", header.QuerySelector("summary")!.ClassList);
+        Assert.Contains("nav-more-active", header.QuerySelector("summary")!.ClassList);
         Assert.Equal(summary, header.QuerySelector("summary")!.TextContent.Replace("\n", string.Empty).Trim());
+        Assert.StartsWith(summary.Split(':')[0], header.QuerySelector("summary")!.GetAttribute("aria-label"), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "/places", "More, current page: Places")]
+    [InlineData(Cultures.BrazilianPortuguese, "/storage", "Mais, página atual: Armazenamento")]
+    public void Names_the_current_page_in_the_summary_s_accessible_name_only_when_it_is_inside(string culture, string address, string label)
+    {
+        using var _ = Cultures.Use(culture);
+
+        Assert.Equal(label, Open(address).Find("header summary").GetAttribute("aria-label"));
+        Assert.Null(Open("/people").Find("header summary").GetAttribute("aria-label"));
+    }
+
+    [Fact]
+    public void Does_not_use_the_class_of_the_show_more_line_so_it_does_not_take_its_margin()
+    {
+        var header = Open("/").Find("header");
+
+        Assert.Empty(header.QuerySelectorAll(".more"));
+        Assert.NotNull(header.QuerySelector(".nav-more"));
     }
 
     [Fact]

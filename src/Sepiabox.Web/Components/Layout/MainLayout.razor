@@ -12,9 +12,9 @@
                 <a href="occasions" class="nav-link" aria-current="@Current("occasions")">@Text["Layout_Occasions"]</a>
                 <a href="people" class="nav-link" aria-current="@Current("people")">@Text["Layout_People"]</a>
                 @* The pages used now and then, in a disclosure that works without JavaScript (D-102); it says which one is open. *@
-                <details class="more" data-more>
-                    <summary class="nav-link@(MoreCurrent is null ? string.Empty : " more-active")">@Text["Layout_More"]@if (MoreCurrent is { } current){<span class="more-current">: @Text[current]</span>}</summary>
-                    <div class="more-list">
+                <details class="nav-more" data-more>
+                    <summary aria-label="@MoreLabel" class="nav-link@(MoreCurrent is null ? string.Empty : " nav-more-active")">@Text["Layout_More"]@if (MoreCurrent is { } current){<span class="nav-more-current">: @Text[current]</span>}</summary>
+                    <div class="nav-more-list">
                         @foreach (var (href, key) in s_more)
                         {
                             <a href="@href" class="nav-link" aria-current="@Current(href)">@Text[key]</a>
@@ -65,5 +65,8 @@
     private string? Current(string href) => Path == href || Path.StartsWith(href + "/", StringComparison.Ordinal) ? "page" : null;
 
     // The resource key of the page being shown when it is one under "More", so the closed disclosure can say so.
+    // The summary's accessible name: its text, and which page is current when it is one inside (a null label leaves the text).
+    private string? MoreLabel => MoreCurrent is { } current ? Text["Layout_MoreCurrentLabel", Text["Layout_More"].Value, Text[current].Value].Value : null;
+
     private string? MoreCurrent => s_more.FirstOrDefault(m => Current(m.Href) is not null).Key;
 }

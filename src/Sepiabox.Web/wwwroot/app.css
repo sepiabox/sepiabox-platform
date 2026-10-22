@@ -612,7 +612,7 @@ main {
     font-size: 0.875rem;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 18rem;
+    max-width: 11rem;
     white-space: nowrap;
 }
 
@@ -686,13 +686,6 @@ main {
 }
 
 @media (max-width: 800px) {
-    .user {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 14rem;
-        white-space: nowrap;
-    }
-
     .detail {
         grid-template-columns: 1fr;
     }
@@ -721,35 +714,35 @@ main {
 }
 
 .nav-link[aria-current="page"],
-.more-active {
+.nav-more-active {
     color: var(--cyanotype);
     text-decoration: underline;
     text-underline-offset: 4px;
 }
 
-/* The pages used now and then, behind a disclosure that needs no JavaScript (D-102). */
-.more {
+/* The pages used now and then, behind a disclosure that needs no JavaScript (D-102); not .more, which the "Show more" line of a search uses. */
+.nav-more {
     position: relative;
 }
 
-.more > summary {
+.nav-more > summary {
     cursor: pointer;
     list-style: none;
 }
 
-.more > summary::-webkit-details-marker {
+.nav-more > summary::-webkit-details-marker {
     display: none;
 }
 
-.more > summary::after {
+.nav-more > summary::after {
     content: " ▾" / "";
 }
 
-.more-current {
+.nav-more-current {
     font-weight: 400;
 }
 
-.more-list {
+.nav-more-list {
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
@@ -765,7 +758,7 @@ main {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
-.more-list .nav-link {
+.nav-more-list .nav-link {
     display: flex;
     align-items: center;
     min-height: 44px;
@@ -774,11 +767,11 @@ main {
 
 /* On a phone the list opens in the flow of the header, not over the page, so it cannot run off the screen. */
 @media (max-width: 600px) {
-    .more[open] {
+    .nav-more[open] {
         flex-basis: 100%;
     }
 
-    .more-list {
+    .nav-more-list {
         position: static;
         margin-top: 8px;
         max-width: none;

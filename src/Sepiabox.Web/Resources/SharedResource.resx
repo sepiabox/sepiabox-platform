@@ -1389,4 +1389,7 @@
     <value>More</value>
     <comment>The header's disclosure for the pages used now and then.</comment>
   </data>
+  <data name="Layout_MoreCurrentLabel" xml:space="preserve">
+    <value>{0}, current page: {1}</value>
+  </data>
 </root>
