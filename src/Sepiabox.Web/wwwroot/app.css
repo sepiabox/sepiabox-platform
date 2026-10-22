@@ -101,8 +101,8 @@
     --r-pill: 999px;
     --ring: 0 0 0 3px var(--focus);
 
-    /* the sticky header's height, for anchored targets (#106) */
-    --header-h: 64px;
+    /* The sticky header's height, for anchored targets (#106): 0 where the header is not sticky (it wraps there, see .top). */
+    --header-h: 0px;
 
     /* light */
     --bg: #eeece7; /* silver paper */
@@ -187,9 +187,9 @@
     --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.6), 0 0 0 1px #352c24;
 }
 
-@media (max-width: 600px) {
+@media (min-width: 1024px) {
     :root {
-        --header-h: 112px;
+        --header-h: 65px;
     }
 }
 
@@ -352,8 +352,7 @@ h1:focus {
 
 /* The header (S-066): sticky, one row where it fits, pill links with the current page marked. */
 .top {
-    position: sticky;
-    top: 0;
+    position: static;
     z-index: 30;
     display: flex;
     flex-wrap: wrap;
@@ -363,6 +362,32 @@ h1:focus {
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: saturate(1.4) blur(8px);
     border-bottom: 1px solid var(--border);
+}
+
+/* Sticky only where the header is one row (1024 px and up): below that it wraps to two or three rows, and a sticky header of that height
+   would cover a quarter of a phone's screen (and half of it with "More" open). There it scrolls away with the page. */
+@media (min-width: 1024px) {
+    .top {
+        position: sticky;
+        top: 0;
+    }
+}
+
+/* The mark is dark brown on a transparent ground: on the dark header it sits on a light rounded square, as in the mockups. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .brand img {
+        padding: 3px;
+        background: #f2ede5;
+        border-radius: var(--r-sm);
+        box-sizing: content-box;
+    }
+}
+
+:root[data-theme="dark"] .brand img {
+    padding: 3px;
+    background: #f2ede5;
+    border-radius: var(--r-sm);
+    box-sizing: content-box;
 }
 
 .brand {
@@ -901,9 +926,21 @@ main {
     margin-left: auto;
 }
 
+/* Where the header has no room for the address (601 to 1100 px) it is the first line of the "More" list, read only. */
+.user-in-more {
+    display: none;
+    padding: var(--s-2) var(--s-3);
+    border-bottom: 1px solid var(--border);
+    max-width: none;
+}
+
 @media (max-width: 1100px) and (min-width: 601px) {
-    .user {
+    .top-end > .user {
         display: none;
+    }
+
+    .user-in-more {
+        display: block;
     }
 }
 
@@ -945,6 +982,18 @@ main {
     cursor: pointer;
 }
 
+/* Up to 1100 px the switch says EN and PT; the button keeps the full name as its accessible name (aria-label). */
+@media (max-width: 1100px) {
+    .language button {
+        font-size: 0;
+    }
+
+    .language button::before {
+        content: attr(data-short);
+        font-size: var(--text-sm);
+    }
+}
+
 .language button:hover:not([aria-pressed="true"]) {
     background: var(--accent-soft);
     color: var(--accent);
@@ -959,13 +1008,13 @@ main {
 
 .sign-out button {
     min-height: 40px;
-    padding: 0 var(--s-3);
-    background: none;
-    color: var(--text);
-    border: 0;
-    border-radius: var(--r-pill);
+    padding: 0 var(--s-4);
+    background: var(--surface);
+    color: var(--accent);
+    border: 1px solid var(--control-border);
+    border-radius: var(--r-md);
     font: inherit;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
 }
 

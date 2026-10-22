@@ -133,6 +133,9 @@ public sealed class AuthPagesTests : LocalizedContext
         // Each language is named in itself, whatever the page's language.
         Assert.Equal(["English", "Português (Brasil)"], buttons.Select(b => b.TextContent));
         Assert.Equal([englishPressed, portuguesePressed], buttons.Select(b => b.GetAttribute("aria-pressed")));
+        // The stylesheet shows EN and PT where the header is tight, and the full name stays the accessible name.
+        Assert.Equal(["EN", "PT"], buttons.Select(b => b.GetAttribute("data-short")));
+        Assert.Equal(["English", "Português (Brasil)"], buttons.Select(b => b.GetAttribute("aria-label")));
     }
 
     private IRenderedComponent<SignIn> RenderSignIn(SignInProviders providers, string environment, string query = "")

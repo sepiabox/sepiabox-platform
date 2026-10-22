@@ -10,8 +10,22 @@ public sealed class HeaderMoreMenuTests : LocalizedContext
 {
     public HeaderMoreMenuTests()
     {
-        AddAuthorization().SetAuthorized("ana@example.com");
+        AddAuthorization().SetAuthorized("ana@example.com").SetClaims(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Email, "ana@example.com"));
         Services.AddSingleton<AntiforgeryStateProvider>(new FixedAntiforgery());
+    }
+
+    [Fact]
+    public void Shows_the_signed_in_address_first_in_the_more_list_read_only_so_it_is_reachable_where_the_header_hides_it()
+    {
+        var header = Open("/").Find("header");
+
+        var list = header.QuerySelector(".nav-more-list")!;
+        var first = list.FirstElementChild!;
+        Assert.Equal(("SPAN", "ana@example.com"), (first.TagName, first.TextContent));
+        Assert.Contains("user-in-more", first.ClassName, StringComparison.Ordinal);
+        // Not a link or a control, and the links after it are the same as before.
+        Assert.Empty(first.QuerySelectorAll("a, button"));
+        Assert.Equal(["organize", "places", "sources", "storage"], list.QuerySelectorAll("a.nav-link").Select(a => a.GetAttribute("href")));
     }
 
     [Fact]

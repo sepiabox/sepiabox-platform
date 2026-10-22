@@ -9,7 +9,7 @@
     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
     @foreach (var (culture, name) in Choices)
     {
-        <button type="submit" name="culture" value="@culture" lang="@culture" aria-pressed="@(IsCurrent(culture) ? "true" : "false")">@name</button>
+        <button type="submit" name="culture" value="@culture" lang="@culture" data-short="@Short(culture)" aria-label="@name" aria-pressed="@(IsCurrent(culture) ? "true" : "false")">@name</button>
     }
 </form>
 
@@ -50,6 +50,9 @@
             return new Uri(Navigation.Uri).PathAndQuery;
         }
     }
+
+    // EN and PT, shown by the stylesheet where the header is tight; the full name stays the button's text and accessible name.
+    private static string Short(string culture) => culture.Split('-')[0].ToUpperInvariant();
 
     private static bool IsCurrent(string culture) =>
         string.Equals(CultureInfo.CurrentUICulture.Name, culture, StringComparison.OrdinalIgnoreCase);
