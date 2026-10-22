@@ -70,6 +70,9 @@ public sealed class AlbumImportTests(CatalogFixture fixture)
     [InlineData("  Ferias  ", "Ferias")]
     [InlineData("Fe\u0000rias", "Ferias")]
     [InlineData("   ", null)]
+    [InlineData("Praia\u202E 2019", "Praia 2019")]
+    [InlineData("Ver\u200Bão\uFEFF", "Verão")]
+    [InlineData("Fam\u200D\u00EDlia", "Fam\u200D\u00EDlia")]
     public void Keeps_an_album_name_trimmed_and_without_control_characters(string name, string? expected)
     {
         Assert.Equal(expected, ManifestImporter.AlbumName(name));

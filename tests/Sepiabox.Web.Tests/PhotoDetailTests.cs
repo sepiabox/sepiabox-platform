@@ -266,6 +266,22 @@ public sealed class PhotoDetailTests : LocalizedContext
     }
 
     [Fact]
+    public void Says_one_more_album_in_the_singular_in_both_languages()
+    {
+        var albums = Enumerable.Range(1, 6).Select(n => $"Album {n}").ToList();
+        Assert.Equal("1 more album", RenderDetail(Details.Photo(Ids.Of(1)) with { Albums = albums }).Find("details.more-albums summary").TextContent);
+    }
+
+    [Fact]
+    public void Says_one_more_album_in_the_singular_in_brazilian_portuguese()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+        var albums = Enumerable.Range(1, 6).Select(n => $"Álbum {n}").ToList();
+
+        Assert.Equal("Mais 1 álbum", RenderDetail(Details.Photo(Ids.Of(1)) with { Albums = albums }).Find("details.more-albums summary").TextContent);
+    }
+
+    [Fact]
     public void Folds_nothing_away_for_five_albums()
     {
         var page = RenderDetail(Details.Photo(Ids.Of(2)) with { Albums = [.. Enumerable.Range(1, 5).Select(n => $"Album {n}")] });
@@ -279,7 +295,7 @@ public sealed class PhotoDetailTests : LocalizedContext
     {
         var page = RenderDetail(Details.Photo(Ids.Of(1), new DateTime(2019, 7, 14)) with { CapturedAtSource = "export" });
 
-        Assert.Equal("From the export", page.FindAll("dl dt").Single(d => d.TextContent == "Date").NextElementSibling!.TextContent);
+        Assert.Equal("Export", page.FindAll("dl dt").Single(d => d.TextContent == "Date source").NextElementSibling!.TextContent);
     }
 
     [Fact]
@@ -287,7 +303,7 @@ public sealed class PhotoDetailTests : LocalizedContext
     {
         var page = RenderDetail(Details.Photo(Ids.Of(2), new DateTime(2019, 7, 14)) with { CapturedAtSource = "metadata" });
 
-        Assert.DoesNotContain(page.FindAll("dl dt"), d => d.TextContent == "Date");
+        Assert.DoesNotContain(page.FindAll("dl dt"), d => d.TextContent == "Date source");
     }
 
     [Fact]
@@ -297,7 +313,7 @@ public sealed class PhotoDetailTests : LocalizedContext
 
         var page = RenderDetail(Details.Photo(Ids.Of(3), new DateTime(2019, 7, 14)) with { CapturedAtSource = "export" });
 
-        Assert.Equal("Da exportação", page.FindAll("dl dt").Single(d => d.TextContent == "Data").NextElementSibling!.TextContent);
+        Assert.Equal("Exportação", page.FindAll("dl dt").Single(d => d.TextContent == "Origem da data").NextElementSibling!.TextContent);
     }
 
     [Fact]

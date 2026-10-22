@@ -491,7 +491,7 @@ public sealed class ManifestImporter(
     internal static string? AlbumName(string name)
     {
         const int Max = Sepiabox.Catalog.Search.SearchQueryJson.MaxNameLength;
-        var clean = new string([.. name.Where(c => !char.IsControl(c))]).Trim();
+        var clean = new string([.. name.Where(c => !char.IsControl(c) && !Sepiabox.Catalog.Search.InvisibleText.IsInvisible(c))]).Trim();
         if (clean.Length > Max)
         {
             clean = clean[..(char.IsHighSurrogate(clean[Max - 1]) ? Max - 1 : Max)].TrimEnd();

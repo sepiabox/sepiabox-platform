@@ -4,12 +4,8 @@ namespace Sepiabox.Web.Services;
 public static class TextSafety
 {
     /// <summary>
-    /// The text without the characters that change the direction text is drawn in (U+202A to U+202E, U+2066 to U+2069, U+200E, U+200F and
-    /// U+061C): in a caption they could make what follows read in another order, or look like part of the page. Null stays null.
+    /// The text without the characters that change the direction text is drawn in, and the zero-width ones (<see cref="Sepiabox.Catalog.Search.InvisibleText"/>):
+    /// in a caption they could make what follows read in another order, or look like part of the page. Null stays null.
     /// </summary>
-    public static string? WithoutBidiControls(string? text) =>
-        text is null ? null : new string([.. text.Where(c => !IsBidiControl(c))]);
-
-    private static bool IsBidiControl(char c) =>
-        c is >= '\u202A' and <= '\u202E' or >= '\u2066' and <= '\u2069' or '\u200E' or '\u200F' or '\u061C';
+    public static string? WithoutBidiControls(string? text) => Sepiabox.Catalog.Search.InvisibleText.Strip(text);
 }

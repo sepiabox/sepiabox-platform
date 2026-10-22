@@ -142,7 +142,7 @@
                 {
                     @* Thirty albums would push the rest of the page far down: the first few, then the others folded away. *@
                     <details class="more-albums">
-                        <summary>@Text["Detail_MoreAlbums", _asset.Albums.Count - VisibleAlbums]</summary>
+                        <summary>@Text[_asset.Albums.Count - VisibleAlbums == 1 ? "Detail_MoreAlbums_One" : "Detail_MoreAlbums_Other", _asset.Albums.Count - VisibleAlbums]</summary>
                         <ul class="photo-albums">
                             @foreach (var album in _asset.Albums.Skip(VisibleAlbums))
                             {

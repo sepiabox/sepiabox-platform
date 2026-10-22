@@ -83,6 +83,8 @@ public sealed class AlbumFilterTests : LocalizedContext
     [Theory]
     [InlineData("Praia\u202E 2019", "Praia 2019")]
     [InlineData("a\u2066b\u2069c\u200Ed\u200Fe\u061Cf", "abcdef")]
+    [InlineData("a\u200Bb\u2060c\uFEFFd", "abcd")]
+    [InlineData("👨\u200D👩 família", "👨\u200D👩 família")]
     [InlineData("Férias na praia", "Férias na praia")]
     [InlineData(null, null)]
     public void Takes_direction_controls_out_of_the_text_it_shows(string? text, string? expected)

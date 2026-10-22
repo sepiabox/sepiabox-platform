@@ -1207,9 +1207,11 @@ main {
     max-width: min(100%, 20rem);
 }
 
+/* The disclosure triangle stays (display: list-item), and the line reads as a link with a 44 px target. */
 .more-albums summary {
+    display: list-item;
     cursor: pointer;
-    min-height: 44px;
-    display: flex;
-    align-items: center;
+    padding: 12px 0;
+    color: var(--cyanotype);
+    text-decoration: underline;
 }

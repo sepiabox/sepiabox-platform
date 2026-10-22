@@ -1446,12 +1446,15 @@
     <value>Album: {0}</value>
   </data>
   <data name="Detail_DateSource" xml:space="preserve">
-    <value>Date</value>
+    <value>Date source</value>
   </data>
   <data name="Detail_DateFromExport" xml:space="preserve">
-    <value>From the export</value>
+    <value>Export</value>
   </data>
-  <data name="Detail_MoreAlbums" xml:space="preserve">
+  <data name="Detail_MoreAlbums_One" xml:space="preserve">
+    <value>{0} more album</value>
+  </data>
+  <data name="Detail_MoreAlbums_Other" xml:space="preserve">
     <value>{0} more albums</value>
   </data>
 </root>
