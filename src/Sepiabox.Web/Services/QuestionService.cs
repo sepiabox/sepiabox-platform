@@ -129,7 +129,8 @@ public sealed class QuestionService(
 
     /// <summary>
     /// The DSL's own gate for the translator's answers: <see cref="SearchQueryJson.TryParse"/>, and none of the filters a
-    /// question cannot express (<see cref="QuestionPrompt.NotFromQuestions"/>), which the output format leaves out anyway.
+    /// question cannot express (<see cref="QuestionPrompt.NotFromQuestions"/>), which the output format leaves out anyway. <c>sourceCount</c> and
+    /// <c>aggregate.sum</c> are part of an answer (D-103).
     /// </summary>
     public static string? Validate(string json) =>
         !SearchQueryJson.TryParse(json, out var query, out var error) ? error
@@ -137,8 +138,6 @@ public sealed class QuestionService(
         : query.Filters.Quality is not null ? "filters.quality is not part of an answer: the organize page shows blurry photos."
         : query.Filters.IncludeHidden ? "filters.includeHidden is not part of an answer: a question never asks for what was set aside."
         : query.Filters.EventIds is not null ? "filters.eventIds is not part of an answer: a question cannot name an occasion."
-        : query.Filters.SourceCount is not null ? "filters.sourceCount is not part of an answer yet: the storage page shows it."
-        : query.Aggregate?.Sum is not null ? "aggregate.sum is not part of an answer yet: the storage page shows sizes."
         : null;
 
     /// <summary>

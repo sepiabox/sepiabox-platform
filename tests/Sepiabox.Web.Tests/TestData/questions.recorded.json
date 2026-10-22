@@ -1,5 +1,5 @@
 {
-  "description": "Responses replayed by the golden test in CI (S-025): the real model's answers from the last live run (SEPIABOX_RECORD_GOLDEN=1), which rewrites this file.",
+  "description": "Responses replayed by the golden test in CI (S-025): the real model's answers from the last live run (SEPIABOX_RECORD_GOLDEN=1), which rewrites this file. Keys in \"placeholders\" are the expected queries, written by hand until that run replaces them.",
   "source": "live",
   "model": "claude-haiku-5-5",
   "recordedAt": "2026-10-22",
@@ -112,6 +112,20 @@
     "sao-paulo/pt": "{\"filters\":{\"kinds\":[\"photo\"],\"places\":{\"cities\":[\"S\\u00E3o Paulo\"]}}}",
     "snow-last-winter/en": "{\"filters\":{\"kinds\":[\"photo\"],\"dateFrom\":\"2025-12-01\",\"dateTo\":\"2026-02-28\",\"visual\":{\"text\":\"snow\"}}}",
     "snow-last-winter/pt": "{\"filters\":{\"kinds\":[\"photo\"],\"dateFrom\":\"2025-12-01\",\"dateTo\":\"2026-02-28\",\"visual\":{\"text\":\"snow\"}}}",
+    "sources-2019-photos-in-one/en": "{\"filters\":{\"sourceCount\":{\"eq\":1},\"kinds\":[\"photo\"],\"years\":[2019]}}",
+    "sources-2019-photos-in-one/pt": "{\"filters\":{\"sourceCount\":{\"eq\":1},\"kinds\":[\"photo\"],\"years\":[2019]}}",
+    "sources-photos-in-several-count/en": "{\"filters\":{\"sourceCount\":{\"gte\":2},\"kinds\":[\"photo\"]},\"aggregate\":{\"count\":\"assets\"}}",
+    "sources-photos-in-several-count/pt": "{\"filters\":{\"sourceCount\":{\"gte\":2},\"kinds\":[\"photo\"]},\"aggregate\":{\"count\":\"assets\"}}",
+    "sources-videos-in-several/en": "{\"filters\":{\"sourceCount\":{\"gte\":2},\"kinds\":[\"video\"]}}",
+    "sources-videos-in-several/pt": "{\"filters\":{\"sourceCount\":{\"gte\":2},\"kinds\":[\"video\"]}}",
+    "storage-in-several-sources/en": "{\"filters\":{\"sourceCount\":{\"gte\":2}},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\"}}",
+    "storage-in-several-sources/pt": "{\"filters\":{\"sourceCount\":{\"gte\":2}},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\"}}",
+    "storage-per-year/en": "{\"filters\":{},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\",\"groupBy\":\"year\"}}",
+    "storage-per-year/pt": "{\"filters\":{},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\",\"groupBy\":\"year\"}}",
+    "storage-photos-2019/en": "{\"filters\":{\"kinds\":[\"photo\"],\"years\":[2019]},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\"}}",
+    "storage-photos-2019/pt": "{\"filters\":{\"kinds\":[\"photo\"],\"years\":[2019]},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\"}}",
+    "storage-videos-2019/en": "{\"filters\":{\"kinds\":[\"video\"],\"years\":[2019]},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\"}}",
+    "storage-videos-2019/pt": "{\"filters\":{\"kinds\":[\"video\"],\"years\":[2019]},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\"}}",
     "this-year-videos/en": "{\"filters\":{\"kinds\":[\"video\"],\"dateFrom\":\"2026-01-01\",\"dateTo\":\"2026-10-20\"}}",
     "this-year-videos/pt": "{\"filters\":{\"kinds\":[\"video\"],\"dateFrom\":\"2026-01-01\",\"dateTo\":\"2026-10-20\"}}",
     "three-years-ago-today/en": "{\"filters\":{\"kinds\":[\"photo\"],\"onThisDay\":{\"yearsAgo\":3}}}",
@@ -122,5 +136,21 @@
     "videos-2015-2017/pt": "{\"filters\":{\"kinds\":[\"video\"],\"dateFrom\":\"2015-01-01\",\"dateTo\":\"2017-12-31\"}}",
     "year-2019/en": "{\"filters\":{\"years\":[2019]}}",
     "year-2019/pt": "{\"filters\":{\"years\":[2019]}}"
-  }
+  },
+  "placeholders": [
+    "storage-videos-2019/en",
+    "storage-videos-2019/pt",
+    "storage-per-year/en",
+    "storage-per-year/pt",
+    "storage-photos-2019/en",
+    "storage-photos-2019/pt",
+    "sources-photos-in-several-count/en",
+    "sources-photos-in-several-count/pt",
+    "sources-videos-in-several/en",
+    "sources-videos-in-several/pt",
+    "sources-2019-photos-in-one/en",
+    "sources-2019-photos-in-one/pt",
+    "storage-in-several-sources/en",
+    "storage-in-several-sources/pt"
+  ]
 }

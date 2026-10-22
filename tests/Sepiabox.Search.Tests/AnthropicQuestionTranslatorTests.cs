@@ -322,7 +322,7 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.False(filters["additionalProperties"]!.GetValue<bool>());
         Assert.Equal("date", filters["properties"]!["dateFrom"]!["format"]!.GetValue<string>());
         Assert.Equal(
-            ["dateFrom", "dateTo", "distanceFrom", "eventTypes", "kinds", "months", "onThisDay", "people", "places", "savedPlaces", "sources", "undatedOnly", "visual", "years"],
+            ["dateFrom", "dateTo", "distanceFrom", "eventTypes", "kinds", "months", "onThisDay", "people", "places", "savedPlaces", "sourceCount", "sources", "undatedOnly", "visual", "years"],
             filters["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
         // minScore is required but nullable in the output format only (D-085).
         Assert.Equal(["text", "minScore"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
@@ -391,12 +391,14 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.Equal(["text", "minScore"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
         // The text was required already, so it stays non-null.
         Assert.Equal("string", filters["properties"]!["visual"]!["properties"]!["text"]!["type"]!.GetValue<string>());
-        // The root, filters and aggregate keep their optional fields, but for the named exception: eventTypes (D-094).
-        Assert.Equal(["eventTypes"], filters["required"]!.AsArray().Select(n => n!.GetValue<string>()));
-        Assert.Equal(["count"], schema["properties"]!["aggregate"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
-        // The root's 4, filters' 13 and aggregate's 2; the 10 made nullable and eventTypes are union-typed.
+        // The root, filters and aggregate keep their optional fields, but for the named exceptions: eventTypes (D-094),
+        // sourceCount and aggregate.sum (D-103).
+        Assert.Equal(["eventTypes", "sourceCount"], filters["required"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(["count", "sum"], schema["properties"]!["aggregate"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
+        // The root's 4, filters' 13 and aggregate's 2 (groupBy, top); the 10 made nullable, eventTypes, sourceCount and its
+        // eq and gte are union-typed (sum and groupBy take null in their enum, which is no union).
         Assert.Equal(19, OptionalProperties(schema));
-        Assert.Equal(11, UnionTypeProperties(schema));
+        Assert.Equal(14, UnionTypeProperties(schema));
     }
 
     [Theory]
@@ -433,15 +435,13 @@ public sealed class AnthropicQuestionTranslatorTests
         using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
         var schema = JsonNode.Parse(stream)!;
         // The schema the API saw then, before S-017, S-024 (the types) and S-028 added what a question cannot express.
-        foreach (var field in QuestionPrompt.NotFromQuestions.Append("eventTypes"))
+        // (sourceCount and aggregate.sum were left out then too; they are in the format now, D-103.)
+        foreach (var field in QuestionPrompt.NotFromQuestions.Append("eventTypes").Append("sourceCount"))
         {
             schema["properties"]!["filters"]!["properties"]!.AsObject().Remove(field);
         }
 
-        foreach (var field in QuestionPrompt.AggregateNotFromQuestions)
-        {
-            schema["properties"]!["aggregate"]!["properties"]!.AsObject().Remove(field);
-        }
+        schema["properties"]!["aggregate"]!["properties"]!.AsObject().Remove("sum");
 
         Assert.Equal(29, OptionalProperties(schema));
     }
@@ -455,7 +455,7 @@ public sealed class AnthropicQuestionTranslatorTests
 
         // similarTo names an asset (S-017, D-086) and eventIds names occasions (S-023, D-092): ids only the pages know.
         // quality and includeHidden (S-027, D-098) are the organize page's, and the format is at the API's ceiling (D-094).
-        Assert.Equal(["similarTo", "eventIds", "sourceCount", "quality", "includeHidden"], QuestionPrompt.NotFromQuestions);
+        Assert.Equal(["similarTo", "eventIds", "quality", "includeHidden"], QuestionPrompt.NotFromQuestions);
         Assert.All(QuestionPrompt.NotFromQuestions, field =>
         {
             Assert.NotNull(dsl["properties"]!["filters"]!["properties"]![field]);
@@ -464,17 +464,33 @@ public sealed class AnthropicQuestionTranslatorTests
     }
 
     [Fact]
-    public void Leaves_the_storage_filters_out_of_the_output_format_when_the_dsl_has_them()
+    public void Has_the_storage_fields_in_the_output_format_required_but_nullable_and_first_in_their_objects()
     {
-        using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
-        var dsl = JsonNode.Parse(stream)!;
         var output = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
+        var filters = output["properties"]!["filters"]!;
+        var aggregate = output["properties"]!["aggregate"]!;
 
-        Assert.NotNull(dsl["properties"]!["filters"]!["properties"]!["sourceCount"]);
-        Assert.Null(output["properties"]!["filters"]!["properties"]!["sourceCount"]);
-        Assert.NotNull(dsl["properties"]!["aggregate"]!["properties"]!["sum"]);
-        Assert.Null(output["properties"]!["aggregate"]!["properties"]!["sum"]);
-        Assert.Equal(["sum"], QuestionPrompt.AggregateNotFromQuestions);
+        // sourceCount: a nullable object whose eq and gte are nullable integers, written second, after eventTypes.
+        Assert.Equal(["eventTypes", "sourceCount"], filters["properties"]!.AsObject().Select(p => p.Key).Take(2));
+        var sourceCount = filters["properties"]!["sourceCount"]!;
+        Assert.Equal(["object", "null"], sourceCount["type"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(["eq", "gte"], sourceCount["required"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(["integer", "null"], sourceCount["properties"]!["eq"]!["type"]!.AsArray().Select(n => n!.GetValue<string>()));
+        // sum: "bytes" or null, written after count (required in the DSL) and before the optional groupBy and top.
+        Assert.Equal(["count", "sum", "groupBy", "top"], aggregate["properties"]!.AsObject().Select(p => p.Key));
+        Assert.Equal(["count", "sum"], aggregate["required"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(["bytes", null], aggregate["properties"]!["sum"]!["enum"]!.AsArray().Select(n => n?.GetValue<string>()));
+        Assert.Equal(QuestionPrompt.AggregateRequiredNullable, ["sum"]);
+    }
+
+    [Fact]
+    public void Removes_the_nulls_the_storage_fields_are_written_with_when_the_question_does_not_ask()
+    {
+        var cleaned = QuestionPrompt.WithoutNulls("""{"filters":{"eventTypes":null,"sourceCount":{"eq":null,"gte":2},"years":[2019]},"aggregate":{"count":"assets","sum":null}}""");
+
+        Assert.Equal("""{"filters":{"sourceCount":{"gte":2},"years":[2019]},"aggregate":{"count":"assets"}}""", cleaned);
+        Assert.Equal("""{"filters":{"kinds":["video"]},"aggregate":{"count":"assets","sum":"bytes"}}""",
+            QuestionPrompt.WithoutNulls("""{"filters":{"eventTypes":null,"sourceCount":null,"kinds":["video"]},"aggregate":{"count":"assets","sum":"bytes","groupBy":null,"top":null}}"""));
     }
 
     [Fact]
@@ -556,9 +572,10 @@ public sealed class AnthropicQuestionTranslatorTests
 
         // Nothing ties one filter to another in the grammar (undatedOnly against dates is SearchQueryJson's rule).
         var text = filters.ToJsonString();
-        foreach (var combinator in new[] { "anyOf", "oneOf", "allOf", "\"not\"", "dependent", "if" })
+        foreach (var combinator in new[] { "anyOf", "oneOf", "allOf", "not", "dependentRequired", "dependentSchemas", "if" })
         {
-            Assert.DoesNotContain(combinator, text, StringComparison.Ordinal);
+            // As a keyword (a key), not as a word in a description ("different").
+            Assert.DoesNotContain($"\"{combinator}\":", text, StringComparison.Ordinal);
         }
 
         Assert.Equal(QuestionPrompt.FiltersRequiredNullable, filters["required"]!.AsArray().Select(n => n!.GetValue<string>()));
