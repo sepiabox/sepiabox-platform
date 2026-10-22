@@ -207,6 +207,19 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
 | S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `todo` | B |
 
+### Sprint 17 — Visual redesign
+
+**Demonstrable increment:** The app has a modern, consistent look in light and dark: new base controls and header, filter chips and a people picker on the timeline, a photo detail with face thumbnails, and every page on the shared components.
+
+**Priority** ([D-119](../decisions.md)): the owner asked for this ahead of the remaining stories, so S-066 and S-067 are taken as soon as an implementer is free, even while Sprint 16 is still open. **Order:** one track, S-066 first, since everything builds on its tokens; once S-066 is merged, S-067 and S-068 may be taken by the two implementers at the same time (they touch different pages), and S-069 comes last.
+
+| Story | Title | Epic | Depends on | Priority | Size | Status | Track |
+|---|---|---|---|---|---|---|---|
+| S-066 | [Design tokens, base controls and the header](S-066-design-tokens-and-base-controls.md) | Visual design | S-013 | High | M | `todo` | A |
+| S-067 | [Timeline filters and the question box, redesigned](S-067-timeline-filters-and-search.md) | Visual design | S-066 | High | M | `todo` | A |
+| S-068 | [Photo grid and photo detail, redesigned](S-068-photo-grid-and-detail.md) | Visual design | S-066 | Medium | M | `todo` | A |
+| S-069 | [Remaining pages, empty states and a theme switch](S-069-remaining-pages-and-empty-states.md) | Visual design | S-066, S-067, S-068 | Medium | M | `todo` | A |
+
 ## Epics
 
 | Epic | Stories |
@@ -225,6 +238,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Privacy | S-040 |
 | Site | S-042 |
 | Import exports | S-045, S-046, S-047, S-048, S-049, S-052 |
+| Visual design | S-066, S-067, S-068, S-069 |
 
 ## Validation
 
