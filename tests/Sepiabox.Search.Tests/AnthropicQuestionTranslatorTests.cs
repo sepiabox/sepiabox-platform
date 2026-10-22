@@ -23,6 +23,13 @@ public sealed class AnthropicQuestionTranslatorTests
         .Build();
 
     [Fact]
+    public void Allows_a_request_ninety_seconds_for_the_first_call_after_a_format_change()
+    {
+        // The API compiles a new output format on its first call, which took 50 to 55 s (issue 85, D-101).
+        Assert.Equal(TimeSpan.FromSeconds(90), new AnthropicQuestionOptions().Timeout);
+    }
+
+    [Fact]
     public async Task Sends_the_model_the_dsl_schema_low_effort_and_text_only()
     {
         var api = new FakeApi(Answer("""{"filters": {"kinds": ["video"]}}"""));

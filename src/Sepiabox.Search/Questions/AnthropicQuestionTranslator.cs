@@ -27,8 +27,11 @@ public sealed record AnthropicQuestionOptions
     /// <summary>A DSL query is a few hundred tokens; the rest leaves room for the model's reasoning at low effort.</summary>
     public int MaxTokens { get; init; } = 1024;
 
-    /// <summary>Per request; a question is answered in seconds, and someone is waiting for it.</summary>
-    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// Per request. A question is answered in about a second and a half, but the first call after the output format
+    /// changed takes 50 to 55 seconds while the API compiles its grammar (issue 85, D-101), and someone is waiting for it.
+    /// </summary>
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(90);
 
     /// <summary>The SDK's own retries of 408, 409, 429, 5xx and connection errors, per request.</summary>
     public int MaxRetries { get; init; } = 1;

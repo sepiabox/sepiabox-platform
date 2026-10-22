@@ -1122,4 +1122,7 @@
     <value>O Sepiabox não guarda uma cópia deste original: ele fica na origem.</value>
     <comment>Answer to a download of an index-only asset.</comment>
   </data>
+  <data name="Ask_Thinking" xml:space="preserve">
+    <value>Pensando na sua pergunta. A primeira depois de uma atualização pode levar até um minuto.</value>
+  </data>
 </root>

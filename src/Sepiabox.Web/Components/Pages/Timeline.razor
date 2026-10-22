@@ -23,6 +23,8 @@
         </label>
         <button type="submit" disabled="@(!Questions.IsConfigured)">@Text["Ask_Submit"]</button>
         <p class="hint muted">@(Questions.IsConfigured ? Text["Ask_Hint"] : Text["Ask_NotConfigured"])</p>
+        @* Shown by ask.js once the question is sent (D-101): the first question after an update can take about a minute. *@
+        <p class="ask-status" role="status">@Text["Ask_Thinking"]</p>
     </form>
     @if (_askMessage is not null)
     {
