@@ -48,6 +48,13 @@ public sealed class WorkerCommandTests
     }
 
     [Fact]
+    public void Parses_export_which_never_migrates()
+    {
+        Assert.True(WorkerCommand.TryParse(["export"], out var command, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.Export, false), command);
+    }
+
+    [Fact]
     public void Parses_events_rebuild_and_nothing_after_it()
     {
         Assert.True(WorkerCommand.TryParse(["events", "rebuild"], out var command, out _));
@@ -82,7 +89,7 @@ public sealed class WorkerCommandTests
         new[] { "import", "--from-queue", "--once" },
         new[] { "import", "--once", "--from-queue" },
         new[] { "migrate", "--once" },
-        new[] { "export" },
+        new[] { "export", "--all" },
         new[] { "geonames" },
         new[] { "geonames", "load" },
         new[] { "geonames", "load", "cities500.zip" },
