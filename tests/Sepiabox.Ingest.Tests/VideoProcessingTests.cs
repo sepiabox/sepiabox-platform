@@ -573,6 +573,51 @@ public class VideoProcessingTests
     }
 
     [Fact]
+    public void Says_which_sound_stream_the_720p_version_has_when_the_second_is_chosen()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV005.mkv");
+        MakeFileWithUndecodableFirstSound(clip);
+        var processor = new VideoProcessor(s_tools);
+
+        var derivatives = processor.Generate(clip, work.Path, "d", processor.Probe(clip));
+
+        Assert.Equal((VideoSound.Kept, 1, null), (derivatives.Sound, derivatives.AudioStream, derivatives.WithoutSoundBecause));
+        Assert.Equal(["video", "audio"], StreamTypes(Path.Combine(work.Path, "d", "proxy-720p.mp4")));
+    }
+
+    [UnixFact]
+    public void Makes_the_720p_version_without_sound_when_the_second_stream_passes_the_check_but_its_encode_fails()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        using var tools = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV006.mkv");
+        MakeFileWithUndecodableFirstSound(clip);
+        // The first sound stream does not decode, so the transcode with sound fails; the second decodes a frame in the check
+        // but, as a file whose later packets are bad would, fails when it is encoded.
+        var ffmpeg = TestTools.FakeTool(tools, "ffmpeg", $$"""
+            case "$*" in
+              *"0:a:1?"*) echo "Error while decoding stream #0:2: Invalid data found when processing input" >&2; exit 1;;
+            esac
+            exec '{{s_tools.Ffmpeg}}' "$@"
+            """);
+        var video = new VideoProcessor(new FfmpegTools(ffmpeg, s_tools.Ffprobe));
+
+        var result = ProcessCommand.Run(
+            new ProcessOptions(drive.Path, work.Path, "HD", FfmpegFolder: s_ffmpegFolder, ModelFolder: TestModels.None),
+            embedder: null,
+            embedderWarning: null,
+            hooks: new ProcessCommand.ProcessHooks(Video: video));
+
+        Assert.Empty(result.Problems);
+        Assert.Single(result.WithoutSound);
+        Assert.Equal(["video"], StreamTypes(ProxyOf(work, Assert.Single(ReadManifests(work)))));
+        Assert.Equal(VideoSound.Undecodable, StateOf(work, clip).Sound);
+    }
+
+    [Fact]
     public void Makes_the_720p_version_without_sound_and_says_so_when_no_sound_stream_decodes()
     {
         using var drive = new TempFolder();

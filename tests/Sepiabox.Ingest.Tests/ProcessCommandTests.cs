@@ -233,6 +233,7 @@ public class ProcessCommandTests
         var problem = Assert.Single(first.Problems);
         Assert.EndsWith("IMG_0001.jpg", problem.Path, StringComparison.Ordinal);
         Assert.Contains("Damaged", problem.Reason, StringComparison.Ordinal);
+        Assert.EndsWith("It is not read again unless it changes or process is given --retry-left-out.", problem.Reason, StringComparison.Ordinal);
         Assert.Equal(FileStatus.Damaged, StateOf(work, broken).Status);
         Assert.Equal(0, first.DamagedEarlier);
 
