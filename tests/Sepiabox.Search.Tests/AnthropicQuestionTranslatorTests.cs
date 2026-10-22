@@ -455,7 +455,7 @@ public sealed class AnthropicQuestionTranslatorTests
 
         // similarTo names an asset (S-017, D-086) and eventIds names occasions (S-023, D-092): ids only the pages know.
         // quality and includeHidden (S-027, D-098) are the organize page's, and the format is at the API's ceiling (D-094).
-        Assert.Equal(["similarTo", "eventIds", "sourceCount", "quality", "includeHidden", "similarToRegion"], QuestionPrompt.NotFromQuestions);
+        Assert.Equal(["similarTo", "eventIds", "sourceCount", "quality", "includeHidden", "similarToRegion", "albums"], QuestionPrompt.NotFromQuestions);
         Assert.All(QuestionPrompt.NotFromQuestions, field =>
         {
             Assert.NotNull(dsl["properties"]!["filters"]!["properties"]![field]);

@@ -644,6 +644,17 @@ main {
     margin: 0;
 }
 
+/* A caption is the family's own text: its line breaks stay, and a long word or address breaks rather than widening the page (S-052). */
+.facts dd.caption {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.photo-albums {
+    padding-left: 18px;
+    overflow-wrap: anywhere;
+}
+
 /* Names and paths may break anywhere, but only when they do not fit (not mid-word in a sentence that does). */
 .sources {
     padding-left: 18px;

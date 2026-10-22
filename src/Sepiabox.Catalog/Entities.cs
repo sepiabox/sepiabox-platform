@@ -71,6 +71,12 @@ public sealed class Asset
     /// </summary>
     public bool Hidden { get; set; }
 
+    /// <summary>
+    /// What the owner or an export's maker wrote about the photo (S-052, D-112), as the manifest carries it (the longer
+    /// caption of the sources merged, S-045); null when none. An import without a caption leaves a stored one as it is.
+    /// </summary>
+    public string? Caption { get; set; }
+
     /// <summary>When the asset first entered the catalog.</summary>
     public DateTimeOffset ImportedAt { get; set; }
 
@@ -80,6 +86,17 @@ public sealed class Asset
     public List<AssetSource> Sources { get; set; } = [];
 
     public List<Derivative> Derivatives { get; set; } = [];
+
+    /// <summary>The albums an export put the asset in (S-052); only ever added to, as the sources are (D-032).</summary>
+    public List<AssetAlbum> Albums { get; set; } = [];
+}
+
+/// <summary>An album an asset is in (S-052, D-112), named as the family wrote it; one row per asset and name.</summary>
+public sealed class AssetAlbum
+{
+    public required string AssetId { get; set; }
+
+    public required string Name { get; set; }
 }
 
 /// <summary>One place where the asset's bytes were found, such as a path on a drive.</summary>

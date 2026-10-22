@@ -1363,4 +1363,16 @@
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
     <value>{0}: {1}, página atual</value>
   </data>
+  <data name="Detail_Caption" xml:space="preserve">
+    <value>Legenda</value>
+  </data>
+  <data name="Detail_Albums" xml:space="preserve">
+    <value>Álbuns</value>
+  </data>
+  <data name="Filter_Album" xml:space="preserve">
+    <value>Álbum</value>
+  </data>
+  <data name="Chip_Albums" xml:space="preserve">
+    <value>Álbum: {0}</value>
+  </data>
 </root>

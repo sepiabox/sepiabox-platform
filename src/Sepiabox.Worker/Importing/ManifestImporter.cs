@@ -253,6 +253,7 @@ public sealed class ManifestImporter(
         var asset = await db.Assets
             .Include(a => a.Sources)
             .Include(a => a.Derivatives)
+            .Include(a => a.Albums)
             .SingleOrDefaultAsync(a => a.Id == manifest.Id, cancellationToken);
         if (asset is null)
         {
@@ -282,6 +283,16 @@ public sealed class ManifestImporter(
         if (manifest.Quality is { } quality)
         {
             (asset.Sharpness, asset.DHash) = (quality.Sharpness, quality.DHash);
+        }
+
+        // A manifest without a caption leaves a stored one as it is (S-052, D-112), as one without albums leaves the albums.
+        asset.Caption = manifest.Caption ?? asset.Caption;
+        foreach (var album in manifest.Albums ?? [])
+        {
+            if (asset.Albums.All(a => a.Name != album))
+            {
+                asset.Albums.Add(new AssetAlbum { AssetId = asset.Id, Name = album });
+            }
         }
 
         asset.UpdatedAt = now;

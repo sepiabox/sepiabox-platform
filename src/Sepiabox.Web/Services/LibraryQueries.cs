@@ -65,6 +65,12 @@ public sealed record AssetDetail(
     /// <summary>The people in it (S-021): those with a counted face, named ones first, by name.</summary>
     public IReadOnlyList<AssetPerson> People { get; init; } = [];
 
+    /// <summary>What an export's maker wrote about it (S-052), as written; null when nothing.</summary>
+    public string? Caption { get; init; }
+
+    /// <summary>The albums an export put it in (S-052), by name; each links to the albums filter.</summary>
+    public IReadOnlyList<string> Albums { get; init; } = [];
+
     /// <summary>Where it was taken, as latitude and longitude, for "Save this place" (S-014); null without a location.</summary>
     public (double Latitude, double Longitude)? Location { get; init; }
 
@@ -108,6 +114,9 @@ public sealed record FilterOptions(
 
     /// <summary>The types the catalog's occasions have (S-024), in the order of <c>OccasionTypes.All</c>; read on every request, since a classify changes them.</summary>
     public IReadOnlyList<string> EventTypes { get; init; } = [];
+
+    /// <summary>The albums the catalog has (S-052), in display order: those an export put assets in.</summary>
+    public IReadOnlyList<string> Albums { get; init; } = [];
 }
 
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
@@ -408,6 +417,7 @@ public sealed class LibraryQueries(
             .AsSplitQuery()
             .Include(a => a.Sources)
             .Include(a => a.Derivatives)
+            .Include(a => a.Albums)
             .SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
 
         if (asset is null)
@@ -445,6 +455,8 @@ public sealed class LibraryQueries(
             PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry))
         {
             People = [.. people.OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
+            Caption = asset.Caption,
+            Albums = [.. asset.Albums.Select(a => a.Name).Order(StringComparer.CurrentCultureIgnoreCase).ThenBy(n => n, StringComparer.Ordinal)],
             Location = asset.Location is { } point ? (point.Y, point.X) : null,
             HasEmbedding = hasEmbedding,
             OriginalStored = asset.OriginalStored,
@@ -658,6 +670,7 @@ public sealed class LibraryQueries(
             EventTypes = [.. Sepiabox.Catalog.Events.OccasionTypes.All.Where(typesPresent.Contains)],
             Cities = [.. options.Cities.Order(byName)],
             Sources = [.. options.Sources.Order(byName)],
+            Albums = [.. options.Albums.Order(byName)],
             People = [.. people.Order(byName)],
             MeLinked = meLinked,
             SavedPlaces = [.. places.Select(p => p.Name).Order(byName)],
@@ -669,6 +682,9 @@ public sealed class LibraryQueries(
     private string? Me() => user?.Email is { } email && !string.IsNullOrWhiteSpace(email) ? email.Trim().ToLowerInvariant() : null;
 
     private SearchService Search(CatalogDbContext db) => new(db, clock ?? TimeProvider.System, searchOptions, embedder, user?.Email, regionEmbedder);
+
+    /// <summary>The most albums the filter bar lists.</summary>
+    public const int MaxAlbums = 500;
 
     private async Task<FilterOptions> LoadFilterOptionsAsync(CancellationToken cancellationToken)
     {
@@ -682,7 +698,11 @@ public sealed class LibraryQueries(
         var countryNames = db.Assets.Where(a => a.PlaceCountry != null).Select(a => a.PlaceCountry);
         var countries = await db.GeoNames.Where(g => g.CountryName != null && countryNames.Contains(g.CountryName))
             .Select(g => g.CountryCode).Distinct().OrderBy(c => c).ToListAsync(cancellationToken);
-        return new FilterOptions(years, cities, sources, countries);
+        // Names the DSL can take (200 characters), most used first when there are more than the bar can hold (D-112).
+        var albums = await db.AssetAlbums.Where(l => l.Name.Length <= SearchQueryJson.MaxNameLength)
+            .GroupBy(l => l.Name).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).Take(MaxAlbums).Select(g => g.Key)
+            .ToListAsync(cancellationToken);
+        return new FilterOptions(years, cities, sources, countries) { Albums = albums };
     }
 
     private static IEnumerable<AssetSource> OrderSources(IEnumerable<AssetSource> sources) =>

@@ -223,6 +223,46 @@ public sealed class PhotoDetailTests : LocalizedContext
         Assert.Equal("Parecidas", page.Find("p.similar a").TextContent);
     }
 
+    [Fact]
+    public void Shows_the_caption_as_written_and_each_album_linking_to_the_albums_filter()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Caption = "Praia <b>de</b> Matosinhos\nCom a avó", Albums = ["Verão 2019", "Wedding"] });
+
+        var caption = page.Find("dd.caption");
+        Assert.Equal("Praia <b>de</b> Matosinhos\nCom a avó", caption.TextContent);
+        Assert.Empty(caption.QuerySelectorAll("b"));
+        Assert.Equal("Caption", Assert.Single(page.FindAll("dl dt"), d => d.TextContent == "Caption").TextContent);
+        Assert.Contains("Albums", page.FindAll("h2").Select(h => h.TextContent));
+        var links = page.FindAll("ul.photo-albums a");
+        Assert.Equal(["Verão 2019", "Wedding"], links.Select(l => l.TextContent));
+        var first = SearchLinks.Timeline(new Sepiabox.Catalog.Search.SearchQuery { Filters = new Sepiabox.Catalog.Search.SearchFilters { Albums = ["Verão 2019"] } });
+        Assert.Equal(first, links[0].GetAttribute("href"));
+        Assert.StartsWith("./?q=", first, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Shows_the_caption_and_albums_with_brazilian_portuguese_labels()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Caption = "Férias na praia", Albums = ["Verão 2019"] });
+
+        Assert.Contains(page.FindAll("dl dt"), d => d.TextContent == "Legenda");
+        Assert.Equal("Férias na praia", page.Find("dd.caption").TextContent);
+        Assert.Contains("Álbuns", page.FindAll("h2").Select(h => h.TextContent));
+        Assert.Equal("Verão 2019", page.Find("ul.photo-albums a").TextContent);
+    }
+
+    [Fact]
+    public void Shows_no_caption_and_no_albums_for_a_photo_without_them()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(1)));
+
+        Assert.Empty(page.FindAll("dd.caption"));
+        Assert.Empty(page.FindAll("ul.photo-albums"));
+        Assert.DoesNotContain("Albums", page.FindAll("h2").Select(h => h.TextContent));
+    }
+
     private IRenderedComponent<PhotoDetail> RenderDetail(AssetDetail asset, int? pageNumber = null, string? query = null)
     {
         var library = new FakeLibrary();
