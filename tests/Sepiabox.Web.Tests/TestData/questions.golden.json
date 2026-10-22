@@ -64,7 +64,8 @@
       "location": [
         38.7405,
         -9.1605
-      ]
+      ],
+      "size": 8000
     },
     {
       "n": 2,
@@ -79,7 +80,8 @@
       "location": [
         38.7398,
         -9.1597
-      ]
+      ],
+      "size": 4000
     },
     {
       "n": 3,
@@ -91,6 +93,10 @@
       "concepts": [],
       "people": [
         "Bruno"
+      ],
+      "size": 2500,
+      "alsoIn": [
+        "HD da Ana"
       ]
     },
     {
@@ -100,7 +106,8 @@
       "city": "Lisbon",
       "country": "Portugal",
       "source": "HD da Ana",
-      "concepts": []
+      "concepts": [],
+      "size": 6000
     },
     {
       "n": 5,
@@ -347,6 +354,10 @@
       "location": [
         38.741,
         -9.159
+      ],
+      "size": 1800,
+      "alsoIn": [
+        "Celular do Bruno"
       ]
     },
     {
@@ -426,6 +437,10 @@
       "location": [
         38.7395,
         -9.1603
+      ],
+      "size": 2000,
+      "alsoIn": [
+        "Celular do Bruno"
       ]
     },
     {
@@ -465,6 +480,10 @@
       "location": [
         38.9601,
         -9.4102
+      ],
+      "size": 1200,
+      "alsoIn": [
+        "HD da Ana"
       ]
     },
     {
@@ -476,6 +495,10 @@
       "source": "Celular do Bruno",
       "concepts": [
         "dog"
+      ],
+      "size": 1500,
+      "alsoIn": [
+        "HD da Ana"
       ]
     },
     {
@@ -485,7 +508,11 @@
       "city": null,
       "country": null,
       "source": "Celular do Bruno",
-      "concepts": []
+      "concepts": [],
+      "size": 7000,
+      "alsoIn": [
+        "HD da Ana"
+      ]
     },
     {
       "n": 35,
@@ -613,6 +640,10 @@
       "source": "HD da Ana",
       "concepts": [
         "cake"
+      ],
+      "size": 3000,
+      "alsoIn": [
+        "Celular do Bruno"
       ]
     },
     {
@@ -662,7 +693,11 @@
       "city": "Porto",
       "country": "Portugal",
       "source": "Celular do Bruno",
-      "concepts": []
+      "concepts": [],
+      "size": 3500,
+      "alsoIn": [
+        "HD da Ana"
+      ]
     },
     {
       "n": 51,
@@ -1989,6 +2024,160 @@
         },
         "aggregate": {
           "count": "events"
+        }
+      }
+    },
+    {
+      "id": "storage-videos-2019",
+      "covers": [
+        "storage",
+        "sum",
+        "kinds",
+        "dates"
+      ],
+      "en": "how much space do the videos from 2019 take?",
+      "pt": "quanto espaço ocupam os vídeos de 2019?",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "video"
+          ],
+          "years": [
+            2019
+          ]
+        },
+        "aggregate": {
+          "count": "assets",
+          "sum": "bytes"
+        }
+      }
+    },
+    {
+      "id": "storage-per-year",
+      "covers": [
+        "storage",
+        "sum",
+        "by year"
+      ],
+      "en": "how much space does each year take?",
+      "pt": "quanto espaço ocupa cada ano?",
+      "expected": {
+        "filters": {},
+        "aggregate": {
+          "count": "assets",
+          "sum": "bytes",
+          "groupBy": "year"
+        }
+      }
+    },
+    {
+      "id": "storage-photos-2019",
+      "covers": [
+        "storage",
+        "sum",
+        "kinds",
+        "dates"
+      ],
+      "en": "how much space do my 2019 photos use?",
+      "pt": "qual o tamanho das minhas fotos de 2019?",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ],
+          "years": [
+            2019
+          ]
+        },
+        "aggregate": {
+          "count": "assets",
+          "sum": "bytes"
+        }
+      }
+    },
+    {
+      "id": "sources-photos-in-several-count",
+      "covers": [
+        "source count",
+        "counting",
+        "kinds"
+      ],
+      "en": "how many photos are in more than one source?",
+      "pt": "quantas fotos estão em mais de uma origem?",
+      "expected": {
+        "filters": {
+          "sourceCount": {
+            "gte": 2
+          },
+          "kinds": [
+            "photo"
+          ]
+        },
+        "aggregate": {
+          "count": "assets"
+        }
+      }
+    },
+    {
+      "id": "sources-videos-in-several",
+      "covers": [
+        "source count",
+        "kinds"
+      ],
+      "en": "show the videos that are in several sources",
+      "pt": "mostre os vídeos que estão em várias origens",
+      "expected": {
+        "filters": {
+          "sourceCount": {
+            "gte": 2
+          },
+          "kinds": [
+            "video"
+          ]
+        }
+      }
+    },
+    {
+      "id": "sources-2019-photos-in-one",
+      "covers": [
+        "source count",
+        "kinds",
+        "dates"
+      ],
+      "en": "photos from 2019 that exist in only one source",
+      "pt": "fotos de 2019 que estão em uma única origem",
+      "expected": {
+        "filters": {
+          "sourceCount": {
+            "eq": 1
+          },
+          "kinds": [
+            "photo"
+          ],
+          "years": [
+            2019
+          ]
+        }
+      }
+    },
+    {
+      "id": "storage-in-several-sources",
+      "covers": [
+        "storage",
+        "sum",
+        "source count"
+      ],
+      "en": "how much space do the items in more than one source take?",
+      "pt": "quanto espaço ocupam os itens que estão em mais de uma origem?",
+      "expected": {
+        "filters": {
+          "sourceCount": {
+            "gte": 2
+          }
+        },
+        "aggregate": {
+          "count": "assets",
+          "sum": "bytes"
         }
       }
     }

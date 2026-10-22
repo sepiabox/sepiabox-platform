@@ -31,6 +31,11 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
             {
                 // The Container Apps environment's identity pulls the images.
                 "aca_mi.properties.principalId: AcrPull on registries registry",
+                // The admin job deletes a source's blobs (S-057, D-108) from three containers, never account-wide: that would reach
+                // the web's key ring and `incoming`.
+                "admin-identity: Storage Blob Data Contributor on containers derivatives",
+                "admin-identity: Storage Blob Data Contributor on containers manifests",
+                "admin-identity: Storage Blob Data Contributor on containers originals",
                 // The faces job rewrites manifests, and nothing else in storage (S-022).
                 "faces-identity: Storage Blob Data Contributor on containers manifests",
                 // The process job (S-036) reads and deletes incoming, copies originals, writes derivatives and manifests: those four containers.
@@ -93,7 +98,7 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
     public void Owner_secrets_reach_only_the_web_and_only_from_key_vault_when_published()
     {
         var webEnvironment = Environment("web");
-        var jobKeys = new[] { "migrate", "import", "import-all", "geonames", "faces", "process" }.SelectMany(job => Environment(job).Keys).ToList();
+        var jobKeys = new[] { "migrate", "import", "import-all", "geonames", "faces", "process", "admin" }.SelectMany(job => Environment(job).Keys).ToList();
 
         // Key Vault is the web's configuration source: Auth--Google--ClientId is Auth:Google:ClientId (D-051). The sync job knows the vault's
         // address, to read the two secrets of the same OAuth client (S-038, D-115), but has no role on the vault itself (see the role

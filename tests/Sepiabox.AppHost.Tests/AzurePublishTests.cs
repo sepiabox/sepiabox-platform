@@ -105,6 +105,17 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
     }
 
     [Fact]
+    public void Storage_has_exactly_one_lifecycle_policy_and_it_keeps_the_incoming_rule_when_published()
+    {
+        // A second `managementPolicies` resource on the account replaces the first (one policy per account, always named default), so the
+        // rules of every story (incoming, S-036; others) must be in the one.
+        var policies = published.Declarations("Microsoft.Storage/storageAccounts/managementPolicies");
+
+        var policy = Assert.Single(policies);
+        Assert.Contains("'incoming/'", policy.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Storage_blocks_public_access_and_has_every_private_container_when_published()
     {
         var account = published.The("Microsoft.Storage/storageAccounts");

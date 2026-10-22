@@ -363,6 +363,7 @@ public abstract class ManifestStoreTests
         public Task<Uri> CreateReadUrlAsync(
             string container, string name, DateTimeOffset expiresOn, BlobReadUrlOptions? options = null, CancellationToken cancellationToken = default) =>
             Inner.CreateReadUrlAsync(container, name, expiresOn, options, cancellationToken);
+        public Task<BlobDeleteStatus> DeleteIfVersionAsync(string container, string name, string version, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }
 }
 
