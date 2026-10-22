@@ -69,7 +69,7 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
         Task.FromResult(Assets.ContainsKey(id) ? $"{id}/{name}{(DerivativeNames.IsVideo(name) ? ".mp4" : ".webp")}" : null);
 
     public Task<OriginalFile?> GetOriginalAsync(string id, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Assets.ContainsKey(id) ? new OriginalFile("IMG_0001.jpg", "image/jpeg") : null);
+        Task.FromResult(Assets.TryGetValue(id, out var asset) ? new OriginalFile("IMG_0001.jpg", "image/jpeg", asset.OriginalStored) : null);
 
     /// <summary>What the filter bar offers.</summary>
     public FilterOptions Options { get; init; } = new([2021, 2019], ["Lisbon", "Porto"], ["HD da Ana"]);

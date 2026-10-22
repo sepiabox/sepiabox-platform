@@ -1,0 +1,67 @@
+using Microsoft.Extensions.Localization;
+
+namespace Sepiabox.Web.Services;
+
+/// <summary>
+/// How the detail page speaks of a source (S-064): a link to the original at its source when the manifest gave an
+/// address, and, for an original Sepiabox does not keep (S-063, D-088), a line saying where it is. The wording of each kind
+/// of source comes from one map (type to resource key), so the export stories (S-046 to S-049) and the cloud ones
+/// (S-038, S-039) only add entries.
+/// </summary>
+public static class SourceLinks
+{
+    public const string LocalType = "local";
+
+    // The link's text by source type; any other type reads "Open at the source".
+    private static readonly Dictionary<string, string> s_linkText = new(StringComparer.Ordinal)
+    {
+        ["google-takeout"] = "Source_OpenGooglePhotos",
+        ["instagram"] = "Source_OpenInstagram",
+    };
+
+    // The line for an original that stays at an export's source and has no address, by export kind; any other export kind
+    // reads "Stored in {name}".
+    private static readonly Dictionary<string, string> s_storedLine = new(StringComparer.Ordinal)
+    {
+        ["apple-photos"] = "Source_StoredApple",
+        ["facebook"] = "Source_StoredFacebook",
+    };
+
+    // Cloud sources (D-023) are in reference mode; S-038 and S-039 add their "Open original" and their line to this list.
+    private static readonly HashSet<string> s_cloudTypes = new(StringComparer.Ordinal) { "google-drive", "onedrive" };
+
+    /// <summary>
+    /// The address to link to, or null: only an absolute <c>https://</c> address is ever a link (a hand-edited catalog row
+    /// could hold <c>javascript:</c> or anything else), and it is never followed by the server.
+    /// </summary>
+    public static string? SafeUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && !string.IsNullOrEmpty(uri.Host)
+            ? uri.AbsoluteUri
+            : null;
+
+    /// <summary>"Open in Google Photos", "Open on Instagram" or "Open at the source".</summary>
+    public static string LinkText(AssetSourceDetail source, IStringLocalizer<SharedResource> text)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(text);
+        return text[s_linkText.GetValueOrDefault(source.Type, "Source_OpenAtSource")].Value;
+    }
+
+    /// <summary>
+    /// Where an original that Sepiabox does not keep is, for a source with no link: the drive and the path, or the export
+    /// it stayed in; null for a cloud source, whose line the cloud stories add.
+    /// </summary>
+    public static string? StoredLine(AssetSourceDetail source, IStringLocalizer<SharedResource> text)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(text);
+        if (source.Type == LocalType)
+        {
+            return text["Source_StoredOnDrive", source.Name, source.Path].Value;
+        }
+
+        return s_cloudTypes.Contains(source.Type)
+            ? null
+            : s_storedLine.TryGetValue(source.Type, out var key) ? text[key].Value : text["Source_StoredIn", source.Name].Value;
+    }
+}

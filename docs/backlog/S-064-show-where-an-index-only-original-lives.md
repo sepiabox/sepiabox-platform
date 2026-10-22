@@ -40,14 +40,14 @@ An asset processed in index-only mode (S-063, D-088) has no original in Sepiabox
 - Switching a source between modes (S-063 covers adding originals later; removing them is out of scope there).
 
 ### Acceptance criteria
-- [ ] Given a photo with `preview-2048` and `preview-1280`, when its detail page renders, then the image is `preview-2048`; given a video with `proxy-1080p`, then the player's source is `photos/{id}/proxy-1080p`.
-- [ ] Given an index-only photo whose `google-takeout` source has the url `https://photos.google.com/photo/AF1Qip-example`, then the page shows "Open in Google Photos" linking there in a new tab with `rel="noopener noreferrer"`, and no "Download the original".
-- [ ] Given an index-only photo whose only source is local, with the name "Life" and the path `2019/IMG_0001.jpg`, then the page says "Stored on the drive 'Life'" with the path, and shows no link and no download.
-- [ ] Given an index-only photo from `apple-photos`, then the page says it is stored in Apple Photos / iCloud Photos and can't be opened from here.
-- [ ] Given a source url that is not `https://` (for example `javascript:alert(1)` in a hand-edited catalog row), then no link is rendered.
-- [ ] Given an index-only asset, when `photos/{id}/original` is requested, then the answer is 404 with the message; given a stored original, the answer is unchanged (a redirect to a short-lived SAS link).
-- [ ] Given a photo whose original is stored and also has an export source with a url, then "Download the original" stays, and the source's link is shown too.
-- [ ] Given the pt-BR culture, then every new text is in Brazilian Portuguese.
+- [x] Given a photo with `preview-2048` and `preview-1280`, when its detail page renders, then the image is `preview-2048`; given a video with `proxy-1080p`, then the player's source is `photos/{id}/proxy-1080p`.
+- [x] Given an index-only photo whose `google-takeout` source has the url `https://photos.google.com/photo/AF1Qip-example`, then the page shows "Open in Google Photos" linking there in a new tab with `rel="noopener noreferrer"`, and no "Download the original".
+- [x] Given an index-only photo whose only source is local, with the name "Life" and the path `2019/IMG_0001.jpg`, then the page says "Stored on the drive 'Life'" with the path, and shows no link and no download.
+- [x] Given an index-only photo from `apple-photos`, then the page says it is stored in Apple Photos / iCloud Photos and can't be opened from here.
+- [x] Given a source url that is not `https://` (for example `javascript:alert(1)` in a hand-edited catalog row), then no link is rendered.
+- [x] Given an index-only asset, when `photos/{id}/original` is requested, then the answer is 404 with the message; given a stored original, the answer is unchanged (a redirect to a short-lived SAS link).
+- [x] Given a photo whose original is stored and also has an export source with a url, then "Download the original" stays, and the source's link is shown too.
+- [x] Given the pt-BR culture, then every new text is in Brazilian Portuguese.
 
 ### Technical notes
 - The `url` comes from the catalog (S-063), which comes from the manifest. Treat it as untrusted text: render it only as an `href` with the `https` scheme checked, through `Uri.TryCreate` (absolute, `Uri.UriSchemeHttps`). Never put it in a redirect from the server.
