@@ -52,6 +52,8 @@ internal sealed class GoldenQuestions
         {
             Location = a["location"] is JsonArray location ? (location[0]!.GetValue<double>(), location[1]!.GetValue<double>()) : null,
         })];
+        Occasions = [.. (root["occasions"]?.AsArray() ?? []).Select(o => new GoldenOccasion(
+            o!["type"]?.GetValue<string>(), [.. o["assets"]!.AsArray().Select(n => n!.GetValue<int>())]))];
         Questions = [.. root["questions"]!.AsArray().Select(q => new GoldenQuestion(
             q!["id"]!.GetValue<string>(),
             q["en"]!.GetValue<string>(),
@@ -76,6 +78,9 @@ internal sealed class GoldenQuestions
 
     public IReadOnlyList<GoldenAsset> Catalog { get; }
 
+    /// <summary>The occasions (S-024): sets of the catalog's assets with the type they were given, or none.</summary>
+    public IReadOnlyList<GoldenOccasion> Occasions { get; }
+
     public IReadOnlyList<GoldenQuestion> Questions { get; }
 
     /// <summary>Noon on the golden day in its time zone, so "today" is the same wherever the test runs.</summary>
@@ -95,6 +100,7 @@ internal sealed class GoldenQuestions
         .Add("saved places", "filters.savedPlaces", SavedPlaces.Select(p => p.Name))
         .Add("home place", "filters.savedPlaces", SavedPlaces.Where(p => p.Home).Select(p => p.Name))
         .Add("people", "filters.people.all", Catalog.SelectMany(a => a.People))
+        .Add("occasion types", "filters.eventTypes", Occasions.Where(o => o.Type is not null).Select(o => o.Type!))
         .Build();
 
     /// <summary>A migrated catalog holding the fixture's assets, their embeddings and the GeoNames rows of their places.</summary>
@@ -165,6 +171,16 @@ internal sealed class GoldenQuestions
             });
         }
 
+        await db.SaveChangesAsync();
+        foreach (var occasion in Occasions)
+        {
+            var dates = occasion.Assets.Select(n => Catalog.Single(a => a.N == n).Date!.Value.ToDateTime(new TimeOnly(12, 0))).Order().ToList();
+            var created = new Occasion { StartsAt = dates[0], EndsAt = dates[^1], AssetCount = occasion.Assets.Count, Type = occasion.Type };
+            db.Occasions.Add(created);
+            await db.SaveChangesAsync();
+            db.OccasionAssets.AddRange(occasion.Assets.Select(n => new OccasionAsset { EventId = created.Id, AssetId = Ids.Of(n) }));
+        }
+
         var id = 1L;
         foreach (var (city, country) in Catalog.Where(a => a.City is not null).Select(a => (a.City!, a.Country!)).Distinct())
         {
@@ -230,6 +246,8 @@ internal sealed class GoldenQuestions
         /// <summary>Where it was taken (S-014), made up; null for most assets.</summary>
         public (double Latitude, double Longitude)? Location { get; init; }
     }
+
+    public sealed record GoldenOccasion(string? Type, IReadOnlyList<int> Assets);
 
     public sealed record GoldenPlace(string Name, double Latitude, double Longitude, int RadiusM, bool Home);
 

@@ -278,7 +278,7 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.False(filters["additionalProperties"]!.GetValue<bool>());
         Assert.Equal("date", filters["properties"]!["dateFrom"]!["format"]!.GetValue<string>());
         Assert.Equal(
-            ["dateFrom", "dateTo", "distanceFrom", "kinds", "months", "onThisDay", "people", "places", "savedPlaces", "sources", "undatedOnly", "visual", "years"],
+            ["dateFrom", "dateTo", "distanceFrom", "eventTypes", "kinds", "months", "onThisDay", "people", "places", "savedPlaces", "sources", "undatedOnly", "visual", "years"],
             filters["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
         // minScore is required but nullable in the output format only (D-085).
         Assert.Equal(["text", "minScore"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
@@ -293,6 +293,49 @@ public sealed class AnthropicQuestionTranslatorTests
     }
 
     [Fact]
+    public void Keeps_the_format_under_the_ceiling_the_api_measured_and_event_types_required_but_nullable()
+    {
+        var output = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
+
+        // The API's text says 24, but 20 optional properties gave "Schema is too complex." on 2026-10-22 (D-094).
+        Assert.Equal(19, QuestionPrompt.MaxOptionalProperties);
+        Assert.True(OptionalProperties(output) <= QuestionPrompt.MaxOptionalProperties);
+        Assert.True(UnionTypeProperties(output) <= QuestionPrompt.MaxUnionTypeProperties);
+        var types = output["properties"]!["filters"]!["properties"]!["eventTypes"]!;
+        Assert.Equal(["array", "null"], types["type"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(OccasionTypeKeys, types["items"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>()));
+        // The DSL's own schema is unchanged: there it is optional and cannot be null.
+        using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
+        var dsl = JsonNode.Parse(stream)!["properties"]!["filters"]!;
+        Assert.Equal("array", dsl["properties"]!["eventTypes"]!["type"]!.GetValue<string>());
+        Assert.Null(dsl["required"]);
+    }
+
+    [Fact]
+    public void Puts_the_required_nullable_filters_first_so_the_model_does_not_skip_the_ones_after_a_null()
+    {
+        var filters = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!["properties"]!["filters"]!["properties"]!.AsObject()
+            .Select(p => p.Key).ToList();
+
+        Assert.Equal(QuestionPrompt.FiltersRequiredNullable, filters.Take(QuestionPrompt.FiltersRequiredNullable.Count));
+        // The rest keep the DSL schema's order.
+        using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
+        var dsl = JsonNode.Parse(stream)!["properties"]!["filters"]!["properties"]!.AsObject().Select(p => p.Key)
+            .Where(k => !QuestionPrompt.NotFromQuestions.Contains(k) && !QuestionPrompt.FiltersRequiredNullable.Contains(k));
+        Assert.Equal(dsl, filters.Skip(QuestionPrompt.FiltersRequiredNullable.Count));
+    }
+
+    private static readonly string[] OccasionTypeKeys = ["wedding", "birthday", "beach", "christmas", "graduation", "snow", "party", "trip"];
+
+    [Fact]
+    public void Removes_the_null_event_types_an_answer_writes_when_the_question_names_none()
+    {
+        var cleaned = QuestionPrompt.WithoutNulls("""{"filters":{"years":[2026],"eventTypes":null},"aggregate":null}""");
+
+        Assert.Equal("""{"filters":{"years":[2026]}}""", cleaned);
+    }
+
+    [Fact]
     public void Output_schema_makes_the_nested_objects_properties_required_and_nullable_and_keeps_the_rest()
     {
         var schema = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
@@ -304,12 +347,12 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.Equal(["text", "minScore"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
         // The text was required already, so it stays non-null.
         Assert.Equal("string", filters["properties"]!["visual"]!["properties"]!["text"]!["type"]!.GetValue<string>());
-        // The root, filters and aggregate keep their optional fields.
-        Assert.Null(filters["required"]);
+        // The root, filters and aggregate keep their optional fields, but for the named exception: eventTypes (D-094).
+        Assert.Equal(["eventTypes"], filters["required"]!.AsArray().Select(n => n!.GetValue<string>()));
         Assert.Equal(["count"], schema["properties"]!["aggregate"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
-        // The root's 4, filters' 13 and aggregate's 2; the 10 made nullable are union-typed.
+        // The root's 4, filters' 13 and aggregate's 2; the 10 made nullable and eventTypes are union-typed.
         Assert.Equal(19, OptionalProperties(schema));
-        Assert.Equal(10, UnionTypeProperties(schema));
+        Assert.Equal(11, UnionTypeProperties(schema));
     }
 
     [Theory]
@@ -345,8 +388,8 @@ public sealed class AnthropicQuestionTranslatorTests
     {
         using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
         var schema = JsonNode.Parse(stream)!;
-        // The schema the API saw then, before S-017 and S-028 added what a question cannot express.
-        foreach (var field in QuestionPrompt.NotFromQuestions)
+        // The schema the API saw then, before S-017, S-024 (the types) and S-028 added what a question cannot express.
+        foreach (var field in QuestionPrompt.NotFromQuestions.Append("eventTypes"))
         {
             schema["properties"]!["filters"]!["properties"]!.AsObject().Remove(field);
         }
@@ -473,7 +516,7 @@ public sealed class AnthropicQuestionTranslatorTests
             Assert.DoesNotContain(combinator, text, StringComparison.Ordinal);
         }
 
-        Assert.Null(filters["required"]);
+        Assert.Equal(QuestionPrompt.FiltersRequiredNullable, filters["required"]!.AsArray().Select(n => n!.GetValue<string>()));
         Assert.Null(schema["required"]);
         // A query with all of them, written in the schema's order, uses only its properties.
         var everything = JsonNode.Parse("""

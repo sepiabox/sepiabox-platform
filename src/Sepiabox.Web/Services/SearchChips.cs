@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Localization;
 using Sepiabox.Catalog.Search;
+using Sepiabox.Web.Localization;
 
 namespace Sepiabox.Web.Services;
 
@@ -102,6 +103,11 @@ public static class SearchChips
             Add(eventIds.Count == 1 ? text["Chip_Occasion_One"].Value : text["Chip_Occasion_Other", eventIds.Count].Value, f with { EventIds = null });
         }
 
+        if (f.EventTypes is { } eventTypes)
+        {
+            Add(text["Chip_EventTypes", string.Join(", ", eventTypes.Select(t => text.EventTypeLabel(t)))], f with { EventTypes = null });
+        }
+
         if (f.Visual is { } visual)
         {
             Add(text["Chip_Visual", visual.Text], f with { Visual = null });
@@ -132,7 +138,7 @@ public static class SearchChips
             var size = aggregate.Sum is not null;
             var label = aggregate.GroupBy is { } groupBy
                 ? text[size ? "Chip_SizeBy" : "Chip_CountBy", text["Group_" + char.ToUpperInvariant(groupBy[0]) + groupBy[1..]]]
-                : text[size ? "Chip_Size" : "Chip_Count"];
+                : size ? text["Chip_Size"] : aggregate.Count == SearchCount.Events ? text["Chip_CountEvents"] : text["Chip_Count"];
             chips.Add(new SearchChip(label, query with { Aggregate = null }));
         }
 

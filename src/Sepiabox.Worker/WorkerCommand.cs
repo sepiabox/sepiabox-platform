@@ -13,6 +13,7 @@ public enum WorkerAction
     PlacesRefresh,
     FacesSweep,
     EventsRebuild,
+    EventsClassify,
 }
 
 /// <summary>The three GeoNames dump files that <c>geonames load</c> reads (S-012).</summary>
@@ -51,6 +52,11 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
           events rebuild             Group every dated asset into occasions (S-023): a new one starts after
                                      a gap of more than 6 hours or 50 km. Safe to run again: with the same
                                      assets it changes nothing. Run it after importing.
+          events classify            Give a type (wedding, birthday, beach, christmas, graduation, snow, party,
+                                     trip) to every occasion that has none (S-024), from the CLIP embeddings
+                                     of its photos and, for a trip, its distance from the home place. Needs
+                                     the CLIP text model: sepiabox-ingest models download (or Search:ModelFolder).
+                                     Safe to run again. Run it after events rebuild.
         """;
 
     public static bool TryParse(string[] args, [NotNullWhen(true)] out WorkerCommand? command, out string error)
@@ -94,6 +100,9 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                 return true;
             case ["events", "rebuild"]:
                 command = new WorkerCommand(WorkerAction.EventsRebuild, false);
+                return true;
+            case ["events", "classify"]:
+                command = new WorkerCommand(WorkerAction.EventsClassify, false);
                 return true;
             case [_, ..]:
                 error = $"Unknown command or option in '{string.Join(' ', args)}'.";

@@ -148,6 +148,25 @@ public sealed class QuestionService(
             : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(email.Trim().ToLowerInvariant())));
     }
 
+    /// <summary>
+    /// What the translator is told besides the question (D-073, D-094). The occasion types are those the catalog's
+    /// occasions have; before any occasion is typed (<c>events classify</c> has not run) all of them, so "how many
+    /// weddings" still gets its type and counts typed occasions (none) rather than every occasion.
+    /// </summary>
+    public static QuestionContext Context(FilterOptions options, DateOnly today, string timeZone)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return QuestionContext.For(today, timeZone)
+            .Add("sources", "filters.sources", options.Sources)
+            .Add("cities", "filters.places.cities", options.Cities)
+            .Add("countries", "filters.places.countries", options.Countries ?? [])
+            .Add("saved places", "filters.savedPlaces", options.SavedPlaces)
+            .Add("home place", "filters.savedPlaces", options.HomePlace is { } home ? [home] : [])
+            .Add("people", "filters.people.all", options.People)
+            .Add("occasion types", "filters.eventTypes", options.EventTypes.Count > 0 ? options.EventTypes : Sepiabox.Catalog.Events.OccasionTypes.All)
+            .Build();
+    }
+
     public async Task<AskResult> AskAsync(string? question, ClaimsPrincipal user, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(user);
@@ -172,15 +191,8 @@ public sealed class QuestionService(
 
         var options = await library.GetFilterOptionsAsync(cancellationToken);
         // People's names, never an e-mail address or who said "This is me" (D-080); the family's places by name, and
-        // which one is home, never where they are (D-083); a later story adds occasion types here (S-024).
-        var context = QuestionContext.For(today, zone.Id)
-            .Add("sources", "filters.sources", options.Sources)
-            .Add("cities", "filters.places.cities", options.Cities)
-            .Add("countries", "filters.places.countries", options.Countries ?? [])
-            .Add("saved places", "filters.savedPlaces", options.SavedPlaces)
-            .Add("home place", "filters.savedPlaces", options.HomePlace is { } home ? [home] : [])
-            .Add("people", "filters.people.all", options.People)
-            .Build();
+        // which one is home, never where they are (D-083); the types the occasions have, which are a fixed list of English keys (S-024, D-094).
+        var context = Context(options, today, zone.Id);
 
         var translation = await translator.TranslateAsync(cleaned, context, cancellationToken);
         if (translation.Outcome is QuestionOutcome.Unavailable or QuestionOutcome.Failed && translation.Usage == TokenUsage.None)

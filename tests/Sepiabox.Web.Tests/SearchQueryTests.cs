@@ -237,6 +237,13 @@ public sealed class SearchQueryTests
         """{"sort": "random"}""",
         """{"limit": 1001}""",
         "[]",
+        // Occasion types and counting occasions (S-024, D-094).
+        """{"filters": {"eventTypes": ["wedding", "trip"], "years": [2026]}, "aggregate": {"count": "events"}}""",
+        """{"filters": {}, "aggregate": {"count": "events", "groupBy": "eventType", "top": 3}}""",
+        """{"filters": {"eventTypes": []}}""",
+        """{"filters": {"eventTypes": ["funeral"]}}""",
+        """{"filters": {"eventTypes": ["wedding", null]}}""",
+        // That events are grouped only by type, and eventType needs events, is a rule the schema cannot say (tested in OccasionTypeDslTests).
         // Occasions (S-023, D-092).
         """{"filters": {"eventIds": [1, 42], "years": [2024]}}""",
         """{"filters": {"eventIds": []}}""",

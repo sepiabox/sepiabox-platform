@@ -57,6 +57,14 @@ public sealed class WorkerCommandTests
     }
 
     [Fact]
+    public void Parses_events_classify_and_nothing_after_it()
+    {
+        Assert.True(WorkerCommand.TryParse(["events", "classify"], out var command, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.EventsClassify, false), command);
+        Assert.False(WorkerCommand.TryParse(["events", "classify", "--all"], out _, out _));
+    }
+
+    [Fact]
     public void Parses_places_refresh()
     {
         Assert.True(WorkerCommand.TryParse(["places", "refresh"], out var command, out _));

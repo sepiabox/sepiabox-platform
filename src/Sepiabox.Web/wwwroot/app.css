@@ -786,6 +786,10 @@ main {
     min-height: 100px;
 }
 
+.occasion-filter {
+    margin-bottom: 24px;
+}
+
 .occasion-link:focus-visible {
     outline: 3px solid var(--cyanotype);
     outline-offset: 4px;

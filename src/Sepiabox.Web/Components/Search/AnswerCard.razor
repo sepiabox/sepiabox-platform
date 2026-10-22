@@ -28,7 +28,11 @@
                 {
                     <tr>
                         <th scope="row">
-                            @if (row.Items is { } items)
+                            @if (row.Href is { } href)
+                            {
+                                <a href="@href">@row.Label</a>
+                            }
+                            else if (row.Items is { } items)
                             {
                                 <a href="@SearchLinks.Timeline(items)">@row.Label</a>
                             }
@@ -56,7 +60,8 @@
         <p class="sentence">@CountAnswers.Sentence(Query, Count.Total, Text)</p>
     }
 
-    <p><a class="show" href="@SearchLinks.Timeline(Query with { Aggregate = null })">@Text["Count_ShowItems"]</a></p>
+    @{ var show = CountAnswers.Show(Query); }
+    <p><a class="show" href="@show.Href">@Text[show.Key]</a></p>
     @if (Count.Undated is > 0 and var undated)
     {
         <p class="undated">

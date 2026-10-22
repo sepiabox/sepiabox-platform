@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.Extensions.DependencyInjection;
+using Sepiabox.Catalog.Events;
 using Sepiabox.Catalog.Search;
 using Sepiabox.Search.Questions;
 using Sepiabox.Web.Components.Layout;
@@ -125,6 +126,83 @@ public sealed class OccasionsPageTests : LocalizedContext
         Assert.Equal(["occasions", "occasions?page=3"], RenderPage(2).FindAll("nav.pages a").Select(a => a.GetAttribute("href")));
         Assert.Equal(["occasions?page=2"], RenderPage(3).FindAll("nav.pages a").Select(a => a.GetAttribute("href")));
         Assert.Equal(3, library.RequestedOccasionsPage);
+    }
+
+    [Fact]
+    public void Shows_the_type_on_a_card_and_on_the_occasion_s_page_in_the_culture()
+    {
+        using var _ = Cultures.Use(Cultures.BrazilianPortuguese);
+        _library.Occasions.Add(new OccasionSummary(7, new DateTime(2024, 12, 14), new DateTime(2024, 12, 14), null, 3, []) { Type = "wedding" });
+        _library.Occasions.Add(new OccasionSummary(8, new DateTime(2024, 11, 1), new DateTime(2024, 11, 1), null, 1, []));
+
+        var cards = RenderPage().FindAll("li.occasion .count");
+
+        Assert.Equal(["Casamento · 3 itens", "1 item"], cards.Select(c => c.TextContent));
+        Assert.Contains("Casamento · 3 itens", Render<Occasion>(p => p.Add(o => o.Id, 7)).Find("p.muted").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Offers_the_types_the_occasions_have_and_lists_the_ones_chosen()
+    {
+        var library = new FakeLibrary { Options = new FilterOptions([], [], []) { EventTypes = ["wedding", "trip"] } };
+        library.Occasions.Add(new OccasionSummary(7, new DateTime(2024, 12, 14), new DateTime(2024, 12, 14), null, 3, []) { Type = "wedding" });
+        library.Occasions.Add(new OccasionSummary(8, new DateTime(2024, 11, 1), new DateTime(2024, 11, 1), null, 1, []) { Type = "trip" });
+        Services.AddSingleton<ILibraryQueries>(library);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/occasions?type=trip");
+
+        var page = Render<Occasions>();
+
+        Assert.Equal(["", "wedding", "trip"], page.FindAll("form.occasion-filter option").Select(o => o.GetAttribute("value")));
+        Assert.Equal("trip", page.Find("form.occasion-filter option[selected]").GetAttribute("value"));
+        Assert.Equal(["Any", "Wedding", "Trip"], page.FindAll("form.occasion-filter option").Select(o => o.TextContent));
+        Assert.Equal("occasions", page.Find("form.occasion-filter a.clear").GetAttribute("href"));
+        Assert.Equal("trip", library.RequestedOccasionType);
+        Assert.Single(page.FindAll("li.occasion"));
+    }
+
+    [Fact]
+    public void Ignores_a_type_that_is_not_one_and_says_when_none_of_a_type_exist()
+    {
+        var library = new FakeLibrary { Options = new FilterOptions([], [], []) { EventTypes = ["wedding"] } };
+        library.Occasions.Add(new OccasionSummary(7, new DateTime(2024, 12, 14), new DateTime(2024, 12, 14), null, 3, []) { Type = "wedding" });
+        Services.AddSingleton<ILibraryQueries>(library);
+        var navigation = Services.GetRequiredService<NavigationManager>();
+
+        navigation.NavigateTo("/occasions?type=funeral");
+        Assert.Single(Render<Occasions>().FindAll("li.occasion"));
+        Assert.Null(library.RequestedOccasionType);
+
+        navigation.NavigateTo("/occasions?type=party");
+        var none = Render<Occasions>();
+        Assert.Equal("There are no occasions of this type. Show all occasions", none.Find("p.empty").TextContent);
+    }
+
+    [Fact]
+    public void Keeps_the_type_in_the_paging_links()
+    {
+        var library = new FakeLibrary { OccasionPageSize = 1, Options = new FilterOptions([], [], []) { EventTypes = ["wedding"] } };
+        foreach (var n in new[] { 3, 2 })
+        {
+            library.Occasions.Add(new OccasionSummary(n, new DateTime(2024, n, 1), new DateTime(2024, n, 1), null, 1, []) { Type = "wedding" });
+        }
+
+        Services.AddSingleton<ILibraryQueries>(library);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/occasions?type=wedding");
+
+        Assert.Equal(["occasions?type=wedding&page=2"], Render<Occasions>().FindAll("nav.pages a").Select(a => a.GetAttribute("href")));
+    }
+
+    [Fact]
+    public void Offers_the_type_in_the_address_even_when_no_occasion_has_it()
+    {
+        var library = new FakeLibrary { Options = new FilterOptions([], [], []) { EventTypes = ["wedding"] } };
+        Services.AddSingleton<ILibraryQueries>(library);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/occasions?type=party");
+
+        var page = Render<Occasions>();
+
+        Assert.Equal(["", "wedding", "party"], page.FindAll("form.occasion-filter option").Select(o => o.GetAttribute("value")));
+        Assert.Equal("party", page.Find("form.occasion-filter option[selected]").GetAttribute("value"));
     }
 
     [Fact]
@@ -312,5 +390,200 @@ public sealed class OccasionFilterTests
 
         Assert.Null(output["properties"]!["filters"]!["properties"]!["eventIds"]);
         Assert.Contains("eventIds", QuestionPrompt.NotFromQuestions);
+    }
+}
+
+/// <summary>Occasion types in the DSL, the counts, the chips and the words of the answers (S-024, D-094).</summary>
+public sealed class OccasionTypeDslTests
+{
+    [Fact]
+    public void Parses_event_types_and_counting_occasions()
+    {
+        Assert.True(SearchQueryJson.TryParse(
+            """{"filters": {"eventTypes": ["wedding", "trip"]}, "aggregate": {"count": "events", "groupBy": "eventType"}}""", out var query, out var error), error);
+
+        Assert.Equal(["wedding", "trip"], query.Filters.EventTypes);
+        Assert.Equal((SearchCount.Events, SearchGroupBy.EventType), (query.Aggregate!.Count, query.Aggregate.GroupBy));
+        Assert.True(SearchQueryJson.TryDecode(SearchQueryJson.Encode(query), out var decoded, out _));
+        Assert.Equal(query, decoded);
+        Assert.NotEqual(query, query with { Filters = query.Filters with { EventTypes = ["wedding"] } });
+    }
+
+    [Theory]
+    [InlineData("""{"filters": {"eventTypes": ["funeral"]}}""", "filters.eventTypes")]
+    [InlineData("""{"filters": {"eventTypes": ["Wedding"]}}""", "filters.eventTypes")]
+    [InlineData("""{"aggregate": {"count": "events", "groupBy": "year"}}""", "eventType")]
+    [InlineData("""{"aggregate": {"count": "assets", "groupBy": "eventType"}}""", "events")]
+    [InlineData("""{"aggregate": {"count": "occasions"}}""", "aggregate.count")]
+    public void Refuses_an_unknown_type_and_a_grouping_that_does_not_go_with_the_count(string json, string mentions)
+    {
+        Assert.False(SearchQueryJson.TryParse(json, out _, out var error));
+        Assert.Contains(mentions, error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Offers_the_types_to_a_question_and_counts_one_more_optional_property_within_the_limit()
+    {
+        var output = System.Text.Json.Nodes.JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
+
+        var types = output["properties"]!["filters"]!["properties"]!["eventTypes"]!;
+        Assert.NotNull(types);
+        Assert.Equal(OccasionTypes.All, types["items"]!["enum"]!.AsArray().Select(t => t!.GetValue<string>()));
+        Assert.Equal(["assets", "events"], output["properties"]!["aggregate"]!["properties"]!["count"]!["enum"]!.AsArray().Select(c => c!.GetValue<string>()));
+        Assert.Contains("eventType", output["properties"]!["aggregate"]!["properties"]!["groupBy"]!["enum"]!.AsArray().Select(c => c?.GetValue<string>()));
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "Occasion type: Wedding, Trip")]
+    [InlineData(Cultures.BrazilianPortuguese, "Tipo de ocasião: Casamento, Viagem")]
+    public void Shows_the_types_as_a_chip_in_the_culture_that_removes_them(string culture, string label)
+    {
+        using var _ = Cultures.Use(culture);
+        var query = new SearchQuery { Filters = new SearchFilters { EventTypes = ["wedding", "trip"], Years = [2026] } };
+
+        var chip = SearchChips.For(query, Cultures.Text()).Single(c => c.Label == label);
+
+        Assert.Equal(new SearchQuery { Filters = new SearchFilters { Years = [2026] } }, chip.Without);
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "Count occasions", "Count by occasion type")]
+    [InlineData(Cultures.BrazilianPortuguese, "Contar ocasiões", "Contagem por tipo de ocasião")]
+    public void Labels_a_count_of_occasions_and_its_grouping(string culture, string total, string grouped)
+    {
+        using var _ = Cultures.Use(culture);
+        var events = new SearchQuery { Aggregate = new SearchAggregate { Count = SearchCount.Events } };
+
+        Assert.Equal([total], SearchChips.For(events, Cultures.Text()).Select(c => c.Label));
+        Assert.Equal([grouped], SearchChips.For(events with { Aggregate = events.Aggregate with { GroupBy = SearchGroupBy.EventType } }, Cultures.Text()).Select(c => c.Label));
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, 4, "4 occasions of type Wedding in 2026")]
+    [InlineData(Cultures.English, 1, "1 occasion of type Wedding in 2026")]
+    [InlineData(Cultures.BrazilianPortuguese, 4, "4 ocasiões do tipo Casamento em 2026")]
+    [InlineData(Cultures.BrazilianPortuguese, 1, "1 ocasião do tipo Casamento em 2026")]
+    public void Says_how_many_occasions_of_a_type_in_the_culture(string culture, int count, string expected)
+    {
+        using var _ = Cultures.Use(culture);
+        var query = new SearchQuery
+        {
+            Filters = new SearchFilters { Years = [2026], EventTypes = ["wedding"] },
+            Aggregate = new SearchAggregate { Count = SearchCount.Events },
+        };
+
+        Assert.Equal(expected, CountAnswers.Sentence(query, count, Cultures.Text()));
+    }
+
+    [Fact]
+    public void Ranks_the_types_with_links_to_their_photos_and_the_occasions_without_one_last_with_none()
+    {
+        var text = Cultures.Text();
+        var query = new SearchQuery { Aggregate = new SearchAggregate { Count = SearchCount.Events, GroupBy = SearchGroupBy.EventType } };
+        var count = new CountResult(7, [new CountGroup("wedding", 4), new CountGroup("trip", 1), new CountGroup(null, 2)], null);
+
+        var rows = CountAnswers.Rows(query, count, text);
+
+        Assert.Equal(["Wedding", "Trip", "No type"], rows.Select(r => r.Label));
+        Assert.Equal([4, 1, 2], rows.Select(r => r.Count));
+        // Occasions are counted, so a row goes to the occasions of its type; the ones without a type go nowhere.
+        Assert.Equal(["occasions?type=wedding", "occasions?type=trip", null], rows.Select(r => r.Href));
+        Assert.All(rows, r => Assert.Null(r.Items));
+        Assert.Equal("Occasions by type", CountAnswers.Heading(query, text));
+    }
+
+    [Fact]
+    public void A_row_of_a_ranking_with_another_filter_goes_to_the_photos_of_its_type_since_the_occasions_page_cannot_say_which_year()
+    {
+        var query = new SearchQuery
+        {
+            Filters = new SearchFilters { Years = [2026] },
+            Aggregate = new SearchAggregate { Count = SearchCount.Events, GroupBy = SearchGroupBy.EventType },
+        };
+
+        var rows = CountAnswers.Rows(query, new CountResult(2, [new CountGroup("wedding", 2)], null), Cultures.Text());
+
+        Assert.Null(rows[0].Href);
+        Assert.Equal(new SearchQuery { Filters = new SearchFilters { Years = [2026], EventTypes = ["wedding"] } }, rows[0].Items);
+    }
+
+    [Theory]
+    [InlineData(null, "occasions", "Count_ShowOccasions")]
+    [InlineData("wedding", "occasions?type=wedding", "Count_ShowOccasions")]
+    [InlineData("wedding,trip", null, "Count_ShowPhotos")]
+    public void Shows_the_occasions_under_a_count_of_occasions_when_the_occasions_page_can_say_what_was_counted(string? types, string? href, string key)
+    {
+        var query = new SearchQuery
+        {
+            Filters = new SearchFilters { EventTypes = types?.Split(',') },
+            Aggregate = new SearchAggregate { Count = SearchCount.Events },
+        };
+
+        var show = CountAnswers.Show(query);
+
+        Assert.Equal(key, show.Key);
+        Assert.Equal(href ?? SearchLinks.Timeline(query with { Aggregate = null }), show.Href);
+    }
+
+    [Fact]
+    public void Shows_the_photos_when_a_count_of_occasions_has_other_filters_and_the_items_for_a_count_of_assets()
+    {
+        var withYear = new SearchQuery
+        {
+            Filters = new SearchFilters { EventTypes = ["wedding"], Years = [2026] },
+            Aggregate = new SearchAggregate { Count = SearchCount.Events },
+        };
+        var assets = new SearchQuery { Filters = new SearchFilters { Years = [2026] }, Aggregate = new SearchAggregate() };
+
+        Assert.Equal(("Count_ShowPhotos", SearchLinks.Timeline(withYear with { Aggregate = null })), (CountAnswers.Show(withYear).Key, CountAnswers.Show(withYear).Href));
+        Assert.Equal("Count_ShowItems", CountAnswers.Show(assets).Key);
+        Assert.Equal("Show the occasions", Cultures.Text()["Count_ShowOccasions"]);
+        Assert.Equal("Show the photos", Cultures.Text()["Count_ShowPhotos"]);
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "2 occasions of types Wedding, Trip")]
+    [InlineData(Cultures.BrazilianPortuguese, "2 ocasiões dos tipos Casamento, Viagem")]
+    public void Says_of_types_when_several_types_are_counted(string culture, string expected)
+    {
+        using var _ = Cultures.Use(culture);
+        var query = new SearchQuery
+        {
+            Filters = new SearchFilters { EventTypes = ["wedding", "trip"] },
+            Aggregate = new SearchAggregate { Count = SearchCount.Events },
+        };
+
+        Assert.Equal(expected, CountAnswers.Sentence(query, 2, Cultures.Text()));
+    }
+
+    [Fact]
+    public void Tells_the_translator_all_the_occasion_types_before_any_occasion_is_typed_and_only_the_ones_there_are_after()
+    {
+        var today = new DateOnly(2026, 10, 22);
+        var untyped = new FilterOptions([], [], []);
+        var typed = new FilterOptions([], [], []) { EventTypes = ["wedding", "trip"] };
+
+        Assert.Equal(
+            [.. OccasionTypes.All.Order(StringComparer.Ordinal)],
+            QuestionService.Context(untyped, today, "Europe/Lisbon").Lists.Single(l => l.DslField == "filters.eventTypes").Values);
+        Assert.Equal(
+            ["trip", "wedding"],
+            QuestionService.Context(typed, today, "Europe/Lisbon").Lists.Single(l => l.DslField == "filters.eventTypes").Values);
+    }
+
+    [Fact]
+    public void Refuses_a_size_for_a_count_of_occasions_since_an_occasion_has_none()
+    {
+        Assert.False(SearchQueryJson.TryParse("""{"aggregate": {"count": "events", "sum": "bytes"}}""", out _, out var error));
+        Assert.Contains("aggregate.sum", error, StringComparison.Ordinal);
+        Assert.Contains("events", error, StringComparison.Ordinal);
+        Assert.True(SearchQueryJson.TryParse("""{"aggregate": {"count": "assets", "sum": "bytes"}}""", out _, out _));
+    }
+
+    [Fact]
+    public void Writes_a_type_that_has_no_text_as_its_key()
+    {
+        Assert.Equal("picnic", Cultures.Text().EventTypeLabel("picnic"));
+        Assert.All(OccasionTypes.All, type => Assert.False(Cultures.Text()["EventType_" + type].ResourceNotFound, type));
     }
 }

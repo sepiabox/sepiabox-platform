@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Sepiabox.Catalog.Events;
 
 namespace Sepiabox.Catalog.Search;
 
@@ -43,7 +44,10 @@ public sealed record SearchAggregate
     public const int DefaultTop = 10;
     public const int MaxTop = 100;
 
-    /// <summary><see cref="SearchCount.Assets"/>: photos and videos, one per content (D-014). Required.</summary>
+    /// <summary>
+    /// <see cref="SearchCount.Assets"/>: photos and videos, one per content (D-014); or <see cref="SearchCount.Events"/>:
+    /// occasions with at least one matching asset (S-024). Required.
+    /// </summary>
     [JsonRequired]
     public string Count { get; init; } = SearchCount.Assets;
 
@@ -68,6 +72,9 @@ public sealed record SearchAggregate
 public static class SearchCount
 {
     public const string Assets = "assets";
+
+    /// <summary>The occasions that have a matching asset (S-024, D-094): an occasion counts once however many match.</summary>
+    public const string Events = "events";
 }
 
 /// <summary>What a count can add up besides the number of assets (S-028).</summary>
@@ -90,7 +97,10 @@ public static class SearchGroupBy
     public const string Source = "source";
     public const string Person = "person";
 
-    public static readonly IReadOnlyList<string> All = [Year, Month, Kind, City, Source, Person];
+    /// <summary>The occasion's type, only with <see cref="SearchCount.Events"/> (S-024); occasions without one are a group of their own.</summary>
+    public const string EventType = "eventType";
+
+    public static readonly IReadOnlyList<string> All = [Year, Month, Kind, City, Source, Person, EventType];
 }
 
 public static class SearchSort
@@ -146,6 +156,13 @@ public sealed record SearchFilters
     public IReadOnlyList<long>? EventIds { get; init; }
 
     /// <summary>
+    /// The types of occasion (S-024, D-094) the asset is in, any of them: <c>wedding</c>, <c>birthday</c>, <c>beach</c>,
+    /// <c>christmas</c>, <c>graduation</c>, <c>snow</c>, <c>party</c> or <c>trip</c> (<see cref="OccasionTypes"/>).
+    /// Assets in no occasion, or in one without a type, never match.
+    /// </summary>
+    public IReadOnlyList<string>? EventTypes { get; init; }
+
+    /// <summary>
     /// A description in English matched against the photos' CLIP embeddings (S-016); results are then ordered by
     /// similarity, most similar first, and <see cref="SearchQuery.Sort"/> is not used.
     /// </summary>
@@ -180,7 +197,7 @@ public sealed record SearchFilters
         && Same(Kinds, other.Kinds) && DateFrom == other.DateFrom && DateTo == other.DateTo
         && Same(Years, other.Years) && Same(Months, other.Months) && OnThisDay == other.OnThisDay
         && Equals(Places, other.Places) && Same(SavedPlaces, other.SavedPlaces) && DistanceFrom == other.DistanceFrom
-        && Same(Sources, other.Sources) && SourceCount == other.SourceCount && Equals(People, other.People) && Same(EventIds, other.EventIds) && UndatedOnly == other.UndatedOnly
+        && Same(Sources, other.Sources) && SourceCount == other.SourceCount && Equals(People, other.People) && Same(EventIds, other.EventIds) && Same(EventTypes, other.EventTypes) && UndatedOnly == other.UndatedOnly
         && Visual == other.Visual && SimilarTo == other.SimilarTo;
 
     public override int GetHashCode() => HashCode.Combine(DateFrom, DateTo, OnThisDay, Places, UndatedOnly);
@@ -397,9 +414,20 @@ public static class SearchQueryJson
 
         if (query.Aggregate is { } aggregate)
         {
-            if (aggregate.Count != SearchCount.Assets)
+            if (aggregate.Count is not (SearchCount.Assets or SearchCount.Events))
             {
-                return $"aggregate.count must be '{SearchCount.Assets}'.";
+                return $"aggregate.count must be '{SearchCount.Assets}' or '{SearchCount.Events}'.";
+            }
+
+            // Occasions are told apart by type; the other groupings are of assets.
+            if (aggregate.Count == SearchCount.Events && aggregate.GroupBy is { } eventGroup && eventGroup != SearchGroupBy.EventType)
+            {
+                return $"aggregate.groupBy of a count of '{SearchCount.Events}' must be '{SearchGroupBy.EventType}'.";
+            }
+
+            if (aggregate.Count == SearchCount.Assets && aggregate.GroupBy == SearchGroupBy.EventType)
+            {
+                return $"aggregate.groupBy '{SearchGroupBy.EventType}' needs aggregate.count '{SearchCount.Events}'.";
             }
 
             if (aggregate.GroupBy is { } groupBy && !SearchGroupBy.All.Contains(groupBy))
@@ -410,6 +438,11 @@ public static class SearchQueryJson
             if (aggregate.Sum is { } sum && sum != SearchSum.Bytes)
             {
                 return $"aggregate.sum must be '{SearchSum.Bytes}'.";
+            }
+
+            if (aggregate is { Sum: not null, Count: SearchCount.Events })
+            {
+                return $"aggregate.sum cannot be added up for a count of '{SearchCount.Events}': an occasion has no size of its own.";
             }
 
             if (aggregate is { Sum: not null, GroupBy: SearchGroupBy.Person })
@@ -443,6 +476,7 @@ public static class SearchQueryJson
             ?? List("filters.sources", filters.Sources, Name)
             ?? SourceCount(filters.SourceCount)
             ?? List("filters.eventIds", filters.EventIds, id => id >= 1 ? null : "must be an occasion id, 1 or more")
+            ?? List("filters.eventTypes", filters.EventTypes, type => OccasionTypes.IsKnown(type) ? null : $"must be one of {string.Join(", ", OccasionTypes.All)}")
             ?? List("filters.people.all", filters.People?.All, Name)
             ?? (filters.People is { All: null, IncludeMe: false } ? "filters.people needs all, includeMe or both." : null)
             ?? Visual(filters.Visual)

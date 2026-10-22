@@ -12,11 +12,13 @@ using Sepiabox.Catalog.Events;
 using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
+using Sepiabox.Search.Models;
 using Sepiabox.Worker;
 using Sepiabox.Worker.Azure;
 using Sepiabox.Worker.Events;
 using Sepiabox.Worker.Faces;
 using Sepiabox.Worker.Importing;
+using Sepiabox.Worker.Occasions;
 using Sepiabox.Worker.Places;
 
 if (args is ["-h" or "--help" or "help"])
@@ -146,6 +148,15 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
     {
         var rebuilt = await new OccasionRebuild(services.GetRequiredService<CatalogDbContext>()).RunAsync(cancellationToken);
         Log.OccasionsRebuilt(logger, rebuilt.Occasions, rebuilt.Assets, rebuilt.Created, rebuilt.Updated, rebuilt.Removed);
+        return ExitCodes.Success;
+    }
+
+    if (command.Action == WorkerAction.EventsClassify)
+    {
+        var modelFolder = services.GetRequiredService<IConfiguration>()["Search:ModelFolder"];
+        using var embedder = new ClipTypeEmbedder(string.IsNullOrWhiteSpace(modelFolder) ? ModelFolder.Default() : modelFolder);
+        var classified = await new OccasionClassifier(services.GetRequiredService<CatalogDbContext>(), embedder).RunAsync(cancellationToken);
+        Log.OccasionsClassified(logger, classified.Considered, classified.ByPhotos, classified.Trips, classified.Untyped);
         return ExitCodes.Success;
     }
 

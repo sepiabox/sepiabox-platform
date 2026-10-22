@@ -105,6 +105,9 @@ public sealed record FilterOptions(
 
     /// <summary>The name of the place marked as home, if any.</summary>
     public string? HomePlace { get; init; }
+
+    /// <summary>The types the catalog's occasions have (S-024), in the order of <c>OccasionTypes.All</c>; read on every request, since a classify changes them.</summary>
+    public IReadOnlyList<string> EventTypes { get; init; } = [];
 }
 
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
@@ -150,7 +153,11 @@ public sealed record PersonDetail(
 /// how many photos and videos it holds, and up to three of their ids that have a thumbnail, for its card.
 /// </summary>
 public sealed record OccasionSummary(
-    long Id, DateTime StartsAt, DateTime EndsAt, string? PlaceLabel, int AssetCount, IReadOnlyList<string> Thumbnails);
+    long Id, DateTime StartsAt, DateTime EndsAt, string? PlaceLabel, int AssetCount, IReadOnlyList<string> Thumbnails)
+{
+    /// <summary>What the occasion was (S-024): one of <c>OccasionTypes.All</c>; null until it is classified.</summary>
+    public string? Type { get; init; }
+}
 
 /// <summary>A page of the occasions, newest first; <see cref="HasMore"/> says whether an older page exists.</summary>
 public sealed record OccasionsPage(int Page, IReadOnlyList<OccasionSummary> Items, bool HasMore);
@@ -159,8 +166,9 @@ public interface ILibraryQueries
 {
     /// <summary>
     /// The occasions, newest first, <see cref="LibraryQueries.OccasionsPageSize"/> to a page; <paramref name="page"/> starts at 1.
+    /// With <paramref name="type"/> (one of <c>OccasionTypes.All</c>), only the occasions of that type; any other value is no filter.
     /// </summary>
-    Task<OccasionsPage> GetOccasionsPageAsync(int page, CancellationToken cancellationToken = default);
+    Task<OccasionsPage> GetOccasionsPageAsync(int page, string? type = null, CancellationToken cancellationToken = default);
 
     /// <summary>Null when the catalog has no occasion with that id. Its thumbnails are not read.</summary>
     Task<OccasionSummary?> GetOccasionAsync(long id, CancellationToken cancellationToken = default);
@@ -300,13 +308,19 @@ public sealed class LibraryQueries(
         return new TimelinePage(page, items, HasNextPage(page, rows.Count));
     }
 
-    public async Task<OccasionsPage> GetOccasionsPageAsync(int page, CancellationToken cancellationToken = default)
+    public async Task<OccasionsPage> GetOccasionsPageAsync(int page, string? type = null, CancellationToken cancellationToken = default)
     {
         page = ClampPage(page);
         var skip = (page - 1) * OccasionsPageSize;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var occasions = db.Occasions.AsNoTracking();
+        if (type is not null && Sepiabox.Catalog.Events.OccasionTypes.IsKnown(type))
+        {
+            occasions = occasions.Where(o => o.Type == type);
+        }
+
         // One extra row tells whether another page follows.
-        var rows = await db.Occasions.AsNoTracking()
+        var rows = await occasions
             .OrderByDescending(o => o.StartsAt).ThenBy(o => o.Id)
             .Skip(skip).Take(OccasionsPageSize + 1)
             .ToListAsync(cancellationToken);
@@ -327,7 +341,10 @@ public sealed class LibraryQueries(
 
     private static OccasionSummary Summary(Occasion occasion, Dictionary<long, List<string>> thumbnails) =>
         new(occasion.Id, occasion.StartsAt, occasion.EndsAt, occasion.PlaceLabel, occasion.AssetCount,
-            thumbnails.GetValueOrDefault(occasion.Id) ?? []);
+            thumbnails.GetValueOrDefault(occasion.Id) ?? [])
+        {
+            Type = occasion.Type,
+        };
 
     // The first assets of each occasion, in capture order, that have a thumbnail.
     private static async Task<Dictionary<long, List<string>>> OccasionThumbnailsAsync(
@@ -601,8 +618,10 @@ public sealed class LibraryQueries(
         var meLinked = me is not null && await db.People.AsNoTracking().AnyAsync(p => p.UserEmail == me, cancellationToken);
         // The family's places change at any time too (S-014).
         var places = await db.SavedPlaces.AsNoTracking().Select(p => new { p.Name, p.IsHome }).ToListAsync(cancellationToken);
+        var typesPresent = await db.Occasions.AsNoTracking().Where(o => o.Type != null).Select(o => o.Type!).Distinct().ToListAsync(cancellationToken);
         return options with
         {
+            EventTypes = [.. Sepiabox.Catalog.Events.OccasionTypes.All.Where(typesPresent.Contains)],
             Cities = [.. options.Cities.Order(byName)],
             Sources = [.. options.Sources.Order(byName)],
             People = [.. people.Order(byName)],
