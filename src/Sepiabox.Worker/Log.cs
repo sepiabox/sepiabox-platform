@@ -34,6 +34,9 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Warning, Message = "Google no longer honours the token of connected account {AccountId}; it needs to be connected again.")]
     public static partial void DriveNeedsReconnecting(ILogger logger, long accountId);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Count} more file(s) of connected account {AccountId} were left out because their names are not a photo's or video's.")]
+    public static partial void DriveSkippedMore(ILogger logger, long accountId, int count);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Synced connected account {AccountId}: {Staged} file(s) staged in incoming; the first listing is still going on: {Listing}.")]
     public static partial void DriveAccountSynced(ILogger logger, long accountId, int staged, bool listing);
 

@@ -30,6 +30,9 @@ public sealed class OneDriveSync(
 {
     private const int MaxFolderDepth = 50;
 
+    /// <summary>How many files left out for not being a photo or video are named in the log in a run (S-036 does the same for incoming).</summary>
+    private const int MaxSkippedLogged = 20;
+
     private readonly IDataProtector _tokens = protection.CreateProtector(ConnectedSource.RefreshTokenPurpose);
     private readonly IncomingStager _stager = new(store);
     private readonly SourceMarks _marks = new(db, clock);
@@ -88,6 +91,11 @@ public sealed class OneDriveSync(
             await DeltaAsync(run, totals, cancellationToken);
             account.LastSyncAt = clock.GetUtcNow();
             await db.SaveChangesAsync(cancellationToken);
+            if (run.SkippedNotMedia > MaxSkippedLogged)
+            {
+                Log.DriveSkippedMore(logger, account.Id, run.SkippedNotMedia - MaxSkippedLogged);
+            }
+
             Log.DriveAccountSynced(logger, account.Id, run.Staged, account.SyncChangesToken is null);
         }
         catch (CloudAuthorizationException)
@@ -158,7 +166,12 @@ public sealed class OneDriveSync(
         var path = await PathAsync(run, file, cancellationToken);
         if (path is null)
         {
-            Log.DriveFileSkipped(logger, account.Id, file.Id, "its name is not a photo's or video's");
+            // The first few are named (by id, never by name), the rest are counted: a OneDrive of documents would otherwise fill the log.
+            if (run.SkippedNotMedia++ < MaxSkippedLogged)
+            {
+                Log.DriveFileSkipped(logger, account.Id, file.Id, "its name is not a photo's or video's");
+            }
+
             totals.Skipped++;
             return;
         }
@@ -285,6 +298,8 @@ public sealed class OneDriveSync(
         public Dictionary<string, OneDriveFolder?> Folders { get; } = [];
 
         public bool Resynced { get; set; }
+
+        public int SkippedNotMedia { get; set; }
 
         public int Staged { get; set; }
 

@@ -151,11 +151,20 @@ public sealed class GraphOneDriveSyncClientTests
     }
 
     [Theory]
+    [InlineData("https://abc123.files.1drv.com/y4mOpaqueCredentialSegment/photo.jpg", false)]
+    [InlineData("https://onedrive.live.com/download?psid=1&cid=abc", false)]
+    [InlineData("https://contoso-my.sharepoint.com/personal/x/_layouts/15/download.aspx?UniqueId=1", false)]
+    [InlineData("https://lh3.googleusercontent.com/d/abc", false)]
+    [InlineData("https://1drv.com/opaque", false)]
+    [InlineData("https://graph.microsoft.com/v1.0/me/drive/root/delta", true)]
+    [InlineData("https://login.microsoftonline.com/consumers/oauth2/v2.0/token", true)]
+    [InlineData("https://www.googleapis.com/drive/v3/files/a?alt=media", true)]
+    [InlineData("https://oauth2.googleapis.com/token", true)]
     [InlineData("https://files.example.com/a?tempauth=secret&x=1", false)]
     [InlineData("https://files.example.com/a?x=1&tempauth=secret", false)]
     [InlineData("https://graph.microsoft.com/v1.0/me/drive/root/delta?token=2", true)]
     [InlineData("https://files.example.com/a", true)]
-    public void The_tracing_leaves_out_a_request_whose_address_carries_a_credential(string uri, bool traced)
+    public void The_tracing_leaves_out_a_download_host_and_a_request_whose_address_carries_a_credential_and_keeps_the_api_hosts(string uri, bool traced)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
 

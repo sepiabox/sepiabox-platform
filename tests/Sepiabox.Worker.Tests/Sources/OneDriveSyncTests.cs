@@ -110,6 +110,24 @@ public sealed class OneDriveSyncTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Names_only_the_first_twenty_files_left_out_for_their_names_and_counts_the_rest()
+    {
+        var (db, store, onedrive, _) = await SetUpAsync(files: 0);
+        for (var i = 0; i < 25; i++)
+        {
+            onedrive.AddFile($"id-x{i}", $"mystery-{i}", "application/octet-stream");
+        }
+
+        var log = new ListLogger();
+        var result = await new OneDriveSync(db, store, onedrive, s_keys, TimeProvider.System, log).RunAsync(CancellationToken.None);
+
+        Assert.Equal(25, result.Skipped);
+        Assert.Equal(20, log.Messages.Count(m => m.Contains("not a photo's or video's", StringComparison.Ordinal) && !m.Contains("more file", StringComparison.Ordinal)));
+        Assert.Single(log.Messages, m => m.StartsWith("5 more file(s)", StringComparison.Ordinal));
+        Assert.DoesNotContain(log.Messages, m => m.Contains("mystery", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Rescan_forgets_the_delta_state_and_the_staged_files_of_that_onedrive_only()
     {
         var (db, store, onedrive, account) = await SetUpAsync(files: 3);
@@ -277,6 +295,19 @@ public sealed class OneDriveSyncTests(CatalogFixture fixture)
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
     }
+}
+
+internal sealed class ListLogger : Microsoft.Extensions.Logging.ILogger
+{
+    public List<string> Messages { get; } = [];
+
+    public IDisposable? BeginScope<TState>(TState state)
+        where TState : notnull => null;
+
+    public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+    public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+        Messages.Add(formatter(state, exception));
 }
 
 /// <summary>A OneDrive that never reaches Microsoft: files listed in delta pages of two, a queue of later changes, folders and bytes.</summary>
