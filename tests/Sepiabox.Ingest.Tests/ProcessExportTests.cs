@@ -112,6 +112,33 @@ public sealed class ProcessExportTests : IDisposable
     }
 
     [Fact]
+    public void Keeps_the_first_copys_own_location_when_a_later_copy_of_the_same_bytes_has_another_from_the_export()
+    {
+        var photo = TestPhotos.Porto();
+        _drive.Write("one/a.jpg", photo);
+        _drive.Write("two/a.jpg", photo);
+        Describe("two/a.jpg", """{"latitude": 38.72, "longitude": -9.14}""");
+
+        Process(s_lisbon);
+
+        // The file's own place (Porto) comes first; the export's fills in only where there is none.
+        Assert.Equal(41.18, ReadManifest().Location!.Latitude, 2);
+    }
+
+    [Fact]
+    public void Fills_the_location_from_a_later_copys_export_when_the_first_copy_had_none()
+    {
+        var photo = TestPhotos.Plain();
+        _drive.Write("one/a.png", photo);
+        _drive.Write("two/a.png", photo);
+        Describe("two/a.png", """{"latitude": 38.72, "longitude": -9.14}""");
+
+        Process(s_lisbon);
+
+        Assert.Equal(new GeoPoint(38.72, -9.14), ReadManifest().Location);
+    }
+
+    [Fact]
     public void Counts_coordinates_zero_zero_as_no_location()
     {
         _drive.Write("a.png", TestPhotos.Plain());
@@ -267,9 +294,22 @@ public sealed class ProcessExportTests : IDisposable
         Assert.Null(ProcessOptions.FindTimeZone("Mars/Olympus"));
         Assert.Null(ProcessOptions.FindTimeZone(string.Empty));
         Assert.Null(ProcessOptions.FindTimeZone("../etc/passwd"));
+        Assert.Null(ProcessOptions.FindTimeZone("Europe/Lis\0bon"));
+        Assert.Null(ProcessOptions.FindTimeZone("   "));
         Assert.False(ProcessOptions.TryParse(["/in", "--out", "/out", "--export", "test", "--time-zone", "Mars/Olympus"], out _, out var error, Registry()));
         Assert.Contains("IANA id such as Europe/Lisbon", error, StringComparison.Ordinal);
         Assert.Contains("Windows id", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("../etc/passwd")]
+    [InlineData("Europe/Lis\0bon")]
+    public void A_blank_or_malformed_time_zone_is_a_usage_error_not_a_crash(string id)
+    {
+        Assert.False(ProcessOptions.TryParse(["/in", "--out", "/out", "--export", "test", "--time-zone", id], out _, out var error, Registry()));
+        Assert.Contains("Unknown time zone", error, StringComparison.Ordinal);
     }
 
     [Fact]
