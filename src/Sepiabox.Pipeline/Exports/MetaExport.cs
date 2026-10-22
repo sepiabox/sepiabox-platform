@@ -47,8 +47,9 @@ public sealed record MetaFacts(string? Caption, DateTime? PostedAt, MetaExif? Ex
 /// </summary>
 public static partial class MetaExport
 {
-    /// <summary>The deepest nesting the walk follows; JSON parsed with the default options cannot be deeper than 64.</summary>
-    public const int MaxDepth = 64;
+    // A guard on the recursion only: JsonDocument parsed with its default options already refuses documents deeper than 64, which
+    // a reader reports as an unreadable list.
+    private const int MaxDepth = 64;
 
     [GeneratedRegex(@"^(\d{4})[:\-](\d\d)[:\-](\d\d)[T ](\d\d):(\d\d):(\d\d)(?:[.,]\d+)?\s*(Z|[+-]\d\d(?::?\d\d)?)?$", RegexOptions.IgnoreCase)]
     private static partial Regex ExifDate();
@@ -137,6 +138,7 @@ public static partial class MetaExport
 
         GeoPoint? location = null;
         DateTime? taken = null;
+        DateTime? stamped = null;
         foreach (var key in new[] { "photo_metadata", "video_metadata" })
         {
             if (!metadata.TryGetProperty(key, out var kind) || kind.ValueKind != JsonValueKind.Object
@@ -157,14 +159,15 @@ public static partial class MetaExport
                     taken = ExifTime(original.GetString());
                 }
 
-                // Facebook writes the time the picture was taken as UTC epoch seconds.
-                if (taken is null && entry.TryGetProperty("taken_timestamp", out var stamp))
+                // Facebook writes the time the picture was taken as UTC epoch seconds; a camera date in any entry is preferred.
+                if (stamped is null && entry.TryGetProperty("taken_timestamp", out var stamp))
                 {
-                    taken = Epoch(stamp);
+                    stamped = Epoch(stamp);
                 }
             }
         }
 
+        taken ??= stamped;
         return location is null && taken is null ? null : new MetaExif(location, taken);
     }
 
@@ -174,24 +177,23 @@ public static partial class MetaExport
     /// walked: a media item takes its own <c>title</c> and <c>creation_timestamp</c> when it has them, else those of the
     /// nearest enclosing object that has them.
     /// </summary>
-    public static IEnumerable<MetaMedia> Items(JsonElement root, Action? tooDeep = null) => Items(root, null, null, tooDeep);
+    public static IEnumerable<MetaMedia> Items(JsonElement root) => Items(root, null, null);
 
     /// <summary>
-    /// As <see cref="Items(JsonElement, Action?)"/>, for the media inside one post whose text and time are given: what the media
+    /// As <see cref="Items(JsonElement)"/>, for the media inside one post whose text and time are given: what the media
     /// does not say itself falls back to them.
     /// </summary>
-    public static IEnumerable<MetaMedia> Items(JsonElement root, string? postText, DateTime? postedAt, Action? tooDeep = null)
+    public static IEnumerable<MetaMedia> Items(JsonElement root, string? postText, DateTime? postedAt)
     {
         var found = new List<MetaMedia>();
-        Walk(root, null, postedAt, postText, found, 0, tooDeep);
+        Walk(root, null, postedAt, postText, found, 0);
         return found;
     }
 
-    private static void Walk(JsonElement element, string? title, DateTime? postedAt, string? inheritedText, List<MetaMedia> found, int depth, Action? tooDeep)
+    private static void Walk(JsonElement element, string? title, DateTime? postedAt, string? inheritedText, List<MetaMedia> found, int depth)
     {
         if (depth > MaxDepth)
         {
-            tooDeep?.Invoke();
             return;
         }
 
@@ -200,7 +202,7 @@ public static partial class MetaExport
             case JsonValueKind.Array:
                 foreach (var item in element.EnumerateArray())
                 {
-                    Walk(item, title, postedAt, inheritedText, found, depth + 1, tooDeep);
+                    Walk(item, title, postedAt, inheritedText, found, depth + 1);
                 }
 
                 break;
@@ -221,7 +223,7 @@ public static partial class MetaExport
                 {
                     if (property.Value.ValueKind is JsonValueKind.Array or JsonValueKind.Object)
                     {
-                        Walk(property.Value, ownTitle, ownTime, ownText, found, depth + 1, tooDeep);
+                        Walk(property.Value, ownTitle, ownTime, ownText, found, depth + 1);
                     }
                 }
 

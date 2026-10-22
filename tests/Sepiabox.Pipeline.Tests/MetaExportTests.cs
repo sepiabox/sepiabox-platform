@@ -143,15 +143,20 @@ public sealed class MetaExportTests
     }
 
     [Fact]
-    public void Stops_at_the_deepest_nesting_and_says_so_instead_of_silently()
+    public void Stops_following_the_nesting_past_its_limit_without_failing()
     {
         var json = string.Concat(Enumerable.Repeat("[", 200)) + """{"uri": "a.jpg"}""" + string.Concat(Enumerable.Repeat("]", 200));
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 300 });
-        var reported = 0;
 
-        Assert.Empty(MetaExport.Items(document.RootElement, () => reported++));
+        Assert.Empty(MetaExport.Items(document.RootElement));
+    }
 
-        Assert.True(reported > 0);
+    [Fact]
+    public void Prefers_a_camera_date_in_any_entry_to_a_timestamp_in_an_earlier_one()
+    {
+        using var document = JsonDocument.Parse("""{"photo_metadata": {"exif_data": [{"taken_timestamp": 1561975200}, {"date_time_original": "2019:06:30 18:00:00"}]}}""");
+
+        Assert.Equal(new DateTime(2019, 6, 30, 18, 0, 0), MetaExport.Exif(document.RootElement)!.TakenAt);
     }
 
     [Fact]

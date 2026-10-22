@@ -118,6 +118,15 @@ public sealed class FacebookReaderTests : IDisposable
     }
 
     [Fact]
+    public void Lists_an_album_named_facebook_once()
+    {
+        Put("media/a.jpg");
+        Json(Album, """{"name": "Facebook", "photos": [{"uri": "media/a.jpg"}]}""");
+
+        Assert.Equal(["Facebook"], Read().Find("media/a.jpg")!.Albums);
+    }
+
+    [Fact]
     public void Gives_an_album_without_a_name_only_the_facebook_album_and_ignores_a_cover_photo_and_odd_shapes()
     {
         Put("media/a.jpg");

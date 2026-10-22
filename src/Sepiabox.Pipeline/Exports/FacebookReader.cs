@@ -47,7 +47,6 @@ public sealed partial class FacebookReader : IExportReader
         var described = new Dictionary<string, MetaFacts>(StringComparer.OrdinalIgnoreCase);
         var unreadable = new List<string>();
         var missing = 0;
-        var tooDeep = 0;
         foreach (var (path, match) in lists)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -66,8 +65,8 @@ public sealed partial class FacebookReader : IExportReader
             {
                 var baseFolder = Activity().Replace(match.Groups["root"].Value, string.Empty);
                 foreach (var (media, albums) in match.Groups["list"].Value.StartsWith("album/", StringComparison.OrdinalIgnoreCase)
-                    ? AlbumMedia(document.RootElement, () => tooDeep++)
-                    : PostMedia(document.RootElement, () => tooDeep++))
+                    ? AlbumMedia(document.RootElement)
+                    : PostMedia(document.RootElement))
                 {
                     var relative = MetaExport.Resolve(root, baseFolder, media);
                     if (relative is null)
@@ -97,11 +96,6 @@ public sealed partial class FacebookReader : IExportReader
             warnings.Add($"{missing:N0} media files named in the lists are not in the download.");
         }
 
-        if (tooDeep > 0)
-        {
-            warnings.Add($"{tooDeep:N0} entries in the lists are nested deeper than {MetaExport.MaxDepth} levels and were not read.");
-        }
-
         if (unreadable.Count > 0)
         {
             warnings.Add($"{unreadable.Count:N0} lists could not be read and were ignored: {string.Join(", ", unreadable.Take(5))}.");
@@ -111,7 +105,7 @@ public sealed partial class FacebookReader : IExportReader
     }
 
     // An album file: its name, and the photos (only: the album's own description and cover are not a photo's caption).
-    private static IEnumerable<(MetaMedia Media, string[] Albums)> AlbumMedia(JsonElement root, Action tooDeep)
+    private static IEnumerable<(MetaMedia Media, string[] Albums)> AlbumMedia(JsonElement root)
     {
         if (root.ValueKind != JsonValueKind.Object)
         {
@@ -119,7 +113,7 @@ public sealed partial class FacebookReader : IExportReader
         }
 
         var name = root.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? MetaExport.RepairText(n.GetString()!).Trim() : string.Empty;
-        string[] albums = name.Length == 0 ? [FacebookAlbum] : [name, FacebookAlbum];
+        string[] albums = [.. new[] { name, FacebookAlbum }.Where(a => a.Length > 0).Distinct(StringComparer.Ordinal)];
         foreach (var key in new[] { "photos", "videos" })
         {
             if (!root.TryGetProperty(key, out var items) || items.ValueKind != JsonValueKind.Array)
@@ -127,7 +121,7 @@ public sealed partial class FacebookReader : IExportReader
                 continue;
             }
 
-            foreach (var media in MetaExport.Items(items, tooDeep))
+            foreach (var media in MetaExport.Items(items))
             {
                 yield return (media, albums);
             }
@@ -135,7 +129,7 @@ public sealed partial class FacebookReader : IExportReader
     }
 
     // The posts file: a list of posts, each with the text in data[].post, a time in timestamp and its media in attachments[].
-    private static IEnumerable<(MetaMedia Media, string[] Albums)> PostMedia(JsonElement root, Action tooDeep)
+    private static IEnumerable<(MetaMedia Media, string[] Albums)> PostMedia(JsonElement root)
     {
         var posts = root.ValueKind switch
         {
@@ -152,7 +146,7 @@ public sealed partial class FacebookReader : IExportReader
                 continue;
             }
 
-            foreach (var media in MetaExport.Items(attachments, text, postedAt, tooDeep))
+            foreach (var media in MetaExport.Items(attachments, text, postedAt))
             {
                 yield return (media, [FacebookAlbum]);
             }
