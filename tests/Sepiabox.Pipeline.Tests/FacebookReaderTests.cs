@@ -88,6 +88,18 @@ public sealed class FacebookReaderTests : IDisposable
     }
 
     [Fact]
+    public void Counts_a_uri_with_a_nul_as_missing_and_reads_the_good_entry_next_to_it()
+    {
+        Put("media/a.jpg");
+        Json(Album, "{\"name\": \"Paris\", \"photos\": [{\"uri\": \"media/b\\u0000.jpg\"}, {\"uri\": \"media/a.jpg\"}]}");
+
+        var scan = Read();
+
+        Assert.Equal(1, scan.Count);
+        Assert.Contains(scan.Warnings, w => w.Contains("1 media files named in the lists are not in the download", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Leaves_out_the_media_no_list_names_and_counts_them()
     {
         Put("media/a.jpg");

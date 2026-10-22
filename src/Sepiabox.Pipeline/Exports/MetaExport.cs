@@ -248,17 +248,31 @@ public static partial class MetaExport
         ArgumentNullException.ThrowIfNull(media);
         foreach (var uri in new[] { media.RawUri, media.Uri }.Distinct(StringComparer.Ordinal))
         {
-            var relative = (baseFolder + uri.Replace('\\', '/').TrimStart('/')).Replace("//", "/", StringComparison.Ordinal);
-            var full = Path.GetFullPath(Path.Combine(root, relative));
-            var inside = Path.GetRelativePath(root, full);
-            if (inside == ".." || inside.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(inside))
+            // A NUL is never in a real path and makes the framework throw; the entry is one more that is not in the download.
+            if (uri.Contains('\0', StringComparison.Ordinal))
             {
                 continue;
             }
 
-            if (File.Exists(full) && IsMedia(full))
+            try
             {
-                return inside.Replace('\\', '/');
+                var relative = (baseFolder + uri.Replace('\\', '/').TrimStart('/')).Replace("//", "/", StringComparison.Ordinal);
+                var full = Path.GetFullPath(Path.Combine(root, relative));
+                var inside = Path.GetRelativePath(root, full);
+                // Nothing outside the download is ever read, whatever the list says: ".." parts, an absolute path on another drive.
+                if (inside == ".." || inside.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(inside))
+                {
+                    continue;
+                }
+
+                if (File.Exists(full) && IsMedia(full))
+                {
+                    return inside.Replace('\\', '/');
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                // A path the file system cannot take (illegal characters, too long) is not a file of the download.
             }
         }
 
