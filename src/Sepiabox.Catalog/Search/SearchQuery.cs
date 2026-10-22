@@ -144,6 +144,12 @@ public sealed record SearchFilters
     /// <summary>Source names, such as the drive's name given to <c>process</c>.</summary>
     public IReadOnlyList<string>? Sources { get; init; }
 
+    /// <summary>
+    /// Album names (S-052, D-114), matched ignoring case: assets in any of the albums an export put them in. A name no
+    /// album has matches nothing. The filter bar and the photo's page produce it; questions never do.
+    /// </summary>
+    public IReadOnlyList<string>? Albums { get; init; }
+
     /// <summary>How many different sources the asset was found in (S-028, D-093): the same name twice counts once.</summary>
     public SourceCountFilter? SourceCount { get; init; }
 
@@ -221,7 +227,7 @@ public sealed record SearchFilters
         && Same(Kinds, other.Kinds) && DateFrom == other.DateFrom && DateTo == other.DateTo
         && Same(Years, other.Years) && Same(Months, other.Months) && OnThisDay == other.OnThisDay
         && Equals(Places, other.Places) && Same(SavedPlaces, other.SavedPlaces) && DistanceFrom == other.DistanceFrom
-        && Same(Sources, other.Sources) && SourceCount == other.SourceCount && Equals(People, other.People) && Same(EventIds, other.EventIds) && Same(EventTypes, other.EventTypes) && UndatedOnly == other.UndatedOnly && Quality == other.Quality && IncludeHidden == other.IncludeHidden
+        && Same(Sources, other.Sources) && Same(Albums, other.Albums) && SourceCount == other.SourceCount && Equals(People, other.People) && Same(EventIds, other.EventIds) && Same(EventTypes, other.EventTypes) && UndatedOnly == other.UndatedOnly && Quality == other.Quality && IncludeHidden == other.IncludeHidden
         && Visual == other.Visual && SimilarTo == other.SimilarTo && SimilarToRegion == other.SimilarToRegion;
 
     public override int GetHashCode() => HashCode.Combine(DateFrom, DateTo, OnThisDay, Places, UndatedOnly);
@@ -539,6 +545,7 @@ public static class SearchQueryJson
             ?? List("filters.savedPlaces", filters.SavedPlaces, Name)
             ?? Distance(filters.DistanceFrom)
             ?? List("filters.sources", filters.Sources, Name)
+            ?? List("filters.albums", filters.Albums, Name)
             ?? SourceCount(filters.SourceCount)
             ?? List("filters.eventIds", filters.EventIds, id => id >= 1 ? null : "must be an occasion id, 1 or more")
             ?? List("filters.eventTypes", filters.EventTypes, type => OccasionTypes.IsKnown(type) ? null : $"must be one of {string.Join(", ", OccasionTypes.All)}")

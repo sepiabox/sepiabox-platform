@@ -79,6 +79,11 @@ public static class SearchChips
             Add(text["Chip_Sources", string.Join(", ", sources)], f with { Sources = null });
         }
 
+        if (f.Albums is { } albums)
+        {
+            Add(text["Chip_Albums", string.Join(", ", albums)], f with { Albums = null });
+        }
+
         if (f.SourceCount is { } sourceCount)
         {
             Add(SourceCount(text, sourceCount), f with { SourceCount = null });

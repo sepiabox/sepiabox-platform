@@ -10,7 +10,7 @@ using static Sepiabox.Tests.Shared.TestManifests;
 
 namespace Sepiabox.Worker.Tests;
 
-/// <summary>A manifest from <c>process --export</c> imports: its caption and albums wait for S-052, its date source is a date source (S-045).</summary>
+/// <summary>A manifest from <c>process --export</c> imports: its date source is a date source (S-045); its caption and albums are in AlbumImportTests (S-052).</summary>
 [Collection(CatalogGroup.Name)]
 [Trait("Category", "Integration")]
 public sealed class ExportFieldsImportTests(CatalogFixture fixture)

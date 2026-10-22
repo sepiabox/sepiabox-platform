@@ -14,8 +14,8 @@ using Sepiabox.Catalog;
 namespace Sepiabox.Catalog.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
-    [Migration("20261022135902_DriveSync")]
-    partial class DriveSync
+    [Migration("20261022162318_AssetAlbums")]
+    partial class AssetAlbums
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -44,9 +44,18 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("text")
                         .HasColumnName("camera_model");
 
+                    b.Property<string>("Caption")
+                        .HasColumnType("text")
+                        .HasColumnName("caption");
+
                     b.Property<DateTime?>("CapturedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("captured_at");
+
+                    b.Property<string>("CapturedAtSource")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("captured_at_source");
 
                     b.Property<string>("ContentType")
                         .IsRequired()
@@ -150,6 +159,25 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("assets", (string)null);
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.AssetAlbum", b =>
+                {
+                    b.Property<string>("AssetId")
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("asset_id");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.HasKey("AssetId", "Name")
+                        .HasName("pk_asset_albums");
+
+                    b.HasIndex("Name")
+                        .HasDatabaseName("ix_asset_albums_name");
+
+                    b.ToTable("asset_albums", (string)null);
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.AssetEmbedding", b =>
                 {
                     b.Property<string>("AssetId")
@@ -205,10 +233,6 @@ namespace Sepiabox.Catalog.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("path");
-
-                    b.Property<DateTimeOffset?>("RemovedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("removed_at");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -274,19 +298,6 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("status");
 
-                    b.Property<string>("SyncChangesToken")
-                        .HasColumnType("text")
-                        .HasColumnName("sync_changes_token");
-
-                    b.Property<string>("SyncListToken")
-                        .HasColumnType("text")
-                        .HasColumnName("sync_list_token");
-
-                    b.Property<bool>("SyncListing")
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("sync_listing");
-
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -344,44 +355,6 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("derivatives", (string)null);
                 });
 
-            modelBuilder.Entity("Sepiabox.Catalog.DriveFile", b =>
-                {
-                    b.Property<long>("ConnectedSourceId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("connected_source_id");
-
-                    b.Property<string>("FileId")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("file_id");
-
-                    b.Property<string>("Checksum")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("checksum");
-
-                    b.Property<DateTimeOffset>("ModifiedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("modified_at");
-
-                    b.Property<string>("Path")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("path");
-
-                    b.Property<long?>("SizeBytes")
-                        .HasColumnType("bigint")
-                        .HasColumnName("size_bytes");
-
-                    b.HasKey("ConnectedSourceId", "FileId")
-                        .HasName("pk_drive_files");
-
-                    b.HasIndex("ConnectedSourceId", "Path")
-                        .HasDatabaseName("ix_drive_files_path");
-
-                    b.ToTable("drive_files", (string)null);
-                });
-
             modelBuilder.Entity("Sepiabox.Catalog.ErasedFace", b =>
                 {
                     b.Property<long>("Id")
@@ -413,6 +386,75 @@ namespace Sepiabox.Catalog.Migrations
                         .HasDatabaseName("ix_erased_faces_asset_id");
 
                     b.ToTable("erased_faces", (string)null);
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.ExportRequest", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("Assets")
+                        .HasColumnType("integer")
+                        .HasColumnName("assets");
+
+                    b.Property<string>("BlobName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("blob_name");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("error");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<bool>("IncludeFaceData")
+                        .HasColumnType("boolean")
+                        .HasColumnName("include_face_data");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<string>("RequestedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("requested_by");
+
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_export_requests");
+
+                    b.HasIndex("Status")
+                        .IsUnique()
+                        .HasDatabaseName("ux_export_requests_active")
+                        .HasFilter("status IN ('requested', 'running')");
+
+                    b.ToTable("export_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_export_requests_status", "status IN ('requested', 'running', 'done', 'failed')");
+                        });
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.Face", b =>
@@ -802,6 +844,16 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("settings", (string)null);
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.AssetAlbum", b =>
+                {
+                    b.HasOne("Sepiabox.Catalog.Asset", null)
+                        .WithMany("Albums")
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_asset_albums_assets_asset_id");
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.AssetEmbedding", b =>
                 {
                     b.HasOne("Sepiabox.Catalog.Asset", null)
@@ -830,16 +882,6 @@ namespace Sepiabox.Catalog.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_derivatives_assets_asset_id");
-                });
-
-            modelBuilder.Entity("Sepiabox.Catalog.DriveFile", b =>
-                {
-                    b.HasOne("Sepiabox.Catalog.ConnectedSource", null)
-                        .WithMany()
-                        .HasForeignKey("ConnectedSourceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_drive_files_connected_sources_connected_source_id");
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.ErasedFace", b =>
@@ -889,6 +931,8 @@ namespace Sepiabox.Catalog.Migrations
 
             modelBuilder.Entity("Sepiabox.Catalog.Asset", b =>
                 {
+                    b.Navigation("Albums");
+
                     b.Navigation("Derivatives");
 
                     b.Navigation("Sources");
