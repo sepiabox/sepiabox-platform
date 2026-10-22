@@ -143,8 +143,9 @@ public static class QuestionPrompt
           month" is the calendar month before today's; "last summer" (and other seasons) is the season whose last
           day is the latest one before today; a season still going on is never "last". Seasons are the meteorological ones
           of the hemisphere of the context's time zone (for Europe: spring March-May, summer June-August, autumn
-          September-November, winter December-February, which spans two years; in the southern hemisphere summer is
-          December-February, autumn March-May, winter June-August, spring September-November). So with today in June,
+          September-November, winter December-February, which spans two years and ends on the last day of February: 29 in a leap year; in the
+          southern hemisphere summer is December-February, autumn March-May, winter June-August, spring September-November;
+          for a time zone on the equator, such as Bogotá, Nairobi or Singapore, use the northern seasons). So with today in June,
           "last winter" in Europe is the one that ended this February, starting in the previous December (the whole of
           it, not only the months of the current year), and "last summer" is the one that ended in August of the year
           before; for a southern-hemisphere time zone, with today in June, "last summer" is the one that ended this
