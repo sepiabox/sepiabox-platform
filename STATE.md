@@ -30,4 +30,4 @@ The owner paused all development until the weekly session limits reset. Main is 
 - Next D-number: D-126.
 
 ## Waiting on the owner
-- Nothing blocking. The owner's ingest was at 176.5 of 706 GB. When it ends: sepiabox-import-all, events rebuild, events classify, report.
+- Nothing blocking. The owner's ingest was at 314 of 706 GB (44%) at about 21:30Z on 2026-10-22. When it ends: sepiabox-import-all, events rebuild, events classify, report.
