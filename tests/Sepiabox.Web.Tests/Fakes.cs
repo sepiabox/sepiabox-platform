@@ -186,6 +186,9 @@ internal sealed class FailingLinks(Exception? failure = null) : ISasUrlFactory
 
     public Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default) =>
         Task.FromException<Uri>(_failure);
+
+    public Task<Uri> ForExportAsync(string blobName, string fileName, CancellationToken cancellationToken = default) =>
+        Task.FromException<Uri>(_failure);
 }
 
 internal static class Ids

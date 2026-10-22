@@ -153,6 +153,19 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
     }
 
     [Fact]
+    public void Export_job_writes_the_requested_exports_every_fifteen_minutes_when_published()
+    {
+        var job = published.Named(Job, "sepiabox-export");
+        var trigger = job.Block("scheduleTriggerConfig");
+
+        Assert.Equal("'Schedule'", job.Property("triggerType"));
+        Assert.Contains("cronExpression: '*/15 * * * *'", trigger, StringComparison.Ordinal);
+        Assert.Contains("parallelism: 1", trigger, StringComparison.Ordinal);
+        Assert.Equal("0", job.Property("replicaRetryLimit"));
+        Assert.Equal(["export"], Arguments("export"));
+    }
+
+    [Fact]
     public void Admin_job_is_started_by_hand_and_never_retried_with_its_own_identity_when_published()
     {
         var job = published.Named(Job, "sepiabox-admin");
@@ -172,6 +185,7 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
     [InlineData("import")]
     [InlineData("import-all")]
     [InlineData("faces")]
+    [InlineData("export")]
     [InlineData("admin")]
     public void Import_jobs_never_migrate_and_connect_as_the_application_role_when_published(string resource)
     {
@@ -202,6 +216,7 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
     [InlineData("import-all", "import-identity")]
     [InlineData("geonames", "migrate-identity")]
     [InlineData("faces", "faces-identity")]
+    [InlineData("export", "export-identity")]
     [InlineData("admin", "admin-identity")]
     public void Migrate_and_import_jobs_run_as_separate_identities_when_published(string job, string identity)
     {
