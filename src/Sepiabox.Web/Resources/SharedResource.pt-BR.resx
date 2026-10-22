@@ -583,7 +583,7 @@
     <value>Cancelar</value>
   </data>
   <data name="Merge_Goes" xml:space="preserve">
-    <value>Deixa de existir</value>
+    <value>Será apagada</value>
   </data>
   <data name="Merge_Stays" xml:space="preserve">
     <value>Fica</value>
@@ -1463,9 +1463,12 @@
     <value>Depois de juntar: {2} ({3} rostos) fica com os rostos de {0} ({1} rostos), e {0} deixa de existir.</value>
   </data>
   <data name="Merge_LeavingKnown" xml:space="preserve">
-    <value>{0} tem nome (ou é você) e será apagada. Continue só se for isso que você quer; senão, use Trocar.</value>
+    <value>tem nome (ou é você) e será apagada de vez. Continue só se for isso que você quer; senão, use Trocar.</value>
   </data>
   <data name="Merge_Swap" xml:space="preserve">
     <value>Trocar: manter a outra pessoa</value>
+  </data>
+  <data name="Merge_ConfirmInto" xml:space="preserve">
+    <value>Juntar em {0}</value>
   </data>
 </root>
