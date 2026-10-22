@@ -100,6 +100,83 @@ public sealed class FacebookReaderTests : IDisposable
     }
 
     [Fact]
+    public void Takes_the_medias_own_description_over_the_posts_text_and_the_posts_text_when_it_has_none()
+    {
+        Put("media/own.jpg");
+        Put("media/plain.jpg");
+        Json(Posts, """[{"data": [{"post": "post text"}], "attachments": [{"data": [{"media": {"uri": "media/own.jpg", "description": "own"}}, {"media": {"uri": "media/plain.jpg"}}]}]}]""");
+
+        var scan = Read();
+
+        Assert.Equal("own", scan.Find("media/own.jpg")!.Caption);
+        Assert.Equal("post text", scan.Find("media/plain.jpg")!.Caption);
+    }
+
+    [Fact]
+    public void Takes_the_first_non_empty_post_text_trimmed_and_repaired()
+    {
+        Put("media/a.jpg");
+        Put("media/b.jpg");
+        Put("media/c.jpg");
+        Json(
+            Posts,
+            """
+            [{"data": [{"post": ""}, {"post": "real"}], "attachments": [{"data": [{"media": {"uri": "media/a.jpg"}}]}]},
+             {"data": [{"post": "   spaced   "}], "attachments": [{"data": [{"media": {"uri": "media/b.jpg"}}]}]},
+             {"data": [{"post": "Ol\u00c3\u00a1"}], "attachments": [{"data": [{"media": {"uri": "media/c.jpg"}}]}]}]
+            """);
+
+        var scan = Read();
+
+        Assert.Equal("real", scan.Find("media/a.jpg")!.Caption);
+        Assert.Equal("spaced", scan.Find("media/b.jpg")!.Caption);
+        Assert.Equal("Olá", scan.Find("media/c.jpg")!.Caption);
+    }
+
+    [Fact]
+    public void Reads_a_posts_file_whose_root_is_an_object_with_the_posts_under_a_key()
+    {
+        Put("media/a.jpg");
+        Json(Posts, """{"status_updates": [{"timestamp": 1561975200, "data": [{"post": "wrapped"}], "attachments": [{"data": [{"media": {"uri": "media/a.jpg"}}]}]}]}""");
+
+        var metadata = Read().Find("media/a.jpg")!;
+
+        Assert.Equal("wrapped", metadata.Caption);
+        Assert.Equal(new DateTime(2019, 7, 1, 10, 0, 0, DateTimeKind.Utc), metadata.CapturedAt);
+    }
+
+    [Fact]
+    public void Reads_the_videos_of_an_album_and_an_albums_name_repaired_and_trimmed()
+    {
+        Put("media/v.mp4");
+        Put("media/p.jpg");
+        Json(Album, """{"name": "  Fam\u00c3\u00adlia  ", "photos": [{"uri": "media/p.jpg"}], "videos": [{"uri": "media/v.mp4", "creation_timestamp": 1561975200}]}""");
+
+        var scan = Read();
+
+        Assert.Equal(["Facebook", "Fam\u00edlia"], scan.Find("media/v.mp4")!.Albums.Order(StringComparer.Ordinal));
+        Assert.Equal(["Facebook", "Fam\u00edlia"], scan.Find("media/p.jpg")!.Albums.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Lets_the_first_list_win_every_field_of_a_file_that_is_in_an_album_and_in_a_post()
+    {
+        Put("media/a.jpg");
+        Json(
+            Album,
+            """{"name": "Paris", "photos": [{"uri": "media/a.jpg", "description": "from the album", "media_metadata": {"photo_metadata": {"exif_data": [{"taken_timestamp": 1561975200, "latitude": 48.8, "longitude": 2.3}]}}}]}""");
+        Json(
+            Posts,
+            """[{"timestamp": 1500000000, "data": [{"post": "from the post"}], "attachments": [{"data": [{"media": {"uri": "media/a.jpg", "description": "own in post", "media_metadata": {"photo_metadata": {"exif_data": [{"taken_timestamp": 1500000000, "latitude": 41.1, "longitude": -8.6}]}}}}]}]}]""");
+
+        var metadata = Read().Find("media/a.jpg")!;
+
+        Assert.Equal("from the album", metadata.Caption);
+        Assert.Equal(new DateTime(2019, 7, 1, 10, 0, 0, DateTimeKind.Utc), metadata.CapturedAt);
+        Assert.Equal(new GeoPoint(48.8, 2.3), metadata.Location);
+    }
+
+    [Fact]
     public void Leaves_out_the_media_no_list_names_and_counts_them()
     {
         Put("media/a.jpg");

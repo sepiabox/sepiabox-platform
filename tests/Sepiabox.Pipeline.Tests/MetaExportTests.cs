@@ -251,4 +251,15 @@ public sealed class MetaExportTests
 
         Assert.Equal(found, MetaExport.Items(document.RootElement).Any());
     }
+
+    [Fact]
+    public void Takes_a_timestamp_from_a_later_entry_when_the_first_has_only_a_place()
+    {
+        using var document = JsonDocument.Parse("""{"photo_metadata": {"exif_data": [{"latitude": 38.7, "longitude": -9.1}, {"taken_timestamp": 1561975200}]}}""");
+
+        var exif = MetaExport.Exif(document.RootElement)!;
+
+        Assert.Equal(new GeoPoint(38.7, -9.1), exif.Location);
+        Assert.Equal(new DateTime(2019, 7, 1, 10, 0, 0, DateTimeKind.Utc), exif.TakenAt);
+    }
 }
