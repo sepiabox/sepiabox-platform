@@ -110,10 +110,24 @@ public class VideoProcessorTests
     [Fact]
     public void Decodes_only_the_first_frame_of_the_first_sound_stream_to_see_whether_the_sound_decodes()
     {
-        var arguments = FfmpegArguments.FirstSoundFrame("clip.mod");
+        var arguments = FfmpegArguments.SoundFrame("clip.mod");
 
         AssertSequence(arguments, "-i", "clip.mod", "-map", "0:a:0", "-frames:a", "1", "-f", "framecrc", "-");
         Assert.Equal(["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", "clip.mod"], FfmpegArguments.SoundStreams("clip.mod"));
+    }
+
+    [Fact]
+    public void Maps_the_sound_stream_it_is_asked_for_and_checks_that_one()
+    {
+        var proxy = FfmpegArguments.Proxy("clip.mpg", 640, 360, VideoEncoder.Software, 0, "out.mp4", audioStream: 2);
+        var first = FfmpegArguments.Proxy("clip.mpg", 640, 360, VideoEncoder.Software, 0, "out.mp4");
+        var none = FfmpegArguments.Proxy("clip.mpg", 640, 360, VideoEncoder.Software, 0, "out.mp4", withAudio: false, audioStream: 2);
+
+        AssertSequence(proxy, "-map", "0:v:0", "-map", "0:a:2?");
+        AssertSequence(first, "-map", "0:v:0", "-map", "0:a:0?");
+        Assert.DoesNotContain("0:a:2?", none);
+        Assert.Contains("-an", none);
+        AssertSequence(FfmpegArguments.SoundFrame("clip.mpg", 1), "-i", "clip.mpg", "-map", "0:a:1", "-frames:a", "1");
     }
 
     [Theory]

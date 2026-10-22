@@ -64,6 +64,20 @@ public sealed record Manifest
 
     public GeoPoint? Location { get; init; }
 
+    /// <summary>
+    /// What the owner or the export's maker wrote about the photo (S-045, D-104), 1 to 2,000 characters; absent when
+    /// there is none. A merge keeps the longer one, then the ordinally greater.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Caption { get; init; }
+
+    /// <summary>
+    /// The albums the export puts the photo in (S-045, D-104): distinct, non-empty, in ordinal order; absent when there are
+    /// none. A merge takes the union.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? Albums { get; init; }
+
     public CameraInfo? Camera { get; init; }
 
     public int? Width { get; init; }
