@@ -143,7 +143,7 @@ public sealed class CloudFileProcessor(
         var sourcePath = Path.Combine(work, "original" + Path.GetExtension(incoming.Path));
         File.Move(downloaded, sourcePath);
         var sha256 = MediaFile.Sha256Hex(sourcePath);
-        var source = new ManifestSource(incoming.SourceType, incoming.SourceName, incoming.Path, incoming.ModifiedAt ?? info.LastModified, incoming.Url);
+        var source = new ManifestSource(incoming.SourceType, incoming.SourceName, incoming.Path, incoming.ModifiedAt ?? info.LastModified, SourceUrl(incoming.Url));
         var reference = incoming.Mode == IncomingMode.Reference;
         var manifestBlob = BlobLayout.ManifestBlobName(sha256);
 
@@ -214,6 +214,14 @@ public sealed class CloudFileProcessor(
             BlobLayout.OriginalsContainer, sha256, localPath, MediaTypes.ContentType(cloudPath),
             originalsCold ? BlobStorageClass.Cold : BlobStorageClass.Default, cancellationToken);
     }
+
+    // The manifest takes an absolute https address without credentials within its length limit (the schema refuses anything else, which
+    // would make the file a permanent problem): a connector's other address is left out, and the file is catalogued without it.
+    internal static string? SourceUrl(string? url) =>
+        url is { Length: > 0 and <= ManifestSource.MaxUrlLength }
+        && Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && uri.UserInfo.Length == 0
+            ? url
+            : null;
 
     private string TooLarge(long bytes) =>
         $"The file is {bytes / (1024 * 1024)} MiB, more than the {maxFileBytes / (1024 * 1024)} MiB the cloud worker takes; it stays in incoming.";

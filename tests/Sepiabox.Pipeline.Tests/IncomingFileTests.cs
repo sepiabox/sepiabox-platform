@@ -50,4 +50,35 @@ public sealed class IncomingFileTests
         Assert.False(IncomingFile.TryRead(metadata, out _, out var problem));
         Assert.Contains(expected, problem, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("sourcetype")]
+    [InlineData("sourcename")]
+    [InlineData("path")]
+    [InlineData("mode")]
+    public void Refuses_a_required_field_whose_value_is_empty(string key)
+    {
+        var metadata = new Dictionary<string, string> { ["sourcetype"] = "gdrive", ["sourcename"] = "Ana", ["path"] = "a.jpg", ["mode"] = "custody", [key] = "" };
+
+        Assert.False(IncomingFile.TryRead(metadata, out _, out var problem));
+        Assert.Equal($"the incoming blob has no '{key}' metadata.", problem);
+    }
+
+    [Theory]
+    [InlineData(IncomingMode.Custody, "custody")]
+    [InlineData(IncomingMode.Reference, "reference")]
+    public void Writes_the_mode_as_the_text_a_connector_and_the_worker_agree_on(IncomingMode mode, string text)
+    {
+        Assert.Equal(text, new IncomingFile("gdrive", "Ana", "a.jpg", mode).ToMetadata()["mode"]);
+    }
+
+    [Fact]
+    public void Writes_the_modification_time_in_utc_whatever_its_offset()
+    {
+        var file = new IncomingFile("gdrive", "Ana", "a.jpg", IncomingMode.Custody, new DateTimeOffset(2019, 7, 14, 10, 30, 0, TimeSpan.FromHours(5)));
+
+        Assert.Equal("2019-07-14T05:30:00.0000000Z", file.ToMetadata()["modifiedat"]);
+        Assert.True(IncomingFile.TryRead(file.ToMetadata(), out var read, out _));
+        Assert.Equal(file.ModifiedAt, read!.ModifiedAt);
+    }
 }

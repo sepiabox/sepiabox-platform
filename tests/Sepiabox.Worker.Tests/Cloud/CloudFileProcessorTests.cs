@@ -226,6 +226,162 @@ public sealed class CloudFileProcessorTests
     }
 
     [Fact]
+    public async Task Keeps_the_incoming_blob_when_the_manifest_cannot_be_written()
+    {
+        var bytes = TestPhotos.Porto("plum");
+        await Put("m1", bytes, File("a.jpg"));
+        var id = MediaFile.Sha256Hex(bytes);
+        // A manifest in storage that cannot be read: the merge refuses, so nothing may be deleted.
+        await _store.WriteAsync("manifests", BlobLayout.ManifestBlobName(id), BinaryData.FromString("{ not json"), "application/json", BlobWriteCondition.Always);
+
+        var result = await Processor().ProcessAsync("m1", CancellationToken.None);
+
+        Assert.Equal(CloudFileStatus.Problem, result.Status);
+        Assert.Contains("cannot be read", result.Reason, StringComparison.Ordinal);
+        Assert.NotNull(await _store.ReadAsync("incoming", "m1"));
+    }
+
+    [Fact]
+    public async Task Keeps_the_incoming_blob_when_the_store_fails_while_the_manifest_is_written()
+    {
+        await Put("m2", TestPhotos.Porto("lime"), File("a.jpg"));
+        var failing = new OrderStore(_store) { FailManifestWrite = true };
+
+        await Assert.ThrowsAsync<IOException>(() => Processor(store: failing).ProcessAsync("m2", CancellationToken.None));
+
+        Assert.NotNull(await _store.ReadAsync("incoming", "m2"));
+        Assert.DoesNotContain("delete:incoming", failing.Calls);
+    }
+
+    [Fact]
+    public async Task Writes_the_derivatives_then_the_original_then_the_manifest_and_deletes_the_incoming_blob_last()
+    {
+        await Put("o1", TestPhotos.Porto("tan"), File("a.jpg"));
+        var recording = new OrderStore(_store);
+
+        var result = await Processor(store: recording).ProcessAsync("o1", CancellationToken.None);
+
+        Assert.Equal(CloudFileStatus.Processed, result.Status);
+        var calls = recording.Calls;
+        var lastDerivative = calls.FindLastIndex(c => c == "write:derivatives");
+        var original = calls.IndexOf("commit:originals");
+        var manifest = calls.IndexOf("write:manifests");
+        var delete = calls.IndexOf("delete:incoming");
+        Assert.True(lastDerivative >= 0 && lastDerivative < original, string.Join(", ", calls));
+        Assert.True(original < manifest, string.Join(", ", calls));
+        Assert.True(manifest < delete, string.Join(", ", calls));
+        // Nothing follows the delete, and it happens once.
+        Assert.Equal(calls.Count - 1, delete);
+        Assert.Single(calls, c => c == "delete:incoming");
+    }
+
+    [Fact]
+    public async Task Writes_the_original_again_when_the_one_in_originals_has_another_size()
+    {
+        var bytes = TestPhotos.Porto("orange");
+        await Put("k1", bytes, File("a.jpg"));
+        var id = MediaFile.Sha256Hex(bytes);
+        // An earlier upload that was cut short.
+        await _store.WriteAsync("originals", id, BinaryData.FromBytes(bytes[..10]), "image/jpeg", BlobWriteCondition.Always);
+
+        await Processor().ProcessAsync("k1", CancellationToken.None);
+
+        Assert.Equal(bytes, (await _store.ReadAsync("originals", id))!.Content.ToArray());
+    }
+
+    [Theory]
+    [InlineData(true, BlobStorageClass.Cold)]
+    [InlineData(false, BlobStorageClass.Default)]
+    public async Task Stores_the_original_in_the_cold_tier_only_when_asked_and_stores_none_in_reference_mode(bool cold, BlobStorageClass expected)
+    {
+        var bytes = TestPhotos.Porto(cold ? "ivory" : "olive");
+        await Put("c1", bytes, File("a.jpg"));
+        await Put("c2", TestPhotos.Porto("pink"), File("b.jpg", IncomingMode.Reference));
+
+        await Processor(originalsCold: cold).ProcessAsync("c1", CancellationToken.None);
+        await Processor(originalsCold: cold).ProcessAsync("c2", CancellationToken.None);
+
+        Assert.Equal(expected, _store.StorageClassOf("originals", MediaFile.Sha256Hex(bytes)));
+        Assert.Single(await _store.ListAsync("originals").ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("https://drive.example.com/file/1", "https://drive.example.com/file/1")]
+    [InlineData("http://drive.example.com/file/1", null)]
+    [InlineData("javascript:alert(1)", null)]
+    [InlineData("https://user:secret@drive.example.com/file/1", null)]
+    [InlineData("/relative/path", null)]
+    [InlineData("", null)]
+    public async Task Keeps_a_connectors_url_only_when_it_is_an_absolute_https_address_without_credentials(string url, string? kept)
+    {
+        var bytes = TestPhotos.Porto("azure");
+        await Put("u1", bytes, File("a.jpg", url: url));
+
+        var result = await Processor().ProcessAsync("u1", CancellationToken.None);
+
+        Assert.Equal(CloudFileStatus.Processed, result.Status);
+        Assert.Equal(kept, Assert.Single((await ManifestAsync(result.AssetId!)).Sources).Url);
+    }
+
+    [Fact]
+    public async Task Leaves_out_a_url_longer_than_the_manifest_takes_and_still_catalogues_the_file()
+    {
+        await Put("u2", TestPhotos.Porto("aquamarine"), File("a.jpg", url: "https://drive.example.com/" + new string('a', ManifestSource.MaxUrlLength)));
+
+        var result = await Processor().ProcessAsync("u2", CancellationToken.None);
+
+        Assert.Equal(CloudFileStatus.Processed, result.Status);
+        Assert.Null(Assert.Single((await ManifestAsync(result.AssetId!)).Sources).Url);
+    }
+
+    [Fact]
+    public async Task Makes_the_derivatives_when_the_manifest_in_storage_has_none()
+    {
+        var bytes = TestPhotos.Porto("coral");
+        await Put("i1", bytes, File("a.jpg"));
+        var id = MediaFile.Sha256Hex(bytes);
+        var bare = new Manifest { Id = id, Kind = MediaKind.Photo, SizeBytes = bytes.Length, ContentType = "image/jpeg", Sources = [new ManifestSource("local", "HD", "a.jpg", s_modified)] };
+        await new ManifestStore(new ManifestValidator(), _store).WriteMergedAsync("manifests", bare, CancellationToken.None);
+
+        var result = await Processor().ProcessAsync("i1", CancellationToken.None);
+
+        Assert.Equal(CloudFileStatus.Processed, result.Status);
+        Assert.Equal(2, (await ManifestAsync(id)).Derivatives.Count);
+        Assert.NotEmpty(await _store.ListAsync("derivatives", id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Checks_the_size_again_after_the_download()
+    {
+        var bytes = TestPhotos.Porto("gray");
+        await Put("s1", bytes, File("a.jpg"));
+        // The size read before the download says it is small; the download finds the blob larger (it was rewritten meanwhile).
+        var lying = new OrderStore(_store) { SizeSeen = 1 };
+
+        var result = await Processor(store: lying, maxFileBytes: bytes.Length - 1).ProcessAsync("s1", CancellationToken.None);
+
+        Assert.Equal(CloudFileStatus.Problem, result.Status);
+        Assert.Contains("MiB", result.Reason, StringComparison.Ordinal);
+        Assert.NotNull(await _store.ReadAsync("incoming", "s1"));
+        Assert.Empty(await _store.ListAsync("originals").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Leaves_out_a_tracker_music_module_with_a_video_extension_keeping_the_extension_on_the_temporary_file()
+    {
+        var module = new byte[1084];
+        "M.K."u8.CopyTo(module.AsSpan(1080));
+        await Put("t1", module, File("Music/song.mod"));
+
+        var result = await Processor().ProcessAsync("t1", CancellationToken.None);
+
+        Assert.Equal(CloudFileStatus.LeftOut, result.Status);
+        Assert.Contains("tracker", result.Reason, StringComparison.Ordinal);
+        Assert.Null(await _store.ReadAsync("incoming", "t1"));
+        Assert.Empty(await _store.ListAsync("manifests").ToListAsync());
+    }
+
+    [Fact]
     public async Task Reports_a_photo_that_cannot_be_decoded_and_leaves_it_in_incoming()
     {
         await Put("c1", Enumerable.Range(0, 2_000).Select(i => (byte)(i * 31 % 251)).ToArray(), File("broken.jpg"));
@@ -299,6 +455,52 @@ public sealed class CloudFileProcessorTests
         Assert.Equal(bytes, (await _store.ReadAsync("derivatives", "abc/proxy-720p.mp4"))!.Content.ToArray());
     }
 
+    // Records the order of the store's writes, commits and deletes, and can fail the manifest write or misreport a size.
+    private sealed class OrderStore(IBlobStore inner) : DelegatingBlobStore(inner)
+    {
+        public List<string> Calls { get; } = [];
+
+        public bool FailManifestWrite { get; init; }
+
+        public long? SizeSeen { get; init; }
+
+        public override Task<long?> GetSizeAsync(string container, string name, CancellationToken cancellationToken = default) =>
+            SizeSeen is { } size && container == "incoming" ? Task.FromResult<long?>(size) : base.GetSizeAsync(container, name, cancellationToken);
+
+        public override IStagedUpload BeginUpload(string container, string name) => new RecordingUpload(base.BeginUpload(container, name), () => Calls.Add("commit:" + container));
+
+        public override Task<BlobWriteResult> WriteAsync(
+            string container, string name, BinaryData content, string contentType, BlobWriteCondition condition, CancellationToken cancellationToken = default)
+        {
+            if (FailManifestWrite && container == "manifests")
+            {
+                throw new IOException("storage is down");
+            }
+
+            Calls.Add("write:" + container);
+            return base.WriteAsync(container, name, content, contentType, condition, cancellationToken);
+        }
+
+        public override Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default)
+        {
+            Calls.Add("delete:" + container);
+            return base.DeleteAsync(container, name, cancellationToken);
+        }
+    }
+
+    private sealed class RecordingUpload(IStagedUpload inner, Action committed) : IStagedUpload
+    {
+        public Task AppendAsync(ReadOnlyMemory<byte> block, CancellationToken cancellationToken = default) => inner.AppendAsync(block, cancellationToken);
+
+        public async Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default)
+        {
+            await inner.CommitAsync(contentType, storageClass, cancellationToken);
+            committed();
+        }
+
+        public ValueTask DisposeAsync() => inner.DisposeAsync();
+    }
+
     private sealed class CountingStore(IBlobStore inner) : DelegatingBlobStore(inner)
     {
         public bool Staged { get; private set; }
@@ -345,8 +547,8 @@ public sealed class CloudFileProcessorTests
         _store.WriteAsync("incoming", name, BinaryData.FromBytes(bytes), "application/octet-stream", BlobWriteCondition.Always, file.ToMetadata());
 
     private CloudFileProcessor Processor(
-        Sepiabox.Pipeline.Faces.IFaceDetector? faces = null, IBlobStore? store = null, long maxFileBytes = CloudFileProcessor.MaxFileBytes) =>
-        new(store ?? _store, new ManifestStore(new ManifestValidator(), store ?? _store), video: null, _embedder, faces, TimeProvider.System, NullLogger.Instance, maxFileBytes: maxFileBytes);
+        Sepiabox.Pipeline.Faces.IFaceDetector? faces = null, IBlobStore? store = null, long maxFileBytes = CloudFileProcessor.MaxFileBytes, bool originalsCold = false) =>
+        new(store ?? _store, new ManifestStore(new ManifestValidator(), store ?? _store), video: null, _embedder, faces, TimeProvider.System, NullLogger.Instance, originalsCold, maxFileBytes: maxFileBytes);
 
     private async Task<Manifest> ManifestAsync(string id) =>
         ManifestJson.Deserialize((await _store.ReadAsync("manifests", BlobLayout.ManifestBlobName(id)))!.Content.ToString());

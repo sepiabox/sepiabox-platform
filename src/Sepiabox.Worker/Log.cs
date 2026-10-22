@@ -10,8 +10,11 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Warning, Message = "Processing incoming files without {Step}: {Reason}")]
     public static partial void IncomingStepUnavailable(ILogger logger, string step, string reason);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Processed {Processed} incoming files; {Problems} could not be processed.")]
-    public static partial void IncomingFinished(ILogger logger, int processed, int problems);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Incoming run finished: {Processed} processed, {LeftOut} left out (not photos or videos), {Skipped} skipped and kept in incoming (a lifecycle rule deletes them after 30 days).")]
+    public static partial void IncomingFinished(ILogger logger, int processed, int leftOut, int skipped);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Skipped file in incoming: {Skipped}")]
+    public static partial void IncomingSkippedFile(ILogger logger, string skipped);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Processed incoming file {BlobName} as {AssetId} ({Mode} mode).")]
     public static partial void IncomingProcessed(ILogger logger, string blobName, string assetId, string mode);

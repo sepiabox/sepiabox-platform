@@ -256,11 +256,13 @@ static async Task<int> ProcessFromQueueAsync(IServiceProvider services, ILogger 
     {
         MaxDeliveryCount = configuration.GetValue("ServiceBus:MaxDeliveryCount", QueueImportOptions.Default.MaxDeliveryCount),
     };
+    var leftOut = 0;
     var result = await new QueueImport(
             queue,
             async (blobName, token) =>
             {
                 var done = await processor.ProcessAsync(blobName, token);
+                leftOut += done.Status == CloudFileStatus.LeftOut ? 1 : 0;
                 return done.Status == CloudFileStatus.Problem
                     ? new ImportResult(0, 0, [new ImportProblem(blobName, done.Reason ?? "could not be processed")], [])
                     : new ImportResult(done.Status == CloudFileStatus.Processed ? 1 : 0, 0, [], []);
@@ -269,7 +271,12 @@ static async Task<int> ProcessFromQueueAsync(IServiceProvider services, ILogger 
             services.GetRequiredService<ILogger<QueueImport>>(),
             BlobLayout.IncomingContainer)
         .RunAsync(cancellationToken);
-    Log.IncomingFinished(logger, result.Imported, result.Problems.Count);
+    // The one line to look for (docs/operations.md): how many files were skipped and are waiting in incoming, then which, up to 20.
+    Log.IncomingFinished(logger, result.Imported, leftOut, result.Problems.Count);
+    foreach (var skipped in result.Problems.Take(20))
+    {
+        Log.IncomingSkippedFile(logger, $"{skipped.BlobName}: {skipped.Reason}");
+    }
     return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
 }
 
