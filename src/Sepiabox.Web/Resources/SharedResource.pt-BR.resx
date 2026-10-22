@@ -877,7 +877,7 @@
     <value>Total</value>
   </data>
   <data name="Storage_OneSource" xml:space="preserve">
-    <value>Em apenas uma fonte</value>
+    <value>Em apenas uma origem</value>
   </data>
   <data name="Storage_Summary_One" xml:space="preserve">
     <value>{0} item, {1}</value>
@@ -888,13 +888,13 @@
     <comment>{0} is the number of items, {1} their size.</comment>
   </data>
   <data name="Storage_NoneOneSource" xml:space="preserve">
-    <value>Nenhum item está em apenas uma fonte.</value>
+    <value>Nenhum item está em apenas uma origem.</value>
   </data>
   <data name="Storage_Several" xml:space="preserve">
-    <value>Em várias fontes</value>
+    <value>Em várias origens</value>
   </data>
   <data name="Storage_NoneSeveral" xml:space="preserve">
-    <value>Nenhum item está em várias fontes.</value>
+    <value>Nenhum item está em várias origens.</value>
   </data>
   <data name="Storage_ShowThem" xml:space="preserve">
     <value>Mostrar esses itens</value>
@@ -913,13 +913,13 @@
     <value>Ainda não há vídeos.</value>
   </data>
   <data name="Chip_SourceOne" xml:space="preserve">
-    <value>Em apenas uma fonte</value>
+    <value>Em apenas uma origem</value>
   </data>
   <data name="Chip_SourceEq" xml:space="preserve">
-    <value>Em {0} fontes</value>
+    <value>Em {0} origens</value>
   </data>
   <data name="Chip_SourceAtLeast" xml:space="preserve">
-    <value>Em {0} ou mais fontes</value>
+    <value>Em {0} ou mais origens</value>
   </data>
   <data name="Chip_Size" xml:space="preserve">
     <value>Tamanho dos originais</value>
@@ -999,10 +999,10 @@
     <value>Sem miniaturas</value>
   </data>
   <data name="Storage_ShowOneSource" xml:space="preserve">
-    <value>Mostrar itens que estão em apenas uma fonte</value>
+    <value>Mostrar esses itens, em apenas uma origem</value>
   </data>
   <data name="Storage_ShowSeveral" xml:space="preserve">
-    <value>Mostrar itens que estão em várias fontes</value>
+    <value>Mostrar esses itens, em várias origens</value>
   </data>
   <data name="Storage_YearLink" xml:space="preserve">
     <value>Fotos e vídeos de {0}</value>

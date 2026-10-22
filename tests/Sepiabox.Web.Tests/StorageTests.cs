@@ -125,9 +125,9 @@ public sealed class StorageDslTests
     [InlineData(Cultures.English, 1, null, "In only one source")]
     [InlineData(Cultures.English, 3, null, "In 3 sources")]
     [InlineData(Cultures.English, null, 2, "In 2 or more sources")]
-    [InlineData(Cultures.BrazilianPortuguese, 1, null, "Em apenas uma fonte")]
-    [InlineData(Cultures.BrazilianPortuguese, 3, null, "Em 3 fontes")]
-    [InlineData(Cultures.BrazilianPortuguese, null, 2, "Em 2 ou mais fontes")]
+    [InlineData(Cultures.BrazilianPortuguese, 1, null, "Em apenas uma origem")]
+    [InlineData(Cultures.BrazilianPortuguese, 3, null, "Em 3 origens")]
+    [InlineData(Cultures.BrazilianPortuguese, null, 2, "Em 2 ou mais origens")]
     public void Shows_the_source_count_as_a_removable_chip(string culture, int? eq, int? gte, string label)
     {
         using var language = Cultures.Use(culture);
@@ -263,7 +263,7 @@ public sealed class StoragePageTests : LocalizedContext
         var one = page.Find(".storage-one-source");
         Assert.Contains("15 items, 19.5 KB", one.TextContent, StringComparison.Ordinal);
         Assert.Equal("Show these items", one.QuerySelector("a")!.TextContent);
-        Assert.Equal("Show items that are only in one source", one.QuerySelector("a")!.GetAttribute("aria-label"));
+        Assert.Equal("Show these items, only in one source", one.QuerySelector("a")!.GetAttribute("aria-label"));
         var oneLink = one.QuerySelector("a")!.GetAttribute("href")!;
         Assert.True(SearchQueryJson.TryDecode(oneLink["./?q=".Length..], out var oneQuery, out _));
         Assert.Equal(new SourceCountFilter { Eq = 1 }, oneQuery.Filters.SourceCount);
@@ -274,7 +274,7 @@ public sealed class StoragePageTests : LocalizedContext
         Assert.Equal(new SourceCountFilter { Gte = 2 }, severalQuery.Filters.SourceCount);
         Assert.Equal("In: HD da Ana, Takeout 2026", several.QuerySelector(".storage-assets p")!.TextContent);
         Assert.Equal("HD da Ana, Takeout 2026", several.QuerySelector(".storage-assets p")!.GetAttribute("title"));
-        Assert.Equal("Show items that are in several sources", several.QuerySelector("p a")!.GetAttribute("aria-label"));
+        Assert.Equal("Show these items, in several sources", several.QuerySelector("p a")!.GetAttribute("aria-label"));
         Assert.Equal($"photos/{Ids.Of(1)}", several.QuerySelector(".storage-assets a.thumb")!.GetAttribute("href"));
         Assert.Contains("Showing the first 1 items.", several.TextContent, StringComparison.Ordinal);
     }
@@ -318,10 +318,10 @@ public sealed class StoragePageTests : LocalizedContext
 
         Assert.Equal("Armazenamento", page.Find("h1").TextContent);
         Assert.Equal("Totais por tipo e ano", page.Find(".storage-totals h2").TextContent);
-        Assert.Equal("Em apenas uma fonte", page.Find(".storage-one-source h2").TextContent);
+        Assert.Equal("Em apenas uma origem", page.Find(".storage-one-source h2").TextContent);
         Assert.Equal(["Ano", "Fotos", "Tamanho das fotos", "Vídeos", "Tamanho dos vídeos"], page.FindAll(".storage-totals thead th").Select(h => h.TextContent));
         Assert.Equal("Mostrar esses itens", page.Find(".storage-one-source a").TextContent);
-        Assert.Equal("Mostrar itens que estão em apenas uma fonte", page.Find(".storage-one-source a").GetAttribute("aria-label"));
+        Assert.Equal("Mostrar esses itens, em apenas uma origem", page.Find(".storage-one-source a").GetAttribute("aria-label"));
         Assert.Contains("15 itens, 19,5 KB", page.Find(".storage-one-source").TextContent, StringComparison.Ordinal);
         Assert.Equal("Em: HD da Ana, Takeout 2026", page.Find(".storage-several-sources .storage-assets p").TextContent);
         Assert.Equal("Os 20 maiores vídeos", page.Find(".storage-largest h2").TextContent);

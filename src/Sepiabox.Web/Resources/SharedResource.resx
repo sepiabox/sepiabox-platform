@@ -1058,10 +1058,10 @@
     <comment>Shown on an occasion's card when none of its photos has a thumbnail.</comment>
   </data>
   <data name="Storage_ShowOneSource" xml:space="preserve">
-    <value>Show items that are only in one source</value>
+    <value>Show these items, only in one source</value>
   </data>
   <data name="Storage_ShowSeveral" xml:space="preserve">
-    <value>Show items that are in several sources</value>
+    <value>Show these items, in several sources</value>
   </data>
   <data name="Storage_YearLink" xml:space="preserve">
     <value>Photos and videos from {0}</value>

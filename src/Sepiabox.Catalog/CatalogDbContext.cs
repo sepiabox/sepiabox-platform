@@ -96,6 +96,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
         {
             source.ToTable("asset_sources");
             source.HasIndex(s => new { s.AssetId, s.Type, s.Name, s.Path }).IsUnique();
+            // The number of sources an asset has (S-028, D-093): the grouped count reads it in order instead of sorting every row.
+            source.HasIndex(s => new { s.AssetId, s.Name }).HasDatabaseName("ix_asset_sources_asset_id_name");
         });
 
         modelBuilder.Entity<Derivative>(derivative =>
