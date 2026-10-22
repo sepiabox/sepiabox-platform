@@ -111,10 +111,10 @@ export SEPIABOX_DEPLOY_SCRIPT=1
 
 azd provision --no-prompt
 
-# The sync job (S-038, D-115) reads the Google OAuth client from the owner's Key Vault, and nothing else in it: a role on each of the two
-# secrets, not on the vault. Bicep cannot give a role on a secret the owner has not created yet, so this script creates each missing secret
-# with an empty value, which the web reads as "not configured", and assigns the role on it. The owner sets the values (docs/operations.md);
-# they are never in this script, the repository or a log. Re-running changes nothing that exists.
+# The sync job (S-038, D-115) reads the Google OAuth client from the owner's Key Vault, and nothing else in it: Key Vault Secrets User on
+# each of the two secrets, not on the vault, and the job reads them by name. Bicep cannot name a secret that may not exist yet, so the
+# role is assigned here, only for a secret that exists: they are the sign-in's own secrets, which the owner sets before any Drive is
+# connected (docs/operations.md), and this script never creates or writes a secret. Run deploy again after setting one.
 vault_name=$(azd env get-value VAULT_NAME 2>/dev/null) || vault_name=""
 sync_principal=$(azd env get-value SYNC_IDENTITY_PRINCIPALID 2>/dev/null) || sync_principal=""
 if [[ -z "$vault_name" || -z "$sync_principal" ]]; then
@@ -123,10 +123,12 @@ if [[ -z "$vault_name" || -z "$sync_principal" ]]; then
 fi
 vault_id=$(az keyvault show --name "$vault_name" --query id --output tsv)
 for secret in Auth--Google--ClientId Auth--Google--ClientSecret; do
-  az keyvault secret show --vault-name "$vault_name" --name "$secret" --output none 2>/dev/null \
-    || az keyvault secret set --vault-name "$vault_name" --name "$secret" --value "" --output none
-  az role assignment create --assignee-object-id "$sync_principal" --assignee-principal-type ServicePrincipal \
-    --role "Key Vault Secrets User" --scope "$vault_id/secrets/$secret" --output none
+  if az keyvault secret show --vault-name "$vault_name" --name "$secret" --output none 2>/dev/null; then
+    az role assignment create --assignee-object-id "$sync_principal" --assignee-principal-type ServicePrincipal \
+      --role "Key Vault Secrets User" --scope "$vault_id/secrets/$secret" --output none
+  else
+    echo "$secret is not set yet; run deploy again after setting it."
+  fi
 done
 
 # The web's base image with the CLIP text model (S-056): built only when models.json or the ASP.NET Core image

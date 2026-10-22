@@ -13,6 +13,9 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Error, Message = "No connected Google Drive matches the account given to --rescan.")]
     public static partial void DriveRescanNotFound(ILogger logger);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The Key Vault secret {Name} could not be read (status {Status}): it is not set, or this job has no role on it yet.")]
+    public static partial void VaultSecretUnavailable(ILogger logger, string name, int status);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "No Google OAuth client is configured (Auth:Google): there is nothing to sync.")]
     public static partial void DriveSyncNotConfigured(ILogger logger);
 
