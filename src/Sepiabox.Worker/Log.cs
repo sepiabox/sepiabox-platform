@@ -13,8 +13,11 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Error, Message = "No connected Google Drive matches the account given to --rescan.")]
     public static partial void DriveRescanNotFound(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The Key Vault secret {Name} could not be read (status {Status}): it is not set, or this job has no role on it yet.")]
-    public static partial void VaultSecretUnavailable(ILogger logger, string name, int status);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The secret {Name} is not set, or this job has no role on it yet.")]
+    public static partial void VaultSecretUnavailable(ILogger logger, string name);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The Key Vault secret {Name} could not be read (status {Status}).")]
+    public static partial void VaultSecretStatus(ILogger logger, string name, int status);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Microsoft Graph no longer honours the delta link of connected account {AccountId}: the OneDrive is listed again from the start.")]
     public static partial void OneDriveResync(ILogger logger, long accountId);

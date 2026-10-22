@@ -11,20 +11,20 @@ namespace Sepiabox.Worker.Sources;
 /// </summary>
 public sealed class SourceMarks(CatalogDbContext db, TimeProvider clock)
 {
-    public Task<int> MarkRemovedAsync(string type, string accountName, string path, DateTimeOffset modifiedAt, long? size, CancellationToken cancellationToken)
+    public Task<int> MarkRemovedAsync(string type, string sourceName, string path, DateTimeOffset modifiedAt, long? size, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
-        return Matching(type, accountName, path, modifiedAt, size).Where(s => s.RemovedAt == null)
+        return Matching(type, sourceName, path, modifiedAt, size).Where(s => s.RemovedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.RemovedAt, now), cancellationToken);
     }
 
-    public Task<int> ClearRemovedAsync(string type, string accountName, string path, DateTimeOffset modifiedAt, long? size, CancellationToken cancellationToken) =>
-        Matching(type, accountName, path, modifiedAt, size).Where(s => s.RemovedAt != null)
+    public Task<int> ClearRemovedAsync(string type, string sourceName, string path, DateTimeOffset modifiedAt, long? size, CancellationToken cancellationToken) =>
+        Matching(type, sourceName, path, modifiedAt, size).Where(s => s.RemovedAt != null)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.RemovedAt, (DateTimeOffset?)null), cancellationToken);
 
-    private IQueryable<AssetSource> Matching(string type, string accountName, string path, DateTimeOffset modifiedAt, long? size)
+    private IQueryable<AssetSource> Matching(string type, string sourceName, string path, DateTimeOffset modifiedAt, long? size)
     {
-        var sources = db.AssetSources.Where(s => s.Type == type && s.Name == accountName && s.Path == path && s.ModifiedAt == modifiedAt);
+        var sources = db.AssetSources.Where(s => s.Type == type && s.Name == sourceName && s.Path == path && s.ModifiedAt == modifiedAt);
         return size is { } bytes ? sources.Where(s => db.Assets.Any(a => a.Id == s.AssetId && a.SizeBytes == bytes)) : sources;
     }
 }

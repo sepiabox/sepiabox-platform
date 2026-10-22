@@ -48,6 +48,35 @@ public sealed class IncomingStager(IBlobStore store)
         metadata.Sum(p => Encoding.UTF8.GetByteCount(p.Key) + Encoding.UTF8.GetByteCount(p.Value));
 }
 
+/// <summary>Forgetting what a sync did for one account (<c>--rescan</c>, S-038, S-039): the cursor and the list of staged files.</summary>
+public static class CloudRescan
+{
+    /// <summary>
+    /// The next run lists the whole account again and stages every file, so those the processing job skipped are put in <c>incoming</c> again;
+    /// files already processed are found by their content and only gain the source they already had. False when no such account is connected.
+    /// </summary>
+    public static async Task<bool> RescanAsync(Sepiabox.Catalog.CatalogDbContext db, string type, string accountEmail, CancellationToken cancellationToken)
+    {
+        var email = accountEmail.Trim().ToLowerInvariant();
+        var account = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleOrDefaultAsync(
+            db.ConnectedSources, s => s.Type == type && s.AccountEmail == email, cancellationToken);
+        if (account is null)
+        {
+            return false;
+        }
+
+        await Microsoft.EntityFrameworkCore.RelationalQueryableExtensions.ExecuteDeleteAsync(db.DriveFiles.Where(f => f.ConnectedSourceId == account.Id), cancellationToken);
+        foreach (var entry in db.ChangeTracker.Entries<Sepiabox.Catalog.DriveFile>().ToList())
+        {
+            entry.State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+        }
+
+        (account.SyncChangesToken, account.SyncListToken, account.SyncListing) = (null, null, false);
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+}
+
 /// <summary>How a cloud file's name and folders become a source's path (S-038, S-039): the same for every cloud service.</summary>
 public static class CloudNames
 {

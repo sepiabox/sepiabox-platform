@@ -48,6 +48,10 @@ public sealed class OneDriveSync(
         return new DriveSyncResult(accounts.Count, totals.Staged, totals.Removed, totals.Skipped, totals.Reconnect, totals.Failed);
     }
 
+    /// <summary>Forgets where the sync was in an account and what it staged (<c>--rescan</c>); see <see cref="CloudRescan"/>.</summary>
+    public Task<bool> RescanAsync(string accountEmail, CancellationToken cancellationToken) =>
+        CloudRescan.RescanAsync(db, ConnectedSourceTypes.OneDrive, accountEmail, cancellationToken);
+
     private async Task SyncAccountAsync(ConnectedSource account, Totals totals, CancellationToken cancellationToken)
     {
         string refreshToken;
@@ -162,7 +166,7 @@ public sealed class OneDriveSync(
         var known = await db.DriveFiles.SingleOrDefaultAsync(f => f.ConnectedSourceId == account.Id && f.FileId == file.Id, cancellationToken);
         if (known is not null && known.ModifiedAt == file.ModifiedTime && known.Checksum == file.Hash && known.Path == path)
         {
-            await _marks.ClearRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, path, file.ModifiedTime, file.Size, cancellationToken);
+            await _marks.ClearRemovedAsync(ConnectedSourceTypes.OneDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.OneDrive, account.AccountEmail), path, file.ModifiedTime, file.Size, cancellationToken);
             return;
         }
 
@@ -174,7 +178,7 @@ public sealed class OneDriveSync(
         }
 
         var incoming = new IncomingFile(
-            ConnectedSourceTypes.OneDrive, account.AccountEmail, path, IncomingMode.Reference, file.ModifiedTime, file.Id, IncomingStager.HttpsOnly(file.WebUrl));
+            ConnectedSourceTypes.OneDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.OneDrive, account.AccountEmail), path, IncomingMode.Reference, file.ModifiedTime, file.Id, IncomingStager.HttpsOnly(file.WebUrl));
         var staged = await _stager.StageAsync(incoming, file.MimeType, (sink, token) => client.DownloadAsync(run.Token, file.Id, sink, token), cancellationToken);
         if (!staged)
         {
@@ -193,13 +197,13 @@ public sealed class OneDriveSync(
         {
             if (known.Path != path)
             {
-                totals.Removed += await _marks.MarkRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, known.Path, known.ModifiedAt, known.SizeBytes, cancellationToken);
+                totals.Removed += await _marks.MarkRemovedAsync(ConnectedSourceTypes.OneDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.OneDrive, account.AccountEmail), known.Path, known.ModifiedAt, known.SizeBytes, cancellationToken);
             }
 
             (known.Path, known.ModifiedAt, known.Checksum, known.SizeBytes) = (path, file.ModifiedTime, file.Hash, file.Size);
         }
 
-        await _marks.ClearRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, path, file.ModifiedTime, file.Size, cancellationToken);
+        await _marks.ClearRemovedAsync(ConnectedSourceTypes.OneDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.OneDrive, account.AccountEmail), path, file.ModifiedTime, file.Size, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -211,7 +215,7 @@ public sealed class OneDriveSync(
             return 0;
         }
 
-        var marked = await _marks.MarkRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, known.Path, known.ModifiedAt, known.SizeBytes, cancellationToken);
+        var marked = await _marks.MarkRemovedAsync(ConnectedSourceTypes.OneDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.OneDrive, account.AccountEmail), known.Path, known.ModifiedAt, known.SizeBytes, cancellationToken);
         db.DriveFiles.Remove(known);
         await db.SaveChangesAsync(cancellationToken);
         return marked;

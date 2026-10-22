@@ -27,7 +27,7 @@ public sealed record GeoNamesSource(string Cities, string Admin1, string Countri
 /// <param name="MigrateFirst">Apply pending migrations before importing (D-013).</param>
 /// <param name="GeoNames">The files to load, for <see cref="WorkerAction.GeoNamesLoad"/> only.</param>
 /// <param name="Folder">Where <see cref="WorkerAction.GeoNamesDownload"/> writes the files.</param>
-/// <param name="Rescan">The connected account (its address) whose sync state is forgotten first, for <see cref="WorkerAction.SyncGoogleDrive"/> only (S-038).</param>
+/// <param name="Rescan">The connected account (its address) whose sync state is forgotten first, for <see cref="WorkerAction.SyncGoogleDrive"/> or <see cref="WorkerAction.SyncOneDrive"/> only (S-038, S-039).</param>
 /// <param name="AllPlaces">Name every asset's place again, for <see cref="WorkerAction.PlacesRefresh"/> only.</param>
 public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNamesSource? GeoNames = null, bool AllPlaces = false, string? Folder = null, string? Rescan = null)
 {
@@ -59,7 +59,7 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                                      run places refresh. What the sepiabox-geonames job runs (S-059).
           places refresh [--all]     Name the place of assets that have a location but no place yet;
                                      --all names every asset with a location again (after a newer dump).
-          sync [google-drive [--rescan <account address>]|onedrive]
+          sync [google-drive|onedrive [--rescan <account address>]]
                                      For each connected Google Drive (S-037, S-038) and OneDrive (S-039), put the
                                      photos and videos that are new or changed in the incoming container in
                                      reference mode, and mark the sources of those that are gone; the first run
@@ -67,7 +67,7 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                                      refresh tokens with the web's key ring and each service's OAuth client
                                      (Auth:Google, OneDrive) from Key Vault. Without a service name, both: what the
                                      sepiabox-sync job runs, daily; never migrates.
-                                     --rescan first forgets what the sync did for that Google account (its cursor and the
+                                     --rescan first forgets what the sync did for that account (of that one service) (its cursor and the
                                      files it staged), so the whole Drive is staged again, for files the processing job skipped.
           faces sweep                After face recognition was turned off, erase the faces found before
                                      that from every manifest written since the last sweep (S-022); does
@@ -129,6 +129,9 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                 return true;
             case ["sync", "google-drive", "--rescan", var rescan] when !rescan.StartsWith("--", StringComparison.Ordinal) && rescan.Contains('@', StringComparison.Ordinal):
                 command = new WorkerCommand(WorkerAction.SyncGoogleDrive, false, Rescan: rescan);
+                return true;
+            case ["sync", "onedrive", "--rescan", var rescanOneDrive] when !rescanOneDrive.StartsWith("--", StringComparison.Ordinal) && rescanOneDrive.Contains('@', StringComparison.Ordinal):
+                command = new WorkerCommand(WorkerAction.SyncOneDrive, false, Rescan: rescanOneDrive);
                 return true;
             case ["sync", "onedrive"]:
                 command = new WorkerCommand(WorkerAction.SyncOneDrive, false);

@@ -17,7 +17,7 @@ public sealed class GraphOneDriveSyncClient(string clientId, string clientSecret
     private const string DeltaFields = "id,name,size,file,folder,deleted,parentReference,lastModifiedDateTime,webUrl,root";
     private const string DownloadUrlProperty = "@microsoft.graph.downloadUrl";
     private const int MaxAttempts = 4;
-    private static readonly TimeSpan MaxRetryAfter = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan MaxRetryAfter = TimeSpan.FromMinutes(5);
 
     /// <summary>The scopes the connection asks for (S-039): the files, a refresh token, and the account's address.</summary>
     public const string Scope = "Files.Read offline_access User.Read";
@@ -67,7 +67,10 @@ public sealed class GraphOneDriveSyncClient(string clientId, string clientSecret
     {
         var uri = link is null ? $"{GraphRoot}/me/drive/root/delta?$select={DeltaFields}&$top=200" : SafeGraphLink(link);
         using var json = await GetJsonAsync(accessToken, uri, cancellationToken)
-            ?? throw new HttpRequestException("Microsoft Graph did not find the drive.", null, HttpStatusCode.NotFound);
+            ?? (link is not null
+                // A delta link for state Graph does not know any more: the same as 410, list again.
+                ? throw new DeltaResyncRequiredException()
+                : throw new HttpRequestException("Microsoft Graph did not find the drive.", null, HttpStatusCode.NotFound));
         var changes = new List<OneDriveChange>();
         if (json.RootElement.TryGetProperty("value", out var items))
         {
@@ -165,14 +168,28 @@ public sealed class GraphOneDriveSyncClient(string clientId, string clientSecret
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
-                    // The access token was refused moments after it was issued: the account is no longer honoured.
+                    // A token refused moments after it was issued is sometimes a replica that has not seen it yet: once more before the
+                    // account is sent to connect again.
+                    if (attempt == 1)
+                    {
+                        await Task.Delay(retryDelay ?? TimeSpan.FromSeconds(2), cancellationToken);
+                        continue;
+                    }
+
                     throw new CloudAuthorizationException("Microsoft Graph refused the access token.");
                 }
 
                 // Throttled, or a moment's failure: ask again after what Graph says, a few times.
                 if (response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout && attempt < MaxAttempts)
                 {
-                    await Task.Delay(retryDelay ?? RetryAfter(response) ?? TimeSpan.FromSeconds(2 * attempt), cancellationToken);
+                    var wait = retryDelay ?? RetryAfter(response) ?? TimeSpan.FromSeconds(2 * attempt);
+                    if (wait > MaxRetryAfter)
+                    {
+                        // Graph asks for longer than a run should wait: the account's run ends here and the next run tries again.
+                        throw new HttpRequestException($"Microsoft Graph asks to wait {wait.TotalMinutes:0} minutes.", null, response.StatusCode);
+                    }
+
+                    await Task.Delay(wait, cancellationToken);
                     continue;
                 }
 
@@ -186,11 +203,11 @@ public sealed class GraphOneDriveSyncClient(string clientId, string clientSecret
         }
     }
 
-    // What Graph asks for in Retry-After (seconds or a date), within a limit, so that a throttled run waits and a wrong header cannot hang it.
+    // What Graph asks for in Retry-After (seconds or a date); a wait beyond MaxRetryAfter is not taken (see GetJsonAsync).
     private static TimeSpan? RetryAfter(HttpResponseMessage response)
     {
         var wait = response.Headers.RetryAfter?.Delta ?? (response.Headers.RetryAfter?.Date is { } date ? date - DateTimeOffset.UtcNow : null);
-        return wait is { } w ? TimeSpan.FromSeconds(Math.Clamp(w.TotalSeconds, 0, MaxRetryAfter.TotalSeconds)) : null;
+        return wait is { } w && w > TimeSpan.Zero ? w : null;
     }
 
     private static OneDriveChange? Read(JsonElement item)
@@ -205,9 +222,17 @@ public sealed class GraphOneDriveSyncClient(string clientId, string clientSecret
             return new OneDriveChange(id, true, null);
         }
 
-        if (!item.TryGetProperty("file", out var file) || String(file, "mimeType") is not { } mime || !IsMedia(mime))
+        if (!item.TryGetProperty("file", out var file))
         {
-            // A folder, or a file that is neither a photo nor a video.
+            // A folder.
+            return null;
+        }
+
+        // Graph gives RAW, some HEIC and MOV files the type application/octet-stream (or none): those are kept, and the sync decides by the
+        // name's extension (counting what is neither as skipped). A file with a type that is not image or video is not media.
+        var mime = String(file, "mimeType") ?? "application/octet-stream";
+        if (!IsMedia(mime) && mime != "application/octet-stream")
+        {
             return null;
         }
 

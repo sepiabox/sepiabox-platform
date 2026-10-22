@@ -22,9 +22,19 @@ namespace Sepiabox.Worker.Tests.Sources;
 public sealed class DriveSyncTests(CatalogFixture fixture)
 {
     private const string Account = "ana@example.com";
+    private const string SourceName = "ana@example.com (Google Drive)";
     private const string Token = "1//the-refresh-token";
     private static readonly EphemeralDataProtectionProvider s_keys = new();
     private static readonly DateTimeOffset s_modified = new(2020, 5, 1, 10, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void A_source_name_is_the_address_and_the_service_and_gives_the_address_back_only_for_its_own_service()
+    {
+        Assert.Equal(SourceName, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.GoogleDrive, Account));
+        Assert.Equal(Account, ConnectedSourceTypes.AccountOf(ConnectedSourceTypes.GoogleDrive, SourceName));
+        Assert.Null(ConnectedSourceTypes.AccountOf(ConnectedSourceTypes.GoogleDrive, Account));
+        Assert.Null(ConnectedSourceTypes.AccountOf(ConnectedSourceTypes.GoogleDrive, " (Google Drive)"));
+    }
 
     [Fact]
     public async Task The_first_sync_of_five_files_puts_five_blobs_in_incoming_in_reference_mode_with_a_new_name_each()
@@ -41,7 +51,7 @@ public sealed class DriveSyncTests(CatalogFixture fixture)
         {
             var read = (await store.ReadAsync("incoming", blob.Name))!;
             Assert.True(IncomingFile.TryRead(read.Metadata, out var incoming, out var problem), problem);
-            Assert.Equal(("google-drive", Account, IncomingMode.Reference), (incoming.SourceType, incoming.SourceName, incoming.Mode));
+            Assert.Equal(("google-drive", SourceName, IncomingMode.Reference), (incoming.SourceType, incoming.SourceName, incoming.Mode));
             Assert.StartsWith("id-", incoming.ExternalId, StringComparison.Ordinal);
             Assert.Equal(s_modified, incoming.ModifiedAt);
             // The bytes are the file's, whole.
@@ -425,7 +435,7 @@ public sealed class DriveSyncTests(CatalogFixture fixture)
             Kind = "photo",
             ContentType = "image/jpeg",
             SizeBytes = size,
-            Sources = [new AssetSource { AssetId = assetId, Type = "google-drive", Name = Account, Path = path, ModifiedAt = modifiedAt ?? s_modified }],
+            Sources = [new AssetSource { AssetId = assetId, Type = "google-drive", Name = SourceName, Path = path, ModifiedAt = modifiedAt ?? s_modified }],
         });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();

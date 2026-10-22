@@ -70,25 +70,8 @@ public sealed class DriveSync(
     /// file, so those the processing job skipped (a problem, left in incoming and deleted after 30 days) are put there again. Files already
     /// processed are found by their content and only gain the source they already had. False when no such account is connected.
     /// </summary>
-    public async Task<bool> RescanAsync(string accountEmail, CancellationToken cancellationToken)
-    {
-        var email = accountEmail.Trim().ToLowerInvariant();
-        var account = await db.ConnectedSources.SingleOrDefaultAsync(s => s.Type == ConnectedSourceTypes.GoogleDrive && s.AccountEmail == email, cancellationToken);
-        if (account is null)
-        {
-            return false;
-        }
-
-        await db.DriveFiles.Where(f => f.ConnectedSourceId == account.Id).ExecuteDeleteAsync(cancellationToken);
-        foreach (var entry in db.ChangeTracker.Entries<DriveFile>().ToList())
-        {
-            entry.State = EntityState.Detached;
-        }
-
-        (account.SyncChangesToken, account.SyncListToken, account.SyncListing) = (null, null, false);
-        await db.SaveChangesAsync(cancellationToken);
-        return true;
-    }
+    public Task<bool> RescanAsync(string accountEmail, CancellationToken cancellationToken) =>
+        CloudRescan.RescanAsync(db, ConnectedSourceTypes.GoogleDrive, accountEmail, cancellationToken);
 
     private async Task SyncAccountAsync(ConnectedSource account, Totals totals, CancellationToken cancellationToken)
     {
@@ -229,7 +212,7 @@ public sealed class DriveSync(
         }
 
         var incoming = new IncomingFile(
-            ConnectedSourceTypes.GoogleDrive, account.AccountEmail, path, IncomingMode.Reference, file.ModifiedTime, file.Id, IncomingStager.HttpsOnly(file.WebViewLink));
+            ConnectedSourceTypes.GoogleDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.GoogleDrive, account.AccountEmail), path, IncomingMode.Reference, file.ModifiedTime, file.Id, IncomingStager.HttpsOnly(file.WebViewLink));
         var staged = await _stager.StageAsync(incoming, file.MimeType, (sink, token) => client.DownloadAsync(run.Token, file.Id, sink, token), cancellationToken);
         if (!staged)
         {
@@ -275,10 +258,10 @@ public sealed class DriveSync(
     }
 
     private Task<int> MarkRemovedAsync(ConnectedSource account, string path, DateTimeOffset modifiedAt, long? size, CancellationToken cancellationToken) =>
-        _marks.MarkRemovedAsync(ConnectedSourceTypes.GoogleDrive, account.AccountEmail, path, modifiedAt, size, cancellationToken);
+        _marks.MarkRemovedAsync(ConnectedSourceTypes.GoogleDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.GoogleDrive, account.AccountEmail), path, modifiedAt, size, cancellationToken);
 
     private Task<int> ClearRemovedAsync(ConnectedSource account, string path, DateTimeOffset modifiedAt, long? size, CancellationToken cancellationToken) =>
-        _marks.ClearRemovedAsync(ConnectedSourceTypes.GoogleDrive, account.AccountEmail, path, modifiedAt, size, cancellationToken);
+        _marks.ClearRemovedAsync(ConnectedSourceTypes.GoogleDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.GoogleDrive, account.AccountEmail), path, modifiedAt, size, cancellationToken);
 
     // The folders' names and the file's, with '/', and an extension if the name has none; null when it is not a photo or video.
     private async Task<string?> PathAsync(AccountRun run, DriveFileInfo file, CancellationToken cancellationToken)

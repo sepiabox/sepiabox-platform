@@ -348,12 +348,12 @@ static async Task<int> RunSyncAsync(WorkerCommand command, IServiceProvider serv
     {
         // From the vault by name in Azure; from configuration (user secrets) on a computer without one.
         var googleClient = services.GetService<SecretClient>() is { } vault
-            ? await VaultSecrets.ReadGoogleClientAsync(vault, logger, cancellationToken)
+            ? await VaultSecrets.ReadGoogleClientAsync(new KeyVaultSecretSource(vault, logger), logger, cancellationToken)
             : OAuthClientFrom(configuration, "Auth:Google");
         if (googleClient is { } google)
         {
             var sync = new DriveSync(db, store, new GoogleDriveSyncClient(google.Id, google.Secret), protection, clock, logger, maxFiles);
-            if (command.Rescan is { } account && !await sync.RescanAsync(account, cancellationToken))
+            if (action == WorkerAction.SyncGoogleDrive && command.Rescan is { } account && !await sync.RescanAsync(account, cancellationToken))
             {
                 Log.DriveRescanNotFound(logger);
                 return ExitCodes.Usage;
@@ -374,11 +374,18 @@ static async Task<int> RunSyncAsync(WorkerCommand command, IServiceProvider serv
     if (action is WorkerAction.SyncOneDrive or WorkerAction.SyncAll)
     {
         var oneDriveClient = services.GetService<SecretClient>() is { } vault
-            ? await VaultSecrets.ReadOneDriveClientAsync(vault, logger, cancellationToken)
+            ? await VaultSecrets.ReadOneDriveClientAsync(new KeyVaultSecretSource(vault, logger), logger, cancellationToken)
             : OAuthClientFrom(configuration, "OneDrive");
         if (oneDriveClient is { } microsoft)
         {
-            total = Add(total, await new OneDriveSync(db, store, new GraphOneDriveSyncClient(microsoft.Id, microsoft.Secret), protection, clock, logger, maxFiles).RunAsync(cancellationToken));
+            var sync = new OneDriveSync(db, store, new GraphOneDriveSyncClient(microsoft.Id, microsoft.Secret), protection, clock, logger, maxFiles);
+            if (action == WorkerAction.SyncOneDrive && command.Rescan is { } account && !await sync.RescanAsync(account, cancellationToken))
+            {
+                Log.DriveRescanNotFound(logger);
+                return ExitCodes.Usage;
+            }
+
+            total = Add(total, await sync.RunAsync(cancellationToken));
         }
         else
         {
@@ -416,4 +423,22 @@ static ServiceBusBlobEventQueue CreateServiceBusQueue(IConfiguration configurati
         PrefetchCount = 0,
     });
     return new ServiceBusBlobEventQueue(client, receiver);
+}
+
+// The sync's Key Vault, by name (D-115): a get, never a list, because the identity has a role on two secrets and none on the vault.
+// A secret that is not there (404) or that it has no role on yet (403) is not set; anything else is a fault and is thrown.
+internal sealed class KeyVaultSecretSource(SecretClient vault, ILogger logger) : ISecretSource
+{
+    public async Task<string?> GetAsync(string name, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await vault.GetSecretAsync(name, null, cancellationToken)).Value.Value;
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status is 403 or 404)
+        {
+            Log.VaultSecretStatus(logger, name, ex.Status);
+            return null;
+        }
+    }
 }
