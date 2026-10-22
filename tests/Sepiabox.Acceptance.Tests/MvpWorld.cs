@@ -67,7 +67,7 @@ public sealed class MvpWorld : IAsyncLifetime, IDisposable
 
         Report = JsonNode.Parse(await File.ReadAllTextAsync(json))!;
 
-        var upload = await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local), _catalog.Blobs);
+        var upload = await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local), _catalog.Store);
         if (upload.Problems.Count > 0)
         {
             throw new InvalidOperationException("upload left problems: " + string.Join("; ", upload.Problems.Select(p => $"{p.Path}: {p.Reason}")));

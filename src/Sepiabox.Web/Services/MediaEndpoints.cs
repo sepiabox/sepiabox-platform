@@ -1,6 +1,5 @@
-using Azure;
-using Azure.Identity;
 using Microsoft.Extensions.Localization;
+using Sepiabox.Storage;
 
 namespace Sepiabox.Web.Services;
 
@@ -20,7 +19,7 @@ public static partial class MediaEndpoints
     }
 
     public static async Task<IResult> DerivativeAsync(
-        string id, string derivative, HttpContext http, ILibraryQueries library, ISasUrlFactory links, ILogger<Program> log)
+        string id, string derivative, HttpContext http, ILibraryQueries library, ISasUrlFactory links, IBlobStore blobs, ILogger<Program> log)
     {
         if (!AssetIds.IsValid(id) || !DerivativeNames.IsServed(derivative))
         {
@@ -42,7 +41,7 @@ public static partial class MediaEndpoints
             http.Response.Headers.CacheControl = $"private, max-age={(int)SasUrlFactory.RedirectCacheDuration.TotalSeconds}";
             return Results.Redirect(url.AbsoluteUri);
         }
-        catch (Exception ex) when (IsSigningFailure(ex, http.RequestAborted))
+        catch (Exception ex) when (IsSigningFailure(ex, blobs, http.RequestAborted))
         {
             // A page asks for up to 200 thumbnails: one short line each, not 200 stack traces.
             LogDerivativeSigningFailed(log, id, derivative, ex.GetType().Name, ex.Message);
@@ -53,7 +52,7 @@ public static partial class MediaEndpoints
 
     public static async Task<IResult> OriginalAsync(
         string id, HttpContext http, ILibraryQueries library, ISasUrlFactory links, IStringLocalizer<SharedResource> text,
-        ILogger<Program> log)
+        IBlobStore blobs, ILogger<Program> log)
     {
         if (!AssetIds.IsValid(id))
         {
@@ -81,7 +80,7 @@ public static partial class MediaEndpoints
             http.Response.Headers.CacheControl = "no-store";
             return Results.Redirect(url.AbsoluteUri);
         }
-        catch (Exception ex) when (IsSigningFailure(ex, http.RequestAborted))
+        catch (Exception ex) when (IsSigningFailure(ex, blobs, http.RequestAborted))
         {
             LogOriginalSigningFailed(log, ex, id);
             Unavailable(http);
@@ -94,15 +93,15 @@ public static partial class MediaEndpoints
 
     /// <summary>
     /// Storage refusing or not answering the delegation key request, or the managed identity unable to get a
-    /// token. Azure.Core's retry policy reports repeated failures as one AggregateException, and a timeout as a
+    /// token. the storage SDK's retry policy reports repeated failures as one AggregateException, and a timeout as a
     /// cancellation; a cancellation only counts while the browser is still waiting for this response.
     /// </summary>
-    private static bool IsSigningFailure(Exception ex, CancellationToken requestAborted) => ex switch
+    private static bool IsSigningFailure(Exception ex, IBlobStore blobs, CancellationToken requestAborted) => ex switch
     {
-        RequestFailedException or AuthenticationFailedException => true,
+        _ when blobs.IsStoreFailure(ex) => true,
         OperationCanceledException => !requestAborted.IsCancellationRequested,
         AggregateException aggregate => aggregate.Flatten().InnerExceptions is { Count: > 0 } inner
-            && inner.All(e => IsSigningFailure(e, requestAborted)),
+            && inner.All(e => IsSigningFailure(e, blobs, requestAborted)),
         _ => false,
     };
 

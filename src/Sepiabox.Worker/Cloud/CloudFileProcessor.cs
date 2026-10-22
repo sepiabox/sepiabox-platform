@@ -138,11 +138,8 @@ public sealed class CloudFileProcessor(
             manifest = AddSteps(manifest, work);
             foreach (var derivative in manifest.Derivatives)
             {
-                var path = Path.Combine(work, derivative.Path);
-                await store.WriteAsync(
-                    BlobLayout.DerivativesContainer, BlobLayout.DerivativeBlobName(sha256, derivative.Path),
-                    BinaryData.FromBytes(await File.ReadAllBytesAsync(path, cancellationToken)), derivative.ContentType,
-                    BlobWriteCondition.Always, cancellationToken);
+                await WriteDerivativeAsync(
+                    BlobLayout.DerivativeBlobName(sha256, derivative.Path), Path.Combine(work, derivative.Path), derivative.ContentType, cancellationToken);
             }
         }
 
@@ -154,7 +151,7 @@ public sealed class CloudFileProcessor(
         if (!reference)
         {
             // On the store's side, so a video's gigabytes never pass through the worker; replaces the same bytes if it was there.
-            await store.CopyAsync(BlobLayout.IncomingContainer, blobName, BlobLayout.OriginalsContainer, sha256, originalsCold, cancellationToken);
+            await store.CopyAsync(BlobLayout.IncomingContainer, blobName, BlobLayout.OriginalsContainer, sha256, originalsCold ? BlobStorageClass.Cold : BlobStorageClass.Default, cancellationToken);
         }
 
         // Last but the deletion: the manifest is what triggers the import, so everything it points to is stored first.
@@ -167,6 +164,40 @@ public sealed class CloudFileProcessor(
         await store.DeleteAsync(BlobLayout.IncomingContainer, blobName, cancellationToken);
         Log.IncomingProcessed(logger, blobName, sha256, reference ? "reference" : "custody");
         return new CloudFileResult(CloudFileStatus.Processed, AssetId: sha256);
+    }
+
+    /// <summary>The block size of a staged upload, as <c>upload</c> uses (D-030).</summary>
+    public const int BlockSize = 8 * 1024 * 1024;
+
+    // A file of less than a block (a thumbnail, a preview) is one write; a larger one (a video's version) is staged block by
+    // block, so it is never held whole in memory (D-100).
+    internal async Task WriteDerivativeAsync(string blobName, string path, string contentType, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, useAsync: true);
+        if (stream.Length < BlockSize)
+        {
+            await store.WriteAsync(
+                BlobLayout.DerivativesContainer, blobName, BinaryData.FromBytes(await File.ReadAllBytesAsync(path, cancellationToken)),
+                contentType, BlobWriteCondition.Always, cancellationToken);
+            return;
+        }
+
+        await using var upload = store.BeginUpload(BlobLayout.DerivativesContainer, blobName);
+        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(BlockSize);
+        try
+        {
+            int read;
+            while ((read = await stream.ReadAtLeastAsync(buffer.AsMemory(0, BlockSize), BlockSize, throwOnEndOfStream: false, cancellationToken)) > 0)
+            {
+                await upload.AppendAsync(buffer.AsMemory(0, read), cancellationToken);
+            }
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        await upload.CommitAsync(contentType, BlobStorageClass.Default, cancellationToken);
     }
 
     private Manifest Describe(string sha256, MediaKind kind, IncomingFile incoming, BlobInfo info, string sourcePath, ManifestSource source, bool reference)

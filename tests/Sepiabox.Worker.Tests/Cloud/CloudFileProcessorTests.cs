@@ -208,6 +208,47 @@ public sealed class CloudFileProcessorTests
         Assert.Empty((await ManifestAsync(result.AssetId!)).Embeddings);
     }
 
+    [Theory]
+    [InlineData(CloudFileProcessor.BlockSize - 1, false)]
+    [InlineData(CloudFileProcessor.BlockSize, true)]
+    [InlineData((CloudFileProcessor.BlockSize * 2) + 5, true)]
+    public async Task Writes_a_derivative_of_less_than_a_block_whole_and_stages_a_larger_one(int size, bool staged)
+    {
+        var counting = new CountingStore(_store);
+        using var folder = new TempFolder();
+        var path = Path.Combine(folder.Path, "proxy.mp4");
+        var bytes = new byte[size];
+        new Random(3).NextBytes(bytes);
+        await System.IO.File.WriteAllBytesAsync(path, bytes);
+        var processor = new CloudFileProcessor(counting, new ManifestStore(new ManifestValidator(), counting), null, null, null, TimeProvider.System, NullLogger.Instance);
+
+        await processor.WriteDerivativeAsync("abc/proxy-720p.mp4", path, "video/mp4", CancellationToken.None);
+
+        Assert.Equal(staged, counting.Staged);
+        Assert.Equal(!staged, counting.Written);
+        Assert.Equal(bytes, (await _store.ReadAsync("derivatives", "abc/proxy-720p.mp4"))!.Content.ToArray());
+    }
+
+    private sealed class CountingStore(IBlobStore inner) : DelegatingBlobStore(inner)
+    {
+        public bool Staged { get; private set; }
+
+        public bool Written { get; private set; }
+
+        public override IStagedUpload BeginUpload(string container, string name)
+        {
+            Staged = true;
+            return base.BeginUpload(container, name);
+        }
+
+        public override Task<BlobWriteResult> WriteAsync(
+            string container, string name, BinaryData content, string contentType, BlobWriteCondition condition, CancellationToken cancellationToken = default)
+        {
+            Written = true;
+            return base.WriteAsync(container, name, content, contentType, condition, cancellationToken);
+        }
+    }
+
     private static string ClipKey => Sepiabox.Pipeline.Embeddings.ClipImageEmbedder.ModelKey;
 
     private static IncomingFile File(string path, IncomingMode mode = IncomingMode.Custody, string? url = null) =>

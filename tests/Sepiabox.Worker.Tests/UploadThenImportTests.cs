@@ -25,8 +25,8 @@ public sealed class UploadThenImportTests(CatalogFixture fixture)
         ProcessCommand.Run(new ProcessOptions(anaDrive.Path, anaWork.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
         ProcessCommand.Run(new ProcessOptions(jonathasDrive.Path, jonathasWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
         var id = Path.GetFileNameWithoutExtension(Assert.Single(Directory.GetFiles(Path.Combine(anaWork.Path, "manifests"), "*.json")));
-        await UploadCommand.RunAsync(new UploadOptions(anaWork.Path, UploadDestination.Local), fixture.Blobs);
-        await UploadCommand.RunAsync(new UploadOptions(jonathasWork.Path, UploadDestination.Local), fixture.Blobs);
+        await UploadCommand.RunAsync(new UploadOptions(anaWork.Path, UploadDestination.Local), fixture.Store);
+        await UploadCommand.RunAsync(new UploadOptions(jonathasWork.Path, UploadDestination.Local), fixture.Store);
         await using var db = await fixture.CreateMigratedDatabaseAsync();
 
         // upload writes to the fixed manifests container, which other tests may also use; only this asset matters.
