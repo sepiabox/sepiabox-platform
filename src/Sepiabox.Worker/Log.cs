@@ -78,4 +78,10 @@ internal static partial class Log
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The host did not stop cleanly; the exit code reflects the command.")]
     public static partial void StopFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Deleting asset {AssetId} failed ({ExceptionType}); it is kept, and a rerun finishes it.")]
+    public static partial void AssetDeleteFailed(ILogger logger, string assetId, string exceptionType);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "assets delete for source {Source} finished with exit code {ExitCode}.")]
+    public static partial void AssetsDeleteFinished(ILogger logger, string source, int exitCode);
 }

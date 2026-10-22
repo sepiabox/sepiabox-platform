@@ -65,6 +65,18 @@ public enum BlobWriteStatus
 /// <param name="Version">The new version, when written.</param>
 public sealed record BlobWriteResult(BlobWriteStatus Status, string? Version = null);
 
+/// <summary>What a conditional delete came to (S-057).</summary>
+public enum BlobDeleteStatus
+{
+    Deleted,
+
+    /// <summary>The blob was not there: already gone, which a deletion counts as done.</summary>
+    NotFound,
+
+    /// <summary>The blob changed since it was read (someone wrote it meanwhile): not deleted, read it and decide again.</summary>
+    ConditionNotMet,
+}
+
 /// <summary>How a signed read URL presents the blob.</summary>
 /// <param name="DownloadFileName">Download the blob under this name instead of showing it.</param>
 /// <param name="ContentType">Answer with this content type instead of the one stored.</param>
@@ -112,6 +124,13 @@ public interface IBlobStore
 
     /// <summary>Deletes the blob; false when it was not there.</summary>
     Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the blob only if it still has <paramref name="version"/> (S-057): a blob someone wrote since it was read is
+    /// <see cref="BlobDeleteStatus.ConditionNotMet"/>, never an exception; one that is not there is
+    /// <see cref="BlobDeleteStatus.NotFound"/>. Any other failure is an exception.
+    /// </summary>
+    Task<BlobDeleteStatus> DeleteIfVersionAsync(string container, string name, string version, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// A read-only link to one blob that stops working at <paramref name="expiresOn"/>, for a browser: the store signs it,

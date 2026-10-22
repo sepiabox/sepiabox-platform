@@ -115,6 +115,26 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
         }
     }
 
+    public Task<BlobDeleteStatus> DeleteIfVersionAsync(string container, string name, string version, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(version);
+        lock (_lock)
+        {
+            if (!_containers.TryGetValue(container, out var blobs) || !blobs.TryGetValue(name, out var stored))
+            {
+                return Task.FromResult(BlobDeleteStatus.NotFound);
+            }
+
+            if (stored.Version != version)
+            {
+                return Task.FromResult(BlobDeleteStatus.ConditionNotMet);
+            }
+
+            blobs.Remove(name);
+            return Task.FromResult(BlobDeleteStatus.Deleted);
+        }
+    }
+
     public Task<Uri> CreateReadUrlAsync(
         string container, string name, DateTimeOffset expiresOn, BlobReadUrlOptions? options = null,
         CancellationToken cancellationToken = default)

@@ -30,6 +30,9 @@ internal class DelegatingBlobStore(IBlobStore inner) : IBlobStore
     public virtual Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default) =>
         Inner.DeleteAsync(container, name, cancellationToken);
 
+    public virtual Task<BlobDeleteStatus> DeleteIfVersionAsync(string container, string name, string version, CancellationToken cancellationToken = default) =>
+        Inner.DeleteIfVersionAsync(container, name, version, cancellationToken);
+
     public virtual Task<Uri> CreateReadUrlAsync(
         string container, string name, DateTimeOffset expiresOn, BlobReadUrlOptions? options = null,
         CancellationToken cancellationToken = default) =>
