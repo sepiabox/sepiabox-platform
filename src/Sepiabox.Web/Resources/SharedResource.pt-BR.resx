@@ -1498,4 +1498,7 @@
   <data name="Detail_ShowFullPath" xml:space="preserve">
     <value>Mostrar o caminho completo</value>
   </data>
+  <data name="Detail_AddNameFace" xml:space="preserve">
+    <value>Dar um nome, rosto sem nome {0}</value>
+  </data>
 </root>

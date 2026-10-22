@@ -443,13 +443,7 @@ public sealed class LibraryQueries(
             return null;
         }
 
-        // Only counted faces put someone in a photo (D-077, D-079).
-        var people = await db.Faces.AsNoTracking()
-            .Where(f => f.AssetId == id && f.PersonId != null
-                && (f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual))
-            .Select(f => new AssetPerson(f.PersonId!.Value, f.Person!.Name))
-            .Distinct()
-            .ToListAsync(cancellationToken);
+        // Only counted faces put someone in a photo (D-077, D-079): one query gives the faces, and the people are those they point to.
         var faceRows = await db.Faces.AsNoTracking()
             .Where(f => f.AssetId == id && f.PersonId != null
                 && (f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual))
@@ -481,7 +475,8 @@ public sealed class LibraryQueries(
             Faces = [.. faceRows.OrderBy(f => f.Name is null).ThenBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ThenBy(f => f.Box.Length > 0 ? f.Box[0] : 0).ThenBy(f => f.Id)
                 .Select(f => new AssetFace(f.Id, f.PersonId, f.Name, Crop(id, f.Box, thumbnailSizes)))],
-            People = [.. people.OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
+            People = [.. faceRows.Select(f => new AssetPerson(f.PersonId, f.Name)).Distinct()
+                .OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
             CapturedAtSource = asset.CapturedAtSource,
             Caption = TextSafety.WithoutBidiControls(asset.Caption),
             // Names that differ only in case are one album to the search, so they are listed once (the first in ordinal order).

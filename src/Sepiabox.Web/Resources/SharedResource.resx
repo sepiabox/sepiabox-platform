@@ -1571,4 +1571,7 @@
   <data name="Detail_ShowFullPath" xml:space="preserve">
     <value>Show full path</value>
   </data>
+  <data name="Detail_AddNameFace" xml:space="preserve">
+    <value>Add a name, unnamed face {0}</value>
+  </data>
 </root>

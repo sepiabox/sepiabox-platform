@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sepiabox.Catalog.Search;
 using Sepiabox.Web.Components.Pages;
 using Sepiabox.Web.Services;
@@ -31,6 +32,25 @@ public sealed class PhotoDetailRedesignTests : LocalizedContext
         // A face with a crop shows the face; one without, the initials.
         Assert.NotNull(tiles[0].QuerySelector("img.avatar-photo"));
         Assert.Equal("B", tiles[1].QuerySelector(".avatar")!.TextContent.Trim());
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "Add a name, unnamed face {0}")]
+    [InlineData(Cultures.BrazilianPortuguese, "Dar um nome, rosto sem nome {0}")]
+    public void Gives_each_unnamed_face_its_own_accessible_name_numbered_in_display_order_with_the_visible_text_first(string culture, string pattern)
+    {
+        using var language = Cultures.Use(culture);
+        var faces = new[] { new AssetFace(1, 3, "Ana", null), new AssetFace(2, 8, null, null), new AssetFace(3, 9, null, null), new AssetFace(4, 10, null, null) };
+
+        var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Faces = faces });
+
+        var tiles = page.FindAll(".faces a.face");
+        Assert.Null(tiles[0].GetAttribute("aria-label"));
+        var names = tiles.Skip(1).Select(t => t.GetAttribute("aria-label")).ToList();
+        Assert.Equal([string.Format(System.Globalization.CultureInfo.InvariantCulture, pattern, 1), string.Format(System.Globalization.CultureInfo.InvariantCulture, pattern, 2), string.Format(System.Globalization.CultureInfo.InvariantCulture, pattern, 3)], names);
+        Assert.Equal(3, names.Distinct().Count());
+        // The visible text is what the name starts with (WCAG 2.5.3).
+        Assert.All(tiles.Skip(1), t => Assert.StartsWith(t.QuerySelector(".name")!.TextContent, t.GetAttribute("aria-label"), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -89,20 +109,59 @@ public sealed class PhotoDetailRedesignTests : LocalizedContext
     [Fact]
     public void Links_the_photos_before_and_after_in_the_timeline_page()
     {
-        var page = RenderDetail(Details.Photo(Ids.Of(3)), new FakeLibrary(Five()));
+        var page = RenderDetail(Details.Photo(Ids.Of(3)), new FakeLibrary(Five()), address: "?page=1");
 
-        Assert.Equal($"photos/{Ids.Of(2)}", page.Find("a.nav-arrow.prev").GetAttribute("href"));
-        Assert.Equal($"photos/{Ids.Of(4)}", page.Find("a.nav-arrow.next").GetAttribute("href"));
+        Assert.Equal($"photos/{Ids.Of(2)}?page=1", page.Find("a.nav-arrow.prev").GetAttribute("href"));
+        Assert.Equal($"photos/{Ids.Of(4)}?page=1", page.Find("a.nav-arrow.next").GetAttribute("href"));
         Assert.Equal(["Previous photo", "Next photo"], page.FindAll("a.nav-arrow").Select(a => a.GetAttribute("aria-label")));
     }
 
     [Fact]
     public void Has_no_previous_link_for_the_first_photo_of_the_page()
     {
-        var page = RenderDetail(Details.Photo(Ids.Of(1)), new FakeLibrary(Five()));
+        var page = RenderDetail(Details.Photo(Ids.Of(1)), new FakeLibrary(Five()), address: "?page=1");
 
         Assert.Empty(page.FindAll("a.nav-arrow.prev"));
         Assert.Single(page.FindAll("a.nav-arrow.next"));
+    }
+
+    [Fact]
+    public void Looks_for_no_neighbours_and_shows_no_arrows_for_a_visitor_who_came_from_no_listing()
+    {
+        // From a person's page, an occasion's link or a shared address: no page and no filters in the address.
+        var library = new FakeLibrary(Five());
+
+        var page = RenderDetail(Details.Photo(Ids.Of(3)), library);
+
+        Assert.Empty(page.FindAll("a.nav-arrow"));
+        Assert.Null(library.RequestedPage);
+        Assert.Empty(library.Searches);
+    }
+
+    [Fact]
+    public void Shows_the_photo_without_arrows_and_logs_it_when_the_listing_cannot_be_read()
+    {
+        var log = new ListLogger<PhotoDetail>();
+        Services.AddSingleton<ILogger<PhotoDetail>>(log);
+        var library = new FakeLibrary(Five()) { TimelineFailure = new InvalidOperationException("the timeline is down") };
+
+        var page = RenderDetail(Details.Photo(Ids.Of(3)), library, address: "?page=2");
+
+        Assert.Empty(page.FindAll("a.nav-arrow"));
+        Assert.NotEmpty(page.FindAll("figure.preview img"));
+        Assert.Contains(log.Entries, e => e.Level == Microsoft.Extensions.Logging.LogLevel.Warning && e.Message.Contains("could not be found", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Shows_the_photo_without_arrows_when_the_search_cannot_be_read()
+    {
+        var encoded = SearchQueryJson.Encode(SearchLinks.FromFields(null, "12", null, null, null));
+        var library = new FakeLibrary { SearchFailure = new InvalidOperationException("search is down") };
+
+        var page = RenderDetail(Details.Photo(Ids.Of(2)), library, address: $"?{SearchLinks.QueryParameter}={Uri.EscapeDataString(encoded)}");
+
+        Assert.Empty(page.FindAll("a.nav-arrow"));
+        Assert.NotNull(page.Find("h1"));
     }
 
     [Fact]

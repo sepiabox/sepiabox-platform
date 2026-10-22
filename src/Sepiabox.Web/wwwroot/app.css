@@ -1416,6 +1416,29 @@ button[data-close] {
     font-size: var(--text-sm);
 }
 
+/* The region tools sit on the dark stage: the page's muted grey (about 2:1 there) is replaced by a light one (about 11:1). */
+.stage .muted,
+.stage .region-status {
+    color: #cfc6b9;
+}
+
+/* In the dark theme the stage is nearly the page's own colour: a hairline keeps it a frame, not a gap. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .stage {
+        border: 1px solid var(--border);
+    }
+}
+
+:root[data-theme="dark"] .stage {
+    border: 1px solid var(--border);
+}
+
+@media (max-width: 600px) {
+    .preview {
+        min-height: 240px;
+    }
+}
+
 @media (max-width: 900px) {
     .detail {
         grid-template-columns: minmax(0, 1fr);

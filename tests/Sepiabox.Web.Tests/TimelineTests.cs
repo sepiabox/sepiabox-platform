@@ -32,7 +32,7 @@ public sealed class TimelineTests : LocalizedContext
         var page = Render<Timeline>();
 
         var cards = page.FindAll("a.thumb");
-        Assert.Equal($"photos/{Ids.Of(15)}", cards[0].GetAttribute("href"));
+        Assert.Equal($"photos/{Ids.Of(15)}?page=1", cards[0].GetAttribute("href"));
         Assert.Equal("0:03", cards[0].QuerySelector(".badge")!.TextContent);
         Assert.NotNull(cards[0].QuerySelector(".play"));
         Assert.Null(cards[1].QuerySelector(".play"));

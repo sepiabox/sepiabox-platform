@@ -3,6 +3,7 @@
 @inject ILibraryQueries Library
 @inject NavigationManager Navigation
 @inject IServiceProvider Services
+@inject ILogger<PhotoDetail> Log
 @* Static server rendering (no @rendermode): the page is plain HTML with links, nothing interactive. *@
 
 @if (_asset is not null)
@@ -141,9 +142,11 @@
             <section class="card people-card">
                 <h2>@Text["Detail_People"]</h2>
                 <div class="faces">
+                    @{ var unnamedNumber = 0; }
                     @foreach (var face in _asset.Faces)
                     {
-                        <a class="face@(face.Name is null ? " unnamed" : " named")" href="@FaceHref(face)">
+                        @* Unnamed faces are all "Add a name": the accessible name says which one, in display order, the visible text first. *@
+                        <a class="face@(face.Name is null ? " unnamed" : " named")" href="@FaceHref(face)" aria-label="@(face.Name is null ? Text["Detail_AddNameFace", ++unnamedNumber].Value : null)">
                             <PersonAvatar Name="@face.Name" PersonId="@face.PersonId" Size="md" Crop="@face.Crop" />
                             <span class="name">@(face.Name ?? Text["Detail_AddName"])</span>
                         </a>
@@ -250,7 +253,16 @@
             return;
         }
 
-        await FindNeighboursAsync();
+        try
+        {
+            await FindNeighboursAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The arrows are a convenience: a failing listing must not take the photo with it.
+            (_previous, _next) = (null, null);
+            Log.LogWarning(ex, "The photos before and after {AssetId} could not be found; the page has no arrows.", Id);
+        }
     }
 
     // The photo before and after this one in the listing the visitor came from: the filtered search or the timeline page, both newest first.
@@ -267,8 +279,10 @@
                 listing = (await Library.SearchAsync(query)).Items;
             }
         }
-        else
+        else if (PageQuery is not null)
         {
+            // Only a visitor who came from a listing has an order to move in: one who came from a person's or an occasion's page,
+            // or by an address typed or shared, has no page in it, and the timeline's first page would be the wrong context.
             listing = (await Library.GetTimelinePageAsync(LibraryQueries.ParsePage(PageQuery))).Items;
         }
 
@@ -297,8 +311,7 @@
     // The same query or page as this one, so the arrows keep the way back and the order.
     private string NeighbourLink(TimelineItem item) =>
         SearchQueryParameter is not null ? $"photos/{item.Id}?{SearchLinks.QueryParameter}={Uri.EscapeDataString(SearchQueryParameter)}"
-        : LibraryQueries.ParsePage(PageQuery) is > 1 and var page ? $"photos/{item.Id}?page={page}"
-        : $"photos/{item.Id}";
+        : $"photos/{item.Id}?page={LibraryQueries.ParsePage(PageQuery)}";
 
     // A named person's face goes to their photos; an unnamed one's to their page, to be named (S-021).
     private static string FaceHref(AssetFace face) =>
