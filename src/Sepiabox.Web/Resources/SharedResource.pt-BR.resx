@@ -1122,4 +1122,94 @@
     <value>O Sepiabox não guarda uma cópia deste original: ele fica na origem.</value>
     <comment>Answer to a download of an index-only asset.</comment>
   </data>
+  <data name="Layout_Sources" xml:space="preserve">
+    <value>Origens</value>
+  </data>
+  <data name="Sources_Heading" xml:space="preserve">
+    <value>Origens</value>
+  </data>
+  <data name="Sources_Intro" xml:space="preserve">
+    <value>Conecte as contas na nuvem onde a família guarda fotos. O Sepiabox apenas lê, e nunca altera.</value>
+  </data>
+  <data name="Sources_GoogleDrive" xml:space="preserve">
+    <value>Google Drive</value>
+  </data>
+  <data name="Sources_Connect" xml:space="preserve">
+    <value>Conectar o Google Drive</value>
+  </data>
+  <data name="Sources_Reconnect" xml:space="preserve">
+    <value>Reconectar</value>
+  </data>
+  <data name="Sources_Disconnect" xml:space="preserve">
+    <value>Desconectar</value>
+  </data>
+  <data name="Sources_Count" xml:space="preserve">
+    <value>Contar fotos e vídeos</value>
+  </data>
+  <data name="Sources_Photos" xml:space="preserve">
+    <value>Fotos: {0}</value>
+  </data>
+  <data name="Sources_Videos" xml:space="preserve">
+    <value>Vídeos: {0}</value>
+  </data>
+  <data name="Sources_CountedAt" xml:space="preserve">
+    <value>Contado em {0}</value>
+  </data>
+  <data name="Sources_NotCounted" xml:space="preserve">
+    <value>Ainda não contado. Contar apenas consulta: nada é importado.</value>
+  </data>
+  <data name="Sources_Status_connected" xml:space="preserve">
+    <value>Conectado</value>
+  </data>
+  <data name="Sources_Status_reconnect" xml:space="preserve">
+    <value>Conexão expirada</value>
+  </data>
+  <data name="Sources_ExpiredHint" xml:space="preserve">
+    <value>O Google deixou de aceitar o acesso a esta conta. Ele expira a cada 7 dias enquanto o app está em testes. Reconecte para contar de novo.</value>
+  </data>
+  <data name="Sources_None" xml:space="preserve">
+    <value>Nenhuma conta conectada ainda.</value>
+  </data>
+  <data name="Sources_NotConfigured" xml:space="preserve">
+    <value>O login com Google não está configurado, então ainda não dá para conectar o Google Drive.</value>
+  </data>
+  <data name="Sources_DisconnectHint" xml:space="preserve">
+    <value>Desconectar apaga o acesso guardado à conta. Nada muda no Google Drive.</value>
+  </data>
+  <data name="Sources_Note_connected" xml:space="preserve">
+    <value>Google Drive conectado.</value>
+  </data>
+  <data name="Sources_Note_denied" xml:space="preserve">
+    <value>O Google Drive não foi conectado: o acesso não foi concedido.</value>
+  </data>
+  <data name="Sources_Note_state" xml:space="preserve">
+    <value>Não foi possível confirmar a conexão. Tente de novo.</value>
+  </data>
+  <data name="Sources_Note_failed" xml:space="preserve">
+    <value>Não foi possível conectar o Google Drive. Tente de novo.</value>
+  </data>
+  <data name="Sources_Note_counted" xml:space="preserve">
+    <value>Contagem feita.</value>
+  </data>
+  <data name="Sources_Note_disconnected" xml:space="preserve">
+    <value>Desconectado. Nada mudou no Google Drive; você pode conectar de novo quando quiser.</value>
+  </data>
+  <data name="Sources_Note_reconnect" xml:space="preserve">
+    <value>O Google deixou de aceitar o acesso a esta conta. Reconecte-a.</value>
+  </data>
+  <data name="Sources_Note_countFailed" xml:space="preserve">
+    <value>Não foi possível contar agora. Tente mais tarde.</value>
+  </data>
+  <data name="Sources_Note_notFound" xml:space="preserve">
+    <value>Essa conexão não existe mais.</value>
+  </data>
+  <data name="Sources_DisconnectAria" xml:space="preserve">
+    <value>Desconectar {0}</value>
+  </data>
+  <data name="Sources_CountAria" xml:space="preserve">
+    <value>Contar fotos e vídeos de {0}</value>
+  </data>
+  <data name="Sources_ReconnectAria" xml:space="preserve">
+    <value>Reconectar {0}</value>
+  </data>
 </root>

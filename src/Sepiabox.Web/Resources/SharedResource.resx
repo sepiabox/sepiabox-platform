@@ -1184,4 +1184,94 @@
     <value>Sepiabox keeps no copy of this original: it stays at its source.</value>
     <comment>Answer to a download of an index-only asset.</comment>
   </data>
+  <data name="Layout_Sources" xml:space="preserve">
+    <value>Sources</value>
+  </data>
+  <data name="Sources_Heading" xml:space="preserve">
+    <value>Sources</value>
+  </data>
+  <data name="Sources_Intro" xml:space="preserve">
+    <value>Connect the cloud accounts where the family keeps photos. Sepiabox only reads them and never changes them.</value>
+  </data>
+  <data name="Sources_GoogleDrive" xml:space="preserve">
+    <value>Google Drive</value>
+  </data>
+  <data name="Sources_Connect" xml:space="preserve">
+    <value>Connect Google Drive</value>
+  </data>
+  <data name="Sources_Reconnect" xml:space="preserve">
+    <value>Reconnect</value>
+  </data>
+  <data name="Sources_Disconnect" xml:space="preserve">
+    <value>Disconnect</value>
+  </data>
+  <data name="Sources_Count" xml:space="preserve">
+    <value>Count photos and videos</value>
+  </data>
+  <data name="Sources_Photos" xml:space="preserve">
+    <value>Photos: {0}</value>
+  </data>
+  <data name="Sources_Videos" xml:space="preserve">
+    <value>Videos: {0}</value>
+  </data>
+  <data name="Sources_CountedAt" xml:space="preserve">
+    <value>Counted {0}</value>
+  </data>
+  <data name="Sources_NotCounted" xml:space="preserve">
+    <value>Not counted yet. Counting only looks: nothing is imported.</value>
+  </data>
+  <data name="Sources_Status_connected" xml:space="preserve">
+    <value>Connected</value>
+  </data>
+  <data name="Sources_Status_reconnect" xml:space="preserve">
+    <value>Connection expired</value>
+  </data>
+  <data name="Sources_ExpiredHint" xml:space="preserve">
+    <value>Google no longer accepts the access to this account. It expires every 7 days while the app is in testing. Reconnect to count again.</value>
+  </data>
+  <data name="Sources_None" xml:space="preserve">
+    <value>No account is connected yet.</value>
+  </data>
+  <data name="Sources_NotConfigured" xml:space="preserve">
+    <value>Google sign-in is not set up, so Google Drive cannot be connected yet.</value>
+  </data>
+  <data name="Sources_DisconnectHint" xml:space="preserve">
+    <value>Disconnecting deletes the stored access to the account. Nothing in Google Drive changes.</value>
+  </data>
+  <data name="Sources_Note_connected" xml:space="preserve">
+    <value>Google Drive connected.</value>
+  </data>
+  <data name="Sources_Note_denied" xml:space="preserve">
+    <value>Google Drive was not connected: access was not granted.</value>
+  </data>
+  <data name="Sources_Note_state" xml:space="preserve">
+    <value>The connection could not be confirmed. Try again.</value>
+  </data>
+  <data name="Sources_Note_failed" xml:space="preserve">
+    <value>Google Drive could not be connected. Try again.</value>
+  </data>
+  <data name="Sources_Note_counted" xml:space="preserve">
+    <value>Counted.</value>
+  </data>
+  <data name="Sources_Note_disconnected" xml:space="preserve">
+    <value>Disconnected. Nothing changed in Google Drive; you can connect it again at any time.</value>
+  </data>
+  <data name="Sources_Note_reconnect" xml:space="preserve">
+    <value>Google no longer accepts the access to this account. Reconnect it.</value>
+  </data>
+  <data name="Sources_Note_countFailed" xml:space="preserve">
+    <value>Could not count right now. Try again later.</value>
+  </data>
+  <data name="Sources_Note_notFound" xml:space="preserve">
+    <value>That connection is gone.</value>
+  </data>
+  <data name="Sources_DisconnectAria" xml:space="preserve">
+    <value>Disconnect {0}</value>
+  </data>
+  <data name="Sources_CountAria" xml:space="preserve">
+    <value>Count photos and videos for {0}</value>
+  </data>
+  <data name="Sources_ReconnectAria" xml:space="preserve">
+    <value>Reconnect {0}</value>
+  </data>
 </root>

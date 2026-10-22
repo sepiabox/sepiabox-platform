@@ -7,6 +7,7 @@ using Sepiabox.Web.Auth;
 using Sepiabox.Web.Components;
 using Sepiabox.Web.Localization;
 using Sepiabox.Web.Services;
+using Sepiabox.Web.Sources;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +43,12 @@ builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 builder.Services.AddScoped<IPeopleEditor, PeopleEditor>();
 builder.Services.AddScoped<IFaceSettings, FaceSettings>();
 builder.Services.AddScoped<ISavedPlaces, SavedPlaces>();
+// Connected cloud accounts (S-037, D-097): Google Drive with the sign-in's OAuth client; tokens protected by Data Protection.
+builder.Services.AddSingleton(services => new GoogleDrive(services.GetRequiredService<SignInProviders>().Google));
+builder.Services.AddSingleton<IDriveClient>(services => services.GetRequiredService<GoogleDrive>());
+builder.Services.AddSingleton<IDriveAuthorization>(services => services.GetRequiredService<GoogleDrive>());
+builder.Services.AddSingleton<DriveTokenProtector>();
+builder.Services.AddScoped<IConnectedSources, ConnectedSources>();
 // Questions (S-025): Claude through the project's own interface (D-051), with a daily limit per person.
 builder.Services.AddSingleton<IQuestionTranslator, ConfiguredQuestionTranslator>();
 builder.Services.AddSingleton<IQuestionQuota, CatalogQuestionQuota>();
@@ -89,6 +96,7 @@ app.MapSepiaboxAuth();
 app.MapLanguageSwitch();
 app.MapMediaEndpoints();
 app.MapSearchEndpoints();
+app.MapSourceEndpoints();
 app.MapQuestionEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
