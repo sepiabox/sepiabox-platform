@@ -644,6 +644,22 @@ main {
     margin: 0;
 }
 
+/* A caption is the family's own text: its line breaks stay, and a long word or address breaks rather than widening the page (S-052). */
+.facts dt.caption-label,
+.facts dd.caption {
+    grid-column: 1 / -1;
+}
+
+.facts dd.caption {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.photo-albums {
+    padding-left: 18px;
+    overflow-wrap: anywhere;
+}
+
 /* Names and paths may break anywhere, but only when they do not fit (not mid-word in a sentence that does). */
 .sources {
     padding-left: 18px;
@@ -946,6 +962,19 @@ main {
     padding: 8px 12px;
     border-left: 3px solid var(--cyanotype);
     background: var(--white);
+}
+
+/* After a correction on a person's page (#106) the page jumps to the next face, which would leave the note off screen: it
+   stays in view while the page is scrolled, and a face card lands below the note. */
+.person-note {
+    position: sticky;
+    top: 8px;
+    z-index: 5;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.person-faces .person {
+    scroll-margin-top: 96px;
 }
 
 /* The occasions page (S-023): a card per occasion, three thumbnails over its title. */
@@ -1253,4 +1282,23 @@ main {
     display: inline-flex;
     align-items: center;
     min-height: 40px;
+
+/* A long album name must not widen the bar or the page (S-052): the select shrinks to its cell and shows an ellipsis. */
+.filters label {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.filters select {
+    min-width: 0;
+    max-width: min(100%, 20rem);
+}
+
+/* The disclosure triangle stays (display: list-item), and the line reads as a link with a 44 px target. */
+.more-albums summary {
+    display: list-item;
+    cursor: pointer;
+    padding: 12px 0;
+    color: var(--cyanotype);
+    text-decoration: underline;
 }

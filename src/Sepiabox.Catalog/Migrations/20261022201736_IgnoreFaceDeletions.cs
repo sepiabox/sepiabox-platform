@@ -23,9 +23,6 @@ namespace Sepiabox.Catalog.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // A row of the new scope would break the old constraint: it was a deletion of faces all the same.
-            migrationBuilder.Sql("UPDATE face_data_deletions SET scope = 'person' WHERE scope = 'ignore'");
-
             migrationBuilder.DropCheckConstraint(
                 name: "ck_face_data_deletions_scope",
                 table: "face_data_deletions");

@@ -41,7 +41,9 @@ public sealed record StorageReport(
 /// The original's address at its source, as the manifest gave it (S-063). Untrusted text: show it only through
 /// <see cref="SourceLinks.SafeUrl"/>.
 /// </param>
-public sealed record AssetSourceDetail(string Type, string Name, string Path, string? Url = null);
+/// <param name="Id">The source's row, which "Open original" of a Drive source names (S-038); 0 when unknown.</param>
+/// <param name="Removed">True when the sync found the file gone from its cloud source (S-038): the source is kept and marked.</param>
+public sealed record AssetSourceDetail(string Type, string Name, string Path, string? Url = null, long Id = 0, bool Removed = false);
 
 /// <summary>
 /// One asset for the detail page. <c>PreviewName</c> is the derivative shown large: the photo preview, or the
@@ -64,6 +66,15 @@ public sealed record AssetDetail(
 {
     /// <summary>The people in it (S-021): those with a counted face, named ones first, by name.</summary>
     public IReadOnlyList<AssetPerson> People { get; init; } = [];
+
+    /// <summary>Where its date came from (S-052): <c>metadata</c>, <c>export</c>, <c>fileName</c> or <c>folder</c>; null without a date.</summary>
+    public string? CapturedAtSource { get; init; }
+
+    /// <summary>What an export's maker wrote about it (S-052), as written; null when nothing.</summary>
+    public string? Caption { get; init; }
+
+    /// <summary>The albums an export put it in (S-052), by name; each links to the albums filter.</summary>
+    public IReadOnlyList<string> Albums { get; init; } = [];
 
     /// <summary>Where it was taken, as latitude and longitude, for "Save this place" (S-014); null without a location.</summary>
     public (double Latitude, double Longitude)? Location { get; init; }
@@ -108,6 +119,9 @@ public sealed record FilterOptions(
 
     /// <summary>The types the catalog's occasions have (S-024), in the order of <c>OccasionTypes.All</c>; read on every request, since a classify changes them.</summary>
     public IReadOnlyList<string> EventTypes { get; init; } = [];
+
+    /// <summary>The albums the catalog has (S-052), in display order: those an export put assets in.</summary>
+    public IReadOnlyList<string> Albums { get; init; } = [];
 }
 
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
@@ -408,6 +422,7 @@ public sealed class LibraryQueries(
             .AsSplitQuery()
             .Include(a => a.Sources)
             .Include(a => a.Derivatives)
+            .Include(a => a.Albums)
             .SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
 
         if (asset is null)
@@ -448,12 +463,17 @@ public sealed class LibraryQueries(
             asset.Width,
             asset.Height,
             preview,
-            [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path, s.Url))],
+            [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path, s.Url, s.Id, s.RemovedAt is not null))],
             asset.DurationSeconds,
             proxy is not null,
             PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry))
         {
             People = [.. people.OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
+            CapturedAtSource = asset.CapturedAtSource,
+            Caption = TextSafety.WithoutBidiControls(asset.Caption),
+            // Names that differ only in case are one album to the search, so they are listed once (the first in ordinal order).
+            Albums = [.. asset.Albums.Select(a => TextSafety.WithoutBidiControls(a.Name)!).OrderBy(n => n, StringComparer.Ordinal)
+                .DistinctBy(n => n, StringComparer.OrdinalIgnoreCase).Order(StringComparer.CurrentCultureIgnoreCase)],
             Location = asset.Location is { } point ? (point.Y, point.X) : null,
             HasEmbedding = hasEmbedding,
             OriginalStored = asset.OriginalStored,
@@ -667,6 +687,7 @@ public sealed class LibraryQueries(
             EventTypes = [.. Sepiabox.Catalog.Events.OccasionTypes.All.Where(typesPresent.Contains)],
             Cities = [.. options.Cities.Order(byName)],
             Sources = [.. options.Sources.Order(byName)],
+            Albums = [.. options.Albums.Order(byName)],
             People = [.. people.Order(byName)],
             MeLinked = meLinked,
             SavedPlaces = [.. places.Select(p => p.Name).Order(byName)],
@@ -678,6 +699,9 @@ public sealed class LibraryQueries(
     private string? Me() => user?.Email is { } email && !string.IsNullOrWhiteSpace(email) ? email.Trim().ToLowerInvariant() : null;
 
     private SearchService Search(CatalogDbContext db) => new(db, clock ?? TimeProvider.System, searchOptions, embedder, user?.Email, regionEmbedder);
+
+    /// <summary>The most albums the filter bar lists.</summary>
+    public const int MaxAlbums = 500;
 
     private async Task<FilterOptions> LoadFilterOptionsAsync(CancellationToken cancellationToken)
     {
@@ -691,7 +715,18 @@ public sealed class LibraryQueries(
         var countryNames = db.Assets.Where(a => a.PlaceCountry != null).Select(a => a.PlaceCountry);
         var countries = await db.GeoNames.Where(g => g.CountryName != null && countryNames.Contains(g.CountryName))
             .Select(g => g.CountryCode).Distinct().OrderBy(c => c).ToListAsync(cancellationToken);
-        return new FilterOptions(years, cities, sources, countries);
+        // Names the DSL can take (200 characters), most used first when there are more than the bar can hold (D-114). Spellings that
+        // differ only in case are one album here, as the search and the photo page take them (the catalog keeps both, D-114): the
+        // bar offers the spelling most photos use.
+        var counted = await db.AssetAlbums.Where(l => l.Name.Length <= SearchQueryJson.MaxNameLength)
+            .GroupBy(l => l.Name).Select(g => new { Name = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        var albums = counted
+            .GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new { Name = g.OrderByDescending(a => a.Count).ThenBy(a => a.Name, StringComparer.Ordinal).First().Name, Count = g.Sum(a => a.Count) })
+            .OrderByDescending(a => a.Count).ThenBy(a => a.Name, StringComparer.Ordinal)
+            .Take(MaxAlbums).Select(a => a.Name).ToList();
+        return new FilterOptions(years, cities, sources, countries) { Albums = albums };
     }
 
     private static IEnumerable<AssetSource> OrderSources(IEnumerable<AssetSource> sources) =>

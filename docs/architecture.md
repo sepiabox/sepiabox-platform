@@ -65,7 +65,7 @@ Originals are **never re-read** in the cloud during local ingest (reading the Co
 
 ## Search
 
-All search goes through a **JSON DSL** (`docs/schemas/search.v1.json`): filters for time, place, people, source, kind, occasion, visual similarity and aggregations. The filter UI and the question translator produce the same DSL; a single service executes it (SQL + kNN in pgvector).
+All search goes through a **JSON DSL** (`docs/schemas/search.v1.json`): filters for time, place, people, source, album, kind, occasion, visual similarity and aggregations. The filter UI and the question translator produce the same DSL; a single service executes it (SQL + kNN in pgvector).
 
 Natural-language questions: the text (never the photos) goes to **Claude Haiku 5.5** (`claude-haiku-5-5`) through the **Anthropic API** (D-052), with *structured outputs* restricted to the DSL schema. Visual terms are translated to English (CLIP is English-only). Daily question limit per user.
 
@@ -74,7 +74,7 @@ Natural-language questions: the text (never the photos) goes to **Claude Haiku 5
 - Sign-in with **Google** and **Microsoft** (Apple will come with the iOS app). A **list of allowed e-mails** is checked when the sign-in returns (not on the list, no cookie) and a default authorization policy protects every route.
 - In Azure each service has its own managed identity with only the roles it uses; the web connects to PostgreSQL as a role that cannot change the schema, and reads the owner's secrets (sign-in, the access list, the Anthropic key) from Key Vault; its data protection keys live in Blob Storage under a Key Vault key (D-062).
 - Face recognition is optional; it can be turned off and face data deleted. No inference of sensitive categories (religion, health).
-- Full export at any time.
+- Full export at any time: Settings → Export all data asks the `sepiabox-export` job for a zip with `catalog.json`, `originals.txt` (24 h links) and a README, with face data only if asked (D-110).
 
 ## Cloud and costs
 

@@ -1,6 +1,8 @@
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
+using Azure.Security.KeyVault.Secrets;
 using Azure.Storage.Blobs;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,10 +24,12 @@ using Sepiabox.Worker;
 using Sepiabox.Worker.Assets;
 using Sepiabox.Worker.Cloud;
 using Sepiabox.Worker.Events;
+using Sepiabox.Worker.Exports;
 using Sepiabox.Worker.Faces;
 using Sepiabox.Worker.Importing;
 using Sepiabox.Worker.Occasions;
 using Sepiabox.Worker.Places;
+using Sepiabox.Worker.Sources;
 
 if (args is ["-h" or "--help" or "help"])
 {
@@ -70,6 +74,17 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
     {
         AddBlobStore(builder);
         builder.Services.AddSingleton<ManifestValidator>();
+    }
+
+    if (command.Action == WorkerAction.SyncGoogleDrive)
+    {
+        AddBlobStore(builder);
+        AddDriveSyncServices(builder);
+    }
+
+    if (command.Action == WorkerAction.Export)
+    {
+        AddBlobStore(builder);
     }
 
     if (command.Action is WorkerAction.ImportOnce or WorkerAction.ImportFromQueue or WorkerAction.PlacesRefresh or WorkerAction.GeoNamesUpdate)
@@ -190,6 +205,55 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         return sweep.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }
 
+    if (command.Action == WorkerAction.SyncGoogleDrive)
+    {
+        var configuration = services.GetRequiredService<IConfiguration>();
+        var db = services.GetRequiredService<CatalogDbContext>();
+        // From the vault by name in Azure; from configuration (user secrets) on a computer without one.
+        var client = services.GetService<SecretClient>() is { } vault
+            ? await VaultSecrets.ReadGoogleClientAsync(new KeyVaultSecretSource(vault, logger), logger, cancellationToken)
+            : OAuthClientFrom(configuration, "Auth:Google");
+        if (client is null)
+        {
+            // With nothing connected there is nothing to sync, and no OAuth client is how it is before the owner sets one up; with an
+            // account connected, a client that is gone is a fault the job must show: it ends Failed.
+            var connected = await db.ConnectedSources.AnyAsync(
+                s => s.Type == ConnectedSourceTypes.GoogleDrive && s.Status == ConnectedSourceStatuses.Connected, cancellationToken);
+            Log.DriveSyncNotConfigured(logger);
+            return connected ? ExitCodes.Failed : ExitCodes.Success;
+        }
+
+        var sync = new DriveSync(
+            db,
+            services.GetRequiredService<IBlobStore>(),
+            new GoogleDriveSyncClient(client.Value.Id, client.Value.Secret),
+            services.GetRequiredService<IDataProtectionProvider>(),
+            services.GetRequiredService<TimeProvider>(),
+            logger,
+            configuration.GetValue("Sync:MaxFilesPerRun", DriveSync.DefaultMaxFilesPerRun));
+        if (command.Rescan is { } account && !await sync.RescanAsync(account, cancellationToken))
+        {
+            Log.DriveRescanNotFound(logger);
+            return ExitCodes.Usage;
+        }
+
+        var synced = await sync.RunAsync(cancellationToken);
+        Log.DriveSyncFinished(logger, synced.Accounts, synced.Staged, synced.Removed, synced.Skipped, synced.Reconnect, synced.Failed);
+        return synced.Failed == 0 ? ExitCodes.Success : ExitCodes.Failed;
+    }
+
+    if (command.Action == WorkerAction.Export)
+    {
+        // The originals' links last 24 hours, longer than the 4 of the default store (S-040, D-110): its own store, on the same client.
+        using var linkStore = new AzureBlobStore(
+            services.GetRequiredService<BlobServiceClient>(), services.GetRequiredService<TimeProvider>(), ExportGenerator.OriginalLinkLifetime);
+        var written = await new ExportGenerator(
+                services.GetRequiredService<CatalogDbContext>(), linkStore, services.GetRequiredService<TimeProvider>(), logger)
+            .RunPendingAsync(cancellationToken);
+        Log.ExportsDone(logger, written);
+        return ExitCodes.Success;
+    }
+
     if (command.Action == WorkerAction.ImportFromQueue)
     {
         // The Azure implementation of the queue (D-051): Event Grid's events, delivered to Service Bus.
@@ -293,6 +357,42 @@ static async Task<int> ProcessFromQueueAsync(IServiceProvider services, ILogger 
     return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
 }
 
+// The sync's two outside inputs (S-038, D-115): the Google OAuth client, read from the owner's Key Vault by name, these two secrets and no
+// other (the Anthropic key is in the same vault), and the token ring, read-only, to unprotect the refresh tokens the web protected.
+// That ring is not the web's cookie ring: this job holds nothing that could sign a session.
+static void AddDriveSyncServices(HostApplicationBuilder builder)
+{
+    // The vault is read by name, never listed or loaded as configuration: the identity has a role on two secrets and none on the vault.
+    if (!string.IsNullOrEmpty(builder.Configuration.GetConnectionString("vault")))
+    {
+        builder.AddAzureKeyVaultClient("vault");
+    }
+
+    builder.Services.AddSingleton<IDataProtectionProvider>(services =>
+    {
+        var ring = new ServiceCollection();
+        ring.AddLogging();
+        var protection = ring.AddDataProtection().SetApplicationName(BlobLayout.TokenRingApplicationName);
+        if (services.GetRequiredService<IConfiguration>()["DataProtection:TokenKeyUri"] is { Length: > 0 } keyUri)
+        {
+            protection
+                .PersistKeysToAzureBlobStorage(services.GetRequiredService<BlobServiceClient>()
+                    .GetBlobContainerClient(BlobLayout.TokenRingContainer)
+                    .GetBlobClient(BlobLayout.TokenRingBlobName))
+                .ProtectKeysWithAzureKeyVault(new Uri(keyUri), new DefaultAzureCredential())
+                // The job only reads the ring: it never makes a key, which the web does.
+                .DisableAutomaticKeyGeneration();
+        }
+
+        return ring.BuildServiceProvider().GetRequiredService<IDataProtectionProvider>();
+    });
+}
+
+static (string Id, string Secret)? OAuthClientFrom(IConfiguration configuration, string section) =>
+    configuration[$"{section}:ClientId"] is { Length: > 0 } id && configuration[$"{section}:ClientSecret"] is { Length: > 0 } secret
+        ? (id, secret)
+        : null;
+
 // The Azure implementation of IBlobStore (D-051), on the client Aspire registers.
 static void AddBlobStore(HostApplicationBuilder builder)
 {
@@ -314,4 +414,22 @@ static ServiceBusBlobEventQueue CreateServiceBusQueue(IConfiguration configurati
         PrefetchCount = 0,
     });
     return new ServiceBusBlobEventQueue(client, receiver);
+}
+
+// The sync's Key Vault, by name (D-115): a get, never a list, because the identity has a role on two secrets and none on the vault.
+// A secret that is not there (404) or that it has no role on yet (403) is not set; anything else is a fault and is thrown.
+internal sealed class KeyVaultSecretSource(SecretClient vault, ILogger logger) : ISecretSource
+{
+    public async Task<string?> GetAsync(string name, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await vault.GetSecretAsync(name, null, cancellationToken)).Value.Value;
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status is 403 or 404)
+        {
+            Log.VaultSecretStatus(logger, name, ex.Status);
+            return null;
+        }
+    }
 }

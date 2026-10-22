@@ -15,6 +15,9 @@ public sealed record FilterFields(int? Year, int? Month, string? Kind, string? C
     /// <summary>The family's places chosen (S-014): taken in any of them.</summary>
     public IReadOnlyList<string> SavedPlaces { get; init; } = [];
 
+    /// <summary>The album chosen (S-052): one, since the bar offers a single select; a query with several shows none.</summary>
+    public string? Album { get; init; }
+
     /// <summary>The photo whose similar ones are shown (S-017), which the bar keeps while it narrows them.</summary>
     public SimilarToFilter? SimilarTo { get; init; }
 
@@ -136,7 +139,8 @@ public static class SearchLinks
         string? regionBox = null,
         string? regionLimit = null,
         string? blurry = null,
-        string? includeHidden = null)
+        string? includeHidden = null,
+        string? album = null)
     {
         var events = EventIds(eventIds);
         var names = Names(people);
@@ -156,6 +160,7 @@ public static class SearchLinks
             Kinds = kind is AssetKinds.Photo or AssetKinds.Video ? [kind] : null,
             Places = Name(city) is { } c ? new PlaceFilter { Cities = [c] } : null,
             Sources = Name(source) is { } s ? [s] : null,
+            Albums = Name(album) is { } al ? [al] : null,
             Visual = visual,
             SimilarTo = similarTo,
             SimilarToRegion = region,
@@ -199,6 +204,7 @@ public static class SearchLinks
             Single(filters?.Sources),
             filters?.Visual?.Text)
         {
+            Album = Single(filters?.Albums),
             People = filters?.People?.All ?? [],
             Me = filters?.People?.IncludeMe ?? false,
             SavedPlaces = filters?.SavedPlaces ?? [],
