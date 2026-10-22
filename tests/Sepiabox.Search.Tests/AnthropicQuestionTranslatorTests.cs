@@ -311,6 +311,20 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.Null(dsl["required"]);
     }
 
+    [Fact]
+    public void Puts_the_required_nullable_filters_first_so_the_model_does_not_skip_the_ones_after_a_null()
+    {
+        var filters = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!["properties"]!["filters"]!["properties"]!.AsObject()
+            .Select(p => p.Key).ToList();
+
+        Assert.Equal(QuestionPrompt.FiltersRequiredNullable, filters.Take(QuestionPrompt.FiltersRequiredNullable.Count));
+        // The rest keep the DSL schema's order.
+        using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
+        var dsl = JsonNode.Parse(stream)!["properties"]!["filters"]!["properties"]!.AsObject().Select(p => p.Key)
+            .Where(k => !QuestionPrompt.NotFromQuestions.Contains(k) && !QuestionPrompt.FiltersRequiredNullable.Contains(k));
+        Assert.Equal(dsl, filters.Skip(QuestionPrompt.FiltersRequiredNullable.Count));
+    }
+
     private static readonly string[] OccasionTypeKeys = ["wedding", "birthday", "beach", "christmas", "graduation", "snow", "party", "trip"];
 
     [Fact]
