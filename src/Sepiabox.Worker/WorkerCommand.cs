@@ -7,6 +7,7 @@ public enum WorkerAction
     Migrate,
     ImportOnce,
     ImportFromQueue,
+    ProcessFromQueue,
     GeoNamesLoad,
     GeoNamesDownload,
     GeoNamesUpdate,
@@ -36,6 +37,14 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
           import --from-queue        Import the manifests named by the storage events waiting in the
                                      queue (ServiceBus:Namespace, ServiceBus:Queue), then exit when
                                      it is empty. Never migrates (D-063).
+          process --from-queue       Process the files that arrived in the incoming container from a cloud
+                                     source (S-036): hash, metadata, thumbnails or video versions, CLIP and,
+                                     when face recognition is on, faces; write the derivatives and the
+                                     manifest; move the original to originals (custody mode, Cold) or leave
+                                     it at its source (reference mode); delete the incoming blob. Takes the
+                                     storage events from the queue (ServiceBus:Namespace, ServiceBus:Queue),
+                                     then exits when it is empty. Needs FFmpeg and the models folder
+                                     (Search:ModelFolder); never migrates.
           geonames load <cities500.zip|txt> --admin1 <admin1CodesASCII.txt> --countries <countryInfo.txt>
                                      Replace the GeoNames cities with these dump files
                                      (https://download.geonames.org/export/dump/, CC BY 4.0).
@@ -71,6 +80,9 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                 return true;
             case ["import", "--from-queue"]:
                 command = new WorkerCommand(WorkerAction.ImportFromQueue, false);
+                return true;
+            case ["process", "--from-queue"]:
+                command = new WorkerCommand(WorkerAction.ProcessFromQueue, false);
                 return true;
             case ["import", .. var options] when options.All(o => o is "--once" or "--migrate"):
                 if (!options.Contains("--once"))

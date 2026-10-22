@@ -97,6 +97,9 @@ else
     // The faces job writes manifests (S-022): its own identity, so the import jobs stay readers.
     var facesIdentity = builder.AddAzureUserAssignedIdentity("faces-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    // The process job writes derivatives, originals and manifests and empties incoming (S-036): its own identity.
+    var processIdentity = builder.AddAzureUserAssignedIdentity("process-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
 
     // The application role's connection, for the web and the import jobs: they read and write rows, never
     // the schema. The server's fixed host name rather than a reference to it: a reference would also grant
@@ -136,11 +139,14 @@ else
     var serviceBus = builder.AddAzureServiceBus("servicebus")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureServiceBus);
     serviceBus.AddServiceBusQueue("manifests-queue", AzureInfrastructure.ManifestsQueueName);
+    serviceBus.AddServiceBusQueue("incoming-queue", AzureInfrastructure.IncomingQueueName);
     builder.AddBicepTemplate("events", "Bicep/events.bicep")
         .WithParameter("storageName", storage.GetOutput("name"))
         .WithParameter("serviceBusName", serviceBus.GetOutput("name"))
         .WithParameter("queueName", AzureInfrastructure.ManifestsQueueName)
-        .WithParameter("importPrincipalId", importIdentity.Resource.PrincipalId);
+        .WithParameter("incomingQueueName", AzureInfrastructure.IncomingQueueName)
+        .WithParameter("importPrincipalId", importIdentity.Resource.PrincipalId)
+        .WithParameter("processPrincipalId", processIdentity.Resource.PrincipalId);
 
     // The namespace by host name rather than a reference, which would grant Aspire's default roles on the
     // whole namespace; the import identity's role on the queue alone is in events.bicep.
@@ -179,6 +185,22 @@ else
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureFacesJob);
 
+    // Files that arrive in `incoming` from a cloud source (S-036, D-107): processed by the worker from the Dockerfile that
+    // gives it FFmpeg and the models, an event-driven job like the import. Its storage roles are on the four containers
+    // it touches, in access.bicep; it connects to the catalog as the application role (it only reads the face setting).
+    builder.AddDockerfile(AzureInfrastructure.ProcessResourceName, "../..", "infra/worker/Dockerfile")
+        .WithArgs("process", "--from-queue")
+        .WithReference(blobs)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithEnvironment("ServiceBus__Namespace", AzureInfrastructure.ServiceBusHostName)
+        .WithEnvironment("ServiceBus__Queue", AzureInfrastructure.IncomingQueueName)
+        .WithEnvironment("ServiceBus__MaxDeliveryCount", AzureInfrastructure.IncomingMaxDeliveryCount.ToString(CultureInfo.InvariantCulture))
+        // Azure has the Cold tier; Azurite does not (D-004).
+        .WithEnvironment("Processing__OriginalsCold", "true")
+        .WithAzureUserAssignedIdentity(processIdentity)
+        .WithRoleAssignments(storage, [])
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureProcessJob(processIdentity.Resource.Id));
+
     // The web's custom domain (S-035, D-065), empty for none. Set after the DNS records exist, first with the
     // binding Disabled (the host name is added), then SniEnabled (domain.bicep creates the managed certificate
     // and the web binds it); docs/operations.md has the steps. No published default: azd would then read only
@@ -200,6 +222,7 @@ else
         .WithParameter("vaultName", vault.GetOutput("name"))
         .WithParameter("webPrincipalId", webIdentity.Resource.PrincipalId)
         .WithParameter("facesPrincipalId", facesIdentity.Resource.PrincipalId)
+        .WithParameter("processPrincipalId", processIdentity.Resource.PrincipalId)
         .WithParameter("uploaderPrincipalIds", uploaders);
 
     web.WithReference(insights)

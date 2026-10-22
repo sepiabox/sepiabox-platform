@@ -4,7 +4,19 @@ namespace Sepiabox.Storage;
 /// <param name="Content">The blob's bytes.</param>
 /// <param name="Version">Changes with every write; what a conditional write compares (an ETag in Azure).</param>
 /// <param name="LastModified">When the blob was last written, on the store's clock.</param>
-public sealed record BlobContent(BinaryData Content, string Version, DateTimeOffset LastModified);
+public sealed record BlobContent(BinaryData Content, string Version, DateTimeOffset LastModified)
+{
+    /// <summary>The blob's metadata (S-036): name/value pairs written with it; empty when it has none.</summary>
+    public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
+}
+
+/// <summary>What a blob is, without its bytes (S-036): its size, version and metadata, as <see cref="IBlobStore.DownloadToAsync"/> reports it.</summary>
+/// <param name="Length">The size in bytes.</param>
+/// <param name="Version">Its version tag, as <see cref="BlobContent.Version"/>.</param>
+/// <param name="LastModified">When it was last written, on the store's clock.</param>
+/// <param name="ContentType">The content type it was written with.</param>
+/// <param name="Metadata">The metadata it was written with; empty when none.</param>
+public sealed record BlobInfo(long Length, string Version, DateTimeOffset LastModified, string ContentType, IReadOnlyDictionary<string, string> Metadata);
 
 /// <summary>A blob in a listing.</summary>
 /// <param name="Name">The blob's name in its container.</param>
@@ -109,6 +121,33 @@ public interface IBlobStore
     Task<BlobWriteResult> WriteAsync(
         string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes the blob with <paramref name="metadata"/> (S-036: the cloud source, path and mode of a file that arrives in
+    /// <c>incoming</c>). Metadata names are letters and digits, starting with a letter, and values are ASCII without
+    /// control characters: a caller encodes anything else.
+    /// </summary>
+    Task<BlobWriteResult> WriteAsync(
+        string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This store does not write metadata.");
+
+    /// <summary>
+    /// Copies the blob into <paramref name="stream"/> without holding it in memory (a video can be gigabytes), and says what
+    /// it is; null, with the stream untouched, when it is not there (S-036).
+    /// </summary>
+    Task<BlobInfo?> DownloadToAsync(string container, string name, Stream stream, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This store does not stream downloads.");
+
+    /// <summary>
+    /// Copies a blob inside the store, on the store's side, so its bytes never pass through the caller (S-036: an original
+    /// moves from <c>incoming</c> to <c>originals</c>). <paramref name="cold"/> asks for the Cold access tier where the
+    /// store has one (D-004); an existing blob of that name is replaced. Throws when the source is not there.
+    /// </summary>
+    Task CopyAsync(
+        string sourceContainer, string sourceName, string container, string name, bool cold = false,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This store does not copy blobs.");
 
     /// <summary>Deletes the blob; false when it was not there.</summary>
     Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default);

@@ -9,7 +9,7 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
     public void Namespace_and_queue_are_the_ones_the_shutdown_runbook_disables_when_published()
     {
         var serviceBus = published.The("Microsoft.ServiceBus/namespaces");
-        var queue = published.The("Microsoft.ServiceBus/namespaces/queues");
+        var queue = published.Named("Microsoft.ServiceBus/namespaces/queues", ShutdownRunbook.Queue);
 
         Assert.Equal("'" + ShutdownRunbook.ServiceBusNamespace + "'", serviceBus.Property("name"));
         Assert.Equal("'" + ShutdownRunbook.Queue + "'", queue.Property("name"));
@@ -30,17 +30,20 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
     [Fact]
     public void Queue_dead_letters_a_message_after_five_deliveries_when_published()
     {
-        var queue = published.The("Microsoft.ServiceBus/namespaces/queues");
+        foreach (var name in new[] { "manifests", "incoming" })
+        {
+            var queue = published.Named("Microsoft.ServiceBus/namespaces/queues", name);
 
-        Assert.Equal("5", queue.Property("maxDeliveryCount"));
-        Assert.Equal("true", queue.Property("deadLetteringOnMessageExpiration"));
+            Assert.Equal("5", queue.Property("maxDeliveryCount"));
+            Assert.Equal("true", queue.Property("deadLetteringOnMessageExpiration"));
+        }
     }
 
     [Fact]
     public void Only_blobs_created_in_the_manifests_container_reach_the_queue_when_published()
     {
         var topic = published.The("Microsoft.EventGrid/systemTopics");
-        var subscription = published.The("Microsoft.EventGrid/systemTopics/eventSubscriptions");
+        var subscription = published.Named("Microsoft.EventGrid/systemTopics/eventSubscriptions", "manifests-to-queue");
 
         Assert.Equal("'Microsoft.Storage.StorageAccounts'", topic.Property("topicType"));
         Assert.Equal("storage.id", topic.Property("source"));
@@ -52,6 +55,51 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
         Assert.Equal("'ServiceBusQueue'", subscription.Property("endpointType"));
         Assert.Equal("queue.id", subscription.Property("resourceId"));
         Assert.Equal("manifests", published.ModuleParameters["events.bicep"]["queueName"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Only_blobs_created_in_the_incoming_container_reach_the_incoming_queue_when_published()
+    {
+        var subscription = published.Named("Microsoft.EventGrid/systemTopics/eventSubscriptions", "incoming-to-queue");
+
+        Assert.Equal("'/blobServices/default/containers/incoming/'", subscription.Property("subjectBeginsWith"));
+        Assert.Matches(@"includedEventTypes: \[\s+'Microsoft.Storage.BlobCreated'\s+\]", subscription.Body);
+        Assert.Equal("'ServiceBusQueue'", subscription.Property("endpointType"));
+        Assert.Equal("incomingQueue.id", subscription.Property("resourceId"));
+        Assert.Equal("incoming", published.ModuleParameters["events.bicep"]["incomingQueueName"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Process_job_runs_one_execution_at_a_time_when_the_incoming_queue_has_a_message_when_published()
+    {
+        var job = published.Named(Job, "sepiabox-process");
+        var trigger = job.Block("eventTriggerConfig");
+        var parameters = published.ModuleParameters["process-containerapp.module.bicep"];
+
+        Assert.Equal("'Event'", job.Property("triggerType"));
+        Assert.Contains("parallelism: 1", trigger, StringComparison.Ordinal);
+        Assert.Contains("maxExecutions: 1", trigger, StringComparison.Ordinal);
+        Assert.Contains("type: 'azure-servicebus'", trigger, StringComparison.Ordinal);
+        Assert.Contains("queueName: 'incoming'", trigger, StringComparison.Ordinal);
+        Assert.Contains("identity: process_identity_id", trigger, StringComparison.Ordinal);
+        Assert.Equal("{process-identity.outputs.id}", parameters["process_identity_id"]!.GetValue<string>());
+        Assert.Equal("3600", job.Property("replicaTimeout"));
+        Assert.Equal("0", job.Property("replicaRetryLimit"));
+        Assert.Contains("memory: '4Gi'", job.Block("resources"), StringComparison.Ordinal);
+        Assert.Equal(["process", "--from-queue"], Arguments("process"));
+        var environment = published.Resource("process")["env"]!.AsObject();
+        Assert.Equal("incoming", environment["ServiceBus__Queue"]!.GetValue<string>());
+        Assert.Equal("5", environment["ServiceBus__MaxDeliveryCount"]!.GetValue<string>());
+        Assert.Equal("true", environment["Processing__OriginalsCold"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void The_process_job_is_built_from_the_worker_dockerfile_when_published()
+    {
+        var resource = published.Resource("process");
+
+        Assert.Equal("container.v1", resource["type"]!.GetValue<string>());
+        Assert.EndsWith("infra/worker/Dockerfile", resource["build"]!["dockerfile"]!.GetValue<string>().Replace('\\', '/'), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -154,7 +202,7 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
         var environment = published.Resource("import")["env"]!.AsObject();
 
         Assert.Equal("5", environment["ServiceBus__MaxDeliveryCount"]!.GetValue<string>());
-        Assert.Equal("5", published.The("Microsoft.ServiceBus/namespaces/queues").Property("maxDeliveryCount"));
+        Assert.Equal("5", published.Named("Microsoft.ServiceBus/namespaces/queues", "manifests").Property("maxDeliveryCount"));
     }
 
     private string[] Arguments(string resource) =>

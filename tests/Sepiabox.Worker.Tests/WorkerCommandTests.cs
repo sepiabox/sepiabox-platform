@@ -26,6 +26,15 @@ public sealed class WorkerCommandTests
         Assert.Equal(new WorkerCommand(WorkerAction.ImportFromQueue, false), command);
     }
 
+    [Fact]
+    public void Parses_process_from_queue()
+    {
+        Assert.True(WorkerCommand.TryParse(["process", "--from-queue"], out var command, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.ProcessFromQueue, false), command);
+        Assert.False(WorkerCommand.TryParse(["process"], out _, out var error));
+        Assert.Contains("process", error, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("geonames", "load", "cities500.zip", "--admin1", "admin1CodesASCII.txt", "--countries", "countryInfo.txt")]
     [InlineData("geonames", "load", "cities500.zip", "--countries", "countryInfo.txt", "--admin1", "admin1CodesASCII.txt")]

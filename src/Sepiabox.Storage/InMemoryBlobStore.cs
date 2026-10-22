@@ -31,7 +31,7 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
         {
             return Task.FromResult(
                 _containers.TryGetValue(container, out var blobs) && blobs.TryGetValue(name, out var stored)
-                    ? new BlobContent(stored.Content, stored.Version, stored.LastModified)
+                    ? new BlobContent(stored.Content, stored.Version, stored.LastModified) { Metadata = stored.Metadata }
                     : null);
         }
     }
@@ -79,9 +79,15 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
 
     public Task<BlobWriteResult> WriteAsync(
         string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        WriteAsync(container, name, content, contentType, condition, new Dictionary<string, string>(), cancellationToken);
+
+    public Task<BlobWriteResult> WriteAsync(
+        string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(metadata);
         lock (_lock)
         {
             if (!_containers.TryGetValue(container, out var blobs))
@@ -102,9 +108,53 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
             }
 
             var version = (++_versions).ToString(CultureInfo.InvariantCulture);
-            blobs[name] = new Stored(BinaryData.FromBytes(content.ToArray()), contentType, version, _time.GetUtcNow());
+            blobs[name] = new Stored(BinaryData.FromBytes(content.ToArray()), contentType, version, _time.GetUtcNow())
+            {
+                Metadata = new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase),
+            };
             return Task.FromResult(new BlobWriteResult(BlobWriteStatus.Written, version));
         }
+    }
+
+    public async Task<BlobInfo?> DownloadToAsync(string container, string name, Stream stream, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        Stored? stored;
+        lock (_lock)
+        {
+            stored = _containers.TryGetValue(container, out var blobs) && blobs.TryGetValue(name, out var found) ? found : null;
+        }
+
+        if (stored is null)
+        {
+            return null;
+        }
+
+        await stream.WriteAsync(stored.Content.ToMemory(), cancellationToken);
+        return new BlobInfo(stored.Content.ToMemory().Length, stored.Version, stored.LastModified, stored.ContentType, stored.Metadata);
+    }
+
+    public Task CopyAsync(
+        string sourceContainer, string sourceName, string container, string name, bool cold = false,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            if (!_containers.TryGetValue(sourceContainer, out var from) || !from.TryGetValue(sourceName, out var source))
+            {
+                throw new InvalidOperationException($"{sourceContainer}/{sourceName} does not exist.");
+            }
+
+            if (!_containers.TryGetValue(container, out var to))
+            {
+                throw new InvalidOperationException($"The container {container} does not exist.");
+            }
+
+            // A copy is a new write: its own version and time, the bytes and the metadata of the source.
+            to[name] = source with { Version = (++_versions).ToString(CultureInfo.InvariantCulture), LastModified = _time.GetUtcNow() };
+        }
+
+        return Task.CompletedTask;
     }
 
     public Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default)
@@ -140,5 +190,8 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
         }
     }
 
-    private sealed record Stored(BinaryData Content, string ContentType, string Version, DateTimeOffset LastModified);
+    private sealed record Stored(BinaryData Content, string ContentType, string Version, DateTimeOffset LastModified)
+    {
+        public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
+    }
 }

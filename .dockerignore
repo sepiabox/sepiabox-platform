@@ -1,0 +1,8 @@
+# The worker image is built from the repository root (infra/worker/Dockerfile): none of this belongs in its context.
+**/bin/
+**/obj/
+.git/
+.claude/
+**/.vs/
+tests/
+docs/

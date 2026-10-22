@@ -27,6 +27,18 @@ internal class DelegatingBlobStore(IBlobStore inner) : IBlobStore
         CancellationToken cancellationToken = default) =>
         Inner.WriteAsync(container, name, content, contentType, condition, cancellationToken);
 
+    public virtual Task<BlobWriteResult> WriteAsync(
+        string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
+        Inner.WriteAsync(container, name, content, contentType, condition, metadata, cancellationToken);
+
+    public virtual Task<BlobInfo?> DownloadToAsync(string container, string name, Stream stream, CancellationToken cancellationToken = default) =>
+        Inner.DownloadToAsync(container, name, stream, cancellationToken);
+
+    public virtual Task CopyAsync(
+        string sourceContainer, string sourceName, string container, string name, bool cold = false, CancellationToken cancellationToken = default) =>
+        Inner.CopyAsync(sourceContainer, sourceName, container, name, cold, cancellationToken);
+
     public virtual Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default) =>
         Inner.DeleteAsync(container, name, cancellationToken);
 

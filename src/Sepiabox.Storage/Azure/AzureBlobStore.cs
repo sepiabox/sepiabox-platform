@@ -39,7 +39,10 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
         try
         {
             var current = (await Blob(container, name).DownloadContentAsync(cancellationToken)).Value;
-            return new BlobContent(current.Content, Unquoted(current.Details.ETag), current.Details.LastModified);
+            return new BlobContent(current.Content, Unquoted(current.Details.ETag), current.Details.LastModified)
+            {
+                Metadata = new Dictionary<string, string>(current.Details.Metadata),
+            };
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
@@ -121,6 +124,66 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
             // An unconditional write has no condition to lose: a 409 or 412 there is a real failure.
             return new BlobWriteResult(BlobWriteStatus.ConditionNotMet);
         }
+    }
+
+    public async Task<BlobWriteResult> WriteAsync(
+        string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        var options = new BlobUploadOptions
+        {
+            HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
+            Metadata = new Dictionary<string, string>(metadata),
+            Conditions = condition.Kind switch
+            {
+                BlobWriteConditionKind.IfNew => new BlobRequestConditions { IfNoneMatch = ETag.All },
+                BlobWriteConditionKind.IfVersion => new BlobRequestConditions { IfMatch = new ETag(Quoted(condition.Version!)) },
+                _ => null,
+            },
+        };
+        try
+        {
+            var written = (await Blob(container, name).UploadAsync(content, options, cancellationToken)).Value;
+            return new BlobWriteResult(BlobWriteStatus.Written, Unquoted(written.ETag));
+        }
+        catch (RequestFailedException ex) when (condition.Kind != BlobWriteConditionKind.Always && LostTheCondition(ex, condition))
+        {
+            return new BlobWriteResult(BlobWriteStatus.ConditionNotMet);
+        }
+    }
+
+    public async Task<BlobInfo?> DownloadToAsync(string container, string name, Stream stream, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        try
+        {
+            var download = (await Blob(container, name).DownloadStreamingAsync(cancellationToken: cancellationToken)).Value;
+            await using (download.Content)
+            {
+                await download.Content.CopyToAsync(stream, cancellationToken);
+            }
+
+            var details = download.Details;
+            return new BlobInfo(
+                details.ContentLength, Unquoted(details.ETag), details.LastModified, details.ContentType ?? "application/octet-stream",
+                new Dictionary<string, string>(details.Metadata));
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+    }
+
+    public async Task CopyAsync(
+        string sourceContainer, string sourceName, string container, string name, bool cold = false,
+        CancellationToken cancellationToken = default)
+    {
+        // Inside one account the request's own authorization covers the source too, so no link is signed for it.
+        var source = Blob(sourceContainer, sourceName).Uri;
+        var operation = await Blob(container, name).StartCopyFromUriAsync(
+            source, new BlobCopyFromUriOptions { AccessTier = cold ? AccessTier.Cold : (AccessTier?)null }, cancellationToken);
+        await operation.WaitForCompletionAsync(cancellationToken);
     }
 
     public async Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default) =>

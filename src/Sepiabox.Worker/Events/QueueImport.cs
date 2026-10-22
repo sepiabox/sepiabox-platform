@@ -25,7 +25,9 @@ public sealed record QueueImportOptions(int MaxDeliveryCount, TimeSpan LockRenew
 /// <param name="importManifest">Imports one manifest of the <c>manifests</c> container.</param>
 /// <param name="options">Delivery count, lock renewal and idle wait.</param>
 /// <param name="logger">Reports ignored messages, failures and the totals.</param>
-public sealed class QueueImport(IBlobEventQueue queue, ImportManifest importManifest, QueueImportOptions options, ILogger<QueueImport> logger)
+/// <param name="container">The container whose events are handled: <c>manifests</c> for the import, <c>incoming</c> for <c>process --from-queue</c> (S-036).</param>
+public sealed class QueueImport(
+    IBlobEventQueue queue, ImportManifest importManifest, QueueImportOptions options, ILogger<QueueImport> logger, string container = BlobLayout.ManifestsContainer)
 {
     public async Task<ImportResult> RunAsync(CancellationToken cancellationToken)
     {
@@ -35,7 +37,7 @@ public sealed class QueueImport(IBlobEventQueue queue, ImportManifest importMani
 
         while (await queue.ReceiveAsync(options.IdleWait, cancellationToken) is { } message)
         {
-            if (message.Event is not { Container: BlobLayout.ManifestsContainer } created)
+            if (message.Event is not { } created || created.Container != container)
             {
                 // Another container, or not a blob event at all: the subscription's filter should have kept it
                 // out, and handling it again would change nothing.
