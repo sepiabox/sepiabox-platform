@@ -1184,4 +1184,32 @@
     <value>Sepiabox keeps no copy of this original: it stays at its source.</value>
     <comment>Answer to a download of an index-only asset.</comment>
   </data>
+  <data name="Chip_SimilarToRegion" xml:space="preserve">
+    <value>Similar to part of a photo</value>
+    <comment>Chip that removes a search for photos like a part of one photo (S-041).</comment>
+  </data>
+  <data name="Search_MostSimilarToRegion" xml:space="preserve">
+    <value>Most similar to the part of the photo, by occasion</value>
+    <comment>Heading of the photos most similar to a part of a photo, in groups by occasion.</comment>
+  </data>
+  <data name="Search_NotInOccasion" xml:space="preserve">
+    <value>Not in an occasion</value>
+    <comment>Heading of the results that are in no occasion (undated ones, S-041).</comment>
+  </data>
+  <data name="Region_Select" xml:space="preserve">
+    <value>Select a part of the photo</value>
+    <comment>Button on the photo detail that starts drawing a rectangle on the preview (S-041).</comment>
+  </data>
+  <data name="Region_Hint" xml:space="preserve">
+    <value>Drag on the photo to draw a rectangle. With the keyboard: Enter starts one, the arrow keys move it, Shift with the arrow keys resizes it, Escape clears it.</value>
+  </data>
+  <data name="Region_Find" xml:space="preserve">
+    <value>Find photos like this part</value>
+  </data>
+  <data name="Region_Clear" xml:space="preserve">
+    <value>Clear selection</value>
+  </data>
+  <data name="Region_Unavailable" xml:space="preserve">
+    <value>Search by a part of a photo is not available right now: the image model is missing.</value>
+  </data>
 </root>

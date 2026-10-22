@@ -114,7 +114,12 @@ public sealed record CountResult(int Total, IReadOnlyList<CountGroup> Groups, in
 /// only compared with the catalog's "This is me" links, never sent anywhere.
 /// </remarks>
 public sealed class SearchService(
-    CatalogDbContext db, TimeProvider clock, SearchOptions? options = null, IQueryEmbedder? embedder = null, string? userEmail = null)
+    CatalogDbContext db,
+    TimeProvider clock,
+    SearchOptions? options = null,
+    IQueryEmbedder? embedder = null,
+    string? userEmail = null,
+    IRegionEmbedder? regionEmbedder = null)
 {
     private readonly string? _me = string.IsNullOrWhiteSpace(userEmail) ? null : userEmail.Trim().ToLowerInvariant();
 
@@ -223,7 +228,7 @@ public sealed class SearchService(
     public IQueryable<Asset> Query(SearchQuery query, ResolvedPlaces? places = null)
     {
         ArgumentNullException.ThrowIfNull(query);
-        if (query.Filters.Visual is not null || query.Filters.SimilarTo is not null)
+        if (query.Filters.Visual is not null || query.Filters.SimilarTo is not null || query.Filters.SimilarToRegion is not null)
         {
             throw new InvalidOperationException("A search by similarity is run with RunAsync, which finds its vector.");
         }
@@ -251,7 +256,7 @@ public sealed class SearchService(
     /// <summary>
     /// Runs the query and returns up to its <see cref="SearchQuery.ResultLimit"/> plus one row (so a caller can tell
     /// whether more matched), projected by <paramref name="byDate"/> for a plain search or <paramref name="bySimilarity"/>
-    /// for a search by similarity: by description, whose vector comes from the embedder (throws
+    /// for a search by similarity: by a region of a photo, whose vector comes from the region embedder (S-041), by description, whose vector comes from the embedder (throws
     /// <see cref="VisualSearchUnavailableException"/> without one), or to an asset, whose vector is its own stored
     /// embedding (throws <see cref="AssetNotAnalysedException"/> without one, S-017).
     /// </summary>
@@ -276,6 +281,17 @@ public sealed class SearchService(
             vector = await PgvectorSimilarity.StoredEmbeddingAsync(db, similar.AssetId, cancellationToken);
             minScore = null;
         }
+        else if (query.Filters.SimilarToRegion is { } region)
+        {
+            // The part of the photo the user marked (S-041, D-099), compared with every photo's embedding, no threshold.
+            if (regionEmbedder is not { IsAvailable: true })
+            {
+                throw new VisualSearchUnavailableException("Search by a region is not available: the CLIP image model is not loaded.");
+            }
+
+            vector = await regionEmbedder.EmbedAsync(region.AssetId, region.Box, cancellationToken);
+            minScore = null;
+        }
         else if (query.Filters.Visual is { } visual)
         {
             if (embedder is not { IsAvailable: true })
@@ -295,7 +311,7 @@ public sealed class SearchService(
         // filters, for counting, or on an older pgvector, every candidate is ranked exactly (D-070). Leaving the asset
         // itself out of a search for similar ones is not a filter that can hide matches from the walk: it is one row.
         var walkIndex = similarity == SimilarityMode.Ranking
-            && (query.Filters with { Visual = null, SimilarTo = null }).IsEmpty
+            && (query.Filters with { Visual = null, SimilarTo = null, SimilarToRegion = null }).IsEmpty
             && await PgvectorSimilarity.CanWalkIndexAsync(db, cancellationToken);
         var ranked = PgvectorSimilarity.Rank(db, Filtered(query, places), vector, minScore, exact: !walkIndex);
         if (!walkIndex)
@@ -319,7 +335,7 @@ public sealed class SearchService(
     public async Task<CountResult?> CountAsync(SearchQuery query, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
-        if (query.Filters.Visual is not null || query.Filters.SimilarTo is not null)
+        if (query.Filters.Visual is not null || query.Filters.SimilarTo is not null || query.Filters.SimilarToRegion is not null)
         {
             return null;
         }

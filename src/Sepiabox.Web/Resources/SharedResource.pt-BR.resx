@@ -1122,4 +1122,28 @@
     <value>O Sepiabox não guarda uma cópia deste original: ele fica na origem.</value>
     <comment>Answer to a download of an index-only asset.</comment>
   </data>
+  <data name="Chip_SimilarToRegion" xml:space="preserve">
+    <value>Parecidas com parte de uma foto</value>
+  </data>
+  <data name="Search_MostSimilarToRegion" xml:space="preserve">
+    <value>Mais parecidas com a parte da foto, por ocasião</value>
+  </data>
+  <data name="Search_NotInOccasion" xml:space="preserve">
+    <value>Fora de uma ocasião</value>
+  </data>
+  <data name="Region_Select" xml:space="preserve">
+    <value>Selecionar uma parte da foto</value>
+  </data>
+  <data name="Region_Hint" xml:space="preserve">
+    <value>Arraste sobre a foto para desenhar um retângulo. Com o teclado: Enter começa um, as setas o movem, Shift com as setas muda o tamanho, Esc o limpa.</value>
+  </data>
+  <data name="Region_Find" xml:space="preserve">
+    <value>Buscar fotos parecidas com esta parte</value>
+  </data>
+  <data name="Region_Clear" xml:space="preserve">
+    <value>Limpar seleção</value>
+  </data>
+  <data name="Region_Unavailable" xml:space="preserve">
+    <value>A busca por uma parte da foto não está disponível agora: falta o modelo de imagem.</value>
+  </data>
 </root>

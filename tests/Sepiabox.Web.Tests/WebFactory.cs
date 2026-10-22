@@ -61,6 +61,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>The CLIP text encoder; unset, the real one, pointed at a folder with no model in it.</summary>
     public Sepiabox.Catalog.Search.IQueryEmbedder? QueryEmbedder { get; init; }
 
+    /// <summary>The CLIP image encoder for a region of a photo (S-041); unset, the real one, pointed at a folder with no model in it.</summary>
+    public Sepiabox.Catalog.Search.IRegionEmbedder? RegionEmbedder { get; init; }
+
     /// <summary>The question translator; unset, the real one, without a key (questions off): no test reaches Anthropic.</summary>
     public Sepiabox.Search.Questions.IQuestionTranslator? QuestionTranslator { get; init; }
 
@@ -130,6 +133,11 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             if (QueryEmbedder is not null)
             {
                 services.AddSingleton(QueryEmbedder);
+            }
+
+            if (RegionEmbedder is not null)
+            {
+                services.AddSingleton(RegionEmbedder);
             }
 
             if (QuestionTranslator is not null)

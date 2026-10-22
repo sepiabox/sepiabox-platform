@@ -410,7 +410,7 @@ public sealed class AnthropicQuestionTranslatorTests
         var output = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
 
         // similarTo names an asset (S-017, D-086) and eventIds names occasions (S-023, D-092): ids only the pages know.
-        Assert.Equal(["similarTo", "eventIds", "sourceCount"], QuestionPrompt.NotFromQuestions);
+        Assert.Equal(["similarTo", "eventIds", "sourceCount", "similarToRegion"], QuestionPrompt.NotFromQuestions);
         Assert.All(QuestionPrompt.NotFromQuestions, field =>
         {
             Assert.NotNull(dsl["properties"]!["filters"]!["properties"]![field]);

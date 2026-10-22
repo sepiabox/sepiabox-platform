@@ -463,6 +463,50 @@ main {
     background: var(--developer);
 }
 
+/* "Photos like this part of a photo" (S-041): the rectangle is drawn over the preview, in pixels set by region.js. */
+.region-frame {
+    position: relative;
+}
+
+.region-frame.selecting {
+    cursor: crosshair;
+    touch-action: none;
+    user-select: none;
+}
+
+.region-frame:focus-visible {
+    outline: 3px solid var(--developer);
+    outline-offset: -3px;
+}
+
+.region-box {
+    position: absolute;
+    box-sizing: border-box;
+    border: 2px solid var(--white);
+    outline: 2px solid var(--developer);
+    background: color-mix(in srgb, var(--white) 18%, transparent);
+    pointer-events: none;
+}
+
+.region-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: center;
+    padding: 12px 16px;
+}
+
+.region-tools form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: center;
+}
+
+.region-tools p {
+    margin: 0;
+}
+
 .player-error {
     margin: 0;
     padding: 12px 16px;

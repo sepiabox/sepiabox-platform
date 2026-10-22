@@ -2,6 +2,7 @@
 @using Sepiabox.Catalog.Search
 @inject ILibraryQueries Library
 @inject NavigationManager Navigation
+@inject IServiceProvider Services
 @* Static server rendering (no @rendermode): the page is plain HTML with links, nothing interactive. *@
 
 @if (_asset is not null)
@@ -18,7 +19,32 @@
             }
             else if (_asset.PreviewName is { } preview)
             {
-                <img src="photos/@_asset.Id/@preview" alt="@Text.KindLabel(_asset.Kind)" />
+                @if (_regionSearch)
+                {
+                    @* "Photos like this part" (S-041): wwwroot/region.js shows the button and the form; without it, the page is as ever. *@
+                    <div class="region" data-region>
+                        <div class="region-frame" data-region-frame aria-describedby="region-hint">
+                            <img src="photos/@_asset.Id/@preview" alt="@Text.KindLabel(_asset.Kind)" />
+                            <div class="region-box" data-region-box hidden></div>
+                        </div>
+                        <div class="region-tools">
+                            <button type="button" class="button" data-region-toggle aria-pressed="false" hidden>@Text["Region_Select"]</button>
+                            <form method="get" action="./" data-region-form hidden>
+                                <input type="hidden" name="filter" value="1" />
+                                <input type="hidden" name="@SearchLinks.RegionAssetParameter" value="@_asset.Id" />
+                                <input type="hidden" name="@SearchLinks.RegionBoxParameter" value="" data-region-input />
+                                <p id="region-hint" class="muted">@Text["Region_Hint"]</p>
+                                <p class="region-status muted" data-region-status role="status"></p>
+                                <button type="submit" class="button" data-region-submit disabled>@Text["Region_Find"]</button>
+                                <button type="button" class="button" data-region-clear hidden>@Text["Region_Clear"]</button>
+                            </form>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <img src="photos/@_asset.Id/@preview" alt="@Text.KindLabel(_asset.Kind)" />
+                }
             }
             else
             {
@@ -140,10 +166,15 @@
 
     private AssetDetail? _asset;
 
+    // Without the image model nothing is offered, as the description box is hidden without the text model (S-016).
+    private bool _regionSearch;
+
     protected override async Task OnParametersSetAsync()
     {
         var asset = AssetIds.IsValid(Id) ? await Library.GetAssetAsync(Id) : null;
         _asset = asset;
+        _regionSearch = asset is not null && !AssetKinds.IsVideo(asset.Kind)
+            && Services.GetService<Sepiabox.Catalog.Search.IRegionEmbedder>() is { IsAvailable: true };
         if (asset is null)
         {
             Navigation.NotFound();

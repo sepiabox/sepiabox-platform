@@ -35,7 +35,9 @@ public sealed record SearchQuery
     /// asks for fewer (S-017).
     /// </summary>
     [JsonIgnore]
-    public int ResultLimit => Filters.SimilarTo is { } similar ? Math.Min(Limit, similar.EffectiveLimit) : Limit;
+    public int ResultLimit => Filters.SimilarTo is { } similar ? Math.Min(Limit, similar.EffectiveLimit)
+        : Filters.SimilarToRegion is { } region ? Math.Min(Limit, region.EffectiveLimit)
+        : Limit;
 }
 
 /// <summary>What to count and how to group it (S-026). Later stories add <c>count: "events"</c> and other groupings.</summary>
@@ -175,6 +177,14 @@ public sealed record SearchFilters
     /// </summary>
     public SimilarToFilter? SimilarTo { get; init; }
 
+    /// <summary>
+    /// The assets most similar to a region of one photo (S-041, D-099): the region is cut from the photo's preview and
+    /// embedded with CLIP when asked. Ordered by similarity like <see cref="SimilarTo"/>, with the photo itself kept in
+    /// (it holds the region), and not combined with <see cref="Visual"/>, <see cref="SimilarTo"/> or
+    /// <see cref="SearchQuery.Aggregate"/>; questions never produce it.
+    /// </summary>
+    public SimilarToRegionFilter? SimilarToRegion { get; init; }
+
     /// <summary>Only assets with no capture date; cannot be combined with a time filter.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UndatedOnly { get; init; }
@@ -198,7 +208,7 @@ public sealed record SearchFilters
         && Same(Years, other.Years) && Same(Months, other.Months) && OnThisDay == other.OnThisDay
         && Equals(Places, other.Places) && Same(SavedPlaces, other.SavedPlaces) && DistanceFrom == other.DistanceFrom
         && Same(Sources, other.Sources) && SourceCount == other.SourceCount && Equals(People, other.People) && Same(EventIds, other.EventIds) && Same(EventTypes, other.EventTypes) && UndatedOnly == other.UndatedOnly
-        && Visual == other.Visual && SimilarTo == other.SimilarTo;
+        && Visual == other.Visual && SimilarTo == other.SimilarTo && SimilarToRegion == other.SimilarToRegion;
 
     public override int GetHashCode() => HashCode.Combine(DateFrom, DateTo, OnThisDay, Places, UndatedOnly);
 
@@ -282,6 +292,40 @@ public sealed record SimilarToFilter
     public int? Limit { get; init; }
 
     public int EffectiveLimit => Limit ?? DefaultLimit;
+}
+
+/// <summary>"Photos like this part of a photo" (S-041, D-099): a box on the photo, relative to it.</summary>
+public sealed record SimilarToRegionFilter
+{
+    /// <summary>The photo's id: the SHA-256 of its content, in lower-case hex (D-014).</summary>
+    [JsonRequired]
+    public string AssetId { get; init; } = string.Empty;
+
+    /// <summary><c>[x, y, width, height]</c> as fractions of the photo's width and height, from its top left corner.</summary>
+    [JsonRequired]
+    public IReadOnlyList<double> Box { get; init; } = [];
+
+    /// <summary>The most similar assets returned, as for <see cref="SimilarToFilter.Limit"/>.</summary>
+    public int? Limit { get; init; }
+
+    public int EffectiveLimit => Limit ?? SimilarToFilter.DefaultLimit;
+
+    /// <summary>Whether <paramref name="box"/> is four numbers from 0 to 1, with a width and height above 0, inside the photo.</summary>
+    public static bool IsValidBox(IReadOnlyList<double>? box) =>
+        box is { Count: 4 }
+        && box.All(double.IsFinite)
+        && box[0] is >= 0 and <= 1 && box[1] is >= 0 and <= 1
+        && box[2] > 0 && box[3] > 0
+        && box[0] + box[2] <= 1 + BoxSlack && box[1] + box[3] <= 1 + BoxSlack;
+
+    /// <summary>A box drawn to the very edge has x + width of 1 plus a rounding error.</summary>
+    public const double BoxSlack = 1e-9;
+
+    // The box is a list, which a record compares by reference.
+    public bool Equals(SimilarToRegionFilter? other) =>
+        other is not null && AssetId == other.AssetId && Limit == other.Limit && Box.SequenceEqual(other.Box);
+
+    public override int GetHashCode() => HashCode.Combine(AssetId, Limit);
 }
 
 /// <summary>
@@ -481,6 +525,7 @@ public static class SearchQueryJson
             ?? (filters.People is { All: null, IncludeMe: false } ? "filters.people needs all, includeMe or both." : null)
             ?? Visual(filters.Visual)
             ?? SimilarTo(query)
+            ?? SimilarToRegion(query)
             ?? (filters.UndatedOnly && filters.HasTimeFilter
                 ? "filters.undatedOnly cannot be combined with dateFrom, dateTo, years, months or onThisDay."
                 : null);
@@ -571,7 +616,35 @@ public static class SearchQueryJson
 
         // One order by similarity at a time; and the most similar few are a list, not a number to count.
         return query.Filters.Visual is not null ? "filters.similarTo cannot be combined with filters.visual."
+            : query.Filters.SimilarToRegion is not null ? "filters.similarTo cannot be combined with filters.similarToRegion."
             : query.Aggregate is not null ? "filters.similarTo cannot be combined with aggregate: it lists the most similar assets."
+            : null;
+    }
+
+    private static string? SimilarToRegion(SearchQuery query)
+    {
+        if (query.Filters.SimilarToRegion is not { } region)
+        {
+            return null;
+        }
+
+        if (region.AssetId.Length != 64 || !region.AssetId.All(c => char.IsAsciiDigit(c) || c is >= 'a' and <= 'f'))
+        {
+            return "filters.similarToRegion.assetId must be an asset id: 64 lower-case hexadecimal characters.";
+        }
+
+        if (!SimilarToRegionFilter.IsValidBox(region.Box))
+        {
+            return "filters.similarToRegion.box must be [x, y, width, height]: numbers from 0 to 1, with a width and a height above 0, inside the photo.";
+        }
+
+        if (region.Limit is < 1 or > SearchQuery.MaxLimit)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"filters.similarToRegion.limit must be between 1 and {SearchQuery.MaxLimit}.");
+        }
+
+        return query.Filters.Visual is not null ? "filters.similarToRegion cannot be combined with filters.visual."
+            : query.Aggregate is not null ? "filters.similarToRegion cannot be combined with aggregate: it lists the most similar assets."
             : null;
     }
 

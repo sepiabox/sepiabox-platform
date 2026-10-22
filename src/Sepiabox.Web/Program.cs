@@ -36,6 +36,13 @@ if (SearchSetup.WarmUp(builder.Configuration, builder.Environment))
 {
     builder.Services.AddHostedService<TextModelWarmUp>();
 }
+// S-041: the region of a photo is cut from its preview and embedded here; the model is loaded on first use (D-099).
+builder.Services.AddHttpClient(SignedLinkPreviewSource.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddSingleton<IPreviewSource, SignedLinkPreviewSource>();
+builder.Services.AddSingleton<IRegionEmbedder>(services => new ClipRegionEmbedder(
+    SearchSetup.ModelFolder(services.GetRequiredService<IConfiguration>()),
+    services.GetRequiredService<IPreviewSource>(),
+    services.GetRequiredService<ILogger<ClipRegionEmbedder>>()));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
