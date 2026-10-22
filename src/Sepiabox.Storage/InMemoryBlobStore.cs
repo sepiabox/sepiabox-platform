@@ -25,6 +25,26 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
     public Task<bool> ContainerExistsAsync(string container, CancellationToken cancellationToken = default) =>
         Task.FromResult(_containers.ContainsKey(container));
 
+    public Task CreateContainerAsync(string container, CancellationToken cancellationToken = default)
+    {
+        CreateContainer(container);
+        return Task.CompletedTask;
+    }
+
+    public Task<long?> GetSizeAsync(string container, string name, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult<long?>(
+                _containers.TryGetValue(container, out var blobs) && blobs.TryGetValue(name, out var stored) ? stored.Content.ToMemory().Length : null);
+        }
+    }
+
+    public Task<DateTimeOffset?> GetServerTimeAsync(string container, CancellationToken cancellationToken = default) =>
+        Task.FromResult<DateTimeOffset?>(_time.GetUtcNow());
+
+    public IStagedUpload BeginUpload(string container, string name) => new StagedUpload(this, container, name);
+
     public Task<BlobContent?> ReadAsync(string container, string name, CancellationToken cancellationToken = default)
     {
         lock (_lock)
@@ -160,5 +180,64 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
         }
     }
 
-    private sealed record Stored(BinaryData Content, string ContentType, string Version, DateTimeOffset LastModified);
+    /// <summary>The storage class a blob was committed with by a staged upload, for a test; null when it is not there.</summary>
+    public BlobStorageClass? StorageClassOf(string container, string name)
+    {
+        lock (_lock)
+        {
+            return _containers.TryGetValue(container, out var blobs) && blobs.TryGetValue(name, out var stored) ? stored.StorageClass : null;
+        }
+    }
+
+    // The blocks are kept in the upload, apart from the container, until the commit.
+    private sealed class StagedUpload(InMemoryBlobStore store, string container, string name) : IStagedUpload
+    {
+        private readonly List<byte[]> _blocks = [];
+        private bool _committed;
+
+        public Task AppendAsync(ReadOnlyMemory<byte> block, CancellationToken cancellationToken = default)
+        {
+            if (_committed)
+            {
+                throw new InvalidOperationException("The upload is already committed.");
+            }
+
+            _blocks.Add(block.ToArray());
+            return Task.CompletedTask;
+        }
+
+        public Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default)
+        {
+            if (_committed)
+            {
+                throw new InvalidOperationException("The upload is already committed.");
+            }
+
+            var content = new byte[_blocks.Sum(b => b.Length)];
+            var offset = 0;
+            foreach (var block in _blocks)
+            {
+                block.CopyTo(content, offset);
+                offset += block.Length;
+            }
+
+            lock (store._lock)
+            {
+                if (!store._containers.TryGetValue(container, out var blobs))
+                {
+                    throw new InvalidOperationException($"The container {container} does not exist.");
+                }
+
+                blobs[name] = new Stored(BinaryData.FromBytes(content), contentType, (++store._versions).ToString(CultureInfo.InvariantCulture), store._time.GetUtcNow(), storageClass);
+            }
+
+            _committed = true;
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed record Stored(
+        BinaryData Content, string ContentType, string Version, DateTimeOffset LastModified, BlobStorageClass StorageClass = BlobStorageClass.Default);
 }

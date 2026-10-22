@@ -1,6 +1,7 @@
 using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Sas;
 
 namespace Sepiabox.Storage.Azure;
@@ -32,7 +33,29 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
     public async Task<bool> ContainerExistsAsync(string container, CancellationToken cancellationToken = default) =>
         (await service.GetBlobContainerClient(container).ExistsAsync(cancellationToken)).Value;
 
-    public bool IsStoreFailure(Exception exception) => exception is RequestFailedException;
+    // A request storage refused or did not answer, or an identity that could not get a token to make it (signing a link
+    // asks storage for a delegation key with the managed identity).
+    public bool IsStoreFailure(Exception exception) => exception is RequestFailedException or global::Azure.Identity.AuthenticationFailedException;
+
+    public Task CreateContainerAsync(string container, CancellationToken cancellationToken = default) =>
+        service.GetBlobContainerClient(container).CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+
+    public async Task<long?> GetSizeAsync(string container, string name, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return (await Blob(container, name).GetPropertiesAsync(cancellationToken: cancellationToken)).Value.ContentLength;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+    }
+
+    public async Task<DateTimeOffset?> GetServerTimeAsync(string container, CancellationToken cancellationToken = default) =>
+        (await service.GetBlobContainerClient(container).GetPropertiesAsync(cancellationToken: cancellationToken)).GetRawResponse().Headers.Date;
+
+    public IStagedUpload BeginUpload(string container, string name) => new StagedUpload(service.GetBlobContainerClient(container).GetBlockBlobClient(name));
 
     public async Task<BlobContent?> ReadAsync(string container, string name, CancellationToken cancellationToken = default)
     {
@@ -181,6 +204,49 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
 
     public void Dispose() => _keyLock.Dispose();
 
+    // Azure keeps staged blocks for a week and then drops them, so an upload that is not committed needs no clean-up.
+    private sealed class StagedUpload(BlockBlobClient blob) : IStagedUpload
+    {
+        private readonly List<string> _blockIds = [];
+        private bool _committed;
+
+        public async Task AppendAsync(ReadOnlyMemory<byte> block, CancellationToken cancellationToken = default)
+        {
+            if (_committed)
+            {
+                throw new InvalidOperationException("The upload is already committed.");
+            }
+
+            // Block ids must all have the same length within a blob.
+            var id = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes(_blockIds.Count.ToString("D8", System.Globalization.CultureInfo.InvariantCulture)));
+            // The caller's buffer is sent as it is when it is an array, so a block is not copied.
+            using var content = System.Runtime.InteropServices.MemoryMarshal.TryGetArray(block, out var segment)
+                ? new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false)
+                : new MemoryStream(block.ToArray(), writable: false);
+            await blob.StageBlockAsync(id, content, cancellationToken: cancellationToken);
+            _blockIds.Add(id);
+        }
+
+        public async Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default)
+        {
+            if (_committed)
+            {
+                throw new InvalidOperationException("The upload is already committed.");
+            }
+
+            await blob.CommitBlockListAsync(
+                _blockIds,
+                new CommitBlockListOptions
+                {
+                    HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
+                    AccessTier = storageClass == BlobStorageClass.Cold ? AccessTier.Cold : (AccessTier?)null,
+                },
+                cancellationToken);
+            _committed = true;
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
     // A missing container is 404 too, and is not a lost condition: only a missing blob is, and only for IfVersion.
     private static bool LostTheCondition(RequestFailedException ex, BlobWriteCondition condition) =>
         ex.Status switch
