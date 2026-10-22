@@ -157,4 +157,76 @@ public sealed class TakeoutSidecarsTests
         Assert.Equal("IMG-edited-twice.jpg", TakeoutSidecars.Original("IMG-edited-twice.jpg"));
         Assert.Equal("-edited.jpg", TakeoutSidecars.Original("-edited.jpg"));
     }
+
+    [Fact]
+    public void Gives_no_sidecar_when_two_cut_sidecars_both_start_the_media_name()
+    {
+        // Taking the first would put one photo's date, place and album on a photo that has none of its own.
+        var twoPlain = TakeoutSidecars.Match([Long], [Long[..42] + ".json", Long[..46] + ".json"]);
+        var twoSupplemental = TakeoutSidecars.Match([Long], [(Long + TakeoutSidecars.Supplemental)[..44] + ".json", (Long + TakeoutSidecars.Supplemental)[..46] + ".json"]);
+
+        Assert.Null(twoPlain[Long]);
+        Assert.Null(twoSupplemental[Long]);
+    }
+
+    [Theory]
+    [InlineData(39, false)]
+    [InlineData(40, true)]
+    [InlineData(46, true)]
+    public void Accepts_a_cut_name_only_from_the_minimum_length(int length, bool matched)
+    {
+        var cut = Long[..length] + ".json";
+
+        var found = TakeoutSidecars.Match([Long], [cut])[Long];
+
+        Assert.Equal(matched ? cut : null, found);
+    }
+
+    [Fact]
+    public void Does_not_match_a_cut_name_that_is_as_long_as_the_media_name_or_longer()
+    {
+        // The cut rule needs a name strictly shorter than the media's: a name as long, but different, is another file's.
+        var sameLength = Long[..^1] + "X.json";
+        var longer = Long + ".extra.json";
+
+        Assert.Null(TakeoutSidecars.Match([Long], [sameLength])[Long]);
+        Assert.Null(TakeoutSidecars.Match([Long], [longer])[Long]);
+    }
+
+    [Fact]
+    public void Does_not_offer_a_sidecar_that_another_file_already_has_to_a_longer_name_it_starts()
+    {
+        var other = Long + ".extra.jpg";
+
+        var match = TakeoutSidecars.Match([Long, other], [Long + ".json"]);
+
+        Assert.Equal(Long + ".json", match[Long]);
+        Assert.Null(match[other]);
+    }
+
+    [Theory]
+    [InlineData("IMG_0001-EDITED.jpg")]
+    [InlineData("IMG_0001-Bearbeitet.jpg")]
+    [InlineData("IMG_0001-\u7de8\u96c6\u6e08\u307f.jpg")]
+    [InlineData("IMG_0001-\ud3b8\uc9d1\ub428.jpg")]
+    public void Knows_the_edited_word_whatever_its_case_and_the_last_languages_too(string media)
+    {
+        Assert.Equal("IMG_0001.jpg.json", TakeoutSidecars.Match([media], ["IMG_0001.jpg.json"])[media]);
+    }
+
+    [Fact]
+    public void Matches_names_in_either_normalization_form_for_the_media_and_for_the_sidecar()
+    {
+        var nfdMedia = "Fe\u0301rias.jpg";
+        var nfcMedia = "F\u00e9rias.jpg";
+
+        Assert.Equal("F\u00e9rias.jpg.json", TakeoutSidecars.Match([nfdMedia], ["F\u00e9rias.jpg.json"])[nfdMedia]);
+        Assert.Equal("Fe\u0301rias.jpg.json", TakeoutSidecars.Match([nfcMedia], ["Fe\u0301rias.jpg.json"])[nfcMedia]);
+    }
+
+    [Fact]
+    public void Reads_a_sidecar_whose_extension_is_in_capitals()
+    {
+        Assert.Equal("IMG_0001.jpg.JSON", TakeoutSidecars.Match(["IMG_0001.jpg"], ["IMG_0001.jpg.JSON"])["IMG_0001.jpg"]);
+    }
 }

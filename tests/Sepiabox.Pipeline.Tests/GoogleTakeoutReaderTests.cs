@@ -62,6 +62,68 @@ public sealed class GoogleTakeoutReaderTests : IDisposable
     }
 
     [Fact]
+    public void Carries_a_place_with_only_one_zero_coordinate_as_a_real_one()
+    {
+        Put("equator.jpg");
+        Put("meridian.jpg");
+        Json("equator.jpg.json", """{"geoData": {"latitude": 0, "longitude": 10}}""");
+        Json("meridian.jpg.json", """{"geoData": {"latitude": 5, "longitude": 0}}""");
+
+        var scan = Read();
+
+        Assert.Equal(new GeoPoint(0, 10), ExportFacts.Location(scan.Find("equator.jpg")));
+        Assert.Equal(new GeoPoint(5, 0), ExportFacts.Location(scan.Find("meridian.jpg")));
+    }
+
+    [Theory]
+    [InlineData("\"-86400\"", "1969-12-31T00:00:00")]
+    [InlineData("-86400", "1969-12-31T00:00:00")]
+    [InlineData("\"+1561975200\"", "2019-07-01T10:00:00")]
+    public void Reads_a_negative_epoch_and_a_signed_timestamp(string timestamp, string expected)
+    {
+        Put("a.jpg");
+        Json("a.jpg.json", "{\"photoTakenTime\": {\"timestamp\": " + timestamp + "}}");
+
+        var date = Read().Find("a.jpg")!.CapturedAt;
+
+        Assert.Equal(DateTime.Parse(expected, System.Globalization.CultureInfo.InvariantCulture), date);
+        Assert.Equal(DateTimeKind.Utc, date!.Value.Kind);
+    }
+
+    [Fact]
+    public void Gives_a_source_url_over_2000_characters_none()
+    {
+        Put("a.jpg");
+        Put("b.jpg");
+        Json("a.jpg.json", "{\"url\": \"https://photos.example.com/" + new string('x', 1990) + "\"}");
+        Json("b.jpg.json", "{\"url\": \"https://photos.example.com/" + new string('x', 1900) + "\"}");
+
+        var scan = Read();
+
+        Assert.Null(ExportFacts.SourceUrl(scan.Find("a.jpg")));
+        Assert.NotNull(ExportFacts.SourceUrl(scan.Find("b.jpg")));
+    }
+
+    [Fact]
+    public void Falls_back_to_the_folder_name_when_the_metadata_title_looks_like_a_year_folder()
+    {
+        Put("Trip/a.jpg");
+        Json("Trip/metadata.json", """{"title": "Photos from 2019"}""");
+
+        Assert.Equal(["Trip"], Read().Find("Trip/a.jpg")!.Albums);
+    }
+
+    [Fact]
+    public void Gives_a_file_at_the_root_of_the_export_no_album()
+    {
+        Put("a.jpg");
+        Json("a.jpg.json", "{}");
+        Json("metadata.json", """{"title": "Whole export"}""");
+
+        Assert.Empty(Read().Find("a.jpg")!.Albums);
+    }
+
+    [Fact]
     public void Reads_the_description_as_the_caption_and_not_the_title()
     {
         Put("a.jpg");
