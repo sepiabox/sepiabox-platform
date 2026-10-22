@@ -209,7 +209,7 @@ public sealed class QuestionService(
             // Recorded whatever the outcome: a refused or invalid answer was billed too.
             await quota.RecordAsync(userKey, today, translation.Usage, CancellationToken.None);
         }
-        if (translation.Outcome == QuestionOutcome.Translated)
+        if (QuestionWarmUp.IsWarm(translation))
         {
             warmUp?.NoteSuccess();
         }

@@ -47,6 +47,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>Extra configuration, such as OAuth clients (fake ones: no test ever reaches Google or Microsoft).</summary>
     public Dictionary<string, string> Settings { get; init; } = [];
 
+    /// <summary>False for the test of the setting's own default.</summary>
+    public bool WarmUpOffByDefault { get; init; } = true;
+
     /// <summary>
     /// A folder for the data protection keys, so two factories can read each other's cookies like two
     /// revisions of the app sharing a key ring.
@@ -94,12 +97,17 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             .UseSetting("Search:ModelFolder", Path.Combine(Path.GetTempPath(), "sepiabox-tests-no-models"))
             // Never the developer's key from user secrets: a test that needs questions gives a fake translator.
             .UseSetting("Anthropic:ApiKey", string.Empty)
-            // No background question when a page is shown, which would show up in a fake translator's calls (D-101).
-            .UseSetting("Questions:WarmUp", "false")
+
             // Nor the developer's Key Vault: Development loads user secrets, which these settings override (a
             // test that needs a key ring URI sets it in Settings).
             .UseSetting($"ConnectionStrings:{AzureSetup.VaultConnectionName}", string.Empty)
             .UseSetting(AzureSetup.KeyUriKey, string.Empty);
+        if (WarmUpOffByDefault)
+        {
+            // No background question when a page is shown, which would show up in a fake translator's calls (D-101).
+            builder.UseSetting("Questions:WarmUp", "false");
+        }
+
         foreach (var (key, value) in Settings)
         {
             builder.UseSetting(key, value);

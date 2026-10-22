@@ -42,6 +42,16 @@ public sealed partial class QuestionWarmUp(IQuestionTranslator translator, TimeP
         }
     }
 
+    /// <summary>
+    /// Whether the API answered, so the grammar of the format was compiled and cached: a translated question or any call
+    /// that spent tokens (a refusal, an answer the validator rejects). A call that cost nothing proves nothing.
+    /// </summary>
+    public static bool IsWarm(QuestionTranslation translation)
+    {
+        ArgumentNullException.ThrowIfNull(translation);
+        return translation.Outcome == QuestionOutcome.Translated || translation.Usage != TokenUsage.None;
+    }
+
     /// <summary>A question was translated: the format is warm for another <see cref="Quiet"/>.</summary>
     public void NoteSuccess()
     {
@@ -84,7 +94,7 @@ public sealed partial class QuestionWarmUp(IQuestionTranslator translator, TimeP
             {
                 // Whenever the API answered (tokens were spent, even for a refusal or an answer the validator rejects) the
                 // grammar was compiled, so the format is warm. Only a call that cost nothing is tried again soon.
-                if (translation.Outcome == QuestionOutcome.Translated || translation.Usage != TokenUsage.None)
+                if (IsWarm(translation))
                 {
                     _lastSuccess = clock.GetUtcNow();
                 }

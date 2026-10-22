@@ -13,7 +13,7 @@
 
 <h1 class="visually-hidden">@Text["Timeline_Heading"]</h1>
 
-@if (_options is { } options && (_filtered || _invalid || _asked || _page is { Items.Count: > 0 } || _page is { Page: > 1 }))
+@if (_options is { } options && QuestionBoxShown)
 {
     <form class="ask" method="post" action="./" @formname="ask" @onsubmit="AskAsync" role="search" aria-label="@Text["Ask_Label"]">
         <AntiforgeryToken />
@@ -214,6 +214,9 @@ else
     private bool _describeUnavailable;
     private string? _peopleMessage;
     private bool _asked;
+
+    // The question box is on the page: a library with something to show, a search, or a question asked.
+    private bool QuestionBoxShown => _options is not null && (_filtered || _invalid || _asked || _page is { Items.Count: > 0 } || _page is { Page: > 1 });
     private string? _askMessage;
 
     protected override async Task OnParametersSetAsync()
@@ -228,7 +231,7 @@ else
         }
 
         await LoadAsync();
-        if (_options is not null)
+        if (QuestionBoxShown)
         {
             // The question box is on the page: keep the question format warm in the background (D-101); it never waits.
             Questions.WarmUp();
