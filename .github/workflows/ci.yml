@@ -120,7 +120,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      # The integration job's cache; on a miss only the two files the web carries are downloaded, and not saved,
+      # The integration job's cache; on a miss only the three files the web carries are downloaded, and not saved,
       # so the cache under this key stays the complete folder.
       - if: steps.changes.outputs.run == 'true'
         uses: actions/cache/restore@v4
@@ -128,7 +128,7 @@ jobs:
           path: ~/.sepiabox/models
           key: models-${{ hashFiles('models/models.json') }}
       - if: steps.changes.outputs.run == 'true'
-        run: dotnet run --project src/Sepiabox.Ingest --configuration Release -- models download --only clip-vit-b32-text,clip-bpe-vocab
+        run: dotnet run --project src/Sepiabox.Ingest --configuration Release -- models download --only clip-vit-b32-text,clip-bpe-vocab,clip-vit-b32-vision
       - if: steps.changes.outputs.run == 'true'
         run: dotnet test tests/Sepiabox.AppHost.Tests --configuration Release --filter "Category=WebImage"
         env:

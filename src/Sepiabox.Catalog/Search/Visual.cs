@@ -20,6 +20,23 @@ public interface IQueryEmbedder
     float[] Embed(string text);
 }
 
+/// <summary>
+/// Turns a region of a photo into a vector in the photos' embedding space (S-041, D-099). The web's implementation cuts
+/// the region from the photo's preview and runs CLIP's image model (<c>Sepiabox.Search</c>); the catalog only needs the vector.
+/// </summary>
+public interface IRegionEmbedder
+{
+    /// <summary>False while the image model is missing or failed to load: the UI then hides the region selection.</summary>
+    bool IsAvailable { get; }
+
+    /// <summary>
+    /// The embedding of the part of the photo <paramref name="assetId"/> inside <paramref name="box"/>
+    /// (<c>[x, y, width, height]</c>, relative), L2-normalized. Throws <see cref="AssetNotAnalysedException"/> when the
+    /// catalog has no such photo or it has no preview to cut, and <see cref="VisualSearchUnavailableException"/> when the model cannot be used.
+    /// </summary>
+    Task<float[]> EmbedAsync(string assetId, IReadOnlyList<double> box, CancellationToken cancellationToken = default);
+}
+
 /// <summary>Search by description was asked for but the text model is not available (S-016, D-070).</summary>
 public sealed class VisualSearchUnavailableException(string message, Exception? inner = null) : Exception(message, inner);
 

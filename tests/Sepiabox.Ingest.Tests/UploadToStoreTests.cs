@@ -94,6 +94,79 @@ public sealed class UploadToStoreTests : IDisposable
         Assert.Null(await _store.ReadAsync(BlobLayout.OriginalsContainer, "anything"));
     }
 
+    // An original already in storage is skipped only if it has the size the manifest says (D-030): a smaller one (a
+    // transfer that stopped) or a larger one (another file under that name) is uploaded again, and replaced.
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(1)]
+    [InlineData(-1_000_000)]
+    public async Task Uploads_an_original_again_when_the_one_in_storage_has_another_size(int difference)
+    {
+        var path = _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        var manifest = Process().Single();
+        var wrong = new byte[Math.Max(0, (int)manifest.SizeBytes + difference)];
+        _store.CreateContainer(BlobLayout.OriginalsContainer);
+        await _store.WriteAsync(BlobLayout.OriginalsContainer, manifest.Id, BinaryData.FromBytes(wrong), "image/jpeg", BlobWriteCondition.Always);
+
+        var result = await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local), _store);
+
+        Assert.Empty(result.Problems);
+        Assert.Equal(await File.ReadAllBytesAsync(path), (await _store.ReadAsync(BlobLayout.OriginalsContainer, manifest.Id))!.Content.ToArray());
+    }
+
+    [Fact]
+    public async Task Skips_an_original_in_storage_that_has_the_size_the_manifest_says()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        var manifest = Process().Single();
+        _store.CreateContainer(BlobLayout.OriginalsContainer);
+        var placeholder = new byte[manifest.SizeBytes];
+        await _store.WriteAsync(BlobLayout.OriginalsContainer, manifest.Id, BinaryData.FromBytes(placeholder), "image/jpeg", BlobWriteCondition.Always);
+        var counting = new CountingStore(_store);
+
+        await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local), counting);
+
+        Assert.DoesNotContain(counting.Staged, s => s.StartsWith(BlobLayout.OriginalsContainer + "/", StringComparison.Ordinal));
+        Assert.Equal(placeholder, (await _store.ReadAsync(BlobLayout.OriginalsContainer, manifest.Id))!.Content.ToArray());
+    }
+
+    // One block or less is one write; more is staged and committed with the default class, never Cold, even for an Azure
+    // destination, which asks for Cold only for originals (D-100).
+    [Theory]
+    [InlineData(UploadCommand.BlockSize - 1, false)]
+    [InlineData(UploadCommand.BlockSize, true)]
+    [InlineData(UploadCommand.BlockSize + 1, true)]
+    public async Task Sends_a_derivative_in_one_write_below_a_block_and_stages_it_from_a_block_up(int size, bool staged)
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        var manifest = Process().Single();
+        var derivative = manifest.Derivatives[0];
+        var file = Path.Combine(_work.Path, derivative.Path);
+        await File.WriteAllBytesAsync(file, new byte[size]);
+        var counting = new CountingStore(_store);
+
+        var result = await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Azure, "account"), counting);
+
+        Assert.Empty(result.Problems);
+        var blob = $"{BlobLayout.DerivativesContainer}/{BlobLayout.DerivativeBlobName(manifest.Id, derivative.Path)}";
+        Assert.Equal(staged, counting.Staged.Contains(blob));
+        Assert.Equal(!staged, counting.Writes.Contains(blob));
+        Assert.Equal(size, await _store.GetSizeAsync(BlobLayout.DerivativesContainer, BlobLayout.DerivativeBlobName(manifest.Id, derivative.Path)));
+        if (staged)
+        {
+            Assert.Equal(BlobStorageClass.Default, counting.CommittedClass[blob]);
+        }
+
+        // The original, in the same run, is the one that asked for Cold.
+        Assert.Equal(BlobStorageClass.Cold, counting.CommittedClass[$"{BlobLayout.OriginalsContainer}/{manifest.Id}"]);
+    }
+
+    [Fact]
+    public void Has_a_block_of_8_mib()
+    {
+        Assert.Equal(8 * 1024 * 1024, UploadCommand.BlockSize);
+    }
+
     private List<Manifest> Process()
     {
         // No FFmpeg in these tests: photos get thumbnails, videos stay pending with no derivatives.
@@ -119,6 +192,9 @@ public sealed class UploadToStoreTests : IDisposable
 
         public List<string> Writes { get; } = [];
 
+        /// <summary>The class each staged upload was committed with, by "container/name".</summary>
+        public Dictionary<string, BlobStorageClass> CommittedClass { get; } = [];
+
         public override IStagedUpload BeginUpload(string container, string name)
         {
             lock (Staged)
@@ -126,7 +202,7 @@ public sealed class UploadToStoreTests : IDisposable
                 Staged.Add($"{container}/{name}");
             }
 
-            return base.BeginUpload(container, name);
+            return new RecordingUpload(base.BeginUpload(container, name), $"{container}/{name}", CommittedClass);
         }
 
         public override Task<BlobWriteResult> WriteAsync(
@@ -139,6 +215,22 @@ public sealed class UploadToStoreTests : IDisposable
 
             return base.WriteAsync(container, name, content, contentType, condition, cancellationToken);
         }
+    }
+
+    private sealed class RecordingUpload(IStagedUpload inner, string key, Dictionary<string, BlobStorageClass> committed) : IStagedUpload
+    {
+        public Task AppendAsync(ReadOnlyMemory<byte> block, CancellationToken cancellationToken = default) => inner.AppendAsync(block, cancellationToken);
+
+        public async Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default)
+        {
+            await inner.CommitAsync(contentType, storageClass, cancellationToken);
+            lock (committed)
+            {
+                committed[key] = storageClass;
+            }
+        }
+
+        public ValueTask DisposeAsync() => inner.DisposeAsync();
     }
 
     private sealed class Ahead(TimeSpan by) : TimeProvider

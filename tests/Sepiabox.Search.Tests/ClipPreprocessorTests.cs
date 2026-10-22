@@ -1,7 +1,7 @@
 using ImageMagick;
-using Sepiabox.Pipeline.Embeddings;
+using Sepiabox.Search.Clip;
 
-namespace Sepiabox.Pipeline.Tests;
+namespace Sepiabox.Search.Tests;
 
 public sealed class ClipPreprocessorTests
 {

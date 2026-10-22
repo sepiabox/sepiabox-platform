@@ -191,6 +191,20 @@ main {
     font-size: 1.25rem;
 }
 
+/* The occasions of a search by part of a photo are headed like months; the heading above them is quieter. */
+.month h3 {
+    margin: 32px 0 12px;
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    line-height: 1.2;
+}
+
+.region-heading {
+    margin: 16px 0 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
 .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -527,6 +541,69 @@ main {
     background: var(--developer);
 }
 
+/* "Photos like this part of a photo" (S-041): the rectangle is drawn over the preview, in pixels set by region.js. */
+.region-frame {
+    position: relative;
+}
+
+.region-frame.selecting {
+    cursor: crosshair;
+    touch-action: none;
+    user-select: none;
+}
+
+.region-frame.selecting {
+    outline: 3px dashed var(--developer);
+    outline-offset: -3px;
+}
+
+.region-tools .button[aria-pressed="true"] {
+    outline: 3px solid var(--developer);
+    outline-offset: 2px;
+}
+
+.region-frame:focus-visible {
+    outline: 3px solid var(--developer);
+    outline-offset: -3px;
+}
+
+.region-box {
+    position: absolute;
+    box-sizing: border-box;
+    border: 2px solid var(--white);
+    outline: 2px solid var(--developer);
+    background: color-mix(in srgb, var(--white) 18%, transparent);
+    pointer-events: none;
+}
+
+.region-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: center;
+    padding: 12px 16px;
+}
+
+.region-tools form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: center;
+}
+
+/* Without the script every control in it is hidden; the padding alone would leave a gap under the photo. */
+.region-tools:not(:has(> :not([hidden]))) {
+    display: none;
+}
+
+.region-status:empty {
+    display: none;
+}
+
+.region-tools p {
+    margin: 0;
+}
+
 .player-error {
     margin: 0;
     padding: 12px 16px;
@@ -612,7 +689,7 @@ main {
     font-size: 0.875rem;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 18rem;
+    max-width: 11rem;
     white-space: nowrap;
 }
 
@@ -686,13 +763,6 @@ main {
 }
 
 @media (max-width: 800px) {
-    .user {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 14rem;
-        white-space: nowrap;
-    }
-
     .detail {
         grid-template-columns: 1fr;
     }
@@ -718,6 +788,72 @@ main {
     color: var(--developer);
     font-weight: 600;
     text-decoration: none;
+}
+
+.nav-link[aria-current="page"],
+.nav-more-active {
+    color: var(--cyanotype);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+}
+
+/* The pages used now and then, behind a disclosure that needs no JavaScript (D-102); not .more, which the "Show more" line of a search uses. */
+.nav-more {
+    position: relative;
+}
+
+.nav-more > summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.nav-more > summary::-webkit-details-marker {
+    display: none;
+}
+
+.nav-more > summary::after {
+    content: " ▾" / "";
+}
+
+.nav-more-current {
+    font-weight: 400;
+}
+
+.nav-more-list {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 20;
+    display: grid;
+    gap: 2px;
+    min-width: 11rem;
+    max-width: calc(100vw - 32px);
+    padding: 8px;
+    background: var(--white);
+    border: 1px solid var(--mat);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.nav-more-list .nav-link {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 12px;
+}
+
+/* On a phone the list opens in the flow of the header, not over the page, so it cannot run off the screen. */
+@media (max-width: 600px) {
+    .nav-more[open] {
+        flex-basis: 100%;
+    }
+
+    .nav-more-list {
+        position: static;
+        margin-top: 8px;
+        max-width: none;
+        box-shadow: none;
+    }
 }
 
 .nav-link:hover,
