@@ -410,7 +410,8 @@ public sealed class AnthropicQuestionTranslatorTests
         var output = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
 
         // similarTo names an asset (S-017, D-086) and eventIds names occasions (S-023, D-092): ids only the pages know.
-        Assert.Equal(["similarTo", "eventIds", "sourceCount"], QuestionPrompt.NotFromQuestions);
+        // quality and includeHidden (S-027, D-098) are the organize page's, and the format is at the API's ceiling (D-094).
+        Assert.Equal(["similarTo", "eventIds", "sourceCount", "quality", "includeHidden"], QuestionPrompt.NotFromQuestions);
         Assert.All(QuestionPrompt.NotFromQuestions, field =>
         {
             Assert.NotNull(dsl["properties"]!["filters"]!["properties"]![field]);

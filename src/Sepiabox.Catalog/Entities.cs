@@ -56,6 +56,21 @@ public sealed class Asset
     /// </summary>
     public bool OriginalStored { get; set; } = true;
 
+    /// <summary>
+    /// How sharp a photo is (S-027, D-098): the variance of the Laplacian of its grayscale image at 512 px, from its
+    /// manifest; null for a video and for a photo not measured. Below <c>Search:BlurryBelow</c> it is blurry.
+    /// </summary>
+    public double? Sharpness { get; set; }
+
+    /// <summary>The photo's 64-bit difference hash, 16 lower-case hex characters (S-027); photos that look alike differ by a few bits.</summary>
+    public string? DHash { get; set; }
+
+    /// <summary>
+    /// Set aside by the family on the organize page (S-027): left out of search, the timeline and counts unless the query says
+    /// <c>includeHidden</c>. Only a person changes it, never an import.
+    /// </summary>
+    public bool Hidden { get; set; }
+
     /// <summary>When the asset first entered the catalog.</summary>
     public DateTimeOffset ImportedAt { get; set; }
 

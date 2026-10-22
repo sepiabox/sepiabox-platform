@@ -50,6 +50,11 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("text")
                         .HasColumnName("content_type");
 
+                    b.Property<string>("DHash")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("dhash");
+
                     b.Property<double?>("DurationSeconds")
                         .HasColumnType("double precision")
                         .HasColumnName("duration_seconds");
@@ -61,6 +66,11 @@ namespace Sepiabox.Catalog.Migrations
                     b.Property<int?>("Height")
                         .HasColumnType("integer")
                         .HasColumnName("height");
+
+                    b.Property<bool>("Hidden")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("hidden");
 
                     b.Property<DateTimeOffset>("ImportedAt")
                         .HasColumnType("timestamp with time zone")
@@ -96,6 +106,10 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("place_region");
 
+                    b.Property<double?>("Sharpness")
+                        .HasColumnType("double precision")
+                        .HasColumnName("sharpness");
+
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint")
                         .HasColumnName("size_bytes");
@@ -111,10 +125,18 @@ namespace Sepiabox.Catalog.Migrations
                     b.HasKey("Id")
                         .HasName("pk_assets");
 
+                    b.HasIndex("Hidden")
+                        .HasDatabaseName("ix_assets_hidden")
+                        .HasFilter("hidden");
+
                     b.HasIndex("Location")
                         .HasDatabaseName("ix_assets_location");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Location"), "gist");
+
+                    b.HasIndex("Sharpness")
+                        .HasDatabaseName("ix_assets_sharpness")
+                        .HasFilter("sharpness IS NOT NULL");
 
                     b.HasIndex("CapturedAt", "Id")
                         .IsDescending(true, false)

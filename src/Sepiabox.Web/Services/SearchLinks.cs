@@ -23,6 +23,12 @@ public sealed record FilterFields(int? Year, int? Month, string? Kind, string? C
 
     /// <summary>The number of sources chosen (S-028), which the bar keeps while it narrows them; it offers no way to choose one.</summary>
     public SourceCountFilter? SourceCount { get; init; }
+
+    /// <summary>Blurry or sharp photos only (S-027), which the bar keeps while it narrows them; it offers no way to choose it.</summary>
+    public QualityFilter? Quality { get; init; }
+
+    /// <summary>Including what was set aside (S-027), kept the same way.</summary>
+    public bool IncludeHidden { get; init; }
 }
 
 /// <summary>
@@ -40,6 +46,11 @@ public static class SearchLinks
 
     /// <summary>The bar's hidden fields for a search inside occasions (S-023): one per occasion id.</summary>
     public const string EventParameter = "event";
+
+    /// <summary>The bar's hidden fields for the sharpness filter (<c>1</c> blurry, <c>0</c> sharp) and for including what was set aside (S-027).</summary>
+    public const string BlurryParameter = "blurry";
+
+    public const string HiddenParameter = "hidden";
 
     /// <summary>The bar's hidden fields for a search by the number of sources (S-028): exactly, or at least.</summary>
     public const string SourceEqParameter = "source-eq";
@@ -75,7 +86,9 @@ public static class SearchLinks
         string? similarLimit = null,
         IEnumerable<string?>? eventIds = null,
         string? sourceEq = null,
-        string? sourceGte = null)
+        string? sourceGte = null,
+        string? blurry = null,
+        string? includeHidden = null)
     {
         var events = EventIds(eventIds);
         var names = Names(people);
@@ -98,6 +111,8 @@ public static class SearchLinks
             SavedPlaces = places.Count > 0 ? places : null,
             EventIds = events.Count > 0 ? events : null,
             SourceCount = SourceCount(sourceEq, sourceGte),
+            Quality = blurry is "1" or "0" ? new QualityFilter { Blurry = blurry == "1" } : null,
+            IncludeHidden = includeHidden == "1",
         };
         // As many as were asked for: the query's own limit would otherwise cap a raised one (SearchQuery.ResultLimit).
         return similarTo?.Limit is > SearchQuery.DefaultLimit and var raised
@@ -138,6 +153,8 @@ public static class SearchLinks
             SimilarTo = filters?.SimilarTo,
             EventIds = filters?.EventIds ?? [],
             SourceCount = filters?.SourceCount,
+            Quality = filters?.Quality,
+            IncludeHidden = filters?.IncludeHidden ?? false,
         };
     }
 

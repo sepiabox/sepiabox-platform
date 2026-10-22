@@ -43,6 +43,7 @@ builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 builder.Services.AddScoped<IPeopleEditor, PeopleEditor>();
 builder.Services.AddScoped<IFaceSettings, FaceSettings>();
 builder.Services.AddScoped<ISavedPlaces, SavedPlaces>();
+builder.Services.AddScoped<IOrganization, Organization>();
 // Connected cloud accounts (S-037, D-097): Google Drive with the sign-in's OAuth client; tokens protected by Data Protection.
 builder.Services.AddSingleton(services => new GoogleDrive(services.GetRequiredService<SignInProviders>().Google));
 builder.Services.AddSingleton<IDriveClient>(services => services.GetRequiredService<GoogleDrive>());
