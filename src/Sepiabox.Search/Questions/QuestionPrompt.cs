@@ -18,9 +18,11 @@ public static class QuestionPrompt
     /// The most optional properties (not in their object's <c>required</c>) the output format may have, over every object:
     /// beyond it the API refuses every request with 400 invalid_request_error, "Schemas contains too many optional
     /// parameters (29), which would make grammar compilation inefficient. Reduce the number of optional parameters in your
-    /// tool schemas (limit: 24)." (the S-014 recording run, D-085).
+    /// tool schemas (limit: 24)." (the S-014 recording run, D-085). The measured ceiling is lower: with 20 the API
+    /// refused the format with 400 "Schema is too complex." on 2026-10-22 (the S-024 recording run, D-094), though its
+    /// own text says 24; with 19, as before, it answered.
     /// </summary>
-    public const int MaxOptionalProperties = 24;
+    public const int MaxOptionalProperties = 19;
 
     /// <summary>
     /// The most properties with a union type (<c>anyOf</c>, or a type array such as <c>["string", "null"]</c>) the output
@@ -57,6 +59,14 @@ public static class QuestionPrompt
     public static readonly IReadOnlyList<string> AggregateNotFromQuestions = ["sum"];
 
     /// <summary>
+    /// The properties of <c>filters</c> the output format makes required but nullable, so they cost a union type instead
+    /// of an optional property (D-094): <c>eventTypes</c> was the 20th optional property, over the ceiling
+    /// (<see cref="MaxOptionalProperties"/>). The answer writes null for them when the question does not ask, and
+    /// <see cref="WithoutNulls"/> removes it. The DSL schema is unchanged.
+    /// </summary>
+    public static readonly IReadOnlyList<string> FiltersRequiredNullable = ["eventTypes"];
+
+    /// <summary>
     /// The DSL schema (<c>docs/schemas/search.v1.json</c>, the same file) as the output format: unchanged apart from
     /// the keywords structured outputs does not support, which <see cref="QueryValidator"/> checks afterwards, and the
     /// filters a question cannot express (<see cref="NotFromQuestions"/>); the
@@ -78,7 +88,9 @@ public static class QuestionPrompt
 
         Answer with one JSON object in the search DSL v1 and nothing else. Every filter you set must match (AND); the
         values inside one list match when any of them does (OR). Leave out every field the question does not ask for;
-        inside a nested object (such as "places" or "distanceFrom"), write such a field as null.
+        inside a nested object (such as "places" or "distanceFrom"), write such a field as null. In "filters", "eventTypes"
+        is the one field that is always written: null unless the question names an occasion type. The examples below leave it
+        out where it is null.
 
         {
           "filters": {
@@ -104,7 +116,7 @@ public static class QuestionPrompt
               "all": ["Ana", "Pedro"],               people who must all be in the picture, names as in the context's people list
               "includeMe": true                      the person asking ("me", "I", "eu", "comigo") must be in it too
             },
-            "eventTypes": ["wedding"],               in an occasion of one of these types, as in the context's occasion types list
+            "eventTypes": ["wedding"] | null,        in an occasion of one of these types, as in the context's occasion types list; null when the question names no occasion type
             "visual": {"text": "snow"},              what the picture shows, in English
             "undatedOnly": true                      only items without a capture date
           },
@@ -310,6 +322,20 @@ public static class QuestionPrompt
 
         Simplify(schema);
         RequireNested(schema, depth: 0);
+        if (schema["properties"]?["filters"] is JsonObject filtersSchema && filtersSchema["properties"] is JsonObject filterProperties)
+        {
+            var names = FiltersRequiredNullable.Where(filterProperties.ContainsKey).ToList();
+            foreach (var name in names.Where(n => filterProperties[n] is JsonObject))
+            {
+                filterProperties[name] = Nullable((JsonObject)filterProperties[name]!);
+            }
+
+            if (names.Count > 0)
+            {
+                filtersSchema["required"] = new JsonArray([.. names.Select(n => (JsonNode?)JsonValue.Create(n))]);
+            }
+        }
+
         return schema.ToJsonString();
     }
 
