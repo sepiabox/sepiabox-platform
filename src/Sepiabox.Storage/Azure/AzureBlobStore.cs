@@ -32,6 +32,8 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
     public async Task<bool> ContainerExistsAsync(string container, CancellationToken cancellationToken = default) =>
         (await service.GetBlobContainerClient(container).ExistsAsync(cancellationToken)).Value;
 
+    public bool IsStoreFailure(Exception exception) => exception is RequestFailedException;
+
     public async Task<BlobContent?> ReadAsync(string container, string name, CancellationToken cancellationToken = default)
     {
         try
@@ -48,9 +50,25 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
     public async IAsyncEnumerable<BlobListing> ListAsync(
         string container, string? prefix = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await foreach (var blob in service.GetBlobContainerClient(container).GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix, cancellationToken))
+        // A container that is not there has no blobs; the error shows when the first page is asked for.
+        await using var blobs = service.GetBlobContainerClient(container)
+            .GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix, cancellationToken)
+            .GetAsyncEnumerator(cancellationToken);
+        while (true)
         {
-            yield return Listing(blob);
+            try
+            {
+                if (!await blobs.MoveNextAsync())
+                {
+                    yield break;
+                }
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                yield break;
+            }
+
+            yield return Listing(blobs.Current);
         }
     }
 
@@ -97,9 +115,10 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
             var written = (await Blob(container, name).UploadAsync(content, options, cancellationToken)).Value;
             return new BlobWriteResult(BlobWriteStatus.Written, Unquoted(written.ETag));
         }
-        catch (RequestFailedException ex) when (ex.Status is 409 or 412 || (ex.Status == 404 && condition.Kind == BlobWriteConditionKind.IfVersion))
+        catch (RequestFailedException ex) when (condition.Kind != BlobWriteConditionKind.Always && LostTheCondition(ex, condition))
         {
             // Someone wrote the blob first (409 for a blob that exists, 412 for a version that changed), or deleted it.
+            // An unconditional write has no condition to lose: a 409 or 412 there is a real failure.
             return new BlobWriteResult(BlobWriteStatus.ConditionNotMet);
         }
     }
@@ -145,8 +164,18 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
 
     public void Dispose() => _keyLock.Dispose();
 
+    // A missing container is 404 too, and is not a lost condition: only a missing blob is, and only for IfVersion.
+    private static bool LostTheCondition(RequestFailedException ex, BlobWriteCondition condition) =>
+        ex.Status switch
+        {
+            412 => true,
+            409 => ex.ErrorCode is null or "BlobAlreadyExists" or "ConditionNotMet",
+            404 => condition.Kind == BlobWriteConditionKind.IfVersion && ex.ErrorCode == "BlobNotFound",
+            _ => false,
+        };
+
     private static BlobListing Listing(BlobItem blob) =>
-        new(blob.Name, Unquoted(blob.Properties.ETag), blob.Properties.LastModified ?? DateTimeOffset.MinValue);
+        new(blob.Name, Unquoted(blob.Properties.ETag), blob.Properties.LastModified ?? DateTimeOffset.MaxValue);
 
     private BlobClient Blob(string container, string name) => service.GetBlobContainerClient(container).GetBlobClient(name);
 

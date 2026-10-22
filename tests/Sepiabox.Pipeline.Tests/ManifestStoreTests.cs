@@ -356,7 +356,14 @@ public abstract class ManifestStoreTests
 /// <summary>On <see cref="InMemoryBlobStore"/>.</summary>
 public sealed class ManifestStoreInMemoryTests : ManifestStoreTests
 {
-    protected override IBlobStore Backing { get; } = new InMemoryBlobStore();
+    public ManifestStoreInMemoryTests()
+    {
+        Memory.CreateContainer(Container);
+    }
+
+    private InMemoryBlobStore Memory { get; } = new();
+
+    protected override IBlobStore Backing => Memory;
 }
 
 /// <summary>On Azure Blob Storage, as Azurite emulates it.</summary>

@@ -190,6 +190,52 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
         Assert.Equal(3, second.Erased + second.Unchanged);
     }
 
+    // The sweep skips a blob only if it was written before the previous pass: LastModified < since, so a blob written at
+    // that very moment is swept (a boundary that, wrong, leaves a person's face in storage after they asked for its erase).
+    [Fact]
+    public async Task Visits_the_blobs_written_at_and_after_the_previous_pass_and_skips_those_before()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var clock = new SettableClock(DateTimeOffset.UtcNow);
+        var memory = new InMemoryBlobStore(clock);
+        memory.CreateContainer(BlobLayout.ManifestsContainer);
+        await Recognition(db).TurnOffAsync(Ana);
+        var blobs = new ManifestFacesSweep(db, memory, new ManifestStore(new ManifestValidator(), memory), clock, NullLogger.Instance);
+        var first = await blobs.RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+        Assert.True(first.Recorded);
+        var since = (await FaceRecognition.ReadAsync(db)).SweptThrough!.Value;
+
+        var times = new Dictionary<int, DateTimeOffset>
+        {
+            [1] = since - TimeSpan.FromSeconds(1),
+            [2] = since,
+            [3] = since + TimeSpan.FromSeconds(1),
+        };
+        foreach (var (n, time) in times)
+        {
+            clock.Now = time;
+            var manifest = FaceImportTests.WithFaces(n, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: n)));
+            await memory.WriteAsync(
+                BlobLayout.ManifestsContainer, BlobLayout.ManifestBlobName(manifest.Id), BinaryData.FromString(ManifestJson.Serialize(manifest)),
+                "application/json", BlobWriteCondition.Always);
+        }
+
+        clock.Now = since + TimeSpan.FromMinutes(30);
+        var second = await blobs.RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+
+        Assert.Equal(2, second.Erased);
+        Assert.NotEmpty(await StoredFacesAsync(memory, 1));
+        Assert.Empty(await StoredFacesAsync(memory, 2));
+        Assert.Empty(await StoredFacesAsync(memory, 3));
+    }
+
+    private static async Task<IReadOnlyList<ManifestFace>> StoredFacesAsync(InMemoryBlobStore store, int n)
+    {
+        var id = FaceImportTests.WithFaces(n).Id;
+        var blob = await store.ReadAsync(BlobLayout.ManifestsContainer, BlobLayout.ManifestBlobName(id));
+        return ManifestJson.Deserialize(blob!.Content.ToString()).Faces;
+    }
+
     [Fact]
     public async Task Turning_recognition_off_again_with_nothing_left_changes_and_records_nothing()
     {

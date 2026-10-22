@@ -6,11 +6,14 @@ namespace Sepiabox.Storage;
 
 /// <summary>
 /// An <see cref="IBlobStore"/> in memory, for unit tests and local experiments, with the same conditional-write rules
-/// as Azure (S-050). Containers come into being with their first write or <see cref="CreateContainer"/>. Read URLs are
+/// as Azure (S-050). Containers come into being with <see cref="CreateContainer"/>, as Azure containers are created beforehand; a write to one that is not there throws. Read URLs are
 /// <c>memory://</c> addresses that say what they were asked for.
 /// </summary>
 public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
 {
+    /// <summary>The longest a link may last, as in Azure (<c>AzureBlobStore.MaxReadUrlLifetime</c>).</summary>
+    public static readonly TimeSpan MaxReadUrlLifetime = TimeSpan.FromHours(4);
+
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly ConcurrentDictionary<string, SortedDictionary<string, Stored>> _containers = new(StringComparer.Ordinal);
     private readonly Lock _lock = new();
@@ -81,7 +84,11 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
         ArgumentNullException.ThrowIfNull(content);
         lock (_lock)
         {
-            var blobs = _containers.GetOrAdd(container, _ => new SortedDictionary<string, Stored>(StringComparer.Ordinal));
+            if (!_containers.TryGetValue(container, out var blobs))
+            {
+                throw new InvalidOperationException($"The container {container} does not exist.");
+            }
+
             var exists = blobs.TryGetValue(name, out var current);
             var holds = condition.Kind switch
             {
@@ -112,6 +119,11 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
         string container, string name, DateTimeOffset expiresOn, BlobReadUrlOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        if (expiresOn > _time.GetUtcNow() + MaxReadUrlLifetime)
+        {
+            throw new ArgumentOutOfRangeException(nameof(expiresOn), expiresOn, $"A link lasts at most {MaxReadUrlLifetime}.");
+        }
+
         var url = $"memory://{container}/{Uri.EscapeDataString(name).Replace("%2F", "/", StringComparison.Ordinal)}"
             + $"?se={Uri.EscapeDataString(expiresOn.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))}"
             + (options?.DownloadFileName is { } file ? $"&filename={Uri.EscapeDataString(file)}" : string.Empty)
