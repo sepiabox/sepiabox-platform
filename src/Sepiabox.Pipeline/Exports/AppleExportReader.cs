@@ -88,7 +88,13 @@ public sealed partial class AppleExportReader : IExportReader
             .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/')).Order(StringComparer.Ordinal).ToList();
         var media = all.Where(f => MediaTypes.Classify(f) != MediaKind.Other).ToList();
         var byName = media.GroupBy(f => Key(Path.GetFileName(f)), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
-        var xmps = new HashSet<string>(all.Where(f => f.EndsWith(".xmp", StringComparison.OrdinalIgnoreCase)).Select(Key), StringComparer.Ordinal);
+        // Every sidecar by its key, with its real path: looked up once, so a folder with a sidecar per file costs a lookup per file.
+        var xmps = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var xmp in all.Where(f => f.EndsWith(".xmp", StringComparison.OrdinalIgnoreCase)))
+        {
+            xmps.TryAdd(Key(xmp), xmp);
+        }
+
         var warnings = new List<string>();
 
         var details = ReadDetails(root, all, warnings, cancellationToken);
@@ -98,6 +104,7 @@ public sealed partial class AppleExportReader : IExportReader
         var leftOut = new List<string>();
         var deleted = 0;
         var ambiguous = 0;
+        var ambiguousDeleted = 0;
         var unreadableXmp = 0;
         var withoutRow = 0;
         foreach (var path in media)
@@ -108,13 +115,22 @@ public sealed partial class AppleExportReader : IExportReader
             DetailsRow? row = null;
             if (details is not null)
             {
-                if (!unique)
+                details.Rows.TryGetValue(key, out var found);
+                var consistent = found is not null && found.Distinct().Count() == 1;
+                if (!unique || (found is not null && !consistent))
                 {
+                    // A name several files share, or rows that disagree, give no date; but a row that says deleted is not ignored.
                     ambiguous++;
+                    if (found?.Any(r => r.Deleted) == true)
+                    {
+                        leftOut.Add(path);
+                        ambiguousDeleted++;
+                        continue;
+                    }
                 }
-                else if (details.TryGetValue(key, out var found))
+                else if (found is not null)
                 {
-                    row = found;
+                    row = found[0];
                 }
                 else
                 {
@@ -140,9 +156,26 @@ public sealed partial class AppleExportReader : IExportReader
             }));
         }
 
-        if (deleted > 0)
+        if (deleted + ambiguousDeleted > 0)
         {
-            warnings.Add($"{deleted:N0} photos and videos are marked deleted in Photo Details and were not imported.");
+            warnings.Add($"{deleted + ambiguousDeleted:N0} photos and videos are marked deleted in Photo Details and were not imported.");
+        }
+
+        if (ambiguousDeleted > 0)
+        {
+            warnings.Add($"{ambiguousDeleted:N0} of them share a file name with another file or have rows that disagree, and a row says deleted: they were left out to be safe.");
+        }
+
+        if (details is not null && details.DeletedValues.Count > 0)
+        {
+            // Every distinct value of the column, so a value that does not mean deleted ("N/A", "Não") is seen at once.
+            var values = string.Join(", ", details.DeletedValues.OrderByDescending(p => p.Value).ThenBy(p => p.Key, StringComparer.Ordinal).Take(10).Select(p => $"\"{p.Key}\" x {p.Value:N0}"));
+            warnings.Add($"The deleted column holds: {values}. Any value but empty, no, false, 0, n or - counts as deleted.");
+        }
+
+        if (details is not null && details.RowCount >= 10 && details.DeletedRows * 2 > details.RowCount)
+        {
+            warnings.Add($"Most rows ({details.DeletedRows:N0} of {details.RowCount:N0}) are marked deleted: check the values the deleted column holds, above; if they do not mean deleted, nothing of the library is imported.");
         }
 
         if (ambiguous > 0)
@@ -165,9 +198,12 @@ public sealed partial class AppleExportReader : IExportReader
 
     private sealed record DetailsRow(DateTime? CapturedAt, bool Deleted);
 
-    // Photo Details*.csv anywhere in the export, by image name; null when there is none. An image named in several rows with
-    // different content is unclear and is left out of the result.
-    private static Dictionary<string, DetailsRow>? ReadDetails(string root, List<string> all, List<string> warnings, CancellationToken cancellationToken)
+    // The rows by image name, with the values the deleted column holds and how many rows there are.
+    private sealed record Details(Dictionary<string, List<DetailsRow>> Rows, Dictionary<string, int> DeletedValues, int RowCount, int DeletedRows);
+
+    // Photo Details*.csv anywhere in the export, by image name; null when there is none. A row repeated exactly is one row; an
+    // image whose rows disagree gives no date, but a row that says deleted still counts (see Read).
+    private static Details? ReadDetails(string root, List<string> all, List<string> warnings, CancellationToken cancellationToken)
     {
         var csvs = all.Where(f => Path.GetFileName(f).StartsWith("Photo Details", StringComparison.OrdinalIgnoreCase)
             && f.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)).ToList();
@@ -177,6 +213,9 @@ public sealed partial class AppleExportReader : IExportReader
         }
 
         var rows = new Dictionary<string, List<DetailsRow>>(StringComparer.Ordinal);
+        var deletedValues = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var rowCount = 0;
+        var deletedRows = 0;
         var badDates = 0;
         string? sample = null;
         foreach (var csv in csvs)
@@ -214,7 +253,15 @@ public sealed partial class AppleExportReader : IExportReader
                     sample ??= text.Trim();
                 }
 
-                var row = new DetailsRow(parsed, flag >= 0 && !s_notDeleted.Contains(Cell(line, flag).Trim()));
+                var value = Cell(line, flag).Trim();
+                var row = new DetailsRow(parsed, flag >= 0 && !s_notDeleted.Contains(value));
+                rowCount++;
+                if (row.Deleted)
+                {
+                    deletedRows++;
+                    deletedValues[value] = deletedValues.GetValueOrDefault(value) + 1;
+                }
+
                 var key = Key(Path.GetFileName(image.Replace('\\', '/')));
                 if (!rows.TryGetValue(key, out var list))
                 {
@@ -230,8 +277,7 @@ public sealed partial class AppleExportReader : IExportReader
             warnings.Add($"{badDates:N0} originalCreationDate values were not in a known date format (for example \"{sample}\") and were ignored.");
         }
 
-        // A row repeated exactly is one row; rows that disagree say nothing for sure.
-        return rows.Where(p => p.Value.Distinct().Count() == 1).ToDictionary(p => p.Key, p => p.Value[0], StringComparer.Ordinal);
+        return new Details(rows, deletedValues, rowCount, deletedRows);
     }
 
     // Albums/<album>.csv anywhere in the export: the album is the file's name, its rows' first cell is an image name.
@@ -280,7 +326,7 @@ public sealed partial class AppleExportReader : IExportReader
 
     // The sidecar of a media file in the same folder: "IMG_0001.HEIC.xmp", else "IMG_0001.xmp" (which a Live Photo's still
     // and video share); null when there is none or it cannot be read.
-    private static ExportMetadata? ReadXmp(string root, string path, HashSet<string> xmps, ref int unreadable)
+    private static ExportMetadata? ReadXmp(string root, string path, Dictionary<string, string> xmps, ref int unreadable)
     {
         var directory = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? string.Empty;
         var name = Path.GetFileName(path);
@@ -288,16 +334,16 @@ public sealed partial class AppleExportReader : IExportReader
         foreach (var candidate in candidates)
         {
             var relative = directory.Length == 0 ? candidate : directory + "/" + candidate;
-            if (!xmps.Contains(Key(relative)))
+            // The sidecar's real spelling may differ in case from the media file's.
+            if (!xmps.TryGetValue(Key(relative), out var actualRelative))
             {
                 continue;
             }
 
-            // The sidecar's real spelling may differ in case from the media file's.
-            var actual = Directory.EnumerateFiles(Path.Combine(root, directory)).FirstOrDefault(f => Key(Path.GetFileName(f)) == Key(candidate));
+            var actual = Path.Combine(root, actualRelative);
             try
             {
-                if (actual is null || new FileInfo(actual).Length > MaxXmpBytes)
+                if (new FileInfo(actual).Length > MaxXmpBytes)
                 {
                     unreadable++;
                     return null;
