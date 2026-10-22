@@ -427,7 +427,9 @@ public sealed class LibraryQueries(
             .Select(f => new AssetPerson(
                 f.PersonId, f.Name, f.FaceId,
                 thumbnail is not null && f.Box is { Length: 4 } ? new FaceCrop(id, f.Box, thumbnail.Width, thumbnail.Height) : null))
-            .DistinctBy(p => (p.Id, p.Name, p.FaceId))
+            // One entry per person, with their first face in the photo (D-077 allows one; a data fix could leave two).
+            .OrderBy(p => p.FaceId)
+            .DistinctBy(p => p.Id)
             .ToList();
         var hasEmbedding = await db.AssetEmbeddings.AnyAsync(e => e.AssetId == id && e.Model == PgvectorSimilarity.ModelKey, cancellationToken);
         // The largest the asset has (S-064): an index-only photo has the 2048 px preview and no 1280 px one, a video the

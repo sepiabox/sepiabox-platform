@@ -1439,7 +1439,7 @@
     <value>As cópias das informações da biblioteca guardadas na nuvem (manifestos) mantêm os rostos apagados até o reconhecimento facial ser desligado em Configurações, e os backups automáticos os mantêm por até 7 dias.</value>
   </data>
   <data name="IgnoreMany_More" xml:space="preserve">
-    <value>e mais {0}</value>
+    <value>e mais {0} pessoas</value>
   </data>
   <data name="Detail_IgnoreFace_Named" xml:space="preserve">
     <value>Ignorar e apagar este rosto, sem nome {0}</value>

@@ -198,7 +198,9 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         Assert.True(page.Markup.IndexOf("ignore-crops", StringComparison.Ordinal) < page.Markup.IndexOf("ignore-warning", StringComparison.Ordinal));
         // A strip of at most 24 faces, then how many more.
         Assert.Equal(24, page.FindAll("ul.ignore-crops li").Count);
-        Assert.Equal("and 6 more", page.Find("p.ignore-more").TextContent);
+        Assert.Equal("and 6 more people", page.Find("p.ignore-more").TextContent);
+        Assert.True(page.Find("form.confirm > a").HasAttribute("autofocus"));
+        Assert.Contains("autofocus", page.Find("form.confirm > a").OuterHtml, StringComparison.Ordinal);
         Assert.Equal("30", page.Find("form.confirm input[name=Expected]").GetAttribute("value"));
         Assert.Contains("changed since you opened this page", page.Find("p[role=status]").TextContent, StringComparison.Ordinal);
     }

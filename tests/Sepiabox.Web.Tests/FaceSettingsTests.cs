@@ -327,6 +327,64 @@ public sealed class FaceSettingsCatalogTests(CatalogFixture catalog)
         Assert.Equal((2, 1), (one1.People, one1.Crops.Count));
     }
 
+    [Fact]
+    public async Task Previews_each_persons_best_scoring_face_and_skips_a_malformed_box_and_a_thumbnail_of_no_size()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.Add(CatalogData.Photo(Ids.Of(1), new DateTime(2019, 7, 14)));
+        db.Assets.Add(CatalogData.Photo(Ids.Of(2), new DateTime(2019, 7, 15)));
+        db.Assets.Add(CatalogData.Photo(Ids.Of(3), new DateTime(2019, 7, 16)));
+        var flat = CatalogData.Photo(Ids.Of(4), new DateTime(2019, 7, 17));
+        flat.Derivatives = [new Derivative { AssetId = Ids.Of(4), Name = "thumb-256", BlobPath = $"{Ids.Of(4)}/thumb-256.webp", Width = 0, Height = 0, ContentType = "image/webp" }];
+        db.Assets.Add(flat);
+        var two = new Catalog.Person { FaceCount = 2 };
+        var short_ = new Catalog.Person { FaceCount = 1 };
+        var noSize = new Catalog.Person { FaceCount = 1 };
+        Face OnAsset(int n, Catalog.Person person, double score, double[]? box = null)
+        {
+            var face = Face(person);
+            face.AssetId = Ids.Of(n);
+            face.Score = score;
+            face.Box = box ?? [0.1, 0.2, 0.3, 0.4];
+            return face;
+        }
+
+        db.Faces.AddRange(OnAsset(1, two, 0.5), OnAsset(2, two, 0.9), OnAsset(3, short_, 0.9, [0.1, 0.2, 0.3]), OnAsset(4, noSize, 0.9));
+        await db.SaveChangesAsync();
+        var contexts = new TestContexts(catalog.ConnectionStringFor(db));
+
+        var preview = await new FaceSettings(contexts, TimeProvider.System).PreviewUnnamedWithFewFacesAsync(12);
+
+        // Three people are counted; only the one with a usable face and thumbnail is shown, by its best face.
+        Assert.Equal(3, preview.People);
+        Assert.Equal([Ids.Of(2)], preview.Crops.Select(c => c.AssetId));
+    }
+
+    [Fact]
+    public async Task Lists_a_person_once_in_a_photo_and_gives_a_face_with_a_short_box_no_crop()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.Add(CatalogData.Photo(Ids.Of(1), new DateTime(2019, 7, 14)));
+        var twice = new Catalog.Person { FaceCount = 2 };
+        var broken = new Catalog.Person { FaceCount = 1 };
+        var first = Face(twice);
+        var second = Face(twice);
+        second.Box = [0.6, 0.6, 0.2, 0.2];
+        var shortBox = Face(broken);
+        shortBox.Box = [0.1, 0.2];
+        db.Faces.AddRange(first, second, shortBox);
+        await db.SaveChangesAsync();
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var people = (await queries.GetAssetAsync(Ids.Of(1)))!.People;
+
+        Assert.Equal(2, people.Count);
+        var listed = Assert.Single(people, p => p.Id == twice.Id);
+        Assert.Equal(first.Id, listed.FaceId);
+        Assert.NotNull(listed.Crop);
+        Assert.Null(Assert.Single(people, p => p.Id == broken.Id).Crop);
+    }
+
     private static Face Face(Catalog.Person person)
     {
         var embedding = new float[128];

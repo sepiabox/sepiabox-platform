@@ -248,6 +248,78 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Ignoring_a_person_linked_to_a_user_is_refused_even_without_a_name_and_changes_nothing()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 1))));
+        await ImportAsync(db, container);
+        var person = await db.People.SingleAsync();
+        person.UserEmail = Ana;
+        await db.SaveChangesAsync();
+
+        Assert.Null(await Recognition(db).IgnorePersonAsync(person.Id, Ana));
+        Assert.Null(await Recognition(db).IgnoreFacesAsync(await db.Assets.Select(a => a.Id).FirstAsync(), null, Ana));
+
+        Assert.Equal(1, await db.Faces.CountAsync());
+        Assert.Equal(0, await db.ErasedFaces.CountAsync());
+        Assert.Equal(0, await db.FaceDataDeletions.CountAsync());
+        Assert.Equal(Ana, (await db.People.AsNoTracking().SingleAsync()).UserEmail);
+    }
+
+    [Fact]
+    public async Task A_normal_deletion_remembers_only_the_boxes_of_counted_faces_not_excluded_or_not_a_face_ones()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        for (var n = 1; n <= 3; n++)
+        {
+            await PutAsync(container, FaceImportTests.WithFaces(n));
+        }
+
+        await ImportAsync(db, container);
+        var person = new Person { FaceCount = 1 };
+        db.People.Add(person);
+        await db.SaveChangesAsync();
+        var assets = await db.Assets.OrderBy(a => a.Id).Select(a => a.Id).ToListAsync();
+        string[] kinds = [FaceAssignments.Auto, FaceAssignments.Excluded, FaceAssignments.NotFace];
+        for (var i = 0; i < 3; i++)
+        {
+            db.Faces.Add(new Face
+            {
+                AssetId = assets[i],
+                Box = [0.1 * (i + 1), 0.1, 0.2, 0.2],
+                Score = 0.9,
+                Embedding = new Pgvector.Vector(SyntheticFaces.Unit(seed: i + 1)),
+                Assignment = kinds[i],
+                PersonId = person.Id,
+            });
+        }
+
+        await db.SaveChangesAsync();
+
+        var deletion = await Recognition(db).DeletePersonAsync(person.Id, Ana);
+
+        Assert.Equal((FaceDataDeletionScopes.Person, 3, 1), (deletion!.Scope, deletion.Faces, deletion.People));
+        // Excluded and "not a face" rows were never theirs: deleted with them, and found again by a later import.
+        Assert.Equal(1, await db.ErasedFaces.CountAsync());
+        Assert.Equal(0, await db.Faces.CountAsync());
+    }
+
+    [Fact]
+    public async Task An_unnamed_person_with_no_face_row_is_not_one_of_the_few_face_people()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        db.People.Add(new Person());
+        await db.SaveChangesAsync();
+
+        Assert.Equal(0, await FaceRecognition.UnnamedWithFewFaces(db, FaceRecognition.FewFaces).CountAsync());
+        var done = await Recognition(db).IgnoreUnnamedPeopleAsync(FaceRecognition.FewFaces, 0, Ana);
+        Assert.True(done.Refused);
+        Assert.Equal(1, await db.People.CountAsync());
+    }
+
+    [Fact]
     public async Task Ignoring_the_unnamed_people_with_few_faces_checks_the_number_and_leaves_everyone_else()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();

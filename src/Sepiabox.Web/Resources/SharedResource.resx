@@ -1506,7 +1506,7 @@
     <value>The copies of the library's information kept in the cloud (manifests) keep the deleted faces until face recognition is turned off in Settings, and automatic backups hold them for up to 7 days.</value>
   </data>
   <data name="IgnoreMany_More" xml:space="preserve">
-    <value>and {0} more</value>
+    <value>and {0} more people</value>
   </data>
   <data name="Detail_IgnoreFace_Named" xml:space="preserve">
     <value>Ignore and delete this face, unnamed {0}</value>
