@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Sepiabox.Worker.Importing;
 using Sepiabox.Worker.Places;
 using static Sepiabox.Tests.Shared.TestManifests;
@@ -228,8 +228,8 @@ public sealed class PlacesTests(CatalogFixture fixture) : IDisposable
     private static async Task ImportAsync(CatalogDbContext db, BlobContainerClient container)
     {
         var result = await new ManifestImporter(
-                db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
-            .ImportOnceAsync(container, CancellationToken.None);
+                db, TestBlobStore.Of(container), new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
+            .ImportOnceAsync(container.Name, CancellationToken.None);
         Assert.Empty(result.Problems);
     }
 

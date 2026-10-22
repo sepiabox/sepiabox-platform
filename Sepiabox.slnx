@@ -6,6 +6,7 @@
     <Project Path="src/Sepiabox.Pipeline/Sepiabox.Pipeline.csproj" />
     <Project Path="src/Sepiabox.Search/Sepiabox.Search.csproj" />
     <Project Path="src/Sepiabox.ServiceDefaults/Sepiabox.ServiceDefaults.csproj" />
+    <Project Path="src/Sepiabox.Storage/Sepiabox.Storage.csproj" />
     <Project Path="src/Sepiabox.Web/Sepiabox.Web.csproj" />
     <Project Path="src/Sepiabox.Worker/Sepiabox.Worker.csproj" />
   </Folder>
@@ -15,6 +16,7 @@
     <Project Path="tests/Sepiabox.Ingest.Tests/Sepiabox.Ingest.Tests.csproj" />
     <Project Path="tests/Sepiabox.Pipeline.Tests/Sepiabox.Pipeline.Tests.csproj" />
     <Project Path="tests/Sepiabox.Search.Tests/Sepiabox.Search.Tests.csproj" />
+    <Project Path="tests/Sepiabox.Storage.Tests/Sepiabox.Storage.Tests.csproj" />
     <Project Path="tests/Sepiabox.Web.Tests/Sepiabox.Web.Tests.csproj" />
     <Project Path="tests/Sepiabox.Worker.Tests/Sepiabox.Worker.Tests.csproj" />
   </Folder>

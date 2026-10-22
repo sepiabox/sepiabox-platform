@@ -1,11 +1,10 @@
 using System.Collections.Concurrent;
-using Azure;
-using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sepiabox.Catalog;
 using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 
 namespace Sepiabox.Worker.Faces;
 
@@ -34,7 +33,7 @@ public sealed record SweepOptions(int Concurrency, int PageSize, TimeSpan Budget
 /// the listing's continuation token, so a run stopped by its budget, the job's timeout or a failure carries on where it
 /// left off. Only a complete pass with no problem records how far the blobs are swept.
 /// </summary>
-public sealed class ManifestFacesSweep(CatalogDbContext db, ManifestStore store, TimeProvider clock, ILogger logger, SweepOptions? options = null)
+public sealed class ManifestFacesSweep(CatalogDbContext db, IBlobStore blobs, ManifestStore store, TimeProvider clock, ILogger logger, SweepOptions? options = null)
 {
     /// <summary>
     /// How far before its start a pass records itself: the blobs' times come from storage and this one from the job, and
@@ -47,9 +46,11 @@ public sealed class ManifestFacesSweep(CatalogDbContext db, ManifestStore store,
 
     private readonly SweepOptions _options = options ?? SweepOptions.Default;
 
-    public async Task<SweepResult> RunAsync(BlobContainerClient manifests, CancellationToken cancellationToken)
+    /// <param name="container">The container of manifests, <see cref="BlobLayout.ManifestsContainer"/>.</param>
+    /// <param name="cancellationToken">Stops the sweep.</param>
+    public async Task<SweepResult> RunAsync(string container, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(manifests);
+        ArgumentNullException.ThrowIfNull(container);
         var state = await FaceRecognition.ReadAsync(db, cancellationToken);
         if (state.ErasedAt is not { } erasedAt)
         {
@@ -67,7 +68,7 @@ public sealed class ManifestFacesSweep(CatalogDbContext db, ManifestStore store,
 
             try
             {
-                return await SweepAsync(manifests, erasedAt, state.SweptThrough, cancellationToken);
+                return await SweepAsync(container, erasedAt, state.SweptThrough, cancellationToken);
             }
             finally
             {
@@ -81,7 +82,7 @@ public sealed class ManifestFacesSweep(CatalogDbContext db, ManifestStore store,
     }
 
     private async Task<SweepResult> SweepAsync(
-        BlobContainerClient manifests, DateTimeOffset erasedAt, DateTimeOffset? sweptThrough, CancellationToken cancellationToken)
+        string container, DateTimeOffset erasedAt, DateTimeOffset? sweptThrough, CancellationToken cancellationToken)
     {
         var recognition = new FaceRecognition(db, clock);
         var started = clock.GetUtcNow();
@@ -90,35 +91,22 @@ public sealed class ManifestFacesSweep(CatalogDbContext db, ManifestStore store,
         var (erased, unchanged) = (0, 0);
         var problems = new ConcurrentQueue<string>();
         var stopped = false;
-        await using var pages = manifests.GetBlobsAsync(cancellationToken: cancellationToken)
-            .AsPages(pass.Token, _options.PageSize)
-            .GetAsyncEnumerator(cancellationToken);
-        bool more;
-        try
+        var token = pass.Token;
+        while (true)
         {
-            more = await pages.MoveNextAsync();
-        }
-        catch (RequestFailedException ex) when (ex.Status == 404)
-        {
-            // No manifest was ever uploaded: nothing holds a face.
-            more = false;
-        }
-
-        for (; more; more = await pages.MoveNextAsync())
-        {
-            var page = pages.Current;
-            var names = page.Values
+            var page = await blobs.ListPageAsync(container, prefix: null, token, _options.PageSize, cancellationToken);
+            var names = page.Items
                 .Where(blob => blob.Name.EndsWith(".json", StringComparison.Ordinal)
-                    && !(pass.Since is { } since && blob.Properties.LastModified is { } written && written < since))
+                    && !(pass.Since is { } since && blob.LastModified < since))
                 .Select(blob => blob.Name)
                 .ToList();
             var pageProblems = 0;
             await Parallel.ForEachAsync(
                 names,
                 new ParallelOptions { MaxDegreeOfParallelism = _options.Concurrency, CancellationToken = cancellationToken },
-                async (name, token) =>
+                async (name, stop) =>
                 {
-                    var result = await store.WriteMergedAsync(manifests, new FacesErasure(name[..^".json".Length], erasedAt), token);
+                    var result = await store.WriteMergedAsync(container, new FacesErasure(name[..^".json".Length], erasedAt), stop);
                     switch (result.Status)
                     {
                         case ManifestWriteStatus.Written:
@@ -136,7 +124,8 @@ public sealed class ManifestFacesSweep(CatalogDbContext db, ManifestStore store,
                 });
 
             pass = pass with { Token = page.ContinuationToken, Failed = pass.Failed || pageProblems > 0 };
-            if (string.IsNullOrEmpty(page.ContinuationToken))
+            token = page.ContinuationToken;
+            if (token is null)
             {
                 break;
             }

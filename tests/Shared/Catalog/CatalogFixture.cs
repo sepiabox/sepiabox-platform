@@ -3,6 +3,8 @@ using DotNet.Testcontainers.Builders;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Sepiabox.Catalog;
+using Sepiabox.Storage;
+using Sepiabox.Storage.Azure;
 using Testcontainers.Azurite;
 using Testcontainers.PostgreSql;
 
@@ -26,6 +28,9 @@ public sealed class CatalogFixture : IAsyncLifetime
 
     public BlobServiceClient Blobs { get; private set; } = null!;
 
+    /// <summary>The blobs as the code under test sees them (S-050): <see cref="IBlobStore"/> on Azurite.</summary>
+    public IBlobStore Store { get; private set; } = null!;
+
     public string BlobConnectionString => _azurite.GetConnectionString();
 
     public async Task InitializeAsync()
@@ -44,6 +49,7 @@ public sealed class CatalogFixture : IAsyncLifetime
         _postgres = new PostgreSqlBuilder(image).Build();
         await Task.WhenAll(_postgres.StartAsync(), _azurite.StartAsync());
         Blobs = new BlobServiceClient(BlobConnectionString);
+        Store = new AzureBlobStore(Blobs);
     }
 
     /// <summary>Creates an empty database and returns a context for it, without applying migrations.</summary>
@@ -102,4 +108,21 @@ public sealed class CatalogFixture : IAsyncLifetime
 public sealed class CatalogGroup : ICollectionFixture<CatalogFixture>
 {
     public const string Name = "Catalog";
+}
+
+/// <summary>
+/// The blob store (S-050) over the Azurite account of a container the fixture made, reached with Azurite's well-known
+/// development account (a public constant, not a secret), so a helper that only has the container can still build one.
+/// </summary>
+public static class TestBlobStore
+{
+    private const string AccountName = "devstoreaccount1";
+    private const string AccountKey = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
+
+    public static IBlobStore Of(BlobContainerClient container)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+        var account = new Uri(container.Uri.GetLeftPart(UriPartial.Authority) + "/" + AccountName);
+        return new AzureBlobStore(new BlobServiceClient(account, new Azure.Storage.StorageSharedKeyCredential(AccountName, AccountKey)));
+    }
 }

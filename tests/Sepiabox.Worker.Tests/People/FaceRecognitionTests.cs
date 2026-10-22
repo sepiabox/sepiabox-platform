@@ -5,6 +5,7 @@ using Sepiabox.Catalog;
 using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Sepiabox.Worker.Faces;
 using Sepiabox.Worker.Importing;
 
@@ -358,14 +359,14 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
         await Recognition(db).TurnOffAsync(Ana);
         var later = (await FaceRecognition.ReadAsync(db)).ErasedAt!.Value.AddMinutes(5);
         // Another erase lands while the first page is being swept.
-        var interfering = new InterferingContainer(fixture.BlobConnectionString, container.Name, async () =>
+        var interfering = new InterferingStore(TestBlobStore.Of(container), async () =>
         {
             await using var other = Context(fixture.ConnectionStringFor(db));
             await other.Settings.Where(x => x.Key == FaceRecognition.ErasedAtKey)
                 .ExecuteUpdateAsync(set => set.SetProperty(x => x.Value, later.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));
         });
 
-        var result = await SweepAsync(db, interfering, new SweepOptions(Concurrency: 4, PageSize: 2, Budget: TimeSpan.FromHours(1)));
+        var result = await SweepAsync(db, container, new SweepOptions(Concurrency: 4, PageSize: 2, Budget: TimeSpan.FromHours(1)), store: interfering);
 
         Assert.False(result.Finished);
         Assert.Equal(2, result.Erased);
@@ -456,9 +457,11 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
     private static FaceRecognition Recognition(CatalogDbContext db) => new(db, TimeProvider.System);
 
     private static Task<SweepResult> SweepAsync(
-        CatalogDbContext db, BlobContainerClient container, SweepOptions? options = null, TimeProvider? clock = null) =>
-        new ManifestFacesSweep(db, new ManifestStore(new ManifestValidator()), clock ?? TimeProvider.System, NullLogger.Instance, options)
-            .RunAsync(container, CancellationToken.None);
+        CatalogDbContext db, BlobContainerClient container, SweepOptions? options = null, TimeProvider? clock = null, IBlobStore? store = null) =>
+        new ManifestFacesSweep(
+                db, TestBlobStore.Of(container), new ManifestStore(new ManifestValidator(), store ?? TestBlobStore.Of(container)),
+                clock ?? TimeProvider.System, NullLogger.Instance, options)
+            .RunAsync(container.Name, CancellationToken.None);
 
     // Runs a stopping sweep until its pass finishes, at most ten times.
     private static async Task<List<SweepResult>> SweepUntilFinishedAsync(
@@ -484,19 +487,19 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
         }
     }
 
-    /// <summary>The manifests container, which runs <paramref name="interfere"/> once, the first time a blob is opened.</summary>
-    private sealed class InterferingContainer(string connectionString, string name, Func<Task> interfere) : BlobContainerClient(connectionString, name)
+    /// <summary>The blob store the manifest writer uses, which runs <paramref name="interfere"/> once, the first time a blob is read.</summary>
+    private sealed class InterferingStore(IBlobStore inner, Func<Task> interfere) : DelegatingBlobStore(inner)
     {
         private int _done;
 
-        public override BlobClient GetBlobClient(string blobName)
+        public override async Task<BlobContent?> ReadAsync(string container, string name, CancellationToken cancellationToken = default)
         {
             if (Interlocked.Exchange(ref _done, 1) == 0)
             {
-                interfere().GetAwaiter().GetResult();
+                await interfere();
             }
 
-            return base.GetBlobClient(blobName);
+            return await base.ReadAsync(container, name, cancellationToken);
         }
     }
 
@@ -518,8 +521,8 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
     }
 
     private static Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container) =>
-        new ManifestImporter(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
-            .ImportOnceAsync(container, CancellationToken.None);
+        new ManifestImporter(db, TestBlobStore.Of(container), new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
+            .ImportOnceAsync(container.Name, CancellationToken.None);
 
     private static async Task PutAsync(BlobContainerClient container, Manifest manifest) =>
         await container.GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id))

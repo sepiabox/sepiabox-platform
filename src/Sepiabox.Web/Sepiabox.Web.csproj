@@ -35,6 +35,8 @@
     <!-- CLIP text model and tokenizer (S-016, D-055): ONNX Runtime only, never Sepiabox.Pipeline (D-038). -->
     <ProjectReference Include="..\Sepiabox.Search\Sepiabox.Search.csproj" />
     <ProjectReference Include="..\Sepiabox.ServiceDefaults\Sepiabox.ServiceDefaults.csproj" />
+    <!-- Blob storage behind IBlobStore (S-050): no media libraries, so never Sepiabox.Pipeline (D-038). -->
+    <ProjectReference Include="..\Sepiabox.Storage\Sepiabox.Storage.csproj" />
   </ItemGroup>
 
 </Project>

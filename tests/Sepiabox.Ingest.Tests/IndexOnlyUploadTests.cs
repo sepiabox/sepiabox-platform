@@ -3,7 +3,7 @@ using Azure.Storage.Blobs;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Testcontainers.Azurite;
 
 namespace Sepiabox.Ingest.Tests;

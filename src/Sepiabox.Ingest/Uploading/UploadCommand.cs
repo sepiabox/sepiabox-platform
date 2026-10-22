@@ -13,6 +13,8 @@ using Sepiabox.Ingest.Scanning;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
+using Sepiabox.Storage.Azure;
 
 namespace Sepiabox.Ingest.Uploading;
 
@@ -106,6 +108,8 @@ public static class UploadCommand
         await CheckClockAsync(containers.Manifests, clock ?? TimeProvider.System, cancellationToken);
 
         using var state = new UploadState(databasePath);
+        // Manifests go through the project's own interface (D-036); S-051 moves the rest of upload behind it too.
+        using var blobStore = new AzureBlobStore(service, clock);
         var run = new Run(
             workFolder,
             containers,
@@ -113,7 +117,7 @@ public static class UploadCommand
             // Azurite does not know the Cold tier, so it is only set on real accounts.
             options.Destination == UploadDestination.Azure ? AccessTier.Cold : (AccessTier?)null,
             validator,
-            new ManifestStore(validator),
+            new ManifestStore(validator, blobStore),
             bytesSent,
             clock ?? TimeProvider.System,
             state.Mode == WorkFolderMode.IndexOnly);
@@ -264,7 +268,7 @@ public static class UploadCommand
 
                 foreach (var (derivative, file) in derivativeFiles)
                 {
-                    var blobName = BlobLayout.DerivativeBlobName(manifest.Id, derivative);
+                    var blobName = BlobLayout.DerivativeBlobName(manifest.Id, derivative.Path);
                     await UploadWorkFileAsync(containers.Derivatives, blobName, file, derivative.ContentType, cancellationToken);
                 }
 
@@ -442,7 +446,7 @@ public static class UploadCommand
                 }
             }
 
-            var result = await manifestStore.WriteMergedAsync(containers.Manifests, manifest, cancellationToken);
+            var result = await manifestStore.WriteMergedAsync(BlobLayout.ManifestsContainer, manifest, cancellationToken);
             switch (result.Status)
             {
                 case ManifestWriteStatus.Problem:
