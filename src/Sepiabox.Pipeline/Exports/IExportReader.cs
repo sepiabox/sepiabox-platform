@@ -34,6 +34,12 @@ public sealed record ExportMetadata
     public string? Caption { get; init; }
 
     public IReadOnlyList<string> Albums { get; init; } = [];
+
+    /// <summary>
+    /// The file's address at the service (S-046), written as the source's <c>url</c> when it is an <c>https://</c> address
+    /// (<see cref="ExportFacts.SourceUrl"/>); the export's link back to the original in the service.
+    /// </summary>
+    public string? SourceUrl { get; init; }
 }
 
 /// <summary>
@@ -45,8 +51,10 @@ public sealed class ExportScan
     private readonly Dictionary<string, ExportMetadata> _files;
     private readonly HashSet<string> _leftOut;
 
-    public ExportScan(IEnumerable<KeyValuePair<string, ExportMetadata>>? files = null, IEnumerable<string>? leftOut = null)
+    public ExportScan(
+        IEnumerable<KeyValuePair<string, ExportMetadata>>? files = null, IEnumerable<string>? leftOut = null, IEnumerable<string>? warnings = null)
     {
+        Warnings = [.. warnings ?? []];
         // Slashes and case do not matter for finding a file: a sidecar names it as the export's maker spelled it.
         _files = new Dictionary<string, ExportMetadata>(StringComparer.OrdinalIgnoreCase);
         foreach (var (path, metadata) in files ?? [])
@@ -56,6 +64,9 @@ public sealed class ExportScan
 
         _leftOut = new HashSet<string>((leftOut ?? []).Select(Normalize), StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>What the reader noticed that the person should know, such as media files with no sidecar: printed once after the run.</summary>
+    public IReadOnlyList<string> Warnings { get; }
 
     /// <summary>The number of files the export describes.</summary>
     public int Count => _files.Count;
@@ -84,8 +95,8 @@ public sealed class ExportReaderRegistry
         _readers = readers.ToDictionary(r => r.Kind, StringComparer.Ordinal);
     }
 
-    /// <summary>The readers shipped with the tool: none yet.</summary>
-    public static ExportReaderRegistry Default { get; } = new([]);
+    /// <summary>The readers shipped with the tool; S-047 to S-049 add theirs.</summary>
+    public static ExportReaderRegistry Default { get; } = new([new GoogleTakeoutReader()]);
 
     /// <summary>The kinds <c>--export</c> accepts, in order.</summary>
     public IReadOnlyList<string> Kinds => [.. _readers.Keys.Order(StringComparer.Ordinal)];
