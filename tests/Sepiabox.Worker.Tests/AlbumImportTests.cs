@@ -33,6 +33,19 @@ public sealed class AlbumImportTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Keeps_two_albums_that_differ_only_in_case_as_two_rows()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        await PutAsync(container, Photo(Source("Instagram", "media/a.jpg")) with { Albums = ["Verão", "verão"] });
+
+        await ImportAsync(db, container);
+
+        // The catalog keeps what the export says (D-114); the search and the pages take the two as one.
+        Assert.Equal(["Verão", "verão"], (await db.AssetAlbums.AsNoTracking().ToListAsync()).Select(a => a.Name).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task A_later_manifest_with_a_third_album_gives_the_asset_three_and_one_without_albums_leaves_them()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
@@ -76,6 +89,17 @@ public sealed class AlbumImportTests(CatalogFixture fixture)
     public void Keeps_an_album_name_trimmed_and_without_control_characters(string name, string? expected)
     {
         Assert.Equal(expected, ManifestImporter.AlbumName(name));
+    }
+
+    [Fact]
+    public void Trims_a_name_after_the_cut_when_the_cut_ends_in_a_space()
+    {
+        // 250 characters with a space as the 200th: cut at 200 it ends in that space, which goes too.
+        var name = new string('a', 199) + " " + new string('b', 50);
+
+        var cut = ManifestImporter.AlbumName(name)!;
+
+        Assert.Equal(new string('a', 199), cut);
     }
 
     [Fact]

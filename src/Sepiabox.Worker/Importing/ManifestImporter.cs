@@ -482,7 +482,6 @@ public sealed class ManifestImporter(
             : $"has {leftOut} face{(leftOut == 1 ? string.Empty : "s")} whose embedding is not {FaceDetector.Dimensions} finite values with a length or whose box is not four finite values, left out");
     }
 
-    // The schema only allows photo and video; anything else is reported before saving.
     /// <summary>
     /// An album's name as the catalog keeps it (S-052, D-114): cut to the 200 characters the search takes (a longer name could not be filtered
     /// on, and the key's index refuses a row over about 2.7 KB, which would fail the whole manifest), not in the middle of a character, and
@@ -500,6 +499,7 @@ public sealed class ManifestImporter(
         return clean.Length == 0 ? null : clean;
     }
 
+    // The schema only allows photo and video; anything else is reported before saving.
     private static string? KindName(MediaKind kind) => kind switch
     {
         MediaKind.Photo => "photo",

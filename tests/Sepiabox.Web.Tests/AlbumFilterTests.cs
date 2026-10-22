@@ -71,6 +71,18 @@ public sealed class AlbumFilterTests : LocalizedContext
     }
 
     [Fact]
+    public void Still_offers_and_selects_the_album_the_address_names_when_the_catalog_does_not_list_it()
+    {
+        var options = new FilterOptions([], [], []) { Albums = ["Summer 2019"] };
+        var fields = new FilterFields(null, null, null, null, null) { Album = "Reunion" };
+
+        var bar = Render<FilterBar>(p => p.Add(b => b.Options, options).Add(b => b.Fields, fields));
+
+        Assert.Equal(["", "Reunion", "Summer 2019"], bar.FindAll("select[name=album] option").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["Reunion"], bar.FindAll("select[name=album] option[selected]").Select(o => o.GetAttribute("value")));
+    }
+
+    [Fact]
     public void Lists_the_albums_alphabetically_ignoring_case_after_any()
     {
         var options = new FilterOptions([], [], []) { Albums = ["wedding", "Zoo", "Álbum", "Summer"] };
@@ -165,6 +177,69 @@ public sealed class AlbumsCatalogTests(CatalogFixture catalog)
         var detail = await queries.GetAssetAsync(Ids.Of(4));
 
         Assert.Equal(["Praia", "Verão"], detail!.Albums);
+    }
+
+    [Fact]
+    public async Task Takes_direction_controls_out_of_a_caption_and_maps_where_the_date_came_from()
+    {
+        await using var db = await CatalogWithAlbumsAsync();
+        await db.Assets.Where(a => a.Id == Ids.Of(4)).ExecuteUpdateAsync(set => set
+            .SetProperty(a => a.Caption, "Praia\u202E 2019")
+            .SetProperty(a => a.CapturedAtSource, "export"));
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var detail = await queries.GetAssetAsync(Ids.Of(4));
+
+        Assert.Equal("Praia 2019", detail!.Caption);
+        Assert.Equal("export", detail.CapturedAtSource);
+        Assert.Null((await queries.GetAssetAsync(Ids.Of(2)))!.CapturedAtSource);
+    }
+
+    [Fact]
+    public async Task Lists_the_albums_most_used_first_without_a_name_over_200_characters_and_no_more_than_the_bar_holds()
+    {
+        await using var db = await CatalogWithAlbumsAsync();
+        var tooLong = new string('x', SearchQueryJson.MaxNameLength + 1);
+        // Inserted directly: the importer would have cut the name, but the filter must never offer one the DSL refuses.
+        db.AssetAlbums.Add(new AssetAlbum { AssetId = Ids.Of(1), Name = tooLong });
+        await db.SaveChangesAsync();
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var options = await queries.GetFilterOptionsAsync();
+
+        Assert.Equal(["Summer 2019", "Wedding"], options.Albums);
+        Assert.DoesNotContain(tooLong, options.Albums);
+
+        db.AssetAlbums.AddRange(Enumerable.Range(0, LibraryQueries.MaxAlbums + 2).Select(n => new AssetAlbum { AssetId = Ids.Of(4), Name = $"Album {n:000}" }));
+        db.AssetAlbums.Add(new AssetAlbum { AssetId = Ids.Of(2), Name = "Album 501" });
+        await db.SaveChangesAsync();
+        var capped = (await new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db))).GetFilterOptionsAsync()).Albums;
+
+        Assert.Equal(LibraryQueries.MaxAlbums, capped.Count);
+        // What survives the cap is the most used (the bar then sorts them by name): the three used twice, then the first names of
+        // those used once, and the rest are cut.
+        Assert.Contains("Album 501", capped);
+        Assert.Contains("Summer 2019", capped);
+        Assert.Contains("Wedding", capped);
+        Assert.Contains("Album 496", capped);
+        Assert.DoesNotContain("Album 497", capped);
+    }
+
+    [Fact]
+    public async Task Offers_spellings_that_differ_only_in_case_as_one_album_in_the_most_used_spelling()
+    {
+        await using var db = await CatalogWithAlbumsAsync();
+        db.AssetAlbums.AddRange(
+            new AssetAlbum { AssetId = Ids.Of(1), Name = "verão" },
+            new AssetAlbum { AssetId = Ids.Of(2), Name = "Verão" },
+            new AssetAlbum { AssetId = Ids.Of(3), Name = "Verão" });
+        await db.SaveChangesAsync();
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var albums = (await queries.GetFilterOptionsAsync()).Albums;
+
+        // One album, in the spelling two of its three photos use.
+        Assert.Equal(["Summer 2019", "Verão", "Wedding"], albums);
     }
 
     // Assets 1 (a photo) and 3 (a video) in "Summer 2019", asset 2 in "Wedding", and asset 1 in both; asset 4 in none.

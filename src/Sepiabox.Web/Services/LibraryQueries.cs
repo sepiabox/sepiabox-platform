@@ -704,10 +704,17 @@ public sealed class LibraryQueries(
         var countryNames = db.Assets.Where(a => a.PlaceCountry != null).Select(a => a.PlaceCountry);
         var countries = await db.GeoNames.Where(g => g.CountryName != null && countryNames.Contains(g.CountryName))
             .Select(g => g.CountryCode).Distinct().OrderBy(c => c).ToListAsync(cancellationToken);
-        // Names the DSL can take (200 characters), most used first when there are more than the bar can hold (D-114).
-        var albums = await db.AssetAlbums.Where(l => l.Name.Length <= SearchQueryJson.MaxNameLength)
-            .GroupBy(l => l.Name).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).Take(MaxAlbums).Select(g => g.Key)
+        // Names the DSL can take (200 characters), most used first when there are more than the bar can hold (D-114). Spellings that
+        // differ only in case are one album here, as the search and the photo page take them (the catalog keeps both, D-114): the
+        // bar offers the spelling most photos use.
+        var counted = await db.AssetAlbums.Where(l => l.Name.Length <= SearchQueryJson.MaxNameLength)
+            .GroupBy(l => l.Name).Select(g => new { Name = g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
+        var albums = counted
+            .GroupBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(g => new { Name = g.OrderByDescending(a => a.Count).ThenBy(a => a.Name, StringComparer.Ordinal).First().Name, Count = g.Sum(a => a.Count) })
+            .OrderByDescending(a => a.Count).ThenBy(a => a.Name, StringComparer.Ordinal)
+            .Take(MaxAlbums).Select(a => a.Name).ToList();
         return new FilterOptions(years, cities, sources, countries) { Albums = albums };
     }
 
