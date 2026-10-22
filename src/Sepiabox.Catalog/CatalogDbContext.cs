@@ -223,8 +223,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             source.Property(s => s.AccountEmail).HasMaxLength(320);
             source.Property(s => s.EncryptedRefreshToken).HasColumnType("text");
             source.Property(s => s.Status).HasMaxLength(16);
-            source.Property(s => s.SyncChangesToken).HasMaxLength(500);
-            source.Property(s => s.SyncListToken).HasMaxLength(500);
+            source.Property(s => s.SyncChangesToken).HasColumnType("text");
+            source.Property(s => s.SyncListToken).HasColumnType("text");
             source.Property(s => s.SyncListing).HasDefaultValue(false).ValueGeneratedNever();
             source.HasIndex(s => new { s.Type, s.AccountEmail }).IsUnique().HasDatabaseName("ix_connected_sources_account");
             source.ToTable(t => t.HasCheckConstraint("ck_connected_sources_status", "status IN ('connected', 'reconnect')"));
