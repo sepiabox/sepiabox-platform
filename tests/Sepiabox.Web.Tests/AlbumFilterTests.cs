@@ -95,7 +95,7 @@ public sealed class AlbumsCatalogTests(CatalogFixture catalog)
         await using var db = await CatalogWithAlbumsAsync();
 
         Assert.Equal([1, 3], (await IdsAsync(db, new SearchFilters { Albums = ["summer 2019"] })).Order());
-        Assert.Equal([2], await IdsAsync(db, new SearchFilters { Albums = ["WEDDING"] }));
+        Assert.Equal([1, 2], (await IdsAsync(db, new SearchFilters { Albums = ["WEDDING"] })).Order());
         Assert.Equal([1, 2, 3], (await IdsAsync(db, new SearchFilters { Albums = ["Summer 2019", "Wedding"] })).Order());
         Assert.Empty(await IdsAsync(db, new SearchFilters { Albums = ["No such album"] }));
     }
