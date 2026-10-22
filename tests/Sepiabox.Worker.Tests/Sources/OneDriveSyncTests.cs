@@ -248,6 +248,146 @@ public sealed class OneDriveSyncTests(CatalogFixture fixture)
         Assert.Equal((1, 1), (result.Staged, result.Skipped));
     }
 
+    private const string StoredDelta = "https://graph.microsoft.com/v1.0/me/drive/root/delta?token=stored";
+
+    [Fact]
+    public async Task Takes_the_list_link_before_the_changes_link_when_both_are_set()
+    {
+        var (db, store, onedrive, account) = await SetUpAsync(files: 5);
+        await SetCursorAsync(db, account, changes: StoredDelta, list: "https://graph.microsoft.com/v1.0/me/drive/root/delta?page=2", listing: true);
+
+        await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+
+        Assert.Equal("https://graph.microsoft.com/v1.0/me/drive/root/delta?page=2", onedrive.Links[0]);
+        Assert.DoesNotContain(StoredDelta, onedrive.Links);
+    }
+
+    [Fact]
+    public async Task Resumes_a_listing_mid_way_staging_the_rest_and_then_asks_from_the_delta_link()
+    {
+        var (db, store, onedrive, account) = await SetUpAsync(files: 5);
+        await SetCursorAsync(db, account, changes: null, list: "https://graph.microsoft.com/v1.0/me/drive/root/delta?page=2", listing: true);
+
+        var result = await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+
+        // The first two files were staged by an earlier run: only the last three are now.
+        Assert.Equal(3, result.Staged);
+        Assert.Equal(["https://graph.microsoft.com/v1.0/me/drive/root/delta?page=2", "https://graph.microsoft.com/v1.0/me/drive/root/delta?page=4"], onedrive.Links.Select(l => l!));
+        var stored = await db.ConnectedSources.AsNoTracking().SingleAsync();
+        Assert.Equal((onedrive.DeltaLink, null, false), (stored.SyncChangesToken, stored.SyncListToken, stored.SyncListing));
+    }
+
+    [Fact]
+    public async Task A_last_page_with_no_delta_link_keeps_the_one_already_stored_and_ends_the_listing()
+    {
+        var (db, store, onedrive, account) = await SetUpAsync(files: 1);
+        await SetCursorAsync(db, account, changes: StoredDelta, list: null, listing: false);
+        onedrive.NoDeltaLink = true;
+        onedrive.Changes.Add(new OneDriveChange("id-0", false, onedrive.Files[0]));
+
+        await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+
+        var stored = await db.ConnectedSources.AsNoTracking().SingleAsync();
+        Assert.Equal((StoredDelta, null, false), (stored.SyncChangesToken, stored.SyncListToken, stored.SyncListing));
+    }
+
+    [Fact]
+    public async Task A_token_microsoft_did_not_roll_is_not_written_again()
+    {
+        var (db, store, onedrive, _) = await SetUpAsync(files: 1);
+        var before = (await db.ConnectedSources.AsNoTracking().SingleAsync()).EncryptedRefreshToken;
+        onedrive.RolledTo = Token;
+
+        await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+
+        Assert.Equal(before, (await db.ConnectedSources.AsNoTracking().SingleAsync()).EncryptedRefreshToken);
+    }
+
+    [Fact]
+    public async Task Skips_an_account_that_needs_connecting_again_and_leaves_a_google_account_alone()
+    {
+        var (db, store, onedrive, account) = await SetUpAsync(files: 2);
+        (await db.ConnectedSources.SingleAsync(s => s.Id == account)).Status = ConnectedSourceStatuses.Reconnect;
+        db.ConnectedSources.Add(new ConnectedSource
+        {
+            Type = ConnectedSourceTypes.GoogleDrive,
+            AccountEmail = "ana@example.com",
+            EncryptedRefreshToken = s_keys.CreateProtector(ConnectedSource.RefreshTokenPurpose).Protect("google-token"),
+            Status = ConnectedSourceStatuses.Connected,
+            ConnectedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+
+        Assert.Equal(new DriveSyncResult(0, 0, 0, 0, 0, 0), result);
+        Assert.Empty(onedrive.Refreshed);
+        var google = await db.ConnectedSources.AsNoTracking().SingleAsync(s => s.Type == ConnectedSourceTypes.GoogleDrive);
+        Assert.Equal((null, ConnectedSourceStatuses.Connected), (google.SyncChangesToken, google.Status));
+    }
+
+    [Fact]
+    public async Task Rescan_of_a_onedrive_leaves_a_google_drive_with_the_same_address_alone()
+    {
+        var (db, store, onedrive, _) = await SetUpAsync(files: 1);
+        var google = new ConnectedSource
+        {
+            Type = ConnectedSourceTypes.GoogleDrive,
+            AccountEmail = Account,
+            EncryptedRefreshToken = s_keys.CreateProtector(ConnectedSource.RefreshTokenPurpose).Protect("google-token"),
+            Status = ConnectedSourceStatuses.Connected,
+            ConnectedAt = DateTimeOffset.UtcNow,
+            SyncChangesToken = "google-cursor",
+        };
+        db.ConnectedSources.Add(google);
+        await db.SaveChangesAsync();
+        db.DriveFiles.Add(new DriveFile { ConnectedSourceId = google.Id, FileId = "g-1", Checksum = "h", Path = "Fotos/g.jpg", SizeBytes = 1 });
+        await db.SaveChangesAsync();
+
+        Assert.True(await Sync(db, store, onedrive).RescanAsync(Account, CancellationToken.None));
+
+        Assert.Equal("google-cursor", (await db.ConnectedSources.AsNoTracking().SingleAsync(s => s.Id == google.Id)).SyncChangesToken);
+        Assert.Equal(1, await db.DriveFiles.CountAsync(f => f.ConnectedSourceId == google.Id));
+    }
+
+    [Fact]
+    public async Task A_file_is_not_staged_again_only_when_both_its_hash_and_its_path_are_what_they_were()
+    {
+        var (db, store, onedrive, _) = await SetUpAsync(files: 2);
+        await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+        // The same content moved to another folder, and the same place with other content: each is staged.
+        onedrive.Changes.Add(new OneDriveChange("id-0", false, onedrive.Files[0] with { ParentId = "folder-2" }));
+        onedrive.Changes.Add(new OneDriveChange("id-1", false, onedrive.Files[1] with { Hash = "another-hash" }));
+
+        var result = await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+
+        Assert.Equal(2, result.Staged);
+        // And the file whose hash and path are both unchanged is not.
+        onedrive.Changes.Add(new OneDriveChange("id-1", false, onedrive.Files[1] with { Hash = "another-hash" }));
+        Assert.Equal(0, (await Sync(db, store, onedrive).RunAsync(CancellationToken.None)).Staged);
+    }
+
+    [Fact]
+    public async Task A_change_that_says_removed_is_a_removal_even_when_it_carries_a_file()
+    {
+        var (db, store, onedrive, account) = await SetUpAsync(files: 2);
+        await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+        await SeedSourceAsync(db, "Fotos/photo-0.jpg", ContentLength("id-0"));
+        onedrive.Changes.Add(new OneDriveChange("id-0", true, onedrive.Files[0] with { ModifiedTime = s_modified.AddDays(3) }));
+
+        var result = await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+
+        Assert.Equal((0, 1), (result.Staged, result.Removed));
+        Assert.Equal(1, await db.DriveFiles.CountAsync(f => f.ConnectedSourceId == account));
+    }
+
+    private static async Task SetCursorAsync(CatalogDbContext db, long account, string? changes, string? list, bool listing)
+    {
+        var row = await db.ConnectedSources.SingleAsync(s => s.Id == account);
+        (row.SyncChangesToken, row.SyncListToken, row.SyncListing) = (changes, list, listing);
+        await db.SaveChangesAsync();
+    }
+
     private static OneDriveSync Sync(CatalogDbContext db, IBlobStore store, IOneDriveSyncClient client, int maxFilesPerRun = DriveSync.DefaultMaxFilesPerRun) =>
         new(db, store, client, s_keys, TimeProvider.System, NullLogger.Instance, maxFilesPerRun);
 
@@ -345,6 +485,12 @@ internal sealed class FakeOneDriveSync : IOneDriveSyncClient
 
     public List<string> Refreshed { get; } = [];
 
+    /// <summary>The links the deltas were asked from, in order (null for the start).</summary>
+    public List<string?> Links { get; } = [];
+
+    /// <summary>The last page of a listing comes with no delta link (Graph may do that).</summary>
+    public bool NoDeltaLink { get; set; }
+
     public void AddFile(string id, string name, string mimeType, string parent = "folder-1")
     {
         Files.Add(new OneDriveItem(id, name, mimeType, Encoding.UTF8.GetByteCount("content of " + id), s_modified, "hash-" + id, parent, "https://onedrive.live.com/?id=" + id));
@@ -357,11 +503,12 @@ internal sealed class FakeOneDriveSync : IOneDriveSyncClient
         // The one refresh rolls the token once; later ones keep what they are given.
         return RefreshFailure is { } failure
             ? Task.FromException<OneDriveToken>(failure)
-            : Task.FromResult(new OneDriveToken("access-token", RolledTo is { } rolled && rolled != refreshToken ? rolled : null));
+            : Task.FromResult(new OneDriveToken("access-token", RolledTo));
     }
 
     public Task<OneDriveDeltaPage> DeltaAsync(string accessToken, string? link, CancellationToken cancellationToken = default)
     {
+        Links.Add(link);
         if (link is not null && !link.Contains("page=", StringComparison.Ordinal) && ResyncOnNextDelta)
         {
             ResyncOnNextDelta = false;
@@ -384,13 +531,13 @@ internal sealed class FakeOneDriveSync : IOneDriveSyncClient
             }
 
             DeltaLink = "https://graph.microsoft.com/v1.0/me/drive/root/delta?token=d1";
-            return Task.FromResult(new OneDriveDeltaPage(page, null, DeltaLink));
+            return Task.FromResult(new OneDriveDeltaPage(page, null, NoDeltaLink ? null : DeltaLink));
         }
 
         var changes = Changes.ToList();
         Changes.Clear();
         DeltaLink = "https://graph.microsoft.com/v1.0/me/drive/root/delta?token=d2";
-        return Task.FromResult(new OneDriveDeltaPage(changes, null, DeltaLink));
+        return Task.FromResult(new OneDriveDeltaPage(changes, null, NoDeltaLink ? null : DeltaLink));
     }
 
     public Task<OneDriveFolder?> GetFolderAsync(string accessToken, string itemId, CancellationToken cancellationToken = default) =>

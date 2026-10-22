@@ -29,6 +29,7 @@ public sealed class MicrosoftOneDriveHttpTests
         Assert.Equal("Files.Read offline_access User.Read", query["scope"]);
         Assert.Equal("client-id", query["client_id"]);
         Assert.Equal("the state", query["state"]);
+        Assert.Equal("select_account", query["prompt"]);
         Assert.DoesNotContain("never-sent", uri.AbsoluteUri, StringComparison.Ordinal);
     }
 
@@ -84,6 +85,44 @@ public sealed class MicrosoftOneDriveHttpTests
         api.Graph["/v1.0/me"] = """{"mail":null,"userPrincipalName":"Ana@Outlook.com"}""";
 
         Assert.Equal("ana@outlook.com", await Client(api).GetAccountEmailAsync("graph-access"));
+    }
+
+    [Fact]
+    public async Task Prefers_the_mail_to_the_user_name_when_both_are_given()
+    {
+        var api = new FakeMicrosoft();
+        api.Graph["/v1.0/me"] = """{"mail":"Ana@Mail.com","userPrincipalName":"ana@outlook.com"}""";
+
+        Assert.Equal("ana@mail.com", await Client(api).GetAccountEmailAsync("graph-access"));
+    }
+
+    [Fact]
+    public async Task An_item_that_is_deleted_or_has_no_https_download_address_is_not_opened()
+    {
+        var api = new FakeMicrosoft();
+        api.Graph["/v1.0/me/drive/items/deleted"] = """{"name":"a.jpg","deleted":{},"@microsoft.graph.downloadUrl":"https://files.example.com/deleted"}""";
+        api.Graph["/v1.0/me/drive/items/plain"] = """{"name":"a.jpg","@microsoft.graph.downloadUrl":"http://files.example.com/plain"}""";
+        api.Graph["/v1.0/me/drive/items/none"] = """{"name":"a.jpg"}""";
+        api.Downloads["/deleted"] = [1];
+        api.Downloads["/plain"] = [1];
+
+        Assert.Null(await Client(api).OpenFileAsync("graph-access", "deleted"));
+        Assert.Null(await Client(api).OpenFileAsync("graph-access", "plain"));
+        Assert.Null(await Client(api).OpenFileAsync("graph-access", "none"));
+        Assert.Empty(api.DownloadAuthorizations);
+    }
+
+    [Fact]
+    public async Task A_download_microsoft_says_is_not_found_is_null_and_a_file_without_a_type_is_octet_stream()
+    {
+        var api = new FakeMicrosoft();
+        api.Graph["/v1.0/me/drive/items/missing"] = """{"name":"a.jpg","@microsoft.graph.downloadUrl":"https://files.example.com/missing"}""";
+        api.Graph["/v1.0/me/drive/items/bare"] = """{"name":"a.jpg","@microsoft.graph.downloadUrl":"https://files.example.com/bare"}""";
+        api.Downloads["/bare"] = [1];
+
+        Assert.Null(await Client(api).OpenFileAsync("graph-access", "missing"));
+        await using var bare = await Client(api).OpenFileAsync("graph-access", "bare");
+        Assert.Equal("application/octet-stream", bare!.ContentType);
     }
 
     [Fact]
