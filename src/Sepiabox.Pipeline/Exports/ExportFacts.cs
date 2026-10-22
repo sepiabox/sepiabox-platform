@@ -34,6 +34,13 @@ public static class ExportFacts
             ? point
             : null;
 
+    /// <summary>The export's link to the file when it is an absolute <c>https://</c> address without credentials that fits a manifest; otherwise null.</summary>
+    public static string? SourceUrl(ExportMetadata? export) =>
+        export?.SourceUrl is { Length: > 0 and <= Manifests.ManifestSource.MaxUrlLength } text
+        && Uri.TryCreate(text, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && uri.UserInfo.Length == 0
+            ? text
+            : null;
+
     /// <summary>The caption trimmed and cut to <see cref="MaxCaptionLength"/> characters; null when nothing is left.</summary>
     public static string? Caption(ExportMetadata? export)
     {
