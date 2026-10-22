@@ -56,6 +56,12 @@ public sealed record ProcessResult(
     /// <summary>Of <see cref="Refreshed"/>, the videos whose manifest gained a location (most gain nothing).</summary>
     public int LocationsAdded { get; init; }
 
+    /// <summary>
+    /// Damaged photos that an earlier run reported, unchanged since, which this run did not read again (D-105); a damaged
+    /// photo found in this run is among <see cref="Problems"/>.
+    /// </summary>
+    public int DamagedEarlier { get; init; }
+
     /// <summary>Videos whose 720p version was made without sound in this run, with FFmpeg's message (D-084).</summary>
     public IReadOnlyList<ScanProblem> WithoutSound { get; init; } = WithoutSound ?? [];
 }
@@ -560,6 +566,14 @@ public static class ProcessCommand
                 return null;
             }
 
+            // A photo that could not be decoded was reported by the run that found it, and re-reading it would change
+            // nothing: only a different file (size or time) or --retry-left-out reads it again (D-105).
+            if (unchanged && previous!.Status == FileStatus.Damaged && !options.RetryLeftOut)
+            {
+                o.DamagedEarlier++;
+                return null;
+            }
+
             // Still no FFmpeg: re-reading a large unchanged video would change nothing.
             if (unchanged && previous!.Status == FileStatus.Pending && video is null)
             {
@@ -843,6 +857,10 @@ public static class ProcessCommand
                     case FileStatus.NotVideo:
                         o.LeftOut.Add(new LeftOutFile(file.Path, noVideo, Earlier: false));
                         break;
+                    case FileStatus.Damaged:
+                        // Reported once: the next run leaves it alone while it is unchanged (D-105).
+                        o.Problems.Add(new ScanProblem(file.Path, $"{derivativeProblem} It is not read again unless it changes or process is given --retry-left-out."));
+                        break;
                     default:
                         // The manifest is kept so the file is still catalogued; the next run tries the derivatives again.
                         o.Problems.Add(new ScanProblem(file.Path, derivativeProblem ?? "Could not make its previews."));
@@ -915,6 +933,7 @@ public static class ProcessCommand
             root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems, leftOut,
             facesChecked, facesFound, faceProblems, withoutSound)
         {
+            DamagedEarlier = outcomes.Sum(o => o.DamagedEarlier),
             Refreshed = outcomes.Sum(o => o.Refreshed),
             LocationsAdded = outcomes.Sum(o => o.LocationsAdded),
         };
@@ -1076,12 +1095,23 @@ public static class ProcessCommand
         {
             return (manifest, FileStatus.NotVideo, null, ex.Reason, null, null);
         }
+        catch (MagickException ex) when (manifest.Kind == MediaKind.Photo && IsDamage(ex))
+        {
+            return (manifest, FileStatus.Damaged, $"Damaged file, its content cannot be decoded: {ex.Message}", null, null, null);
+        }
         catch (Exception ex) when (ex is MagickException or VideoProcessingException)
         {
             var what = manifest.Kind == MediaKind.Photo ? "thumbnails" : indexOnly ? "the poster and 1080p version" : "the poster and 720p version";
             return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}", null, null, null);
         }
     }
+
+    // Magick's errors that say the file's own content is bad: corrupt data, and a codec that read it and refused it (a
+    // JPEG or TIFF marker that makes no sense is a coder error, as in a corrupt Canon CR2). Not a missing codec, a delegate
+    // that failed or a blob that could not be read: those can come from the machine or a drive that dropped out, would
+    // mark good files, and the sticky status would hide the cause. They stay failures, tried again on the next run.
+    internal static bool IsDamage(MagickException ex) => ex is
+        MagickCorruptImageErrorException or MagickCorruptImageWarningException or MagickCoderErrorException;
 
     private static void RemoveSource(string output, string sha256, ManifestSource source)
     {
@@ -1189,6 +1219,8 @@ public static class ProcessCommand
         public int Embedded { get; set; }
 
         public int Refreshed { get; set; }
+
+        public int DamagedEarlier { get; set; }
 
         public int LocationsAdded { get; set; }
 

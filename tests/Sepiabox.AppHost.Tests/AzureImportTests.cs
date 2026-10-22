@@ -104,10 +104,27 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
         Assert.Equal(["faces", "sweep"], Arguments("faces"));
     }
 
+    [Fact]
+    public void Admin_job_is_started_by_hand_and_never_retried_with_its_own_identity_when_published()
+    {
+        var job = published.Named(Job, "sepiabox-admin");
+        var parameters = published.ModuleParameters["admin-containerapp.module.bicep"].ToJsonString();
+
+        Assert.Equal("'Manual'", job.Property("triggerType"));
+        Assert.Contains("parallelism: 1", job.Block("manualTriggerConfig"), StringComparison.Ordinal);
+        Assert.Equal("7200", job.Property("replicaTimeout"));
+        Assert.Equal("0", job.Property("replicaRetryLimit"));
+        Assert.Equal(["assets", "delete"], Arguments("admin"));
+        Assert.Contains("{admin-identity.outputs.id}", parameters, StringComparison.Ordinal);
+        Assert.DoesNotContain("import-identity", parameters, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrate-identity", parameters, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("import")]
     [InlineData("import-all")]
     [InlineData("faces")]
+    [InlineData("admin")]
     public void Import_jobs_never_migrate_and_connect_as_the_application_role_when_published(string resource)
     {
         // D-063: only sepiabox-migrate changes the schema and grants the role its tables.
@@ -137,6 +154,7 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
     [InlineData("import-all", "import-identity")]
     [InlineData("geonames", "migrate-identity")]
     [InlineData("faces", "faces-identity")]
+    [InlineData("admin", "admin-identity")]
     public void Migrate_and_import_jobs_run_as_separate_identities_when_published(string job, string identity)
     {
         // Only migrate's identity reads the database vault; only the import identity reads storage and the
