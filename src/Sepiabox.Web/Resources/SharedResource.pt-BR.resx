@@ -1363,4 +1363,10 @@
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
     <value>{0}: {1}, página atual</value>
   </data>
+  <data name="Source_OpenOriginal" xml:space="preserve">
+    <value>Abrir original</value>
+  </data>
+  <data name="Source_Removed" xml:space="preserve">
+    <value>Não está mais na origem</value>
+  </data>
 </root>

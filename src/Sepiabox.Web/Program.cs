@@ -65,6 +65,7 @@ builder.Services.AddSingleton<IDriveClient>(services => services.GetRequiredServ
 builder.Services.AddSingleton<IDriveAuthorization>(services => services.GetRequiredService<GoogleDrive>());
 builder.Services.AddSingleton<DriveTokenProtector>();
 builder.Services.AddScoped<IConnectedSources, ConnectedSources>();
+builder.Services.AddScoped<IDriveOriginals, DriveOriginals>();
 // Questions (S-025): Claude through the project's own interface (D-051), with a daily limit per person.
 builder.Services.AddSingleton<IQuestionTranslator, ConfiguredQuestionTranslator>();
 builder.Services.AddSingleton<IQuestionQuota, CatalogQuestionQuota>();
@@ -118,6 +119,7 @@ app.MapLanguageSwitch();
 app.MapMediaEndpoints();
 app.MapSearchEndpoints();
 app.MapSourceEndpoints();
+app.MapDriveOriginalEndpoint();
 app.MapQuestionEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

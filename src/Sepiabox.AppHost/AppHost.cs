@@ -97,6 +97,9 @@ else
     // The faces job writes manifests (S-022): its own identity, so the import jobs stay readers.
     var facesIdentity = builder.AddAzureUserAssignedIdentity("faces-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    // The sync job stages files in incoming and unprotects the refresh tokens the web protected (S-038): its own identity.
+    var syncIdentity = builder.AddAzureUserAssignedIdentity("sync-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
     // The process job writes derivatives, originals and manifests and empties incoming (S-036): its own identity.
     var processIdentity = builder.AddAzureUserAssignedIdentity("process-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
@@ -223,7 +226,24 @@ else
         .WithParameter("webPrincipalId", webIdentity.Resource.PrincipalId)
         .WithParameter("facesPrincipalId", facesIdentity.Resource.PrincipalId)
         .WithParameter("processPrincipalId", processIdentity.Resource.PrincipalId)
+        .WithParameter("syncPrincipalId", syncIdentity.Resource.PrincipalId)
         .WithParameter("uploaderPrincipalIds", uploaders);
+
+    // Syncs the connected Google Drives into `incoming` every day (S-038, D-115). It connects as the application role, reads the
+    // Google OAuth client from the owner's Key Vault (the same secrets as the web's sign-in) and the web's key ring, read-only,
+    // to unprotect the refresh tokens; its storage roles (write incoming, read the key ring) and its use of the key are in
+    // access.bicep.
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.SyncResourceName)
+        .WithArgs("sync", "google-drive")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(blobs)
+        .WithReference(vault)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithEnvironment("DataProtection__KeyUri", access.GetOutput("dataProtectionKeyUri"))
+        .WithAzureUserAssignedIdentity(syncIdentity)
+        .WithRoleAssignments(vault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
+        .WithRoleAssignments(storage, [])
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureSyncJob);
 
     web.WithReference(insights)
         .WithAzureUserAssignedIdentity(webIdentity)

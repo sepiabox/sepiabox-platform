@@ -57,6 +57,16 @@ public sealed class WorkerCommandTests
     }
 
     [Fact]
+    public void Parses_sync_google_drive_which_never_migrates()
+    {
+        Assert.True(WorkerCommand.TryParse(["sync", "google-drive"], out var command, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.SyncGoogleDrive, false), command);
+        Assert.False(WorkerCommand.TryParse(["sync"], out _, out _));
+        Assert.False(WorkerCommand.TryParse(["sync", "onedrive"], out _, out _));
+        Assert.False(WorkerCommand.TryParse(["sync", "google-drive", "--migrate"], out _, out _));
+    }
+
+    [Fact]
     public void Parses_events_rebuild_and_nothing_after_it()
     {
         Assert.True(WorkerCommand.TryParse(["events", "rebuild"], out var command, out _));

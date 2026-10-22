@@ -481,4 +481,20 @@ internal sealed class FakeDrive : IDriveClient, IDriveAuthorization
         TokensUsed.Add(refreshToken);
         return Failure?.Invoke() is { } failure ? Task.FromException<DriveMediaCount>(failure) : Task.FromResult(Media);
     }
+
+    /// <summary>The content of each file by id, for "Open original" (S-038); a file not here is gone from the Drive.</summary>
+    public Dictionary<string, byte[]> Files { get; } = [];
+
+    public Task<DriveFileDownload?> OpenFileAsync(string refreshToken, string fileId, CancellationToken cancellationToken = default)
+    {
+        TokensUsed.Add(refreshToken);
+        if (Failure?.Invoke() is { } failure)
+        {
+            return Task.FromException<DriveFileDownload?>(failure);
+        }
+
+        return Task.FromResult<DriveFileDownload?>(Files.TryGetValue(fileId, out var bytes)
+            ? new DriveFileDownload(new MemoryStream(bytes), "Praia 2019.jpg", "image/jpeg", bytes.Length)
+            : null);
+    }
 }

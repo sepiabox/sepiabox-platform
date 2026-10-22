@@ -21,6 +21,7 @@ public sealed class DeployScriptTests : IDisposable
     private const string DeployGeoNames = "azd deploy geonames --no-prompt";
     private const string DeployFaces = "azd deploy faces --no-prompt";
     private const string DeployProcess = "azd deploy process --no-prompt";
+    private const string DeploySync = "azd deploy sync --no-prompt";
     private const string PauseQueue =
         $"az servicebus queue update --resource-group {ShutdownRunbook.ResourceGroup} --namespace-name {ShutdownRunbook.ServiceBusNamespace} --name {ShutdownRunbook.Queue} --status ReceiveDisabled --output none";
     private const string ResumeQueue =
@@ -173,6 +174,8 @@ public sealed class DeployScriptTests : IDisposable
                 DeployFaces,
                 // The event-driven process job (S-036), from its own Dockerfile.
                 DeployProcess,
+                // The scheduled Drive sync (S-038) after the job that processes what it stages.
+                DeploySync,
                 // The manual GeoNames job runs the new image too (S-059), before the queue receives again.
                 DeployGeoNames,
                 ResumeQueue,
@@ -182,7 +185,7 @@ public sealed class DeployScriptTests : IDisposable
                 && !call.StartsWith("az group", StringComparison.Ordinal)
                 && !call.StartsWith("az postgres", StringComparison.Ordinal)));
         // What azure.yaml's predeploy hook checks, so that only this script deploys.
-        Assert.Equal(["1", "1", "1", "1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
+        Assert.Equal(["1", "1", "1", "1", "1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
         Assert.Equal($"web sepiaboxacr.azurecr.io/sepiabox-web-models:{ModelsTag()}", File.ReadAllLines(_calls + ".base")[^1]);
         Assert.Contains("Migrations applied.", result.Output, StringComparison.Ordinal);
     }

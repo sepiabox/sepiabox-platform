@@ -41,7 +41,9 @@ public sealed record StorageReport(
 /// The original's address at its source, as the manifest gave it (S-063). Untrusted text: show it only through
 /// <see cref="SourceLinks.SafeUrl"/>.
 /// </param>
-public sealed record AssetSourceDetail(string Type, string Name, string Path, string? Url = null);
+/// <param name="Id">The source's row, which "Open original" of a Drive source names (S-038); 0 when unknown.</param>
+/// <param name="Removed">True when the sync found the file gone from its cloud source (S-038): the source is kept and marked.</param>
+public sealed record AssetSourceDetail(string Type, string Name, string Path, string? Url = null, long Id = 0, bool Removed = false);
 
 /// <summary>
 /// One asset for the detail page. <c>PreviewName</c> is the derivative shown large: the photo preview, or the
@@ -439,7 +441,7 @@ public sealed class LibraryQueries(
             asset.Width,
             asset.Height,
             preview,
-            [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path, s.Url))],
+            [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path, s.Url, s.Id, s.RemovedAt is not null))],
             asset.DurationSeconds,
             proxy is not null,
             PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry))

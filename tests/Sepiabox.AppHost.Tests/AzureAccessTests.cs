@@ -34,6 +34,12 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
                 // The faces job rewrites manifests, and nothing else in storage (S-022).
                 "faces-identity: Storage Blob Data Contributor on containers manifests",
                 // The process job (S-036) reads and deletes incoming, copies originals, writes derivatives and manifests: those four containers.
+                // The sync job stages Drive files in incoming, reads the key ring that protects the tokens and uses the key that wraps it,
+                // and reads the owner's Key Vault for the Google OAuth client (S-038, D-115).
+                "sync-identity: Key Vault Crypto User on keys dataprotection",
+                "sync-identity: Key Vault Secrets User on vaults vault",
+                "sync-identity: Storage Blob Data Contributor on containers incoming",
+                "sync-identity: Storage Blob Data Reader on containers dataprotection",
                 "process-identity: Storage Blob Data Contributor on containers derivatives",
                 "process-identity: Storage Blob Data Contributor on containers incoming",
                 "process-identity: Storage Blob Data Contributor on containers manifests",
@@ -88,9 +94,12 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
         var webEnvironment = Environment("web");
         var jobKeys = new[] { "migrate", "import", "import-all", "geonames", "faces", "process" }.SelectMany(job => Environment(job).Keys).ToList();
 
-        // Key Vault is the web's configuration source: Auth--Google--ClientId is Auth:Google:ClientId (D-051).
+        // Key Vault is the web's configuration source: Auth--Google--ClientId is Auth:Google:ClientId (D-051). The sync job is the one
+        // other reader, for the same OAuth client (S-038, D-115); no other job sees the vault.
         Assert.Equal("{vault.connectionString}", webEnvironment["ConnectionStrings__vault"]);
+        Assert.Equal("{vault.connectionString}", Environment("sync")["ConnectionStrings__vault"]);
         Assert.DoesNotContain("ConnectionStrings__vault", jobKeys);
+        jobKeys.AddRange(Environment("sync").Keys);
         string[] ownerSecrets = ["Auth__", "Access__", "Anthropic__"];
         Assert.DoesNotContain(
             webEnvironment.Keys.Concat(jobKeys),

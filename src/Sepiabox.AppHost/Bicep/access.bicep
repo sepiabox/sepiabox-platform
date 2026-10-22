@@ -1,6 +1,6 @@
 // Access Aspire's role helpers cannot scope (S-058, D-062): the web's write access to the data protection
 // container only, its use of the data protection key only, the faces job's write access to the manifests container
-// only (S-022), the process job's write access to the four containers it touches (S-036), and the uploaders' write access
+// only (S-022), the sync job's access to incoming, the key ring and the key (S-038), the process job's write access to the four containers it touches (S-036), and the uploaders' write access
 // to storage.
 // The account-wide roles (the web's and the worker's Storage Blob Data Reader, the web's Key Vault Secrets
 // User) come from the AppHost's WithRoleAssignments.
@@ -20,6 +20,9 @@ param facesPrincipalId string
 
 @description('The process job\'s managed identity, which processes the files in incoming (S-036).')
 param processPrincipalId string
+
+@description('The sync job\'s managed identity, which stages Google Drive files in incoming and reads the web\'s key ring (S-038).')
+param syncPrincipalId string
 
 @description('Comma-separated Entra object ids of the people who run `sepiabox-ingest upload --destination azure`. User object ids only (`az ad signed-in-user show --query id -o tsv`), not groups or service principals.')
 param uploaderPrincipalIds string = ''
@@ -112,6 +115,41 @@ resource facesManifestsWriter 'Microsoft.Authorization/roleAssignments@2022-04-0
     principalId: facesPrincipalId
     // Storage Blob Data Contributor
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// The sync job (S-038, D-115): writes incoming, reads the key ring and uses the key that wraps it, and nothing else in storage. It
+// reads the owner's Key Vault secrets through the AppHost's role helper (the Google OAuth client is one of them).
+resource syncIncomingWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(incomingContainer.id, syncPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: incomingContainer
+  properties: {
+    principalId: syncPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource syncKeyRingReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyRingContainer.id, syncPrincipalId, '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
+  scope: keyRingContainer
+  properties: {
+    principalId: syncPrincipalId
+    // Storage Blob Data Reader
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource syncKeyUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(dataProtectionKey.id, syncPrincipalId, '12338af0-0e69-4776-bea7-57ae8d297424')
+  scope: dataProtectionKey
+  properties: {
+    principalId: syncPrincipalId
+    // Key Vault Crypto User
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12338af0-0e69-4776-bea7-57ae8d297424')
     principalType: 'ServicePrincipal'
   }
 }

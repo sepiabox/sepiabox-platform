@@ -132,6 +132,15 @@
                         {
                             <span class="source-name">@source.Name</span> <span class="mono">@source.Path</span>
                         }
+                        @if (SourceLinks.OriginalHref(_asset.Id, source, _asset.OriginalStored) is { } openOriginal)
+                        {
+                            @* The file is fetched from the Drive by the server (S-038): not a link to Google, and not kept. *@
+                            <a class="source-link" href="@openOriginal" data-enhance-nav="false">@Text["Source_OpenOriginal"]</a>
+                        }
+                        @if (source.Removed)
+                        {
+                            <span class="source-removed muted">@Text["Source_Removed"]</span>
+                        }
                         @if (link is not null)
                         {
                             @* The address is untrusted text: only https is ever a link, in a new tab that gets nothing from this page. *@

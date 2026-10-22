@@ -1430,4 +1430,10 @@
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
     <value>{0}: {1}, current page</value>
   </data>
+  <data name="Source_OpenOriginal" xml:space="preserve">
+    <value>Open original</value>
+  </data>
+  <data name="Source_Removed" xml:space="preserve">
+    <value>No longer at the source</value>
+  </data>
 </root>
