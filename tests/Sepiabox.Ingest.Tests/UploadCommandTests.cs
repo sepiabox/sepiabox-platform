@@ -6,6 +6,7 @@ using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Storage;
+using Sepiabox.Storage.Azure;
 using Testcontainers.Azurite;
 
 namespace Sepiabox.Ingest.Tests;
@@ -24,6 +25,8 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
     private readonly TempFolder _work = new();
 
     private BlobServiceClient Service => new(_azurite.GetConnectionString());
+
+    private AzureBlobStore Store => new(Service);
 
     public Task InitializeAsync() => _azurite.StartAsync();
 
@@ -71,7 +74,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         var clock = new ShiftedClock(TimeSpan.FromMinutes(minutes));
 
         var refused = await Assert.ThrowsAsync<ClockSkewException>(
-            () => UploadCommand.RunAsync(Options(), Service, null, new ManifestValidator(), CancellationToken.None, clock));
+            () => UploadCommand.RunAsync(Options(), Store, null, new ManifestValidator(), CancellationToken.None, clock));
 
         Assert.Contains(minutes > 0 ? "10 minutes ahead of the storage server's" : "10 minutes behind the storage server's", refused.Message, StringComparison.Ordinal);
         Assert.Contains("Settings → Time & language → Date & time → Sync now", refused.Message, StringComparison.Ordinal);
@@ -117,7 +120,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         Process();
 
         var result = await UploadCommand.RunAsync(
-            Options(), Service, null, new ManifestValidator(), CancellationToken.None, new ShiftedClock(TimeSpan.FromMinutes(-3)));
+            Options(), Store, null, new ManifestValidator(), CancellationToken.None, new ShiftedClock(TimeSpan.FromMinutes(-3)));
 
         Assert.Equal(1, result.Assets);
         Assert.Empty(result.Problems);
@@ -155,7 +158,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
             }
         });
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => UploadCommand.RunAsync(Options(), Service, cancelOnFirstBlock, cancellation.Token));
+            () => UploadCommand.RunAsync(Options(), Store, cancelOnFirstBlock, cancellation.Token));
         var beforeResume = ReadUploads();
 
         var resumed = await Upload();
@@ -240,7 +243,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         otherDrive.Write("Fotos/IMG_0001.jpg", TestPhotos.Porto("red"));
         ProcessCommand.Run(new ProcessOptions(otherDrive.Path, otherWork.Path, "HD do Jonathas", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
 
-        var result = await UploadCommand.RunAsync(new UploadOptions(otherWork.Path, UploadDestination.Local), Service);
+        var result = await UploadCommand.RunAsync(new UploadOptions(otherWork.Path, UploadDestination.Local), Store);
 
         Assert.Empty(result.Problems);
         var blob = Service.GetBlobContainerClient(BlobLayout.ManifestsContainer).GetBlobClient(BlobLayout.ManifestBlobName(id));
@@ -395,7 +398,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         // A cancelled request can reach the caller as an IOException (the socket was closed under it).
         using var cancellation = new CancellationTokenSource();
         var failure = await Record.ExceptionAsync(() => UploadCommand.RunAsync(
-            Options(), Service, null, new ThrowingValidator(new IOException("connection closed"), cancellation), cancellation.Token));
+            Options(), Store, null, new ThrowingValidator(new IOException("connection closed"), cancellation), cancellation.Token));
 
         Assert.IsAssignableFrom<OperationCanceledException>(failure);
     }
@@ -530,8 +533,8 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
     private UploadOptions Options() => new(_work.Path, UploadDestination.Local);
 
     private Task<UploadResult> Upload(IManifestValidator? validator = null) => validator is null
-        ? UploadCommand.RunAsync(Options(), Service)
-        : UploadCommand.RunAsync(Options(), Service, null, validator, CancellationToken.None);
+        ? UploadCommand.RunAsync(Options(), Store)
+        : UploadCommand.RunAsync(Options(), Store, null, validator, CancellationToken.None);
 
     private List<UploadRecord> ReadUploads()
     {

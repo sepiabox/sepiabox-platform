@@ -2,6 +2,7 @@ using System.Diagnostics;
 using ImageMagick;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Pipeline.Embeddings;
+using Sepiabox.Pipeline.Exports;
 using Sepiabox.Pipeline.Faces;
 using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
@@ -54,6 +55,12 @@ public sealed record ProcessResult(
 
     /// <summary>Of <see cref="Refreshed"/>, the videos whose manifest gained a location (most gain nothing).</summary>
     public int LocationsAdded { get; init; }
+
+    /// <summary>
+    /// Damaged photos that an earlier run reported, unchanged since, which this run did not read again (D-105); a damaged
+    /// photo found in this run is among <see cref="Problems"/>.
+    /// </summary>
+    public int DamagedEarlier { get; init; }
 
     /// <summary>Videos whose 720p version was made without sound in this run, with FFmpeg's message (D-084).</summary>
     public IReadOnlyList<ScanProblem> WithoutSound { get; init; } = WithoutSound ?? [];
@@ -188,6 +195,9 @@ public static class ProcessCommand
         // The mode is the work folder's (S-063): a run asking for the other one stops before it reads or writes anything.
         WorkFolderModes.Check(StatePath(output), options.Mode);
         var indexOnly = options.IndexOnly;
+        // What an official export says about its files (S-045), read once and read-only; nothing is written to the folder.
+        var export = ReadExport(options, root, hooks, cancellationToken);
+        var exportZone = options.TimeZone ?? TimeZoneInfo.Local;
         // Faces are biometric data: without --faces nothing looks for them, whatever detector was passed in.
         var faces = options.Faces ? faceDetector : null;
         var manifestFolder = Path.Combine(output, "manifests");
@@ -336,7 +346,8 @@ public static class ProcessCommand
                 }
 
                 var kind = MediaTypes.Classify(file.Path);
-                if (kind == MediaKind.Other || file.Path.StartsWith(outputPrefix, StringComparison.OrdinalIgnoreCase))
+                if (kind == MediaKind.Other || file.Path.StartsWith(outputPrefix, StringComparison.OrdinalIgnoreCase)
+                    || export?.IsLeftOut(Path.GetRelativePath(root, file.Path)) == true)
                 {
                     continue;
                 }
@@ -555,6 +566,14 @@ public static class ProcessCommand
                 return null;
             }
 
+            // A photo that could not be decoded was reported by the run that found it, and re-reading it would change
+            // nothing: only a different file (size or time) or --retry-left-out reads it again (D-105).
+            if (unchanged && previous!.Status == FileStatus.Damaged && !options.RetryLeftOut)
+            {
+                o.DamagedEarlier++;
+                return null;
+            }
+
             // Still no FFmpeg: re-reading a large unchanged video would change nothing.
             if (unchanged && previous!.Status == FileStatus.Pending && video is null)
             {
@@ -753,18 +772,24 @@ public static class ProcessCommand
             var modifiedTicks = file.ModifiedAt.UtcTicks;
             try
             {
+                // The export's kind when the folder is an export (S-045), so the web can say where the original is, and the
+                // export's link to the file at the service when it gives one (S-046).
+                var relativePath = ManifestSource.NormalizePath(Path.GetRelativePath(root, file.Path));
+                var exported = export?.Find(relativePath);
                 var source = new ManifestSource(
-                    LocalSourceType,
+                    options.ExportKind ?? LocalSourceType,
                     sourceName,
-                    ManifestSource.NormalizePath(Path.GetRelativePath(root, file.Path)),
-                    file.ModifiedAt);
+                    relativePath,
+                    file.ModifiedAt,
+                    ExportFacts.SourceUrl(exported));
 
                 if (previous?.Sha256 is { } oldSha256 && oldSha256 != sha256)
                 {
                     RemoveSource(output, oldSha256, source);
                 }
 
-                var described = Describe(manifestFolder, sha256, kind, file, source, clock, content, indexOnly);
+                var described = Describe(
+                    manifestFolder, sha256, kind, file, source, clock, content, indexOnly, exported, exportZone);
                 var (manifest, status, derivativeProblem, noVideo, withoutSound, sound) =
                     AddDerivatives(output, file, described, content, video, redoProxy, indexOnly, stop.Token);
                 if (withoutSound is not null)
@@ -832,6 +857,10 @@ public static class ProcessCommand
                     case FileStatus.NotVideo:
                         o.LeftOut.Add(new LeftOutFile(file.Path, noVideo, Earlier: false));
                         break;
+                    case FileStatus.Damaged:
+                        // Reported once: the next run leaves it alone while it is unchanged (D-105).
+                        o.Problems.Add(new ScanProblem(file.Path, $"{derivativeProblem} It is not read again unless it changes or process is given --retry-left-out."));
+                        break;
                     default:
                         // The manifest is kept so the file is still catalogued; the next run tries the derivatives again.
                         o.Problems.Add(new ScanProblem(file.Path, derivativeProblem ?? "Could not make its previews."));
@@ -860,6 +889,7 @@ public static class ProcessCommand
         var withoutManifest = outcomes.SelectMany(o => o.WithoutManifest).ToHashSet(StringComparer.Ordinal);
 
         var warnings = new List<string>();
+        warnings.AddRange(export?.Warnings ?? []);
         if (pending > 0)
         {
             warnings.Add(
@@ -903,6 +933,7 @@ public static class ProcessCommand
             root, manifestFolder, stopwatch.Elapsed, processed, skipped, problems, pending, warning, embedded, embeddingProblems, leftOut,
             facesChecked, facesFound, faceProblems, withoutSound)
         {
+            DamagedEarlier = outcomes.Sum(o => o.DamagedEarlier),
             Refreshed = outcomes.Sum(o => o.Refreshed),
             LocationsAdded = outcomes.Sum(o => o.LocationsAdded),
         };
@@ -932,10 +963,26 @@ public static class ProcessCommand
         }
     }
 
+    /// <summary>The scan of the export the run was asked to read, or null without <c>--export</c>.</summary>
+    private static ExportScan? ReadExport(ProcessOptions options, string root, ProcessHooks? hooks, CancellationToken cancellationToken)
+    {
+        if (options.ExportKind is not { } kind)
+        {
+            return null;
+        }
+
+        var readers = hooks?.ExportReaders ?? ExportReaderRegistry.Default;
+        return readers.TryGet(kind, out var reader)
+            ? reader.Read(root, cancellationToken)
+            : throw new ExportReadException($"Unknown export kind '{kind}'. Known kinds: {string.Join(", ", readers.Kinds)}.");
+    }
+
     private static Manifest Describe(
         string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source, TimeProvider clock, byte[]? content,
-        bool indexOnly)
+        bool indexOnly, ExportMetadata? export, TimeZoneInfo exportZone)
     {
+        var exportDate = ExportFacts.WallClock(export, exportZone);
+        var exportLocation = ExportFacts.Location(export);
         // Written only when false, as the schema says; a work folder keeps one mode, so every manifest in it agrees.
         bool? originalStored = indexOnly ? false : null;
         var path = ManifestPath(manifestFolder, sha256);
@@ -946,7 +993,10 @@ public static class ProcessCommand
             var existing = ManifestJson.Deserialize(File.ReadAllText(path));
             return existing with
             {
-                Captured = CaptureDate.Stronger(existing.Captured, CaptureDate.Resolve(null, file.Path, clock)),
+                Captured = CaptureDate.Stronger(existing.Captured, CaptureDate.Resolve(null, file.Path, clock, exportDate)),
+                Location = existing.Location ?? exportLocation,
+                Caption = ManifestMerge.LongerCaption(existing.Caption, ExportFacts.Caption(export)),
+                Albums = ManifestMerge.UnionAlbums(existing.Albums, ExportFacts.Albums(export)),
                 Sources = WithSource(existing.Sources, source),
                 OriginalStored = originalStored,
             };
@@ -970,8 +1020,11 @@ public static class ProcessCommand
             SizeBytes = file.Size,
             ContentType = MediaTypes.ContentType(file.Path),
             // The file's own date when plausible, otherwise one from its path (D-046).
-            Captured = CaptureDate.Resolve(metadata.RawCapturedAt, file.Path, clock),
-            Location = metadata.Location,
+            Captured = CaptureDate.Resolve(metadata.RawCapturedAt, file.Path, clock, exportDate),
+            // The file's own place wins; the export's fills in only when the file has none (S-045, D-104).
+            Location = metadata.Location ?? exportLocation,
+            Caption = ExportFacts.Caption(export),
+            Albums = ExportFacts.Albums(export),
             Camera = metadata.Camera,
             Width = metadata.Width,
             Height = metadata.Height,
@@ -1042,12 +1095,23 @@ public static class ProcessCommand
         {
             return (manifest, FileStatus.NotVideo, null, ex.Reason, null, null);
         }
+        catch (MagickException ex) when (manifest.Kind == MediaKind.Photo && IsDamage(ex))
+        {
+            return (manifest, FileStatus.Damaged, $"Damaged file, its content cannot be decoded: {ex.Message}", null, null, null);
+        }
         catch (Exception ex) when (ex is MagickException or VideoProcessingException)
         {
             var what = manifest.Kind == MediaKind.Photo ? "thumbnails" : indexOnly ? "the poster and 1080p version" : "the poster and 720p version";
             return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}", null, null, null);
         }
     }
+
+    // Magick's errors that say the file's own content is bad: corrupt data, and a codec that read it and refused it (a
+    // JPEG or TIFF marker that makes no sense is a coder error, as in a corrupt Canon CR2). Not a missing codec, a delegate
+    // that failed or a blob that could not be read: those can come from the machine or a drive that dropped out, would
+    // mark good files, and the sticky status would hide the cause. They stay failures, tried again on the next run.
+    internal static bool IsDamage(MagickException ex) => ex is
+        MagickCorruptImageErrorException or MagickCorruptImageWarningException or MagickCoderErrorException;
 
     private static void RemoveSource(string output, string sha256, ManifestSource source)
     {
@@ -1088,7 +1152,8 @@ public static class ProcessCommand
     /// its turn came), and another read-ahead budget.
     /// </summary>
     internal sealed record ProcessHooks(
-        IVideoProcessor? Video = null, Action<string>? BeforeWork = null, long? ReadAheadBytes = null, Action<string>? BeforeRead = null);
+        IVideoProcessor? Video = null, Action<string>? BeforeWork = null, long? ReadAheadBytes = null, Action<string>? BeforeRead = null,
+        ExportReaderRegistry? ExportReaders = null);
 
     /// <summary>Photos read ahead and waiting in memory at most, so a slow step never lets the reader fill the memory.</summary>
     internal const long ReadAheadBytes = 256L * 1024 * 1024;
@@ -1154,6 +1219,8 @@ public static class ProcessCommand
         public int Embedded { get; set; }
 
         public int Refreshed { get; set; }
+
+        public int DamagedEarlier { get; set; }
 
         public int LocationsAdded { get; set; }
 

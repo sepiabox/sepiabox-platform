@@ -34,6 +34,9 @@ public static class ManifestMerge
             Captured = CaptureDate.Stronger(description.Captured, other.Captured),
             // A manifest written before video locations were read (D-060) has none; it must not erase one found since.
             Location = description.Location ?? other.Location,
+            // Both are commutative and associative, so any order of merging gives the same blob (S-045, D-104).
+            Caption = LongerCaption(existing.Caption, incoming.Caption),
+            Albums = UnionAlbums(existing.Albums, incoming.Albums),
             Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
             Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
             Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),
@@ -49,6 +52,21 @@ public static class ManifestMerge
             FacesErasedAt = erasedAt,
         };
     }
+
+    /// <summary>The caption to keep: the longer, then the ordinally greater, so it does not depend on the order (S-045, D-104).</summary>
+    public static string? LongerCaption(string? a, string? b)
+    {
+        if (a is null || b is null)
+        {
+            return a ?? b;
+        }
+
+        return a.Length != b.Length ? (a.Length > b.Length ? a : b) : (string.CompareOrdinal(a, b) >= 0 ? a : b);
+    }
+
+    /// <summary>The union of two lists of albums, distinct and in ordinal order; null when there are none.</summary>
+    public static IReadOnlyList<string>? UnionAlbums(IReadOnlyList<string>? a, IReadOnlyList<string>? b) =>
+        Exports.ExportFacts.Clean([.. a ?? [], .. b ?? []]);
 
     /// <summary>
     /// How far after its blob was written a manifest's <c>facesDetectedAt</c> may be (D-081): beyond it, the computer's
