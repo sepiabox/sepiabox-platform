@@ -40,7 +40,7 @@
     }
     else
     {
-        <p class="muted small">@Text["Organize_BurstsCount", _bursts.Total.ToString("N0", CultureInfo.CurrentCulture)]</p>
+        <p class="muted small">@Text["Organize_BurstsCount", _bursts.Total.ToString("N0", CultureInfo.CurrentCulture)] @Text["Organize_PageOnly"]</p>
         <form method="post" @formname="organize" @onsubmit="ActAsync" class="organize-form">
             <AntiforgeryToken />
             <input type="hidden" name="View" value="bursts" />
@@ -51,19 +51,13 @@
                     <ul class="grid">
                         @foreach (var photo in burst.Items)
                         {
-                            <li class="organize-item">
-                                <MediaCard Item="photo.Item" Href="@($"photos/{photo.Item.Id}")" />
-                                <label>
-                                    <input type="checkbox" name="Ids" value="@photo.Item.Id" checked="@(photo.Item.Id != burst.KeepId)" />
-                                    <span>@(photo.Item.Id == burst.KeepId ? Text["Organize_Sharpest"] : Text["Organize_SetAsideOne"])</span>
-                                </label>
-                                <span class="muted small">@Sharpness(photo)</span>
-                            </li>
+                            <OrganizeCard Photo="photo" LabelKey="Organize_SetAsideOne" Checked="photo.Item.Id != burst.KeepId"
+                                          Sharpest="photo.Item.Id == burst.KeepId" BlurryBelow="Organization.BlurryBelow" />
                         }
                     </ul>
                 </section>
             }
-            <button type="submit" name="Action" value="hide">@Text["Organize_HideSelected"]</button>
+            <button type="submit" class="button organize-submit" name="Action" value="hide">@Text["Organize_HideSelected"]</button>
         </form>
         <Pager Page="_bursts.Page" HasMore="_bursts.HasMore" Link="PageLink" />
     }
@@ -76,24 +70,18 @@ else if (_view == "blurry")
     }
     else
     {
-        <p class="muted small">@Text["Organize_BlurryCount", _photos.Total.ToString("N0", CultureInfo.CurrentCulture), Organization.BlurryBelow.ToString("0.#", CultureInfo.CurrentCulture)]</p>
+        <p class="muted small">@Text["Organize_BlurryCount", _photos.Total.ToString("N0", CultureInfo.CurrentCulture)] @Text["Organize_PageOnly"]</p>
         <form method="post" @formname="organize" @onsubmit="ActAsync" class="organize-form">
             <AntiforgeryToken />
             <input type="hidden" name="View" value="blurry" />
+            <BulkSelect />
             <ul class="grid">
                 @foreach (var photo in _photos.Items)
                 {
-                    <li class="organize-item">
-                        <MediaCard Item="photo.Item" Href="@($"photos/{photo.Item.Id}")" />
-                        <label>
-                            <input type="checkbox" name="Ids" value="@photo.Item.Id" />
-                            <span>@Text["Organize_SetAsideOne"]</span>
-                        </label>
-                        <span class="muted small">@Sharpness(photo)</span>
-                    </li>
+                    <OrganizeCard Photo="photo" LabelKey="Organize_SetAsideOne" BlurryBelow="Organization.BlurryBelow" />
                 }
             </ul>
-            <button type="submit" name="Action" value="hide">@Text["Organize_HideSelected"]</button>
+            <button type="submit" class="button organize-submit" name="Action" value="hide">@Text["Organize_HideSelected"]</button>
         </form>
         <Pager Page="_photos.Page" HasMore="_photos.HasMore" Link="PageLink" />
     }
@@ -106,23 +94,18 @@ else
     }
     else
     {
-        <p class="muted small">@Text["Organize_HiddenCount", _photos.Total.ToString("N0", CultureInfo.CurrentCulture)]</p>
+        <p class="muted small">@Text["Organize_HiddenCount", _photos.Total.ToString("N0", CultureInfo.CurrentCulture)] @Text["Organize_PageOnly"]</p>
         <form method="post" @formname="organize" @onsubmit="ActAsync" class="organize-form">
             <AntiforgeryToken />
             <input type="hidden" name="View" value="hidden" />
+            <BulkSelect />
             <ul class="grid">
                 @foreach (var photo in _photos.Items)
                 {
-                    <li class="organize-item">
-                        <MediaCard Item="photo.Item" Href="@($"photos/{photo.Item.Id}")" />
-                        <label>
-                            <input type="checkbox" name="Ids" value="@photo.Item.Id" />
-                            <span>@Text["Organize_BringBackOne"]</span>
-                        </label>
-                    </li>
+                    <OrganizeCard Photo="photo" LabelKey="Organize_BringBackOne" />
                 }
             </ul>
-            <button type="submit" name="Action" value="unhide">@Text["Organize_UnhideSelected"]</button>
+            <button type="submit" class="button organize-submit" name="Action" value="unhide">@Text["Organize_UnhideSelected"]</button>
         </form>
         <Pager Page="_photos.Page" HasMore="_photos.HasMore" Link="PageLink" />
     }

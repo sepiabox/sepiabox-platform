@@ -6,7 +6,7 @@ using Sepiabox.Catalog.Search;
 namespace Sepiabox.Web.Services;
 
 /// <summary>A photo on the organize page: its tile, and how sharp it is.</summary>
-public sealed record OrganizeItem(TimelineItem Item, double? Sharpness);
+public sealed record OrganizeItem(TimelineItem Item, double? Sharpness, bool HasPreview = false);
 
 /// <summary>A burst (S-027): photos taken within seconds that look alike, in capture order, and the one to keep.</summary>
 public sealed record BurstGroup(IReadOnlyList<OrganizeItem> Items, string KeepId);
@@ -62,11 +62,14 @@ public sealed class Organization(IDbContextFactory<CatalogDbContext> contexts, S
             .OrderByDescending(b => b[0].CapturedAt).ThenBy(b => b[0].Id, StringComparer.Ordinal)
             .ToList();
         var shown = bursts.Skip((page - 1) * BurstsPageSize).Take(BurstsPageSize).ToList();
-        var items = await ItemsAsync(db, [.. shown.SelectMany(b => b.Select(p => p.Id))], cancellationToken);
+        var shownIds = shown.SelectMany(b => b.Select(p => p.Id)).ToList();
+        var items = await ItemsAsync(db, shownIds, cancellationToken);
+        var previews = (await db.Derivatives.AsNoTracking().Where(d => shownIds.Contains(d.AssetId) && d.Name == DerivativeNames.Preview)
+            .Select(d => d.AssetId).ToListAsync(cancellationToken)).ToHashSet(StringComparer.Ordinal);
         return new OrganizePage<BurstGroup>(
             page,
             [.. shown.Select(b => new BurstGroup(
-                [.. b.Select(p => new OrganizeItem(items[p.Id], p.Sharpness))], BurstFinder.Sharpest(b).Id))],
+                [.. b.Select(p => new OrganizeItem(items[p.Id], p.Sharpness, previews.Contains(p.Id)))], BurstFinder.Sharpest(b).Id))],
             bursts.Count > page * BurstsPageSize,
             bursts.Count);
     }
@@ -117,7 +120,7 @@ public sealed class Organization(IDbContextFactory<CatalogDbContext> contexts, S
         var total = await assets.CountAsync(cancellationToken);
         var rows = await order(assets).Skip((page - 1) * PhotosPageSize).Take(PhotosPageSize)
             .Select(a => new OrganizeItem(
-                new TimelineItem(a.Id, a.Kind, a.CapturedAt, a.Derivatives.Any(d => d.Name == DerivativeNames.Thumbnail), a.DurationSeconds), a.Sharpness))
+                new TimelineItem(a.Id, a.Kind, a.CapturedAt, a.Derivatives.Any(d => d.Name == DerivativeNames.Thumbnail), a.DurationSeconds), a.Sharpness, a.Derivatives.Any(d => d.Name == DerivativeNames.Preview)))
             .ToListAsync(cancellationToken);
         return new OrganizePage<OrganizeItem>(page, rows, total > page * PhotosPageSize, total);
     }

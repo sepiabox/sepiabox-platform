@@ -1218,7 +1218,7 @@
     <value>Bursts: {0}. The sharpest photo of each is left unchecked.</value>
   </data>
   <data name="Organize_BlurryCount" xml:space="preserve">
-    <value>Photos with sharpness below {1}: {0}, the blurriest first.</value>
+    <value>Blurry photos: {0}, the blurriest first.</value>
   </data>
   <data name="Organize_HiddenCount" xml:space="preserve">
     <value>Photos set aside: {0}.</value>
@@ -1227,7 +1227,7 @@
     <value>Burst of {0} photos</value>
   </data>
   <data name="Organize_Sharpest" xml:space="preserve">
-    <value>Sharpest, keep</value>
+    <value>Sharpest</value>
   </data>
   <data name="Organize_SetAsideOne" xml:space="preserve">
     <value>Set aside</value>
@@ -1261,5 +1261,26 @@
   </data>
   <data name="Chip_IncludeHidden" xml:space="preserve">
     <value>Including set aside</value>
+  </data>
+  <data name="Organize_NewTab" xml:space="preserve">
+    <value>opens in a new tab</value>
+  </data>
+  <data name="Organize_SelectAll" xml:space="preserve">
+    <value>Select all on this page</value>
+  </data>
+  <data name="Organize_SelectNone" xml:space="preserve">
+    <value>Select none</value>
+  </data>
+  <data name="Organize_PageOnly" xml:space="preserve">
+    <value>Checks apply to this page only.</value>
+  </data>
+  <data name="Organize_Level_VeryBlurry" xml:space="preserve">
+    <value>Very blurry</value>
+  </data>
+  <data name="Organize_Level_Blurry" xml:space="preserve">
+    <value>Blurry</value>
+  </data>
+  <data name="Organize_Level_Sharp" xml:space="preserve">
+    <value>Sharp</value>
   </data>
 </root>

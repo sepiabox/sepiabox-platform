@@ -105,7 +105,7 @@ public sealed class OrganizeUnitTests
 
     [Theory]
     [InlineData(Cultures.English, "Blurry photos", "Sharp photos", "Including set aside")]
-    [InlineData(Cultures.BrazilianPortuguese, "Fotos tremidas", "Fotos nítidas", "Incluindo separadas")]
+    [InlineData(Cultures.BrazilianPortuguese, "Fotos desfocadas", "Fotos nítidas", "Incluindo ocultas")]
     public void Labels_the_quality_and_hidden_chips_and_each_removes_only_itself(string culture, string blurry, string sharp, string hidden)
     {
         using var _ = Cultures.Use(culture);

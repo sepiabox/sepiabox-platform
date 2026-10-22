@@ -1129,46 +1129,46 @@
     <value>Organizar</value>
   </data>
   <data name="Organize_Intro" xml:space="preserve">
-    <value>Fotos em sequência e fotos tremidas, para você separar as que não quer ver. Separar apenas esconde a foto da busca e da linha do tempo: nada é apagado e os originais nunca são tocados.</value>
+    <value>Fotos em rajada e fotos desfocadas, para você ocultar as que não quer ver. Ocultar apenas esconde a foto da busca e da linha do tempo: nada é apagado e os originais nunca são tocados.</value>
   </data>
   <data name="Organize_Views" xml:space="preserve">
     <value>Listas</value>
   </data>
   <data name="Organize_View_bursts" xml:space="preserve">
-    <value>Sequências</value>
+    <value>Rajadas</value>
   </data>
   <data name="Organize_View_blurry" xml:space="preserve">
-    <value>Tremidas</value>
+    <value>Desfocadas</value>
   </data>
   <data name="Organize_View_hidden" xml:space="preserve">
-    <value>Separadas</value>
+    <value>Ocultas</value>
   </data>
   <data name="Organize_NoBursts" xml:space="preserve">
-    <value>Nenhuma sequência encontrada. Uma sequência são fotos tiradas com até dois segundos de intervalo e parecidas entre si.</value>
+    <value>Nenhuma rajada encontrada. Uma rajada são fotos tiradas com até dois segundos de intervalo e parecidas entre si.</value>
   </data>
   <data name="Organize_NoBlurry" xml:space="preserve">
-    <value>Nenhuma foto tremida encontrada.</value>
+    <value>Nenhuma foto desfocada encontrada.</value>
   </data>
   <data name="Organize_NoHidden" xml:space="preserve">
-    <value>Nada está separado.</value>
+    <value>Nada está oculto.</value>
   </data>
   <data name="Organize_BurstsCount" xml:space="preserve">
-    <value>Sequências: {0}. A foto mais nítida de cada uma fica desmarcada.</value>
+    <value>Rajadas: {0}. A foto mais nítida de cada uma fica desmarcada.</value>
   </data>
   <data name="Organize_BlurryCount" xml:space="preserve">
-    <value>Fotos com nitidez abaixo de {1}: {0}, as mais tremidas primeiro.</value>
+    <value>Fotos desfocadas: {0}, as mais desfocadas primeiro.</value>
   </data>
   <data name="Organize_HiddenCount" xml:space="preserve">
-    <value>Fotos separadas: {0}.</value>
+    <value>Fotos ocultas: {0}.</value>
   </data>
   <data name="Organize_Burst" xml:space="preserve">
-    <value>Sequência de {0} fotos</value>
+    <value>Rajada de {0} fotos</value>
   </data>
   <data name="Organize_Sharpest" xml:space="preserve">
-    <value>Mais nítida, manter</value>
+    <value>Mais nítida</value>
   </data>
   <data name="Organize_SetAsideOne" xml:space="preserve">
-    <value>Separar</value>
+    <value>Ocultar</value>
   </data>
   <data name="Organize_BringBackOne" xml:space="preserve">
     <value>Trazer de volta</value>
@@ -1177,13 +1177,13 @@
     <value>Nitidez {0}</value>
   </data>
   <data name="Organize_HideSelected" xml:space="preserve">
-    <value>Separar as fotos marcadas</value>
+    <value>Ocultar as fotos marcadas</value>
   </data>
   <data name="Organize_UnhideSelected" xml:space="preserve">
     <value>Trazer de volta as fotos marcadas</value>
   </data>
   <data name="Organize_Done_Hidden" xml:space="preserve">
-    <value>Fotos separadas: {0}. Nada foi apagado: veja em Separadas.</value>
+    <value>Fotos ocultas: {0}. Nada foi apagado: veja em Ocultas.</value>
   </data>
   <data name="Organize_Done_Restored" xml:space="preserve">
     <value>Fotos trazidas de volta: {0}.</value>
@@ -1192,12 +1192,33 @@
     <value>Nenhuma foto estava marcada.</value>
   </data>
   <data name="Chip_Blurry" xml:space="preserve">
-    <value>Fotos tremidas</value>
+    <value>Fotos desfocadas</value>
   </data>
   <data name="Chip_Sharp" xml:space="preserve">
     <value>Fotos nítidas</value>
   </data>
   <data name="Chip_IncludeHidden" xml:space="preserve">
-    <value>Incluindo separadas</value>
+    <value>Incluindo ocultas</value>
+  </data>
+  <data name="Organize_NewTab" xml:space="preserve">
+    <value>abre em nova aba</value>
+  </data>
+  <data name="Organize_SelectAll" xml:space="preserve">
+    <value>Selecionar tudo nesta página</value>
+  </data>
+  <data name="Organize_SelectNone" xml:space="preserve">
+    <value>Limpar seleção</value>
+  </data>
+  <data name="Organize_PageOnly" xml:space="preserve">
+    <value>As marcações valem só para esta página.</value>
+  </data>
+  <data name="Organize_Level_VeryBlurry" xml:space="preserve">
+    <value>Muito desfocada</value>
+  </data>
+  <data name="Organize_Level_Blurry" xml:space="preserve">
+    <value>Desfocada</value>
+  </data>
+  <data name="Organize_Level_Sharp" xml:space="preserve">
+    <value>Nítida</value>
   </data>
 </root>
