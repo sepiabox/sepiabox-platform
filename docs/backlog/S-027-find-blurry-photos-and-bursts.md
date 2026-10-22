@@ -16,13 +16,16 @@ Family drives have many blurry photos and near-identical sequences. Help review 
 - Deleting originals.
 
 ### Acceptance criteria
-- [ ] Given an image and its blurred version, when sharpness is computed, then the blurred one has lower sharpness.
-- [ ] Given an image and the same image resized, when dHashes are compared, then the distance is ≤ 4; for different images it is > 20.
-- [ ] Given 3 photos 1 s apart with close dHashes, when bursts are detected, then they form a burst.
-- [ ] Given a hidden asset, when searching, then it does not appear by default and appears with `includeHidden`.
+- [x] Given an image and its blurred version, when sharpness is computed, then the blurred one has lower sharpness.
+- [x] Given an image and the same image resized, when dHashes are compared, then the distance is ≤ 4; for different images it is > 20.
+- [x] Given 3 photos 1 s apart with close dHashes, when bursts are detected, then they form a burst.
+- [x] Given a hidden asset, when searching, then it does not appear by default and appears with `includeHidden`.
 
 ### Technical notes
 - `Sepiabox.Pipeline/Imaging/QualityAnalyzer.cs` with Magick.NET.
 
 ### Expected tests
 - Unit: sharpness, dHash, grouping. Integration: hiding and search.
+
+### Status
+- `done` (2026-10-22): implemented (D-098). Sharpness and hash come from the preview, so photos processed before this get them on the next `process` without reading the drive again; the question translator does not produce `quality` or `includeHidden` (D-098, so no live run was needed).

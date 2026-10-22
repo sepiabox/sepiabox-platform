@@ -38,6 +38,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<OccasionAsset> OccasionAssets => Set<OccasionAsset>();
 
+    public DbSet<ConnectedSource> ConnectedSources => Set<ConnectedSource>();
+
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options
@@ -75,6 +77,12 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             // True for every asset before index-only mode (S-063). Never generated, as belt and braces: a column with a
             // default and a CLR default of false is the case where EF may leave the value out of the insert.
             asset.Property(a => a.OriginalStored).HasDefaultValue(true).ValueGeneratedNever();
+            asset.Property(a => a.DHash).HasColumnName("dhash").HasMaxLength(16);
+            // Set aside, S-027: a person's choice, so a new asset is never hidden and an import never changes it.
+            asset.Property(a => a.Hidden).HasDefaultValue(false).ValueGeneratedNever();
+            // The organize page's lists of blurry photos and of hidden ones.
+            asset.HasIndex(a => a.Sharpness).HasDatabaseName("ix_assets_sharpness").HasFilter("sharpness IS NOT NULL");
+            asset.HasIndex(a => a.Hidden).HasDatabaseName("ix_assets_hidden").HasFilter("hidden");
             // Camera clocks have no time zone, so the value is stored exactly as read.
             asset.Property(a => a.CapturedAt).HasColumnType("timestamp without time zone");
             asset.Property(a => a.Location).HasColumnType("geography (Point, 4326)");
@@ -203,6 +211,18 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             link.HasOne<Occasion>().WithMany().HasForeignKey(l => l.EventId).OnDelete(DeleteBehavior.Cascade);
             link.HasOne<Asset>().WithMany().HasForeignKey(l => l.AssetId).OnDelete(DeleteBehavior.Cascade);
             link.HasIndex(l => l.EventId);
+        });
+
+        modelBuilder.Entity<ConnectedSource>(source =>
+        {
+            source.ToTable("connected_sources");
+            source.Property(s => s.Type).HasMaxLength(32);
+            // Lower-cased by the code that stores it, so a plain unique index is "ignoring case".
+            source.Property(s => s.AccountEmail).HasMaxLength(320);
+            source.Property(s => s.EncryptedRefreshToken).HasColumnType("text");
+            source.Property(s => s.Status).HasMaxLength(16);
+            source.HasIndex(s => new { s.Type, s.AccountEmail }).IsUnique().HasDatabaseName("ix_connected_sources_account");
+            source.ToTable(t => t.HasCheckConstraint("ck_connected_sources_status", "status IN ('connected', 'reconnect')"));
         });
 
         modelBuilder.Entity<Setting>(setting =>

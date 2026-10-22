@@ -5,12 +5,17 @@ using Sepiabox.Web.Services;
 namespace Sepiabox.Web.Tests;
 
 /// <summary>Opens new contexts on one test database, the way the web's factory does.</summary>
-internal sealed class TestContexts(string connectionString) : IDbContextFactory<CatalogDbContext>
+internal sealed class TestContexts(string connectionString, Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor? interceptor = null) : IDbContextFactory<CatalogDbContext>
 {
     public CatalogDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<CatalogDbContext>();
         CatalogDbContext.Configure(options, connectionString);
+        if (interceptor is not null)
+        {
+            options.AddInterceptors(interceptor);
+        }
+
         return new CatalogDbContext(options.Options);
     }
 }

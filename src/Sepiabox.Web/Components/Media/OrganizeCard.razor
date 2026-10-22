@@ -1,0 +1,59 @@
+@using System.Globalization
+@* One photo on the organize page (S-027): a large preview to judge blur by, opening the photo in a new tab so the checks
+   on the page survive, and a checkbox whose name says which photo it is. The sharpest photo of a burst has a badge, not a
+   different label. *@
+
+<li class="organize-item">
+    <a href="photos/@Photo.Item.Id" class="thumb" target="_blank" rel="noopener" aria-label="@Description, @Text["Organize_NewTab"]">
+        @if (Photo.PreviewName is { } preview)
+        {
+            <img src="photos/@Photo.Item.Id/@preview" alt="" loading="lazy" />
+        }
+        else if (Photo.Item.HasThumbnail)
+        {
+            <img src="photos/@Photo.Item.Id/@DerivativeNames.Thumbnail" alt="" loading="lazy" width="256" height="256" />
+        }
+        else
+        {
+            <span class="placeholder">@Text["MediaCard_NoThumbnail", Text.KindLabel(Photo.Item.Kind)]</span>
+        }
+    </a>
+    @if (Sharpest)
+    {
+        <span class="sharpest-badge">@Text["Organize_Sharpest"]</span>
+    }
+    <label class="check">
+        <input type="checkbox" name="Ids" value="@Photo.Item.Id" checked="@Checked" />
+        <span>@Text[LabelKey]<span class="visually-hidden">: @Description</span></span>
+    </label>
+    @if (Level is { } level && Photo.Sharpness is { } sharpness)
+    {
+        <span class="muted small level" title="@Text["Organize_Sharpness", sharpness.ToString("0.#", CultureInfo.CurrentCulture)]">@Text[level]</span>
+    }
+</li>
+
+@code {
+    [Parameter, EditorRequired]
+    public OrganizeItem Photo { get; set; } = default!;
+
+    [Parameter]
+    public bool Checked { get; set; }
+
+    [Parameter]
+    public bool Sharpest { get; set; }
+
+    /// <summary>The resource key of the checkbox's label: the same for every photo of a list.</summary>
+    [Parameter, EditorRequired]
+    public string LabelKey { get; set; } = string.Empty;
+
+    /// <summary>The sharpness below which a photo is blurry; null shows no sharpness word.</summary>
+    [Parameter]
+    public double? BlurryBelow { get; set; }
+
+    private string? Level => BlurryBelow is { } below && Photo.Sharpness is { } sharpness
+        ? sharpness < below / 2 ? "Organize_Level_VeryBlurry" : sharpness < below ? "Organize_Level_Blurry" : "Organize_Level_Sharp"
+        : null;
+
+    private string Description =>
+        $"{Text.KindLabel(Photo.Item.Kind)}, {(Photo.Item.CapturedAt is { } taken ? Text.DateAndTime(taken) : Text.DateOrNoDate(null))}";
+}

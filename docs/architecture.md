@@ -39,7 +39,7 @@ Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsof
 | `Sepiabox.Catalog` | library | EF Core + Npgsql: schema, migrations, queries. |
 | `Sepiabox.Storage` | library | The project's storage and queue interfaces (`IBlobStore`, `IBlobEventQueue`), `BlobLayout`, and their Azure implementations (D-051, from S-050). |
 | `Sepiabox.Worker` (`sepiabox-worker`) | Container Apps job | Imports manifests, processes files that arrive through the cloud, groups events, syncs cloud sources. |
-| `Sepiabox.Web` | Container Apps | Blazor (interactive server): sign-in, timeline, search, people, occasions, questions. |
+| `Sepiabox.Web` | Container Apps | Blazor (interactive server): sign-in, timeline, search, people, occasions, organize, questions. |
 | `Sepiabox.AppHost` / `Sepiabox.ServiceDefaults` | PC (dev) / azd | .NET Aspire: local environment (PostgreSQL + Azurite) and infrastructure description for `azd`. |
 
 ## Ingest flow

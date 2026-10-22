@@ -33,6 +33,17 @@
         }
     }
 
+    @if (Fields.Quality is { } quality)
+    {
+        @* The bar narrows the blurry (or the sharp) photos (S-027): the filter goes with it. *@
+        <input type="hidden" name="@SearchLinks.BlurryParameter" value="@(quality.Blurry ? "1" : "0")" />
+    }
+
+    @if (Fields.IncludeHidden)
+    {
+        <input type="hidden" name="@SearchLinks.HiddenParameter" value="1" />
+    }
+
     <label>
         <span>@Text["Filter_Year"]</span>
         <select name="year">

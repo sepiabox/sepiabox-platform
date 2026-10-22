@@ -278,6 +278,12 @@ public sealed class ManifestImporter(
         asset.Width = manifest.Width;
         asset.Height = manifest.Height;
         asset.DurationSeconds = manifest.DurationSeconds;
+        // A manifest written before the photo was measured has none: what is stored stays (S-027, D-098).
+        if (manifest.Quality is { } quality)
+        {
+            (asset.Sharpness, asset.DHash) = (quality.Sharpness, quality.DHash);
+        }
+
         asset.UpdatedAt = now;
 
         // Sources are only ever added (D-032, D-036): upload already merges every drive into the blob.

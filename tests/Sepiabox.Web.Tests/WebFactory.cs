@@ -14,6 +14,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sepiabox.Web.Services;
+using Sepiabox.Web.Sources;
 
 namespace Sepiabox.Web.Tests;
 
@@ -75,6 +76,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
 
     /// <summary>The family's places; unset, the catalog's (or an in-memory one with a fake library).</summary>
     public ISavedPlaces? SavedPlaces { get; init; }
+
+    /// <summary>The connected cloud accounts (S-037); unset, the catalog's, with a Drive that is never reached.</summary>
+    public IConnectedSources? ConnectedSources { get; init; }
 
     /// <summary>Answers the Google handler's server-to-server calls (token and user info) instead of Google.</summary>
     public HttpMessageHandler? GoogleBackchannel { get; init; }
@@ -158,6 +162,15 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             else if (_library is not null)
             {
                 services.AddSingleton<ISavedPlaces>(new FakeSavedPlaces());
+            }
+
+            if (ConnectedSources is not null)
+            {
+                services.AddSingleton(ConnectedSources);
+            }
+            else if (_library is not null)
+            {
+                services.AddSingleton<IConnectedSources>(new FakeConnectedSources());
             }
 
             if (QuestionQuota is not null)
