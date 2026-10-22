@@ -1431,10 +1431,10 @@
     <value>{0}: {1}, current page</value>
   </data>
   <data name="Detail_IgnoreFace" xml:space="preserve">
-    <value>Ignore this face</value>
+    <value>Ignore and delete this face</value>
   </data>
   <data name="Detail_IgnoreUnnamed" xml:space="preserve">
-    <value>Ignore the unnamed faces in this photo</value>
+    <value>Ignore and delete the unnamed faces in this photo</value>
   </data>
   <data name="Detail_Done_Ignored" xml:space="preserve">
     <value>The faces were ignored.</value>
@@ -1509,15 +1509,15 @@
     <value>and {0} more</value>
   </data>
   <data name="Detail_IgnoreFace_Named" xml:space="preserve">
-    <value>Ignore this face, unnamed {0}</value>
+    <value>Ignore and delete this face, unnamed {0}</value>
   </data>
   <data name="Person_Delete_Hint" xml:space="preserve">
-    <value>Deletes this person, their name and all their faces; for someone you know.</value>
+    <value>Deletes this person, their name and all their faces.</value>
   </data>
   <data name="Person_Ignore_Hint" xml:space="preserve">
     <value>For strangers (posters, crowds): deletes this unnamed person and their faces, so they do not come back.</value>
   </data>
   <data name="Settings_Faces_History_Ignore" xml:space="preserve">
-    <value>{0}, by {1}: faces ignored: {2}; people removed: {3}.</value>
+    <value>{0}, by {1}: unnamed faces deleted: {2}; people deleted: {3}.</value>
   </data>
 </root>

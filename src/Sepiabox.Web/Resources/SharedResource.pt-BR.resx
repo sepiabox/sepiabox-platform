@@ -1364,10 +1364,10 @@
     <value>{0}: {1}, página atual</value>
   </data>
   <data name="Detail_IgnoreFace" xml:space="preserve">
-    <value>Ignorar este rosto</value>
+    <value>Ignorar e apagar este rosto</value>
   </data>
   <data name="Detail_IgnoreUnnamed" xml:space="preserve">
-    <value>Ignorar os rostos sem nome desta foto</value>
+    <value>Ignorar e apagar os rostos sem nome desta foto</value>
   </data>
   <data name="Detail_Done_Ignored" xml:space="preserve">
     <value>Os rostos foram ignorados.</value>
@@ -1442,15 +1442,15 @@
     <value>e mais {0}</value>
   </data>
   <data name="Detail_IgnoreFace_Named" xml:space="preserve">
-    <value>Ignorar este rosto, sem nome {0}</value>
+    <value>Ignorar e apagar este rosto, sem nome {0}</value>
   </data>
   <data name="Person_Delete_Hint" xml:space="preserve">
-    <value>Apaga esta pessoa, o nome e todos os rostos dela; para alguém que você conhece.</value>
+    <value>Apaga esta pessoa, o nome e todos os rostos dela.</value>
   </data>
   <data name="Person_Ignore_Hint" xml:space="preserve">
     <value>Para desconhecidos (cartazes, multidões): apaga esta pessoa sem nome e os rostos dela, para que não voltem.</value>
   </data>
   <data name="Settings_Faces_History_Ignore" xml:space="preserve">
-    <value>{0}, por {1}: rostos ignorados: {2}; pessoas removidas: {3}.</value>
+    <value>{0}, por {1}: rostos sem nome apagados: {2}; pessoas apagadas: {3}.</value>
   </data>
 </root>

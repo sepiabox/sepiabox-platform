@@ -94,7 +94,7 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         var lines = page.FindAll(".face-deletions li").Select(li => li.TextContent).ToList();
 
         // The time's own format varies with the runtime's culture data; the words are what is asserted.
-        Assert.EndsWith(", by ana@example.com: faces ignored: 14; people removed: 6.", lines[0], StringComparison.Ordinal);
+        Assert.EndsWith(", by ana@example.com: unnamed faces deleted: 14; people deleted: 6.", lines[0], StringComparison.Ordinal);
         Assert.EndsWith(", by ana@example.com: one person's face data deleted; faces: 3.", lines[1], StringComparison.Ordinal);
     }
 
@@ -105,7 +105,7 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         _faces.History.Add(Deletion(FaceDataDeletionScopes.Ignore, 14, 6, new DateTimeOffset(2026, 10, 22, 9, 0, 0, TimeSpan.Zero)));
 
         Assert.Equal(
-            "22/10/2026 09:00, por ana@example.com: rostos ignorados: 14; pessoas removidas: 6.",
+            "22/10/2026 09:00, por ana@example.com: rostos sem nome apagados: 14; pessoas apagadas: 6.",
             Assert.Single(Render<Settings>().FindAll(".face-deletions li")).TextContent);
     }
 

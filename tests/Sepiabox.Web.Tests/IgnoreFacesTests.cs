@@ -38,11 +38,13 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         Assert.Equal(
             [$"photos/{asset.Id}/ignore-faces?face=20", $"photos/{asset.Id}/ignore-faces?face=30"],
             page.FindAll("a.ignore-face").Select(a => a.GetAttribute("href")));
-        Assert.Equal("Ignore this face", page.Find("a.ignore-face").TextContent);
+        Assert.Equal("Ignore and delete this face", page.Find("a.ignore-face").TextContent);
         // Each link has a name of its own, visible text first.
-        Assert.Equal(["Ignore this face, unnamed 1", "Ignore this face, unnamed 2"], page.FindAll("a.ignore-face").Select(a => a.GetAttribute("aria-label")));
+        Assert.Equal(["Ignore and delete this face, unnamed 1", "Ignore and delete this face, unnamed 2"], page.FindAll("a.ignore-face").Select(a => a.GetAttribute("aria-label")));
         Assert.Equal($"photos/{asset.Id}/ignore-faces", page.Find("p.ignore-faces a").GetAttribute("href"));
-        Assert.Equal("Ignore the unnamed faces in this photo", page.Find("p.ignore-faces a").TextContent);
+        Assert.Equal("Ignore and delete the unnamed faces in this photo", page.Find("p.ignore-faces a").TextContent);
+        // Enhanced navigation would keep the focus where it was, not on the way out of the confirmation.
+        Assert.All(page.FindAll("a.ignore-face, p.ignore-faces a"), a => Assert.Equal("false", a.GetAttribute("data-enhance-nav")));
     }
 
     [Fact]
@@ -78,6 +80,7 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         var page = Render<PhotoIgnoreFaces>(p => p.Add(d => d.Id, asset.Id));
 
         Assert.Equal("Ignore and delete faces", page.Find("h1").TextContent);
+        Assert.Single(page.FindAll("p.ignore-warning"));
         Assert.Equal("This cannot be undone. The photos stay.", page.Find("p.ignore-warning strong").TextContent);
         Assert.Contains("1 unnamed face in this photo will be ignored.", page.Markup, StringComparison.Ordinal);
         Assert.Contains("deleted for good", page.Find("ul.ignore-effects").TextContent, StringComparison.Ordinal);
@@ -137,7 +140,8 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         Assert.Equal("Ignore this person", unnamed.Find("p.ignore-person a").TextContent);
         // Each of the two deletions says what it is for.
         Assert.Contains("strangers", unnamed.Find("p.ignore-person .muted").TextContent, StringComparison.Ordinal);
-        Assert.Contains("someone you know", unnamed.Find("p.delete-face-data .muted").TextContent, StringComparison.Ordinal);
+        Assert.Equal("Deletes this person, their name and all their faces.", unnamed.Find("p.delete-face-data .muted").TextContent);
+        Assert.Equal("false", unnamed.Find("p.ignore-person a").GetAttribute("data-enhance-nav"));
         Assert.Empty(named.FindAll("p.ignore-person"));
     }
 
@@ -174,6 +178,7 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         else
         {
             Assert.Equal("people/ignore", page.Find("p.ignore-many a").GetAttribute("href"));
+            Assert.Equal("false", page.Find("p.ignore-many a").GetAttribute("data-enhance-nav"));
             Assert.Equal(text, page.Find("p.ignore-many a").TextContent);
         }
     }
@@ -188,6 +193,9 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         var page = Render<PeopleIgnore>();
 
         Assert.Contains("30 unnamed people with one or two faces will be ignored.", page.Markup, StringComparison.Ordinal);
+        // The warning once, after the crops.
+        Assert.Single(page.FindAll("p.ignore-warning"));
+        Assert.True(page.Markup.IndexOf("ignore-crops", StringComparison.Ordinal) < page.Markup.IndexOf("ignore-warning", StringComparison.Ordinal));
         // A strip of at most 24 faces, then how many more.
         Assert.Equal(24, page.FindAll("ul.ignore-crops li").Count);
         Assert.Equal("and 6 more", page.Find("p.ignore-more").TextContent);

@@ -73,7 +73,7 @@ else
         @if (_person.Name is null && _person.UserEmail is null)
         {
             @* A stranger (a poster, a face in a crowd): opens a confirmation, which deletes the faces for good (#107). *@
-            <p class="ignore-person"><a href="people/@_person.Id/ignore">@Text["Person_Ignore"]</a><br /><span class="muted small">@Text["Person_Ignore_Hint"]</span></p>
+            <p class="ignore-person"><a href="people/@_person.Id/ignore" data-enhance-nav="false">@Text["Person_Ignore"]</a><br /><span class="muted small">@Text["Person_Ignore_Hint"]</span></p>
         }
     </section>
 

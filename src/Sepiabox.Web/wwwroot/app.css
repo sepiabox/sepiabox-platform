@@ -1227,6 +1227,9 @@ main {
 
 .ignore-crops {
     margin: 12px 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 8px;
 }
 
 .ignore-more {
