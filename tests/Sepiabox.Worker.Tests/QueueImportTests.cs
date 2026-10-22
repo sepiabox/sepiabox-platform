@@ -28,6 +28,31 @@ public sealed class QueueImportTests
     }
 
     [Fact]
+    public async Task A_queue_for_incoming_handles_only_that_containers_events()
+    {
+        var queue = new InMemoryBlobEventQueue(
+            new BlobCreated("manifests", "a.json"),
+            new BlobCreated("incoming", "f1"),
+            new BlobCreated("incoming", "f2"));
+
+        var result = await new QueueImport(
+                queue,
+                (name, _) =>
+                {
+                    _imported.Add(name);
+                    return Task.FromResult(new ImportResult(1, 0, [], []));
+                },
+                s_options,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<QueueImport>.Instance,
+                BlobLayout.IncomingContainer)
+            .RunAsync(CancellationToken.None);
+
+        Assert.Equal(["f1", "f2"], _imported);
+        Assert.Equal(2, result.Imported);
+        Assert.Equal(["message-0", "message-1", "message-2"], queue.Completed);
+    }
+
+    [Fact]
     public async Task An_empty_queue_ends_the_run_at_once()
     {
         var queue = new InMemoryBlobEventQueue();

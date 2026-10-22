@@ -10,13 +10,17 @@ using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Catalog.Events;
 using Sepiabox.Catalog.People;
+using Sepiabox.Pipeline.Embeddings;
+using Sepiabox.Pipeline.Faces;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
+using Sepiabox.Pipeline.Video;
 using Sepiabox.Search.Models;
 using Sepiabox.Storage;
 using Sepiabox.Storage.Azure;
 using Sepiabox.Worker;
 using Sepiabox.Worker.Assets;
+using Sepiabox.Worker.Cloud;
 using Sepiabox.Worker.Events;
 using Sepiabox.Worker.Faces;
 using Sepiabox.Worker.Importing;
@@ -62,7 +66,7 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
         builder.Services.AddScoped<ManifestImporter>();
     }
 
-    if (command.Action is WorkerAction.FacesSweep or WorkerAction.AssetsDelete)
+    if (command.Action is WorkerAction.FacesSweep or WorkerAction.ProcessFromQueue or WorkerAction.AssetsDelete)
     {
         AddBlobStore(builder);
         builder.Services.AddSingleton<ManifestValidator>();
@@ -206,6 +210,11 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         return fromQueue.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }
 
+    if (command.Action == WorkerAction.ProcessFromQueue)
+    {
+        return await ProcessFromQueueAsync(services, logger, cancellationToken);
+    }
+
     if (command.Action != WorkerAction.ImportOnce)
     {
         return ExitCodes.Success;
@@ -213,6 +222,74 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
 
     var result = await services.GetRequiredService<ManifestImporter>().ImportOnceAsync(BlobLayout.ManifestsContainer, cancellationToken);
     Log.ImportFinished(logger, result.Imported, result.Unchanged, result.Problems.Count, result.Warnings.Count);
+    return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
+}
+
+// `process --from-queue` (S-036): the pipeline's stages for a file that arrived in the incoming container.
+static async Task<int> ProcessFromQueueAsync(IServiceProvider services, ILogger logger, CancellationToken cancellationToken)
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+    var store = services.GetRequiredService<IBlobStore>();
+    var clock = services.GetRequiredService<TimeProvider>();
+    var modelFolder = configuration["Search:ModelFolder"];
+    var models = string.IsNullOrWhiteSpace(modelFolder) ? ModelFolder.Default() : modelFolder;
+
+    using var embedder = ClipImageEmbedder.TryCreate(models, out var embedderWarning);
+    if (embedder is null && embedderWarning is not null)
+    {
+        Log.IncomingStepUnavailable(logger, "CLIP embeddings", embedderWarning);
+    }
+
+    // Faces only when the library's setting is on (D-047, S-022); a setting changed while the job runs applies to the next run.
+    FaceDetector? faces = null;
+    if ((await FaceRecognition.ReadAsync(services.GetRequiredService<CatalogDbContext>(), cancellationToken)).On)
+    {
+        faces = FaceDetector.TryCreate(models, out var facesWarning);
+        if (faces is null && facesWarning is not null)
+        {
+            Log.IncomingStepUnavailable(logger, "faces", facesWarning);
+        }
+    }
+
+    using var detector = faces;
+    var ffmpeg = FfmpegTools.Find(null);
+    var processor = new CloudFileProcessor(
+        store,
+        new ManifestStore(services.GetRequiredService<ManifestValidator>(), store),
+        ffmpeg is null ? null : new VideoProcessor(ffmpeg),
+        embedder,
+        detector,
+        clock,
+        logger,
+        originalsCold: configuration.GetValue("Processing:OriginalsCold", false),
+        referenceVideo: ffmpeg is null ? null : new VideoProcessor(ffmpeg, VideoEncoder.Software, VideoVersion.Hd1080));
+
+    await using var queue = CreateServiceBusQueue(configuration);
+    var options = QueueImportOptions.Default with
+    {
+        MaxDeliveryCount = configuration.GetValue("ServiceBus:MaxDeliveryCount", QueueImportOptions.Default.MaxDeliveryCount),
+    };
+    var leftOut = 0;
+    var result = await new QueueImport(
+            queue,
+            async (blobName, token) =>
+            {
+                var done = await processor.ProcessAsync(blobName, token);
+                leftOut += done.Status == CloudFileStatus.LeftOut ? 1 : 0;
+                return done.Status == CloudFileStatus.Problem
+                    ? new ImportResult(0, 0, [new ImportProblem(blobName, done.Reason ?? "could not be processed")], [])
+                    : new ImportResult(done.Status == CloudFileStatus.Processed ? 1 : 0, 0, [], []);
+            },
+            options,
+            services.GetRequiredService<ILogger<QueueImport>>(),
+            BlobLayout.IncomingContainer)
+        .RunAsync(cancellationToken);
+    // The one line to look for (docs/operations.md): how many files were skipped and are waiting in incoming, then which, up to 20.
+    Log.IncomingFinished(logger, result.Imported, leftOut, result.Problems.Count);
+    foreach (var skipped in result.Problems.Take(20))
+    {
+        Log.IncomingSkippedFile(logger, $"{skipped.BlobName}: {skipped.Reason}");
+    }
     return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
 }
 

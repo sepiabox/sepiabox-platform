@@ -26,7 +26,7 @@ Parallel branches always collide somewhere, so:
 ## Step 0 — Pick the story
 
 1. Update `main`.
-2. Take the next `todo` story **of your track in the current sprint** (before Sprint 13, of the current sprint) in `docs/backlog/README.md` whose dependencies are all `done`, in backlog order. The current sprint is the first one with a story not yet `done` or `blocked`; the next sprint starts only when both its tracks are finished, and there are no order overrides (D-054, D-090). The owner has allowed moving to the next sprint without asking, so the orchestrator does not wait for approval. Sprints after the MVP do not start while any MVP story is `blocked`: report it in the Agent Log and stop (D-054).
+2. Take the next `todo` story **of your track in the current sprint** (before Sprint 13, of the current sprint) in `docs/backlog/README.md` whose dependencies are all `done`, in backlog order. The current sprint is the first one with a story not yet `done` or `blocked`; the next sprint starts only when both its tracks are finished, and there are no order overrides (D-054, D-090), except the owner's visual redesign (Sprint 17, S-066 to S-070), which is taken ahead of the remaining stories as soon as an implementer is free and its dependencies are merged (D-119). The owner has allowed moving to the next sprint without asking, so the orchestrator does not wait for approval. Sprints after the MVP do not start while any MVP story is `blocked`: report it in the Agent Log and stop (D-054).
 3. Set it to `doing` and create the branch.
 4. If nothing is eligible but some stories are `blocked`, go to "End of the cycle". A `todo` story whose dependency is `blocked` is set to `blocked` too, with the reason "depends on S-XXX" (D-054).
 
