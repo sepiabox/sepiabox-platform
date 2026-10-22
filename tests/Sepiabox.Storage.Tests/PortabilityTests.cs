@@ -2,7 +2,7 @@ namespace Sepiabox.Storage.Tests;
 
 /// <summary>
 /// The rule of D-051 for blob storage (S-050): the Azure Blob SDK is used by <c>Sepiabox.Storage.Azure</c>, by the
-/// composition roots and, until S-051, by <c>upload</c>; the rest of the code asks <see cref="IBlobStore"/>.
+/// composition roots; the rest of the code, <c>upload</c> included (S-051), asks <see cref="IBlobStore"/>.
 /// </summary>
 public sealed class PortabilityTests
 {
@@ -12,13 +12,16 @@ public sealed class PortabilityTests
 
     [Theory]
     [InlineData("Sepiabox.Pipeline")]
+    [InlineData("Sepiabox.Ingest")]
     [InlineData("Sepiabox.Worker")]
     [InlineData("Sepiabox.Web")]
-    public void No_source_file_outside_the_composition_root_uses_an_azure_storage_namespace(string project)
+    public void No_source_file_outside_the_composition_root_names_the_azure_sdk(string project)
     {
+        // The storage namespaces, the SDK's exception (ask IBlobStore.IsStoreFailure) and Azure.Core (its pipeline types).
+        string[] forbidden = ["Azure.Storage", "RequestFailedException", "Azure.Core"];
         var offending = SourceFiles(project)
             .Where(file => !s_hostWiring.Contains(Path.GetFileName(file), StringComparer.Ordinal) || Path.GetDirectoryName(file) != ProjectFolder(project))
-            .Where(file => File.ReadAllText(file).Contains("Azure.Storage", StringComparison.Ordinal))
+            .Where(file => forbidden.Any(word => File.ReadAllText(file).Contains(word, StringComparison.Ordinal)))
             .Select(file => Path.GetRelativePath(Root, file))
             .ToList();
 
