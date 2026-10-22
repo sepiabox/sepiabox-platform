@@ -2,6 +2,7 @@ using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using Azure.Identity;
 using Azure.Storage.Blobs;
 using Microsoft.AspNetCore.DataProtection;
+using Sepiabox.Storage;
 using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web;
@@ -20,10 +21,10 @@ public static partial class AzureSetup
     public const string KeyUriKey = "DataProtection:KeyUri";
 
     /// <summary>The key ring's blob in <see cref="StorageContainers.DataProtection"/>.</summary>
-    public const string KeyRingBlobName = "keys.xml";
+    public const string KeyRingBlobName = BlobLayout.KeyRingBlobName;
 
     /// <summary>Shared by every revision and replica, so they read each other's cookies.</summary>
-    public const string ApplicationName = "sepiabox-web";
+    public const string ApplicationName = BlobLayout.KeyRingApplicationName;
 
     // Owner-created secrets (sign-in, the access list, the Anthropic key) are read again this often, so a
     // change to Access--Emails reaches the web without a restart (D-048).

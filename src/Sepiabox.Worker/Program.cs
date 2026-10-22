@@ -1,6 +1,7 @@
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,7 @@ using Sepiabox.Worker.Faces;
 using Sepiabox.Worker.Importing;
 using Sepiabox.Worker.Occasions;
 using Sepiabox.Worker.Places;
+using Sepiabox.Worker.Sources;
 
 if (args is ["-h" or "--help" or "help"])
 {
@@ -69,6 +71,12 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
     {
         AddBlobStore(builder);
         builder.Services.AddSingleton<ManifestValidator>();
+    }
+
+    if (command.Action == WorkerAction.SyncGoogleDrive)
+    {
+        AddBlobStore(builder);
+        AddDriveSyncServices(builder);
     }
 
     if (command.Action is WorkerAction.ImportOnce or WorkerAction.ImportFromQueue or WorkerAction.PlacesRefresh or WorkerAction.GeoNamesUpdate)
@@ -177,6 +185,30 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         return sweep.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }
 
+    if (command.Action == WorkerAction.SyncGoogleDrive)
+    {
+        var configuration = services.GetRequiredService<IConfiguration>();
+        var client = OAuthClientFrom(configuration);
+        if (client is null)
+        {
+            // Nothing is connected without it (the web needs the same client), so there is nothing to sync.
+            Log.DriveSyncNotConfigured(logger);
+            return ExitCodes.Success;
+        }
+
+        var synced = await new DriveSync(
+                services.GetRequiredService<CatalogDbContext>(),
+                services.GetRequiredService<IBlobStore>(),
+                new GoogleDriveSyncClient(client.Value.Id, client.Value.Secret),
+                services.GetRequiredService<IDataProtectionProvider>(),
+                services.GetRequiredService<TimeProvider>(),
+                logger,
+                configuration.GetValue("Sync:MaxFilesPerRun", DriveSync.DefaultMaxFilesPerRun))
+            .RunAsync(cancellationToken);
+        Log.DriveSyncFinished(logger, synced.Accounts, synced.Staged, synced.Removed, synced.Skipped, synced.Reconnect, synced.Failed);
+        return synced.Failed == 0 ? ExitCodes.Success : ExitCodes.Failed;
+    }
+
     if (command.Action == WorkerAction.ImportFromQueue)
     {
         // The Azure implementation of the queue (D-051): Event Grid's events, delivered to Service Bus.
@@ -279,6 +311,33 @@ static async Task<int> ProcessFromQueueAsync(IServiceProvider services, ILogger 
     }
     return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
 }
+
+// The sync's two outside inputs (S-038): the Google OAuth client from Key Vault (Auth--Google--ClientId and ClientSecret, the owner's
+// secrets, as the web reads them), and the web's key ring, read-only, to unprotect the refresh tokens the web protected.
+static void AddDriveSyncServices(HostApplicationBuilder builder)
+{
+    if (!string.IsNullOrEmpty(builder.Configuration.GetConnectionString("vault")))
+    {
+        builder.Configuration.AddAzureKeyVaultSecrets("vault");
+    }
+
+    var protection = builder.Services.AddDataProtection().SetApplicationName(BlobLayout.KeyRingApplicationName);
+    if (builder.Configuration["DataProtection:KeyUri"] is { Length: > 0 } keyUri)
+    {
+        protection
+            .PersistKeysToAzureBlobStorage(services => services.GetRequiredService<BlobServiceClient>()
+                .GetBlobContainerClient(BlobLayout.DataProtectionContainer)
+                .GetBlobClient(BlobLayout.KeyRingBlobName))
+            .ProtectKeysWithAzureKeyVault(new Uri(keyUri), new DefaultAzureCredential())
+            // The job only reads the ring: it never makes a key, which the web does (D-062).
+            .DisableAutomaticKeyGeneration();
+    }
+}
+
+static (string Id, string Secret)? OAuthClientFrom(IConfiguration configuration) =>
+    configuration["Auth:Google:ClientId"] is { Length: > 0 } id && configuration["Auth:Google:ClientSecret"] is { Length: > 0 } secret
+        ? (id, secret)
+        : null;
 
 // The Azure implementation of IBlobStore (D-051), on the client Aspire registers.
 static void AddBlobStore(HostApplicationBuilder builder)

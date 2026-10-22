@@ -40,6 +40,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<ConnectedSource> ConnectedSources => Set<ConnectedSource>();
 
+    public DbSet<DriveFile> DriveFiles => Set<DriveFile>();
+
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options
@@ -221,8 +223,23 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             source.Property(s => s.AccountEmail).HasMaxLength(320);
             source.Property(s => s.EncryptedRefreshToken).HasColumnType("text");
             source.Property(s => s.Status).HasMaxLength(16);
+            source.Property(s => s.SyncChangesToken).HasMaxLength(500);
+            source.Property(s => s.SyncListToken).HasMaxLength(500);
+            source.Property(s => s.SyncListing).HasDefaultValue(false).ValueGeneratedNever();
             source.HasIndex(s => new { s.Type, s.AccountEmail }).IsUnique().HasDatabaseName("ix_connected_sources_account");
             source.ToTable(t => t.HasCheckConstraint("ck_connected_sources_status", "status IN ('connected', 'reconnect')"));
+        });
+
+        modelBuilder.Entity<DriveFile>(file =>
+        {
+            file.ToTable("drive_files");
+            file.HasKey(f => new { f.ConnectedSourceId, f.FileId });
+            file.Property(f => f.FileId).HasMaxLength(200);
+            file.Property(f => f.Path).HasColumnType("text");
+            file.Property(f => f.Checksum).HasMaxLength(64);
+            file.HasOne<ConnectedSource>().WithMany().HasForeignKey(f => f.ConnectedSourceId).OnDelete(DeleteBehavior.Cascade);
+            // A removed file is found by the path it made, to mark its source.
+            file.HasIndex(f => new { f.ConnectedSourceId, f.Path }).HasDatabaseName("ix_drive_files_path");
         });
 
         modelBuilder.Entity<Setting>(setting =>
