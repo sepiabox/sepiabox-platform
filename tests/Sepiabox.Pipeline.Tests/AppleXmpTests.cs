@@ -154,4 +154,15 @@ public sealed class AppleXmpTests
 
         Assert.Equal(new DateTime(2017, 1, 2, 3, 4, 5), facts.CapturedAt);
     }
+
+    [Theory]
+    [InlineData("-9.1", "N", "EW", false)]
+    [InlineData("-9.1", "E", "EW", true)]
+    [InlineData("-9.1", "W", "EW", false)]
+    [InlineData("9.1W", "E", "EW", true)]
+    [InlineData("9.1", "W", "EW", false)]
+    [InlineData("-9.1", null, "EW", false)]
+    [InlineData("nonsense", "E", "EW", false)]
+    public void Tells_a_conflict_from_a_value_that_is_only_odd(string value, string? reference, string hemispheres, bool conflict) =>
+        Assert.Equal(conflict, AppleXmp.Conflicts(value, reference, hemispheres));
 }
