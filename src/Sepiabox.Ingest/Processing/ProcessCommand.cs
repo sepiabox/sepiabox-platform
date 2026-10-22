@@ -1072,13 +1072,12 @@ public static class ProcessCommand
         }
     }
 
-    // Magick's errors about the file's own content: corrupt or truncated data, a codec that fails on it, or no codec that
-    // takes it (a file with a photo's name and no photo in it: the codecs are built in, so a newer Magick.NET is the only
-    // thing that would change that, and --retry-left-out is for it). Not the ones about the machine (limits, cache, policy)
-    // or the drive (open), which another run may get past.
+    // Magick's errors that say the file's own content is bad: corrupt data, and a codec that read it and refused it (a
+    // JPEG or TIFF marker that makes no sense is a coder error, as in a corrupt Canon CR2). Not a missing codec, a delegate
+    // that failed or a blob that could not be read: those can come from the machine or a drive that dropped out, would
+    // mark good files, and the sticky status would hide the cause. They stay failures, tried again on the next run.
     internal static bool IsDamage(MagickException ex) => ex is
-        MagickCorruptImageErrorException or MagickCorruptImageWarningException
-        or MagickDelegateErrorException or MagickMissingDelegateErrorException or MagickCoderErrorException or MagickBlobErrorException;
+        MagickCorruptImageErrorException or MagickCorruptImageWarningException or MagickCoderErrorException;
 
     private static void RemoveSource(string output, string sha256, ManifestSource source)
     {

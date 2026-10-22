@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using ImageMagick;
 using Json.Schema;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Manifests;
@@ -224,7 +225,7 @@ public class ProcessCommandTests
     {
         using var drive = new TempFolder();
         using var work = new TempFolder();
-        var broken = drive.Write("IMG_0001.jpg", RandomBytes(2_000));
+        var broken = drive.Write("IMG_0001.jpg", CorruptJpeg());
         drive.Write("good.jpg", TestPhotos.Porto());
 
         var first = Process(drive, work);
@@ -255,6 +256,35 @@ public class ProcessCommandTests
         Assert.Empty(changed.Problems);
         Assert.Equal(0, changed.DamagedEarlier);
         Assert.Equal(FileStatus.Done, StateOf(work, broken).Status);
+    }
+
+    // A real photo with its entropy-coded data overwritten: the decoder reads the header and refuses the rest.
+    private static byte[] CorruptJpeg()
+    {
+        var bytes = TestPhotos.Porto();
+        var random = new Random(7);
+        for (var i = bytes.Length / 3; i < bytes.Length - 2; i++)
+        {
+            bytes[i] = (byte)random.Next(256);
+        }
+
+        return bytes;
+    }
+
+    [Theory]
+    [InlineData(typeof(MagickCoderErrorException), true)]
+    [InlineData(typeof(MagickCorruptImageErrorException), true)]
+    [InlineData(typeof(MagickCorruptImageWarningException), true)]
+    [InlineData(typeof(MagickBlobErrorException), false)]
+    [InlineData(typeof(MagickMissingDelegateErrorException), false)]
+    [InlineData(typeof(MagickDelegateErrorException), false)]
+    [InlineData(typeof(MagickFileOpenErrorException), false)]
+    [InlineData(typeof(MagickResourceLimitErrorException), false)]
+    public void Takes_only_a_coder_or_corrupt_image_error_for_damage(Type exception, bool damage)
+    {
+        var thrown = (MagickException)Activator.CreateInstance(exception, "test")!;
+
+        Assert.Equal(damage, ProcessCommand.IsDamage(thrown));
     }
 
     private static FileState StateOf(TempFolder work, string path)
