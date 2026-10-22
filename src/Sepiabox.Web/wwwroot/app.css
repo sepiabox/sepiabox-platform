@@ -823,6 +823,7 @@ main {
 }
 
 .pill {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: var(--s-2);
@@ -888,7 +889,16 @@ main {
 .privacy > summary {
     display: inline;
     cursor: pointer;
+    color: var(--accent, var(--cyanotype));
     text-decoration: underline;
+}
+
+.privacy > summary::marker {
+    content: "\25B8  ";
+}
+
+.privacy[open] > summary::marker {
+    content: "\25BE  ";
 }
 
 .privacy[open] > span {

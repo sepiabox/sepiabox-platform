@@ -32,14 +32,14 @@
     @if (Questions.IsConfigured)
     {
         @* One line; what leaves the server is behind a disclosure, so the first screen on a phone shows photos (S-067). *@
-        <p class="hint muted">
+        <div class="hint muted">
             @Text["Ask_HintShort"]
             <details class="privacy"><summary>@Text["Ask_PrivacyLabel"]</summary><span>@Text["Ask_Hint"]</span></details>
-        </p>
+        </div>
     }
     else
     {
-        <p class="hint muted">@Text["Ask_NotConfigured"]</p>
+        <div class="hint muted">@Text["Ask_NotConfigured"]</div>
     }
     @if (_askMessage is not null)
     {
