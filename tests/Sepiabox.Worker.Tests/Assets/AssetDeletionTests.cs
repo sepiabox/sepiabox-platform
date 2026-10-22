@@ -40,7 +40,7 @@ public sealed class AssetDeletionTests(CatalogFixture fixture)
         Assert.Equal([World.Id(1), World.Id(2)], plan.Matched.Select(a => a.Id));
         Assert.Equal(["2019/a.jpg"], plan.Matched[0].SourcePaths);
         Assert.Equal(
-            [$"manifests/{World.Id(1)}.json", $"derivatives/{World.Id(1)}/preview-1280.webp", $"derivatives/{World.Id(1)}/thumb-256.webp", $"originals/{World.Id(1)}"],
+            new[] { $"manifests/{World.Id(1)}.json", $"derivatives/{World.Id(1)}/preview-1280.webp", $"derivatives/{World.Id(1)}/thumb-256.webp", $"originals/{World.Id(1)}" }.Order(StringComparer.Ordinal),
             plan.Matched[0].Blobs.Order(StringComparer.Ordinal));
         Assert.Equal(8, plan.BlobCount);
         Assert.Equal(2 * 2_345_678, plan.OriginalBytes);
@@ -169,9 +169,9 @@ public sealed class AssetDeletionTests(CatalogFixture fixture)
         var before = await world.SnapshotAsync();
         var racing = new Racing(world.Store, beforeManifestDelete: async inner =>
         {
-            // Someone uploads the same manifest again with a caption (a new version of the blob).
+            // Someone uploads the same manifest again with a changed width (a new version of the blob).
             var current = (await inner.ReadAsync(BlobLayout.ManifestsContainer, $"{World.Id(1)}.json"))!;
-            var changed = ManifestJson.Deserialize(current.Content.ToString()) with { Caption = "added meanwhile" };
+            var changed = ManifestJson.Deserialize(current.Content.ToString()) with { Width = 1234 };
             await inner.WriteAsync(BlobLayout.ManifestsContainer, $"{World.Id(1)}.json", BinaryData.FromString(ManifestJson.Serialize(changed)), "application/json", BlobWriteCondition.Always);
         });
         var plan = await world.Deletion(racing).PlanAsync(Wrong, default);
@@ -180,8 +180,10 @@ public sealed class AssetDeletionTests(CatalogFixture fixture)
 
         Assert.Equal(0, first.Deleted);
         Assert.Contains("changed while", Assert.Single(first.Kept).Reason, StringComparison.Ordinal);
-        Assert.Equal(before.Rows, (await world.SnapshotAsync()).Rows);
-        Assert.Equal(before.Blobs, (await world.SnapshotAsync()).Blobs.Where(b => !b.StartsWith("manifests/", StringComparison.Ordinal)).ToList().Concat(before.Blobs.Where(b => b.StartsWith("manifests/", StringComparison.Ordinal))).Order(StringComparer.Ordinal).ToList());
+        var after = await world.SnapshotAsync();
+        Assert.Equal(before.Rows, after.Rows);
+        // Every blob is still there (the manifest has a new version, which is the change that was raced in).
+        Assert.Equal(before.Blobs, after.Blobs);
 
         var rerun = await world.Deletion().DeleteAsync(await world.Deletion().PlanAsync(Wrong, default), default);
 
@@ -326,7 +328,8 @@ public sealed class AssetDeletionTests(CatalogFixture fixture)
         }
     }
 
-    private sealed record Snapshot(List<string> Rows, List<string> Blobs);
+    // Compared by value: the rows and the blobs, one per line.
+    private sealed record Snapshot(string Rows, string Blobs);
 
     private sealed class World : IAsyncDisposable
     {
@@ -457,7 +460,7 @@ public sealed class AssetDeletionTests(CatalogFixture fixture)
                 }
             }
 
-            return new Snapshot(rows, [.. blobs.Order(StringComparer.Ordinal)]);
+            return new Snapshot(string.Join('\n', rows), string.Join('\n', blobs.Order(StringComparer.Ordinal)));
         }
 
         public async ValueTask DisposeAsync() => await Db.DisposeAsync();
