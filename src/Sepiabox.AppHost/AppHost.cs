@@ -97,6 +97,9 @@ else
     // The faces job writes manifests (S-022): its own identity, so the import jobs stay readers.
     var facesIdentity = builder.AddAzureUserAssignedIdentity("faces-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    // The process job writes derivatives, originals and manifests and empties incoming (S-036): its own identity.
+    var processIdentity = builder.AddAzureUserAssignedIdentity("process-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
 
     // The admin job (S-057, D-108) deletes blobs, which no other identity may: its own, with the write role on storage.
     var adminIdentity = builder.AddAzureUserAssignedIdentity("admin-identity")
@@ -140,11 +143,14 @@ else
     var serviceBus = builder.AddAzureServiceBus("servicebus")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureServiceBus);
     serviceBus.AddServiceBusQueue("manifests-queue", AzureInfrastructure.ManifestsQueueName);
+    serviceBus.AddServiceBusQueue("incoming-queue", AzureInfrastructure.IncomingQueueName);
     builder.AddBicepTemplate("events", "Bicep/events.bicep")
         .WithParameter("storageName", storage.GetOutput("name"))
         .WithParameter("serviceBusName", serviceBus.GetOutput("name"))
         .WithParameter("queueName", AzureInfrastructure.ManifestsQueueName)
-        .WithParameter("importPrincipalId", importIdentity.Resource.PrincipalId);
+        .WithParameter("incomingQueueName", AzureInfrastructure.IncomingQueueName)
+        .WithParameter("importPrincipalId", importIdentity.Resource.PrincipalId)
+        .WithParameter("processPrincipalId", processIdentity.Resource.PrincipalId);
 
     // The namespace by host name rather than a reference, which would grant Aspire's default roles on the
     // whole namespace; the import identity's role on the queue alone is in events.bicep.
@@ -183,6 +189,22 @@ else
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureFacesJob);
 
+    // Files that arrive in `incoming` from a cloud source (S-036, D-107): processed by the worker from the Dockerfile that
+    // gives it FFmpeg and the models, an event-driven job like the import. Its storage roles are on the four containers
+    // it touches, in access.bicep; it connects to the catalog as the application role (it only reads the face setting).
+    builder.AddDockerfile(AzureInfrastructure.ProcessResourceName, "../..", "infra/worker/Dockerfile")
+        .WithArgs("process", "--from-queue")
+        .WithReference(blobs)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithEnvironment("ServiceBus__Namespace", AzureInfrastructure.ServiceBusHostName)
+        .WithEnvironment("ServiceBus__Queue", AzureInfrastructure.IncomingQueueName)
+        .WithEnvironment("ServiceBus__MaxDeliveryCount", AzureInfrastructure.IncomingMaxDeliveryCount.ToString(CultureInfo.InvariantCulture))
+        // Azure has the Cold tier; Azurite does not (D-004).
+        .WithEnvironment("Processing__OriginalsCold", "true")
+        .WithAzureUserAssignedIdentity(processIdentity)
+        .WithRoleAssignments(storage, [])
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureProcessJob(processIdentity.Resource.Id));
+
     // Administrative commands, started by hand (S-057, D-108): `assets delete --source <name>`. The arguments here only
     // make a run without any fail with a usage message; the real ones are given when the job is started. It connects as the
     // application role, which may delete rows but never change the schema. Its identity writes only the manifests, derivatives
@@ -218,6 +240,7 @@ else
         .WithParameter("vaultName", vault.GetOutput("name"))
         .WithParameter("webPrincipalId", webIdentity.Resource.PrincipalId)
         .WithParameter("facesPrincipalId", facesIdentity.Resource.PrincipalId)
+        .WithParameter("processPrincipalId", processIdentity.Resource.PrincipalId)
         .WithParameter("adminPrincipalId", adminIdentity.Resource.PrincipalId)
         .WithParameter("uploaderPrincipalIds", uploaders);
 

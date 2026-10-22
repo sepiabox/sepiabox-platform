@@ -16,6 +16,9 @@ public abstract class BlobStoreContract
     /// <summary>The store under test, with <see cref="Container"/> created.</summary>
     protected abstract IBlobStore Store { get; }
 
+    /// <summary>Makes another container exist, for the tests that copy between two.</summary>
+    protected abstract Task CreateContainerAsync(string name);
+
     [Fact]
     public async Task A_missing_blob_reads_as_null()
     {
@@ -37,6 +40,50 @@ public abstract class BlobStoreContract
         Assert.Equal(written.Version, read.Version);
         Assert.False(string.IsNullOrEmpty(read.Version));
         Assert.InRange(read.LastModified, before, DateTimeOffset.UtcNow.AddMinutes(5));
+    }
+
+    [Fact]
+    public async Task Writes_and_reads_back_a_blobs_metadata()
+    {
+        var metadata = new Dictionary<string, string> { ["sourcetype"] = "gdrive", ["path"] = "Fam%C3%ADlia/a.jpg" };
+
+        var written = await Store.WriteAsync(Container, "m.jpg", BinaryData.FromBytes([1, 2, 3]), "image/jpeg", BlobWriteCondition.Always, metadata);
+        var read = await Store.ReadAsync(Container, "m.jpg");
+
+        Assert.Equal(BlobWriteStatus.Written, written.Status);
+        Assert.Equal(
+            metadata.OrderBy(p => p.Key),
+            read!.Metadata.Select(p => KeyValuePair.Create(p.Key.ToLowerInvariant(), p.Value)).OrderBy(p => p.Key));
+        await Write("plain.json", "x");
+        Assert.Empty((await Store.ReadAsync(Container, "plain.json"))!.Metadata);
+    }
+
+    [Fact]
+    public async Task Streams_a_blob_into_a_stream_and_says_what_it_is()
+    {
+        await Store.WriteAsync(
+            Container, "d.bin", BinaryData.FromBytes([9, 8, 7, 6]), "application/octet-stream", BlobWriteCondition.Always,
+            new Dictionary<string, string> { ["mode"] = "custody" });
+        using var target = new MemoryStream();
+
+        var info = await Store.DownloadToAsync(Container, "d.bin", target);
+
+        Assert.NotNull(info);
+        Assert.Equal(new byte[] { 9, 8, 7, 6 }, target.ToArray());
+        Assert.Equal(4, info.Length);
+        Assert.Equal("application/octet-stream", info.ContentType);
+        Assert.Equal("custody", info.Metadata.Single(p => string.Equals(p.Key, "mode", StringComparison.OrdinalIgnoreCase)).Value);
+        Assert.Equal((await Store.ReadAsync(Container, "d.bin"))!.Version, info.Version);
+    }
+
+    [Fact]
+    public async Task Downloading_a_blob_that_is_not_there_gives_null_and_writes_nothing()
+    {
+        using var target = new MemoryStream();
+
+        Assert.Null(await Store.DownloadToAsync(Container, "nothing.bin", target));
+        Assert.Null(await Store.DownloadToAsync("no-such-container", "nothing.bin", target));
+        Assert.Equal(0, target.Length);
     }
 
     [Fact]
@@ -67,6 +114,22 @@ public abstract class BlobStoreContract
 
         Assert.Null(await Store.ReadAsync(Container, "never.bin"));
         Assert.Empty(await ToListAsync(Store.ListAsync(Container, "never")));
+    }
+
+    [Fact]
+    public async Task A_staged_upload_commits_with_metadata_in_the_same_call_that_makes_the_blob()
+    {
+        var metadata = new Dictionary<string, string> { ["sourcetype"] = "gdrive", ["mode"] = "custody" };
+        await using var upload = Store.BeginUpload(Container, "big.mp4");
+        await upload.AppendAsync(new byte[] { 1, 2, 3 });
+
+        await upload.CommitAsync("video/mp4", BlobStorageClass.Default, metadata);
+
+        var read = await Store.ReadAsync(Container, "big.mp4");
+        Assert.Equal(
+            metadata.OrderBy(p => p.Key),
+            read!.Metadata.Select(p => KeyValuePair.Create(p.Key.ToLowerInvariant(), p.Value)).OrderBy(p => p.Key));
+        Assert.Equal(3, await Store.GetSizeAsync(Container, "big.mp4"));
     }
 
     [Fact]
@@ -423,6 +486,12 @@ public sealed class InMemoryBlobStoreTests : BlobStoreContract
 
     protected override IBlobStore Store => Memory;
 
+    protected override Task CreateContainerAsync(string name)
+    {
+        Memory.CreateContainer(name);
+        return Task.CompletedTask;
+    }
+
     [Fact]
     public async Task Remembers_the_content_type_a_blob_was_written_with()
     {
@@ -465,6 +534,7 @@ public sealed class AzureBlobStoreTests : BlobStoreContract, IAsyncLifetime, IDi
         .Build();
 
     private AzureBlobStore? _store;
+    private BlobServiceClient? _service;
 
     protected override IBlobStore Store => _store ?? throw new InvalidOperationException("Azurite is not started.");
 
@@ -473,8 +543,12 @@ public sealed class AzureBlobStoreTests : BlobStoreContract, IAsyncLifetime, IDi
         await _azurite.StartAsync();
         var service = new BlobServiceClient(_azurite.GetConnectionString());
         await service.GetBlobContainerClient(Container).CreateAsync();
+        _service = service;
         _store = new AzureBlobStore(service);
     }
+
+    protected override async Task CreateContainerAsync(string name) =>
+        await _service!.GetBlobContainerClient(name).CreateIfNotExistsAsync();
 
     public async Task DisposeAsync() => await _azurite.DisposeAsync();
 

@@ -90,6 +90,23 @@ public static class AzureInfrastructure
     /// <summary>A message that fails this many times goes to the dead-letter queue (docs/operations.md).</summary>
     public const int ManifestsMaxDeliveryCount = 5;
 
+    /// <summary>The event-driven job that processes the files that arrive in <c>incoming</c> (S-036, D-107).</summary>
+    public const string ProcessJobName = "sepiabox-process";
+
+    /// <summary>The AppHost resource behind <see cref="ProcessJobName"/>: a container built from <c>infra/worker/Dockerfile</c>.</summary>
+    public const string ProcessResourceName = "process";
+
+    /// <summary>The queue Event Grid sends <c>incoming</c> events to (S-036).</summary>
+    public const string IncomingQueueName = "incoming";
+
+    /// <summary>A message that fails this many times goes to the dead-letter queue (S-036), as for the manifests.</summary>
+    public const int IncomingMaxDeliveryCount = 5;
+
+    /// <summary>Days after which a blob left in <c>incoming</c> is deleted by a lifecycle rule (S-036).</summary>
+    public const int IncomingRetentionDays = 30;
+
+    private const string IncomingContainer = "incoming";
+
     /// <summary>Created by sepiabox-infra (S-031) with the daily cap; Application Insights writes to it.</summary>
     public const string LogAnalyticsWorkspaceName = "sepiabox-logs";
 
@@ -176,6 +193,10 @@ public static class AzureInfrastructure
     // KEDA checks the queue this often; a manifest waits at most about this long before the job starts.
     private const int ImportPollingSeconds = 30;
 
+    // A video's transcode takes minutes, and a queue of files hours; the job renews the message's lock meanwhile. An hour
+    // bounds a stuck run, and the messages it leaves come back.
+    private const int ProcessTimeoutSeconds = 3600;
+
     // The migrations of a catalog this size take seconds; ten minutes is plenty and bounds a stuck run.
     private const int MigrateTimeoutSeconds = 600;
 
@@ -256,6 +277,37 @@ public static class AzureInfrastructure
             IsEnabled = true,
             Days = BlobSoftDeleteDays,
         };
+
+        // A file in incoming is normally deleted by the job that processes it; what is left after a month is a problem
+        // blob nobody dealt with (S-036), and it is a copy of a file that is still at its source.
+        infrastructure.Add(new StorageAccountManagementPolicy("lifecycle")
+        {
+            Parent = account,
+            Rules =
+            {
+                new ManagementPolicyRule
+                {
+                    Name = "delete-old-incoming",
+                    RuleType = ManagementPolicyRuleType.Lifecycle,
+                    IsEnabled = true,
+                    Definition = new ManagementPolicyDefinition
+                    {
+                        Filters = new ManagementPolicyFilter
+                        {
+                            BlobTypes = { "blockBlob" },
+                            PrefixMatch = { IncomingContainer + "/" },
+                        },
+                        Actions = new ManagementPolicyAction
+                        {
+                            BaseBlob = new ManagementPolicyBaseBlob
+                            {
+                                Delete = new DateAfterModification { DaysAfterModificationGreaterThan = IncomingRetentionDays },
+                            },
+                        },
+                    },
+                },
+            },
+        });
 
         foreach (var name in BlobContainers)
         {
@@ -371,12 +423,64 @@ public static class AzureInfrastructure
         // Basic has queues and dead-lettering, which is all the import needs, at a few cents a month (D-008).
         serviceBus.Sku = new ServiceBusSku { Name = ServiceBusSkuName.Basic, Tier = ServiceBusSkuTier.Basic };
 
-        var queue = infrastructure.GetProvisionableResources().OfType<ServiceBusQueue>().Single();
-        queue.MaxDeliveryCount = ManifestsMaxDeliveryCount;
-        // The longest a message is locked while its manifest is imported, the most Service Bus allows.
-        queue.LockDuration = TimeSpan.FromMinutes(5);
-        queue.DeadLetteringOnMessageExpiration = true;
+        // The manifests queue (S-033) and the incoming queue (S-036): the same delivery count and lock.
+        foreach (var queue in infrastructure.GetProvisionableResources().OfType<ServiceBusQueue>())
+        {
+            queue.MaxDeliveryCount = ManifestsMaxDeliveryCount;
+            // The longest a message is locked while its manifest is imported or its file processed, the most Service Bus
+            // allows; the jobs renew it.
+            queue.LockDuration = TimeSpan.FromMinutes(5);
+            queue.DeadLetteringOnMessageExpiration = true;
+        }
     }
+
+    /// <summary>
+    /// The event-driven processing of cloud files (S-036): KEDA starts one execution when the incoming queue has a
+    /// message, with the process identity, and the execution processes until the queue is empty. One at a time: two files
+    /// with the same content would race on their manifest, which the store merges but only as fast as it can retry.
+    /// </summary>
+    public static Action<AzureResourceInfrastructure, ContainerAppJob> ConfigureProcessJob(BicepOutputReference processIdentityId) =>
+        (infrastructure, job) =>
+        {
+            ArgumentNullException.ThrowIfNull(job);
+            job.Name = ProcessJobName;
+            job.Location = Region;
+
+            var configuration = job.Configuration;
+            configuration.TriggerType = ContainerAppJobTriggerType.Event;
+            configuration.ReplicaTimeout = ProcessTimeoutSeconds;
+            // A failed run is not repeated at once: its messages come back by themselves, up to the delivery count.
+            configuration.ReplicaRetryLimit = 0;
+            configuration.EventTriggerConfig = new EventTriggerConfiguration
+            {
+                Parallelism = 1,
+                ReplicaCompletionCount = 1,
+                Scale = new ContainerAppJobScale
+                {
+                    MinExecutions = 0,
+                    MaxExecutions = 1,
+                    PollingIntervalInSeconds = ImportPollingSeconds,
+                    Rules =
+                    {
+                        new ContainerAppJobScaleRule
+                        {
+                            Name = "incoming-queue",
+                            JobScaleRuleType = "azure-servicebus",
+                            Metadata = new ObjectExpression(
+                                new PropertyExpression("namespace", new StringLiteralExpression(ServiceBusName)),
+                                new PropertyExpression("queueName", new StringLiteralExpression(IncomingQueueName)),
+                                new PropertyExpression("messageCount", new StringLiteralExpression("1"))),
+                            Identity = processIdentityId.AsProvisioningParameter(infrastructure, "process_identity_id"),
+                        },
+                    },
+                },
+            };
+
+            // Decoding photos, transcoding a video with FFmpeg and running the models: more than an import.
+            var container = job.Template.Containers.Single().Value
+                ?? throw new InvalidOperationException("The process job has no container.");
+            container.Resources = new AppContainerResources { Cpu = 2.0, Memory = "4Gi" };
+        };
 
     /// <summary>
     /// The event-driven import (S-033): KEDA starts one execution when the queue has a message, with the import
