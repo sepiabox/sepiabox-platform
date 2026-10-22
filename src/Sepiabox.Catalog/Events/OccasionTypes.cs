@@ -14,6 +14,12 @@ public static class OccasionTypes
 {
     public const string Trip = "trip";
 
+    /// <summary>
+    /// The neutral prompt (D-094): in the softmax with the types' prompts, so a photo of a street or a landscape can go to
+    /// it rather than to whichever type is least wrong, and never a type itself.
+    /// </summary>
+    public const string DistractorPrompt = "a photo";
+
     private static readonly Lazy<IReadOnlyList<OccasionTypeDefinition>> s_clip = new(Load);
 
     /// <summary>The types told by the photos, in the file's order (which breaks ties).</summary>

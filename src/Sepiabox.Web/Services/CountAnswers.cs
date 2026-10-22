@@ -6,7 +6,14 @@ using Sepiabox.Web.Localization;
 namespace Sepiabox.Web.Services;
 
 /// <summary>One row of a ranking: its label in the current culture, its count, and the search for its items (null when none).</summary>
-public sealed record CountRow(string Label, int Count, SearchQuery? Items);
+public sealed record CountRow(string Label, int Count, SearchQuery? Items, long? Bytes = null)
+{
+    /// <summary>Where the row goes when it is not a search (the occasions page, S-024); it wins over <see cref="Items"/>.</summary>
+    public string? Href { get; init; }
+}
+
+/// <summary>Where "Show them" under a count goes, and what it says: <see cref="Key"/> is a resource.</summary>
+public sealed record ShowLink(string Href, string Key);
 
 /// <summary>
 /// The words of a counting answer (S-026) in the current culture (D-050): "312 videos in 2019" in English,
@@ -23,7 +30,7 @@ public static class CountAnswers
         var events = query.Aggregate?.Count == SearchCount.Events;
         var noun = (events ? "Count_Events" : Noun(query.Filters)) + (count == 1 ? "_One" : "_Other");
         var ofType = events && query.Filters.EventTypes is { } types
-            ? text["Count_OfType", string.Join(", ", types.Select(t => text.EventTypeLabel(t)))].Value
+            ? text[types.Count == 1 ? "Count_OfType" : "Count_OfTypes", string.Join(", ", types.Select(t => text.EventTypeLabel(t)))].Value
             : string.Empty;
         return text[noun, count.ToString("N0", CultureInfo.CurrentCulture)] + ofType + About(query.Filters, text);
     }
@@ -64,11 +71,15 @@ public static class CountAnswers
         ArgumentNullException.ThrowIfNull(text);
         var list = query with { Aggregate = null };
         var f = list.Filters;
-        return [.. count.Groups.Select(g => query.Aggregate?.GroupBy switch
+        return [.. count.Groups.Select(g => RowWith(g, query.Aggregate?.GroupBy switch
         {
             SearchGroupBy.Year when Number(g.Key) is { } year => new CountRow(g.Key!, g.Count, list with { Filters = f with { Years = [year] } }),
             SearchGroupBy.Month when Number(g.Key) is { } month => new CountRow(MonthName(month), g.Count, list with { Filters = f with { Months = [month] } }),
             // Each type's photos; the occasions without a type have no filter to say so.
+            // Counted occasions go to the occasions of that type when that says what was counted (nothing else filtered),
+            // otherwise to the photos of those occasions.
+            SearchGroupBy.EventType when g.Key is not null && OnOccasionsPage(f with { EventTypes = null }) => new CountRow(
+                text.EventTypeLabel(g.Key), g.Count, null) { Href = "occasions?type=" + Uri.EscapeDataString(g.Key) },
             SearchGroupBy.EventType when g.Key is not null => new CountRow(
                 text.EventTypeLabel(g.Key), g.Count, list with { Filters = f with { EventTypes = [g.Key] } }),
             SearchGroupBy.EventType => new CountRow(text["Count_NoType"], g.Count, null),
@@ -83,8 +94,37 @@ public static class CountAnswers
                 Filters = f with { People = (f.People ?? new PeopleFilter()) with { All = [.. f.People?.All ?? [], g.Key!] } },
             }),
             _ => new CountRow(g.Key ?? string.Empty, g.Count, list with { Filters = f with { Sources = [g.Key!] } }),
-        })];
+        }))];
     }
+
+    // The size comes with the group when the query asked for it (S-028).
+    private static CountRow RowWith(CountGroup group, CountRow row) => row with { Bytes = group.Bytes };
+
+    /// <summary>"Used by 312 videos in 2019": what the big size is the size of.</summary>
+    public static string SizeSentence(SearchQuery query, int count, IStringLocalizer<SharedResource> text) =>
+        text["Count_TakenBy", Sentence(query, count, text)];
+
+    /// <summary>
+    /// The link under a count (S-024): the photos it counts; for a count of occasions, the occasions page when it can say
+    /// what was counted (no filter, or one type), otherwise the photos in those occasions.
+    /// </summary>
+    public static ShowLink Show(SearchQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        var photos = new ShowLink(SearchLinks.Timeline(query with { Aggregate = null }), "Count_ShowItems");
+        if (query.Aggregate?.Count != SearchCount.Events)
+        {
+            return photos;
+        }
+
+        var f = query.Filters;
+        return OnOccasionsPage(f with { EventTypes = null }) && f.EventTypes is null or [_]
+            ? new ShowLink(f.EventTypes is [var type] ? "occasions?type=" + Uri.EscapeDataString(type) : "occasions", "Count_ShowOccasions")
+            : photos with { Key = "Count_ShowPhotos" };
+    }
+
+    // The occasions page filters by type only: a count with any other filter cannot be shown there.
+    private static bool OnOccasionsPage(SearchFilters otherFilters) => otherFilters.IsEmpty;
 
     /// <summary>"3 items have no date and cannot match the dates asked."</summary>
     public static string Undated(int count, IStringLocalizer<SharedResource> text)

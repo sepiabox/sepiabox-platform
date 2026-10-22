@@ -907,6 +907,86 @@
   <data name="Chip_SimilarTo" xml:space="preserve">
     <value>Similar to a photo</value>
   </data>
+  <data name="Layout_Storage" xml:space="preserve">
+    <value>Storage</value>
+  </data>
+  <data name="Storage_Heading" xml:space="preserve">
+    <value>Storage</value>
+  </data>
+  <data name="Storage_Intro" xml:space="preserve">
+    <value>What the library takes up and where its photos and videos come from. Sizes are those of the originals.</value>
+  </data>
+  <data name="Storage_Empty" xml:space="preserve">
+    <value>The library has no photos or videos yet.</value>
+  </data>
+  <data name="Storage_Totals" xml:space="preserve">
+    <value>Totals by kind and year</value>
+  </data>
+  <data name="Storage_Year" xml:space="preserve">
+    <value>Year</value>
+  </data>
+  <data name="Storage_Total" xml:space="preserve">
+    <value>Total</value>
+  </data>
+  <data name="Storage_OneSource" xml:space="preserve">
+    <value>Only in one source</value>
+  </data>
+  <data name="Storage_Summary_One" xml:space="preserve">
+    <value>{0} item, {1}</value>
+    <comment>{0} is the number of items, {1} their size.</comment>
+  </data>
+  <data name="Storage_Summary_Other" xml:space="preserve">
+    <value>{0} items, {1}</value>
+    <comment>{0} is the number of items, {1} their size.</comment>
+  </data>
+  <data name="Storage_NoneOneSource" xml:space="preserve">
+    <value>No items are only in one source.</value>
+  </data>
+  <data name="Storage_Several" xml:space="preserve">
+    <value>In several sources</value>
+  </data>
+  <data name="Storage_NoneSeveral" xml:space="preserve">
+    <value>No items are in several sources.</value>
+  </data>
+  <data name="Storage_ShowThem" xml:space="preserve">
+    <value>Show these items</value>
+  </data>
+  <data name="Storage_FirstShown" xml:space="preserve">
+    <value>Showing the first {0} items.</value>
+  </data>
+  <data name="Storage_InSources" xml:space="preserve">
+    <value>In: {0}</value>
+    <comment>{0} is a list of source names.</comment>
+  </data>
+  <data name="Storage_Largest" xml:space="preserve">
+    <value>The 20 largest videos</value>
+  </data>
+  <data name="Storage_NoVideos" xml:space="preserve">
+    <value>There are no videos yet.</value>
+  </data>
+  <data name="Chip_SourceOne" xml:space="preserve">
+    <value>In only one source</value>
+  </data>
+  <data name="Chip_SourceEq" xml:space="preserve">
+    <value>In {0} sources</value>
+  </data>
+  <data name="Chip_SourceAtLeast" xml:space="preserve">
+    <value>In {0} or more sources</value>
+  </data>
+  <data name="Chip_Size" xml:space="preserve">
+    <value>Size of originals</value>
+  </data>
+  <data name="Chip_SizeBy" xml:space="preserve">
+    <value>Size of originals by {0}</value>
+    <comment>{0} is year, month, kind, city or source.</comment>
+  </data>
+  <data name="Count_Size" xml:space="preserve">
+    <value>Size of originals</value>
+  </data>
+  <data name="Count_TakenBy" xml:space="preserve">
+    <value>Space used by {0}</value>
+    <comment>{0} is a count such as "312 videos in 2019".</comment>
+  </data>
   <data name="Format_Occasion_Day" xml:space="preserve">
     <value>MMM d, yyyy</value>
     <comment>A whole day in an occasion's title, such as "Dec 14, 2024": a .NET date format; month names come from the culture, abbreviated and without a trailing dot.</comment>
@@ -1035,5 +1115,39 @@
   </data>
   <data name="Occasions_NoneOfType" xml:space="preserve">
     <value>There are no occasions of this type.</value>
+  </data>
+  <data name="Storage_ShowOneSource" xml:space="preserve">
+    <value>Show these items, only in one source</value>
+  </data>
+  <data name="Storage_ShowSeveral" xml:space="preserve">
+    <value>Show these items, in several sources</value>
+  </data>
+  <data name="Storage_YearLink" xml:space="preserve">
+    <value>Photos and videos from {0}</value>
+  </data>
+  <data name="Storage_PhotosHeader" xml:space="preserve">
+    <value>Photos</value>
+  </data>
+  <data name="Storage_PhotosSize" xml:space="preserve">
+    <value>Photos size</value>
+  </data>
+  <data name="Storage_VideosHeader" xml:space="preserve">
+    <value>Videos</value>
+  </data>
+  <data name="Storage_VideosSize" xml:space="preserve">
+    <value>Videos size</value>
+  </data>
+  <data name="Count_OfTypes" xml:space="preserve">
+    <value> of types {0}</value>
+    <comment>Appended to a count of occasions of several types: " of types Wedding, Trip".</comment>
+  </data>
+  <data name="Count_ShowOccasions" xml:space="preserve">
+    <value>Show the occasions</value>
+  </data>
+  <data name="Count_ShowPhotos" xml:space="preserve">
+    <value>Show the photos</value>
+  </data>
+  <data name="Occasions_ShowAll" xml:space="preserve">
+    <value>Show all occasions</value>
   </data>
 </root>

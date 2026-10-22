@@ -131,6 +131,8 @@ public sealed class QuestionService(
         !SearchQueryJson.TryParse(json, out var query, out var error) ? error
         : query.Filters.SimilarTo is not null ? "filters.similarTo is not part of an answer: a question cannot name an asset."
         : query.Filters.EventIds is not null ? "filters.eventIds is not part of an answer: a question cannot name an occasion."
+        : query.Filters.SourceCount is not null ? "filters.sourceCount is not part of an answer yet: the storage page shows it."
+        : query.Aggregate?.Sum is not null ? "aggregate.sum is not part of an answer yet: the storage page shows sizes."
         : null;
 
     /// <summary>

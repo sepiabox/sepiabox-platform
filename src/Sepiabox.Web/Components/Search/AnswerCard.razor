@@ -5,22 +5,34 @@
 <section class="answer" aria-label="@Text["Count_Label"]">
     @if (Query.Aggregate?.GroupBy is null)
     {
-        <p class="number">@Count.Total.ToString("N0", CultureInfo.CurrentCulture)</p>
-        <p class="sentence">@CountAnswers.Sentence(Query, Count.Total, Text)</p>
+        @if (Count.Bytes is { } bytes)
+        {
+            <p class="number">@ByteSizes.Format(bytes)</p>
+            <p class="sentence">@CountAnswers.SizeSentence(Query, Count.Total, Text)</p>
+        }
+        else
+        {
+            <p class="number">@Count.Total.ToString("N0", CultureInfo.CurrentCulture)</p>
+            <p class="sentence">@CountAnswers.Sentence(Query, Count.Total, Text)</p>
+        }
     }
     else
     {
         <h2>@CountAnswers.Heading(Query, Text)</h2>
         <table class="ranking">
             <thead>
-                <tr><th scope="col">@Text["Count_Group"]</th><th scope="col">@Text["Count_Count"]</th></tr>
+                <tr><th scope="col">@Text["Count_Group"]</th><th scope="col">@Text["Count_Count"]</th>@if (Count.Bytes is not null){<th scope="col">@Text["Count_Size"]</th>}</tr>
             </thead>
             <tbody>
                 @foreach (var row in CountAnswers.Rows(Query, Count, Text))
                 {
                     <tr>
                         <th scope="row">
-                            @if (row.Items is { } items)
+                            @if (row.Href is { } href)
+                            {
+                                <a href="@href">@row.Label</a>
+                            }
+                            else if (row.Items is { } items)
                             {
                                 <a href="@SearchLinks.Timeline(items)">@row.Label</a>
                             }
@@ -30,6 +42,10 @@
                             }
                         </th>
                         <td>@row.Count.ToString("N0", CultureInfo.CurrentCulture)</td>
+                        @if (Count.Bytes is not null)
+                        {
+                            <td>@ByteSizes.Format(row.Bytes ?? 0)</td>
+                        }
                     </tr>
                 }
             </tbody>
@@ -44,7 +60,8 @@
         <p class="sentence">@CountAnswers.Sentence(Query, Count.Total, Text)</p>
     }
 
-    <p><a class="show" href="@SearchLinks.Timeline(Query with { Aggregate = null })">@Text["Count_ShowItems"]</a></p>
+    @{ var show = CountAnswers.Show(Query); }
+    <p><a class="show" href="@show.Href">@Text[show.Key]</a></p>
     @if (Count.Undated is > 0 and var undated)
     {
         <p class="undated">

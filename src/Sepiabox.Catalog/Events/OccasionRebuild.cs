@@ -23,8 +23,8 @@ public sealed record OccasionRebuildResult(int Occasions, int Assets, int Create
 /// </remarks>
 public sealed class OccasionRebuild(CatalogDbContext db)
 {
-    // Any constant shared by every rebuild.
-    private const long AdvisoryLockKey = 0x5E91AB0D;
+    /// <summary>Any constant shared by every rebuild and every classify, which change the same rows (S-023, S-024).</summary>
+    internal const long AdvisoryLockKey = 0x5E91AB0D;
 
     private const int BatchSize = 5000;
 

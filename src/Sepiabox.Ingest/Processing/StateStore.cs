@@ -80,6 +80,15 @@ public sealed class StateStore : IDisposable
         AddColumnIfMissing("metadata_version", "INTEGER");
     }
 
+    /// <summary>
+    /// Records the work folder's mode when none is recorded yet (S-063); a recorded mode is never changed. A work folder
+    /// made before S-063 gets <see cref="WorkFolderMode.KeepsOriginals"/>, which is what it always did.
+    /// </summary>
+    public void RecordMode(WorkFolderMode mode) => WorkFolderModes.Record(_connection, mode);
+
+    /// <summary>The recorded mode (<see cref="WorkFolderMode.KeepsOriginals"/> when none is).</summary>
+    public WorkFolderMode Mode => WorkFolderModes.Read(_connection);
+
     public FileState? Get(string path)
     {
         using var command = _connection.CreateCommand();

@@ -8,6 +8,25 @@ namespace Sepiabox.Ingest.Tests;
 public class StateStoreTests
 {
     [Fact]
+    public void Never_changes_a_recorded_mode()
+    {
+        using var folder = new TempFolder();
+        var database = Path.Combine(folder.Path, "state.db");
+
+        using (var store = new StateStore(database))
+        {
+            Assert.Equal(WorkFolderMode.KeepsOriginals, store.Mode);
+            store.RecordMode(WorkFolderMode.IndexOnly);
+            store.RecordMode(WorkFolderMode.KeepsOriginals);
+            Assert.Equal(WorkFolderMode.IndexOnly, store.Mode);
+        }
+
+        using var reopened = new StateStore(database);
+        reopened.RecordMode(WorkFolderMode.KeepsOriginals);
+        Assert.Equal(WorkFolderMode.IndexOnly, reopened.Mode);
+    }
+
+    [Fact]
     public void Returns_null_for_a_file_it_never_saw()
     {
         using var folder = new TempFolder();

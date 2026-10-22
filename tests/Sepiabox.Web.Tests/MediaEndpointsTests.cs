@@ -85,7 +85,7 @@ public sealed class MediaEndpointsTests
     }
 
     [Theory]
-    [InlineData("preview-2048")]
+    [InlineData("preview-4096")]
     [InlineData("..")]
     [InlineData("original.jpg")]
     public async Task Only_known_derivative_names_are_served(string name)

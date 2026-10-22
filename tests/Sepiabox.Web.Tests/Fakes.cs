@@ -69,7 +69,7 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
         Task.FromResult(Assets.GetValueOrDefault(id));
 
     public Task<string?> GetDerivativeBlobPathAsync(string id, string name, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Assets.ContainsKey(id) ? $"{id}/{name}{(name == DerivativeNames.Proxy ? ".mp4" : ".webp")}" : null);
+        Task.FromResult(Assets.ContainsKey(id) ? $"{id}/{name}{(DerivativeNames.IsVideo(name) ? ".mp4" : ".webp")}" : null);
 
     public Task<OriginalFile?> GetOriginalAsync(string id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Assets.ContainsKey(id) ? new OriginalFile("IMG_0001.jpg", "image/jpeg") : null);
@@ -104,6 +104,11 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
     }
 
     public Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Options);
+
+    /// <summary>What the storage page shows (S-028).</summary>
+    public StorageReport Storage { get; set; } = new([], 0, 0, 0, 0, [], []);
+
+    public Task<StorageReport> GetStorageAsync(CancellationToken cancellationToken = default) => Task.FromResult(Storage);
 
     /// <summary>The people page's people, as the query returns them.</summary>
     public List<PersonSummary> People { get; init; } = [];

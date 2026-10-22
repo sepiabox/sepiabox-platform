@@ -29,16 +29,16 @@ public sealed class OccasionClassifierTests
     {
         var photos = Photos(wedding: 6, other: 4);
 
-        Assert.Equal(0, OccasionClassifier.Classify(photos, Labels()));
+        Assert.Equal(0, OccasionClassifier.Classify(photos, Labels(), distractors: 1));
     }
 
     [Fact]
     public void An_occasion_where_no_type_reaches_30_percent_of_the_photos_has_none()
     {
         // Two wedding photos in ten: 20%.
-        Assert.Null(OccasionClassifier.Classify(Photos(wedding: 2, other: 8), Labels()));
+        Assert.Null(OccasionClassifier.Classify(Photos(wedding: 2, other: 8), Labels(), distractors: 1));
         // Three in ten: exactly 30%, enough.
-        Assert.Equal(0, OccasionClassifier.Classify(Photos(wedding: 3, other: 7), Labels()));
+        Assert.Equal(0, OccasionClassifier.Classify(Photos(wedding: 3, other: 7), Labels(), distractors: 1));
     }
 
     [Fact]
@@ -47,16 +47,16 @@ public sealed class OccasionClassifierTests
         var beach = Axis(2);
         var snow = Axis(5);
         var photos = new List<float[]> { beach, beach, beach, snow, snow, snow, snow };
-        Assert.Equal(5, OccasionClassifier.Classify(photos, Labels()));
+        Assert.Equal(5, OccasionClassifier.Classify(photos, Labels(), distractors: 1));
 
-        Assert.Equal(2, OccasionClassifier.Classify([beach, beach, snow, snow], Labels()));
+        Assert.Equal(2, OccasionClassifier.Classify([beach, beach, snow, snow], Labels(), distractors: 1));
     }
 
     [Fact]
     public void A_photo_that_no_type_is_clearly_about_counts_for_none()
     {
         // Equally close to all seven: a probability of 1/7, below 0.35.
-        Assert.Null(OccasionClassifier.Classify([Axis(100), Axis(100)], Labels()));
+        Assert.Null(OccasionClassifier.Classify([Axis(100), Axis(100)], Labels(), distractors: 1));
     }
 
     [Fact]
@@ -64,16 +64,38 @@ public sealed class OccasionClassifierTests
     {
         var between = Normalize(Axis(0), Axis(1));
 
-        Assert.Equal(0, OccasionClassifier.Classify([between], Labels()));
+        Assert.Equal(0, OccasionClassifier.Classify([between], Labels(), distractors: 1));
         var photos = new List<float[]> { between, between, Axis(1) };
         // Birthday: three photos; wedding: two.
-        Assert.Equal(1, OccasionClassifier.Classify(photos, Labels()));
+        Assert.Equal(1, OccasionClassifier.Classify(photos, Labels(), distractors: 1));
+    }
+
+    [Fact]
+    public void A_photo_the_neutral_prompt_also_describes_counts_for_no_type()
+    {
+        var neutral = Axis(s_keys.Length);
+        // Equally a wedding, a birthday and "a photo": a third each, below 0.35.
+        var vague = Normalize(Normalize(Axis(0), Axis(1)), neutral);
+
+        Assert.Null(OccasionClassifier.Classify([vague, vague, vague], Labels(), distractors: 1));
+        // Without the neutral prompt in the softmax, it is a wedding or a birthday at 0.5 each: the first in the file wins.
+        Assert.Equal(0, OccasionClassifier.Classify([vague, vague, vague], Labels()[..^1]));
+        // A photo on the neutral prompt alone is of no type.
+        Assert.Null(OccasionClassifier.Classify([neutral, neutral, neutral], Labels(), distractors: 1));
+    }
+
+    [Fact]
+    public void Exactly_30_percent_is_enough_in_whole_numbers()
+    {
+        Assert.Equal(0, OccasionClassifier.Classify(Photos(wedding: 3, other: 7), Labels(), distractors: 1));
+        Assert.Null(OccasionClassifier.Classify(Photos(wedding: 29, other: 71), Labels(), distractors: 1));
+        Assert.Equal(0, OccasionClassifier.Classify(Photos(wedding: 30, other: 70), Labels(), distractors: 1));
     }
 
     [Fact]
     public void An_occasion_without_photos_that_have_embeddings_has_no_type()
     {
-        Assert.Null(OccasionClassifier.Classify([], Labels()));
+        Assert.Null(OccasionClassifier.Classify([], Labels(), distractors: 1));
     }
 
     [Fact]
@@ -117,7 +139,8 @@ public sealed class OccasionClassifierTests
         return vector;
     }
 
-    private static List<float[]> Labels() => [.. s_keys.Select((_, i) => Axis(i))];
+    // The types' axes, then the neutral prompt's (D-094).
+    private static List<float[]> Labels() => [.. s_keys.Select((_, i) => Axis(i)), Axis(s_keys.Length)];
 
     // Wedding photos on the wedding axis, the others on one that is none of the types'.
     private static List<float[]> Photos(int wedding, int other) =>
@@ -146,6 +169,11 @@ internal sealed class TypeAxisEmbedder : IQueryEmbedder
     public float[] Embed(string text)
     {
         Embedded.Add(text);
+        if (text == OccasionTypes.DistractorPrompt)
+        {
+            return OccasionClassifierTests.Axis(OccasionTypes.Clip.Count);
+        }
+
         var index = OccasionTypes.Clip.ToList().FindIndex(t => t.Prompt == text);
         return index < 0 ? throw new InvalidOperationException($"Unknown prompt '{text}'.") : OccasionClassifierTests.Axis(index);
     }
@@ -170,7 +198,7 @@ public sealed class OccasionClassifyTests(CatalogFixture fixture)
         var result = await new OccasionClassifier(db, embedder).RunAsync(CancellationToken.None);
 
         Assert.Equal(new OccasionClassification(2, 1, 0, 1), result);
-        Assert.Equal(7, embedder.Embedded.Count);
+        Assert.Equal(8, embedder.Embedded.Count);
         var types = await db.Occasions.AsNoTracking().ToDictionaryAsync(o => o.Id, o => o.Type);
         Assert.Equal(("wedding", null, "party"), (types[wedding], types[plain], types[kept]));
     }
@@ -296,5 +324,41 @@ public sealed class OccasionClassifyTests(CatalogFixture fixture)
         public bool IsAvailable => false;
 
         public float[] Embed(string text) => throw new VisualSearchUnavailableException("The CLIP text model is not in the folder.");
+    }
+}
+
+/// <summary>A fact that needs the CLIP text model: skipped when it is not downloaded, unless CI requires it.</summary>
+internal sealed class ClipTextFactAttribute : FactAttribute
+{
+    public ClipTextFactAttribute()
+    {
+        if (!Sepiabox.Search.Clip.ClipTextEncoder.FilesPresent(TestModels.Folder) && !TestModels.Required)
+        {
+            Skip = $"The CLIP text model is not in {TestModels.Folder}; run `sepiabox-ingest models download`.";
+        }
+    }
+}
+
+/// <summary>The types' prompts with the real CLIP text model (S-024): each prompt is its own type, and a street is none.</summary>
+[Trait("Category", "Integration")]
+public sealed class OccasionTypesClipTests
+{
+    [ClipTextFact]
+    public void Each_prompt_s_own_embedding_classifies_as_its_type_and_a_street_as_none()
+    {
+        using var encoder = Sepiabox.Search.Clip.ClipTextEncoder.TryCreate(TestModels.Folder, out var warning)
+            ?? throw new InvalidOperationException(warning);
+        var labels = new List<float[]>([.. OccasionTypes.Clip.Select(t => encoder.Encode(t.Prompt)), encoder.Encode(OccasionTypes.DistractorPrompt)]);
+
+        for (var i = 0; i < OccasionTypes.Clip.Count; i++)
+        {
+            Assert.Equal(i, OccasionClassifier.Classify([labels[i]], labels, distractors: 1));
+        }
+
+        // Things no type describes: the neutral prompt itself, and a street.
+        foreach (var prompt in new[] { "a photo of a street", OccasionTypes.DistractorPrompt })
+        {
+            Assert.Null(OccasionClassifier.Classify([encoder.Encode(prompt)], labels, distractors: 1));
+        }
     }
 }

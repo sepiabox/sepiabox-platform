@@ -50,6 +50,12 @@ public sealed class Asset
     /// </summary>
     public int? FacesVersion { get; set; }
 
+    /// <summary>
+    /// Whether Sepiabox keeps the original (S-063, D-088). False while every manifest imported says the original stayed
+    /// at its source (index-only); true once any of them says it was uploaded, and then it stays true.
+    /// </summary>
+    public bool OriginalStored { get; set; } = true;
+
     /// <summary>When the asset first entered the catalog.</summary>
     public DateTimeOffset ImportedAt { get; set; }
 
@@ -75,6 +81,9 @@ public sealed class AssetSource
     public required string Path { get; set; }
 
     public DateTimeOffset ModifiedAt { get; set; }
+
+    /// <summary>The original's address at its source (S-063), when the source gave one; <c>https://</c>.</summary>
+    public string? Url { get; set; }
 }
 
 /// <summary>A file generated for the web, stored in the <c>derivatives</c> container.</summary>

@@ -345,10 +345,15 @@ public sealed class AnthropicQuestionTranslatorTests
     {
         using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
         var schema = JsonNode.Parse(stream)!;
-        // The schema the API saw then, before S-017 added the filters a question cannot express, and S-024 the types.
+        // The schema the API saw then, before S-017, S-024 (the types) and S-028 added what a question cannot express.
         foreach (var field in QuestionPrompt.NotFromQuestions.Append("eventTypes"))
         {
             schema["properties"]!["filters"]!["properties"]!.AsObject().Remove(field);
+        }
+
+        foreach (var field in QuestionPrompt.AggregateNotFromQuestions)
+        {
+            schema["properties"]!["aggregate"]!["properties"]!.AsObject().Remove(field);
         }
 
         Assert.Equal(29, OptionalProperties(schema));
@@ -362,12 +367,26 @@ public sealed class AnthropicQuestionTranslatorTests
         var output = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
 
         // similarTo names an asset (S-017, D-086) and eventIds names occasions (S-023, D-092): ids only the pages know.
-        Assert.Equal(["similarTo", "eventIds"], QuestionPrompt.NotFromQuestions);
+        Assert.Equal(["similarTo", "eventIds", "sourceCount"], QuestionPrompt.NotFromQuestions);
         Assert.All(QuestionPrompt.NotFromQuestions, field =>
         {
             Assert.NotNull(dsl["properties"]!["filters"]!["properties"]![field]);
             Assert.Null(output["properties"]!["filters"]!["properties"]![field]);
         });
+    }
+
+    [Fact]
+    public void Leaves_the_storage_filters_out_of_the_output_format_when_the_dsl_has_them()
+    {
+        using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
+        var dsl = JsonNode.Parse(stream)!;
+        var output = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
+
+        Assert.NotNull(dsl["properties"]!["filters"]!["properties"]!["sourceCount"]);
+        Assert.Null(output["properties"]!["filters"]!["properties"]!["sourceCount"]);
+        Assert.NotNull(dsl["properties"]!["aggregate"]!["properties"]!["sum"]);
+        Assert.Null(output["properties"]!["aggregate"]!["properties"]!["sum"]);
+        Assert.Equal(["sum"], QuestionPrompt.AggregateNotFromQuestions);
     }
 
     [Fact]

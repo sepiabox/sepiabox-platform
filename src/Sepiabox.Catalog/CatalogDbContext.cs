@@ -72,6 +72,9 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             asset.ToTable("assets");
             asset.Property(a => a.Id).HasMaxLength(64);
             asset.Property(a => a.Kind).HasMaxLength(16);
+            // True for every asset before index-only mode (S-063). Never generated, as belt and braces: a column with a
+            // default and a CLR default of false is the case where EF may leave the value out of the insert.
+            asset.Property(a => a.OriginalStored).HasDefaultValue(true).ValueGeneratedNever();
             // Camera clocks have no time zone, so the value is stored exactly as read.
             asset.Property(a => a.CapturedAt).HasColumnType("timestamp without time zone");
             asset.Property(a => a.Location).HasColumnType("geography (Point, 4326)");
@@ -93,6 +96,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
         {
             source.ToTable("asset_sources");
             source.HasIndex(s => new { s.AssetId, s.Type, s.Name, s.Path }).IsUnique();
+            // The number of sources an asset has (S-028, D-093): the grouped count reads it in order instead of sorting every row.
+            source.HasIndex(s => new { s.AssetId, s.Name }).HasDatabaseName("ix_asset_sources_asset_id_name");
         });
 
         modelBuilder.Entity<Derivative>(derivative =>

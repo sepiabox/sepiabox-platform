@@ -39,6 +39,10 @@ const string Usage = """
       --jobs <n>            Process n files at once (1 to 64). Default: half the processors. The drive is
                             still read by one reader, front to back; the result is the same for any n.
       --video-jobs <n>      Videos read and transcoded at once. Default: 1.
+      --index-only          The originals stay where they are and are never uploaded; Sepiabox keeps no
+                            copy of them. Photos get a 2048 px preview and videos a 1080p version instead
+                            of 1280 px and 720p. Belongs to the work folder: the first run records it,
+                            upload follows it, and a run asking for the other mode needs a new --out.
 
     Options for models download:
       --models <folder>     Where to put the models. Default: %LOCALAPPDATA%\Sepiabox\models on
@@ -79,6 +83,12 @@ try
         "models" => await RunModels(args[1..], cancellation.Token),
         _ => UsageError($"Unknown command '{args[0]}'."),
     };
+}
+catch (WorkFolderModeException ex)
+{
+    // A usage error: the run asked for the other mode than its work folder's, and nothing was read or changed.
+    Console.Error.WriteLine(ex.Message);
+    return 2;
 }
 catch (Exception ex) when (ex is DirectoryNotFoundException or ClockSkewException)
 {
@@ -128,6 +138,13 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
         return UsageError(error);
     }
 
+    // Before the warning, so a refused run says only why it stopped.
+    ProcessCommand.CheckMode(options);
+    if (options.IndexOnly)
+    {
+        Console.Error.WriteLine(ProcessCommand.IndexOnlyWarning);
+    }
+
     var progress = new ConsoleProgress<int>(count => Console.Error.Write($"\r{count:N0} photos and videos checked..."));
     var result = ProcessCommand.Run(options, progress, cancellationToken);
     Console.Error.WriteLine();
@@ -170,7 +187,7 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
     var result = await UploadCommand.RunAsync(options, UploadCommand.CreateClient(options), progress, cancellationToken);
     Console.Error.WriteLine();
 
-    Console.WriteLine($"{result.Assets:N0} assets: uploaded {result.Uploaded:N0} files ({ScanReport.FormatBytes(result.Bytes)}), already there {result.Skipped:N0}, problems {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
+    Console.WriteLine($"{result.Assets:N0} assets: uploaded {result.Uploaded:N0} files ({ScanReport.FormatBytes(result.Bytes)}), already there {result.Skipped:N0}, {(result.IndexOnly ? $"originals left at their source {result.OriginalsLeftAtSource:N0}, " : "")}problems {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");

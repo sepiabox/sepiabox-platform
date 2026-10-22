@@ -220,8 +220,29 @@ public sealed partial class CountPageTests
         Assert.Equal(3, count.GetProperty("undated").GetInt32());
         Assert.Equal(2, count.GetProperty("groupCount").GetInt32());
         Assert.Equal("""[{"key":"2017","count":4},{"key":null,"count":2}]""", count.GetProperty("groups").GetRawText());
+        // No sizes were asked for: no "bytes" anywhere, so the answer keeps the shape it had.
+        Assert.False(count.TryGetProperty("bytes", out _));
         Assert.Empty(body.RootElement.GetProperty("items").EnumerateArray());
         Assert.Empty(library.Searches);
+    }
+
+    [Fact]
+    public async Task Search_api_answers_a_size_count_with_the_bytes_of_the_total_and_of_each_group()
+    {
+        var library = new FakeLibrary { CountResult = new CountResult(10, [new CountGroup("2017", 4, 4_000), new CountGroup(null, 2, 50)], null) { Bytes = 4_050 } };
+        await using var web = new WebFactory(library);
+        using var http = web.CreateSignedInClient();
+
+        using var response = await http.PostAsync(
+            new Uri("/api/search", UriKind.Relative),
+            new StringContent("""{"filters": {"sourceCount": {"eq": 1}}, "aggregate": {"count": "assets", "groupBy": "year", "sum": "bytes"}}""", Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var count = body.RootElement.GetProperty("count");
+        Assert.Equal(4_050, count.GetProperty("bytes").GetInt64());
+        Assert.Equal("""[{"key":"2017","count":4,"bytes":4000},{"key":null,"count":2,"bytes":50}]""", count.GetProperty("groups").GetRawText());
+        Assert.Equal(1, Assert.Single(library.Counts).Filters.SourceCount!.Eq);
     }
 
     [Fact]
