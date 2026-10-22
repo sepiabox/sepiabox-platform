@@ -70,6 +70,25 @@ public sealed class UploadToStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Resends_an_asset_whose_manifest_lists_the_source_among_others()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        Process();
+        using var backup = new TempFolder();
+        backup.Write("copy/a.jpg", TestPhotos.Porto("red"));
+        ProcessCommand.Run(new ProcessOptions(backup.Path, _work.Path, "Backup", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None));
+        var manifest = Assert.Single(Directory.GetFiles(Path.Combine(_work.Path, "manifests"), "*.json").Select(f => ManifestJson.Deserialize(File.ReadAllText(f))));
+        Assert.Equal(["Backup", "HD da Ana"], manifest.Sources.Select(s => s.Name).Order(StringComparer.Ordinal));
+        await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local), _store);
+        await _store.DeleteAsync(BlobLayout.OriginalsContainer, manifest.Id);
+
+        var resend = await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local, ResendSource: "HD da Ana"), _store);
+
+        Assert.Equal(1, resend.AssetsResent);
+        Assert.NotNull(await _store.ReadAsync(BlobLayout.OriginalsContainer, manifest.Id));
+    }
+
+    [Fact]
     public async Task Asks_for_the_cold_class_for_originals_only_when_the_destination_is_azure()
     {
         _drive.Write("a.jpg", TestPhotos.Porto("red"));

@@ -46,6 +46,7 @@ public sealed class AssetDeletionTests(CatalogFixture fixture)
         Assert.Equal(2 * 2_345_678, plan.OriginalBytes);
         var text = output.ToString();
         Assert.Contains("Dry run: nothing is deleted. 2 assets", text, StringComparison.Ordinal);
+        Assert.Contains("Totals: 2 assets, 8 blobs, 4,691,356 bytes of originals, 0 kept.", text, StringComparison.Ordinal);
         Assert.Contains("from 2019/a.jpg", text, StringComparison.Ordinal);
         Assert.Contains($"blob originals/{World.Id(1)}", text, StringComparison.Ordinal);
         Assert.Contains("--yes --expect 2", text, StringComparison.Ordinal);
@@ -310,6 +311,100 @@ public sealed class AssetDeletionTests(CatalogFixture fixture)
 
         var left = Assert.Single(await world.Db.People.AsNoTracking().ToListAsync());
         Assert.Equal(("Ana", "ana@example.com", 0), (left.Name, left.UserEmail, left.FaceCount));
+    }
+
+    [Fact]
+    public async Task Refuses_an_asset_that_gained_another_source_after_the_plan()
+    {
+        await using var world = await World.CreateAsync(fixture);
+        await world.SeedAsync(1, (Wrong, "2019/a.jpg"));
+        await world.ImportAsync();
+        var deletion = world.Deletion();
+        var plan = await deletion.PlanAsync(Wrong, default);
+        Assert.Single(plan.Matched);
+        world.Db.AssetSources.Add(new AssetSource { AssetId = World.Id(1), Type = "local", Name = Other, Path = "2019/a.jpg" });
+        await world.Db.SaveChangesAsync();
+        world.Db.ChangeTracker.Clear();
+
+        var result = await deletion.DeleteAsync(plan, default);
+
+        Assert.Equal(0, result.Deleted);
+        Assert.Contains("no longer matches", Assert.Single(result.Kept).Reason, StringComparison.Ordinal);
+        Assert.Equal(1, await world.Db.Assets.CountAsync());
+        Assert.NotEmpty(await world.BlobsOfAsync(1));
+    }
+
+    [Fact]
+    public async Task Does_not_match_an_asset_that_has_no_source_at_all()
+    {
+        await using var world = await World.CreateAsync(fixture);
+        await world.SeedAsync(1, (Wrong, "2019/a.jpg"));
+        await world.ImportAsync();
+        // "All sources have the name" is true of an empty set: the query also asks for at least one.
+        await world.Db.AssetSources.Where(x => x.AssetId == World.Id(1)).ExecuteDeleteAsync();
+
+        var plan = await world.Deletion().PlanAsync(Wrong, default);
+
+        Assert.Empty(plan.Matched);
+        Assert.Empty(plan.Kept);
+        Assert.Equal(1, await world.Db.Assets.CountAsync());
+    }
+
+    [Fact]
+    public async Task Waits_for_the_face_lock_while_it_deletes_the_rows()
+    {
+        await using var world = await World.CreateAsync(fixture);
+        await world.SeedAsync(1, (Wrong, "2019/a.jpg"));
+        await world.ImportAsync();
+        var deletion = world.Deletion();
+        var plan = await deletion.PlanAsync(Wrong, default);
+        await using var holder = new Npgsql.NpgsqlConnection(fixture.ConnectionStringFor(world.Db));
+        await holder.OpenAsync();
+        await using var transaction = await holder.BeginTransactionAsync();
+        await using (var take = new Npgsql.NpgsqlCommand($"SELECT pg_advisory_xact_lock({Sepiabox.Catalog.People.FaceAssigner.PeopleLockKey})", holder, transaction))
+        {
+            await take.ExecuteNonQueryAsync();
+        }
+
+        var deleting = deletion.DeleteAsync(plan, default);
+        var finishedWhileLocked = await Task.WhenAny(deleting, Task.Delay(1500)) == deleting;
+        await transaction.CommitAsync();
+        var result = await deleting;
+
+        Assert.False(finishedWhileLocked);
+        Assert.Equal(1, result.Deleted);
+    }
+
+    [Fact]
+    public async Task Leaves_no_row_of_the_asset_in_any_table_and_no_blob()
+    {
+        await using var world = await World.CreateAsync(fixture);
+        await world.SeedAsync(1, (Wrong, "2019/a.jpg"));
+        await world.SeedAsync(2, (Other, "2019/b.jpg"));
+        await world.ImportAsync();
+        await world.AddRelatedRowsAsync(1);
+        await world.AddRelatedRowsAsync(2);
+        world.Db.ErasedFaces.AddRange(
+            new ErasedFace { AssetId = World.Id(1), Box = [0.1, 0.1, 0.2, 0.2], ErasedAt = DateTimeOffset.UnixEpoch },
+            new ErasedFace { AssetId = World.Id(2), Box = [0.1, 0.1, 0.2, 0.2], ErasedAt = DateTimeOffset.UnixEpoch });
+        await world.Db.SaveChangesAsync();
+        world.Db.ChangeTracker.Clear();
+
+        await world.Deletion().DeleteAsync(await world.Deletion().PlanAsync(Wrong, default), default);
+
+        var id = World.Id(1);
+        Assert.Equal(0, await world.Db.ErasedFaces.CountAsync(x => x.AssetId == id));
+        Assert.Equal(0, await world.Db.OccasionAssets.CountAsync(x => x.AssetId == id));
+        Assert.Equal(0, await world.Db.AssetEmbeddings.CountAsync(x => x.AssetId == id));
+        Assert.Equal(0, await world.Db.Faces.CountAsync(x => x.AssetId == id));
+        Assert.Equal(0, await world.Db.Derivatives.CountAsync(x => x.AssetId == id));
+        Assert.Equal(0, await world.Db.AssetSources.CountAsync(x => x.AssetId == id));
+        Assert.Empty(await world.BlobsOfAsync(1));
+        Assert.Null(await world.Store.ReadAsync(BlobLayout.OriginalsContainer, id));
+        // The other asset keeps all of its.
+        Assert.Equal(1, await world.Db.ErasedFaces.CountAsync(x => x.AssetId == World.Id(2)));
+        Assert.Equal(1, await world.Db.OccasionAssets.CountAsync(x => x.AssetId == World.Id(2)));
+        Assert.NotEmpty(await world.BlobsOfAsync(2));
     }
 
     [Fact]
