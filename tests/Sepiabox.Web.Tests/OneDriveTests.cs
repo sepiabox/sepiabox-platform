@@ -223,6 +223,7 @@ public sealed class MicrosoftOneDriveHttpTests
 
 /// <summary>OneDrive connections on the catalog (S-039): the rolled refresh token is the one kept.</summary>
 [Collection(CatalogGroup.Name)]
+[Trait("Category", "Integration")]
 public sealed class OneDriveConnectionTests(CatalogFixture catalog)
 {
     private const string Redirect = "https://app.example.com/sources/onedrive/callback";
@@ -333,6 +334,7 @@ public sealed class OneDriveConnectionTests(CatalogFixture catalog)
 
 /// <summary>"Open original" for a OneDrive source (S-039): the rolled token is kept, a refused one asks to reconnect.</summary>
 [Collection(CatalogGroup.Name)]
+[Trait("Category", "Integration")]
 public sealed class OneDriveOriginalTests(CatalogFixture catalog)
 {
     private const string Account = "ana@outlook.com";
