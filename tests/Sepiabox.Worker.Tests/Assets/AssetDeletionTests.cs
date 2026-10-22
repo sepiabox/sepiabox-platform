@@ -238,6 +238,113 @@ public sealed class AssetDeletionTests(CatalogFixture fixture)
         Assert.Empty(await world.Store.ListAsync(BlobLayout.OriginalsContainer).ToListAsync());
     }
 
+    [Fact]
+    public async Task Names_the_source_whose_upload_brought_the_manifest_back_and_how_to_send_it_again()
+    {
+        await using var world = await World.CreateAsync(fixture);
+        await world.SeedAsync(1, (Wrong, "2019/a.jpg"));
+        await world.ImportAsync();
+        var back = new Racing(world.Store, afterOriginalDelete: inner => inner.WriteAsync(
+            BlobLayout.ManifestsContainer, $"{World.Id(1)}.json",
+            BinaryData.FromString(ManifestJson.Serialize(Photo(Source(Other, "2019/a.jpg")) with { Id = World.Id(1) })), "application/json", BlobWriteCondition.Always));
+
+        var result = await world.Deletion(back).DeleteAsync(await world.Deletion(back).PlanAsync(Wrong, default), default);
+
+        var reason = Assert.Single(result.ReuploadNeeded).Reason;
+        Assert.Contains("'HD da Ana'", reason, StringComparison.Ordinal);
+        Assert.Contains("--resend-source \"HD da Ana\"", reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("wrong-drive", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Recomputes_the_people_of_the_deleted_faces_and_removes_the_unnamed_one_left_with_none()
+    {
+        await using var world = await World.CreateAsync(fixture);
+        await world.SeedAsync(1, (Wrong, "2019/a.jpg"));
+        await world.SeedAsync(2, (Other, "2019/b.jpg"));
+        await world.ImportAsync();
+        var named = new Person { Name = "Ana", FaceCount = 2 };
+        var unnamed = new Person { FaceCount = 1 };
+        world.Db.People.AddRange(named, unnamed);
+        await world.Db.SaveChangesAsync();
+        world.Db.Faces.AddRange(
+            World.NewFace(1, named, 0), World.NewFace(2, named, 1), World.NewFace(1, unnamed, 2));
+        await world.Db.SaveChangesAsync();
+        named.Centroid = new Pgvector.Vector(Enumerable.Range(0, 128).Select(i => i < 2 ? 0.7071f : 0f).ToArray());
+        await world.Db.SaveChangesAsync();
+        world.Db.ChangeTracker.Clear();
+
+        var result = await world.Deletion().DeleteAsync(await world.Deletion().PlanAsync(Wrong, default), default);
+
+        Assert.True(result.Clean);
+        var people = await world.Db.People.AsNoTracking().ToListAsync();
+        var left = Assert.Single(people);
+        Assert.Equal("Ana", left.Name);
+        Assert.Equal(1, left.FaceCount);
+        // Only the other photo's face is in the centroid: no trace of the deleted photo's embedding.
+        var centroid = left.Centroid!.ToArray();
+        Assert.Equal(1f, centroid[1], 3);
+        Assert.Equal(0f, centroid[0], 3);
+    }
+
+    [Fact]
+    public async Task Keeps_a_named_person_whose_every_face_was_deleted_with_no_count_and_no_centroid()
+    {
+        await using var world = await World.CreateAsync(fixture);
+        await world.SeedAsync(1, (Wrong, "2019/a.jpg"));
+        await world.ImportAsync();
+        var named = new Person { Name = "Ana", FaceCount = 1 };
+        world.Db.People.Add(named);
+        await world.Db.SaveChangesAsync();
+        world.Db.Faces.Add(World.NewFace(1, named, 0));
+        named.Centroid = new Pgvector.Vector(Enumerable.Range(0, 128).Select(i => i == 0 ? 1f : 0f).ToArray());
+        await world.Db.SaveChangesAsync();
+        world.Db.ChangeTracker.Clear();
+
+        await world.Deletion().DeleteAsync(await world.Deletion().PlanAsync(Wrong, default), default);
+
+        var left = Assert.Single(await world.Db.People.AsNoTracking().ToListAsync());
+        Assert.Equal((0, null), (left.FaceCount, left.Centroid));
+    }
+
+    [Fact]
+    public void Prints_the_totals_first_and_lists_at_most_200_assets()
+    {
+        var matched = Enumerable.Range(1, 250)
+            .Select(n => new MatchedAsset(World.Id(n), [$"{n}.jpg"], [$"manifests/{World.Id(n)}.json"], 1_073_741_824, false)).ToList();
+        var plan = new DeletionPlan(Wrong, matched, [], ["google-takeout"]);
+        var output = new StringWriter();
+
+        AssetDeletionReport.WritePlan(plan, dryRun: true, output);
+
+        var text = output.ToString();
+        Assert.True(text.IndexOf("Totals: 250 assets", StringComparison.Ordinal) < text.IndexOf("from 1.jpg", StringComparison.Ordinal));
+        Assert.Contains("Source type: google-takeout", text, StringComparison.Ordinal);
+        Assert.Contains("early-deletion fee: up to about USD 3.75", text, StringComparison.Ordinal);
+        Assert.Contains("from 200.jpg", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("from 201.jpg", text, StringComparison.Ordinal);
+        Assert.Contains("and 50 more assets, not listed", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Deletes_many_assets_side_by_side_and_all_go()
+    {
+        await using var world = await World.CreateAsync(fixture);
+        for (var n = 1; n <= 20; n++)
+        {
+            await world.SeedAsync(n, (Wrong, $"2019/{n}.jpg"));
+        }
+
+        await world.ImportAsync();
+
+        var result = await world.Deletion().DeleteAsync(await world.Deletion().PlanAsync(Wrong, default), default);
+
+        Assert.Equal(20, result.Deleted);
+        Assert.True(result.Clean);
+        Assert.Equal(0, await world.Db.Assets.CountAsync());
+        Assert.Empty(await world.Store.ListAsync(BlobLayout.OriginalsContainer).ToListAsync());
+    }
+
     [Theory]
     [InlineData("manifest only")]
     [InlineData("manifest and derivatives")]
@@ -424,6 +531,22 @@ public sealed class AssetDeletionTests(CatalogFixture fixture)
             Db.OccasionAssets.Add(new OccasionAsset { EventId = occasion.Id, AssetId = id });
             await Db.SaveChangesAsync();
             Db.ChangeTracker.Clear();
+        }
+
+        /// <summary>A face on asset <paramref name="n"/> for <paramref name="person"/>, an axis of the embedding space by <paramref name="axis"/>.</summary>
+        public static Face NewFace(int n, Person person, int axis)
+        {
+            var embedding = new float[128];
+            embedding[axis] = 1;
+            return new Face
+            {
+                AssetId = Id(n),
+                Box = [0.1, 0.1, 0.2, 0.2],
+                Score = 0.9,
+                Embedding = new Vector(embedding),
+                Assignment = FaceAssignments.Auto,
+                PersonId = person.Id,
+            };
         }
 
         public async Task<List<string>> BlobsOfAsync(params int[] ns)

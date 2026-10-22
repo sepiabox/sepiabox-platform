@@ -31,8 +31,11 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
             {
                 // The Container Apps environment's identity pulls the images.
                 "aca_mi.properties.principalId: AcrPull on registries registry",
-                // The admin job deletes a source's blobs (S-057, D-108): the only identity with a write role on the account.
-                "admin-identity: Storage Blob Data Contributor on storageAccounts storage",
+                // The admin job deletes a source's blobs (S-057, D-108) from three containers, never account-wide: that would reach
+                // the web's key ring and `incoming`.
+                "admin-identity: Storage Blob Data Contributor on containers derivatives",
+                "admin-identity: Storage Blob Data Contributor on containers manifests",
+                "admin-identity: Storage Blob Data Contributor on containers originals",
                 // The faces job rewrites manifests, and nothing else in storage (S-022).
                 "faces-identity: Storage Blob Data Contributor on containers manifests",
                 // The uploaders, one assignment per id in uploaderPrincipalIds.

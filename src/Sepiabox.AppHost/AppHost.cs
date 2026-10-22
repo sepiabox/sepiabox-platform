@@ -185,15 +185,16 @@ else
 
     // Administrative commands, started by hand (S-057, D-108): `assets delete --source <name>`. The arguments here only
     // make a run without any fail with a usage message; the real ones are given when the job is started. It connects as the
-    // application role, which may delete rows but never change the schema, and its identity is the only one with a write
-    // role on the whole storage account (Storage Blob Data Contributor); the import identity stays a reader (S-058).
+    // application role, which may delete rows but never change the schema. Its identity writes only the manifests, derivatives
+    // and originals containers (access.bicep); an account-wide write role would also reach the web's key ring (D-062) and
+    // the incoming container.
     builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.AdminResourceName)
         .WithArgs("assets", "delete")
         .WithReferenceEnvironment(ConnectionStringsOnly)
         .WithReference(blobs)
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
         .WithAzureUserAssignedIdentity(adminIdentity)
-        .WithRoleAssignments(storage, StorageBuiltInRole.StorageBlobDataContributor)
+        .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureAdminJob);
 
     // The web's custom domain (S-035, D-065), empty for none. Set after the DNS records exist, first with the
@@ -217,6 +218,7 @@ else
         .WithParameter("vaultName", vault.GetOutput("name"))
         .WithParameter("webPrincipalId", webIdentity.Resource.PrincipalId)
         .WithParameter("facesPrincipalId", facesIdentity.Resource.PrincipalId)
+        .WithParameter("adminPrincipalId", adminIdentity.Resource.PrincipalId)
         .WithParameter("uploaderPrincipalIds", uploaders);
 
     web.WithReference(insights)

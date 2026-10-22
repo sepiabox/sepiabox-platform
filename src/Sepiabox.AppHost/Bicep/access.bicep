@@ -1,6 +1,7 @@
 // Access Aspire's role helpers cannot scope (S-058, D-062): the web's write access to the data protection
 // container only, its use of the data protection key only, the faces job's write access to the manifests container
-// only (S-022), and the uploaders' write access to storage.
+// only (S-022), the admin job's write access to the three containers it deletes from (S-057), and the uploaders' write
+// access to storage.
 // The account-wide roles (the web's and the worker's Storage Blob Data Reader, the web's Key Vault Secrets
 // User) come from the AppHost's WithRoleAssignments.
 
@@ -16,6 +17,9 @@ param webPrincipalId string
 
 @description('The faces job\'s managed identity, which erases faces from the stored manifests (S-022).')
 param facesPrincipalId string
+
+@description('The admin job\'s managed identity, which deletes a source\'s assets (S-057, D-108).')
+param adminPrincipalId string
 
 @description('Comma-separated Entra object ids of the people who run `sepiabox-ingest upload --destination azure`. User object ids only (`az ad signed-in-user show --query id -o tsv`), not groups or service principals.')
 param uploaderPrincipalIds string = ''
@@ -41,6 +45,16 @@ resource keyRingContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
 resource manifestsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
   parent: blobService
   name: 'manifests'
+}
+
+resource derivativesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
+  parent: blobService
+  name: 'derivatives'
+}
+
+resource originalsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
+  parent: blobService
+  name: 'originals'
 }
 
 resource vault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
@@ -89,6 +103,40 @@ resource facesManifestsWriter 'Microsoft.Authorization/roleAssignments@2022-04-0
   scope: manifestsContainer
   properties: {
     principalId: facesPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Deletes manifests, derivatives and originals, and nothing else in storage: not the web's key ring, not `incoming` (S-057).
+resource adminManifestsWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(manifestsContainer.id, adminPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: manifestsContainer
+  properties: {
+    principalId: adminPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource adminDerivativesWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(derivativesContainer.id, adminPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: derivativesContainer
+  properties: {
+    principalId: adminPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource adminOriginalsWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(originalsContainer.id, adminPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: originalsContainer
+  properties: {
+    principalId: adminPrincipalId
     // Storage Blob Data Contributor
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
     principalType: 'ServicePrincipal'

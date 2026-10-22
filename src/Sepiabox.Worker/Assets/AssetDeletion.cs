@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sepiabox.Catalog;
+using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Storage;
 
@@ -19,7 +20,11 @@ public sealed record MatchedAsset(string Id, IReadOnlyList<string> SourcePaths, 
 public sealed record KeptAsset(string Id, IReadOnlyList<string> SourcePaths, string Reason);
 
 /// <summary>What <c>assets delete --source</c> found: the assets it would delete and those it keeps.</summary>
-public sealed record DeletionPlan(string Source, IReadOnlyList<MatchedAsset> Matched, IReadOnlyList<KeptAsset> Kept)
+/// <param name="Source">The source name asked for.</param>
+/// <param name="Matched">The assets that would be deleted.</param>
+/// <param name="Kept">The assets that stay, with the reason.</param>
+/// <param name="SourceTypes">The types of the matched assets' sources (<c>local</c>, <c>google-takeout</c>, ...), so a wrong source name shows.</param>
+public sealed record DeletionPlan(string Source, IReadOnlyList<MatchedAsset> Matched, IReadOnlyList<KeptAsset> Kept, IReadOnlyList<string> SourceTypes)
 {
     public int BlobCount => Matched.Sum(a => a.Blobs.Count);
 
@@ -50,6 +55,9 @@ public sealed class AssetDeletion(CatalogDbContext db, IBlobStore store, IManife
     /// <summary>Assets looked at at once while planning.</summary>
     public const int PlanConcurrency = 8;
 
+    /// <summary>Assets deleted at once: each takes about twenty storage round trips, so a large source would take hours one by one.</summary>
+    public const int DeleteConcurrency = 8;
+
     /// <summary>Finds what would be deleted; changes nothing.</summary>
     public async Task<DeletionPlan> PlanAsync(string source, CancellationToken cancellationToken)
     {
@@ -71,54 +79,59 @@ public sealed class AssetDeletion(CatalogDbContext db, IBlobStore store, IManife
                 matched.Add(await DescribeAsync(candidate, manifest is null, token));
             });
 
+        var matchedIds = matched.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
+        var types = candidates.Where(c => matchedIds.Contains(c.Id)).SelectMany(c => c.Types).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
         return new DeletionPlan(
-            source, [.. matched.OrderBy(a => a.Id, StringComparer.Ordinal)], [.. kept.OrderBy(a => a.Id, StringComparer.Ordinal)]);
+            source, [.. matched.OrderBy(a => a.Id, StringComparer.Ordinal)], [.. kept.OrderBy(a => a.Id, StringComparer.Ordinal)], types);
     }
 
     /// <summary>Deletes the assets of <paramref name="plan"/>, looking at each again just before it goes.</summary>
     public async Task<DeletionResult> DeleteAsync(DeletionPlan plan, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        var kept = new List<KeptAsset>(plan.Kept);
-        var reupload = new List<KeptAsset>();
+        var kept = new ConcurrentBag<KeptAsset>(plan.Kept);
+        var reupload = new ConcurrentBag<KeptAsset>();
         var deleted = 0;
-        foreach (var asset in plan.Matched)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
+        // One database context is used by one task at a time; the storage calls, which are most of the time, run side by side.
+        using var database = new SemaphoreSlim(1, 1);
+        await Parallel.ForEachAsync(
+            plan.Matched, new ParallelOptions { MaxDegreeOfParallelism = DeleteConcurrency, CancellationToken = cancellationToken },
+            async (asset, token) =>
             {
-                var outcome = await DeleteOneAsync(plan.Source, asset, cancellationToken);
-                if (outcome.IsDeleted)
+                try
                 {
-                    deleted++;
+                    var outcome = await DeleteOneAsync(plan.Source, asset, database, token);
+                    if (outcome.IsDeleted)
+                    {
+                        Interlocked.Increment(ref deleted);
+                    }
+                    else if (outcome.NeedsReupload)
+                    {
+                        reupload.Add(new KeptAsset(asset.Id, asset.SourcePaths, outcome.Reason ?? "re-upload needed"));
+                    }
+                    else
+                    {
+                        kept.Add(new KeptAsset(asset.Id, asset.SourcePaths, outcome.Reason ?? "kept"));
+                    }
                 }
-                else if (outcome.NeedsReupload)
+                catch (Exception ex) when (ex is not OperationCanceledException && (store.IsStoreFailure(ex) || ex is DbUpdateException or InvalidOperationException))
                 {
-                    reupload.Add(new KeptAsset(asset.Id, asset.SourcePaths, "re-upload needed: its manifest was written again after its blobs were deleted"));
+                    // One asset must not stop the rest; its deletion is idempotent, so a rerun finishes it.
+                    Log.AssetDeleteFailed(logger, asset.Id, ex.GetType().Name);
+                    kept.Add(new KeptAsset(asset.Id, asset.SourcePaths, $"failed ({ex.GetType().Name}); run again"));
                 }
-                else
-                {
-                    kept.Add(new KeptAsset(asset.Id, asset.SourcePaths, outcome.Reason ?? "kept"));
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException && (store.IsStoreFailure(ex) || ex is DbUpdateException or InvalidOperationException))
-            {
-                // One asset must not stop the rest; its deletion is idempotent, so a rerun finishes it.
-                Log.AssetDeleteFailed(logger, asset.Id, ex.GetType().Name);
-                kept.Add(new KeptAsset(asset.Id, asset.SourcePaths, $"failed ({ex.GetType().Name}); run again"));
-            }
-        }
+            });
 
-        return new DeletionResult(plan, deleted, [.. kept.OrderBy(a => a.Id, StringComparer.Ordinal)], [.. reupload]);
+        return new DeletionResult(plan, deleted, [.. kept.OrderBy(a => a.Id, StringComparer.Ordinal)], [.. reupload.OrderBy(a => a.Id, StringComparer.Ordinal)]);
     }
 
-    private readonly record struct Candidate(string Id, long SizeBytes, bool OriginalStored, IReadOnlyList<string> SourcePaths);
+    private readonly record struct Candidate(string Id, long SizeBytes, bool OriginalStored, IReadOnlyList<string> SourcePaths, IReadOnlyList<string> Types);
 
     private readonly record struct Outcome(bool IsDeleted, bool NeedsReupload, string? Reason)
     {
         public static readonly Outcome Deleted = new(true, false, null);
 
-        public static readonly Outcome ReuploadNeeded = new(false, true, null);
+        public static Outcome ReuploadNeeded(string reason) => new(false, true, reason);
 
         public static Outcome Kept(string reason) => new(false, false, reason);
     }
@@ -128,9 +141,9 @@ public sealed class AssetDeletion(CatalogDbContext db, IBlobStore store, IManife
     {
         var rows = await db.Assets.AsNoTracking()
             .Where(a => a.Sources.Any(s => s.Name == source) && a.Sources.All(s => s.Name == source))
-            .Select(a => new { a.Id, a.SizeBytes, a.OriginalStored, Paths = a.Sources.Select(s => s.Path).OrderBy(p => p).ToList() })
+            .Select(a => new { a.Id, a.SizeBytes, a.OriginalStored, Paths = a.Sources.Select(s => s.Path).OrderBy(p => p).ToList(), Types = a.Sources.Select(s => s.Type).Distinct().ToList() })
             .ToListAsync(cancellationToken);
-        return [.. rows.OrderBy(r => r.Id, StringComparer.Ordinal).Select(r => new Candidate(r.Id, r.SizeBytes, r.OriginalStored, r.Paths))];
+        return [.. rows.OrderBy(r => r.Id, StringComparer.Ordinal).Select(r => new Candidate(r.Id, r.SizeBytes, r.OriginalStored, r.Paths, r.Types))];
     }
 
     // Why this asset must stay, from its stored manifest; null when the manifest allows deleting it. A manifest that is
@@ -182,10 +195,20 @@ public sealed class AssetDeletion(CatalogDbContext db, IBlobStore store, IManife
         return new MatchedAsset(candidate.Id, candidate.SourcePaths, blobs, originalBytes, manifestMissing);
     }
 
-    private async Task<Outcome> DeleteOneAsync(string source, MatchedAsset asset, CancellationToken cancellationToken)
+    private async Task<Outcome> DeleteOneAsync(string source, MatchedAsset asset, SemaphoreSlim database, CancellationToken cancellationToken)
     {
         // Looked at again: the plan may be minutes old, and another drive may have been uploaded since.
-        var candidate = await CandidatesAsync(source, asset.Id, cancellationToken);
+        Candidate? candidate;
+        await database.WaitAsync(cancellationToken);
+        try
+        {
+            candidate = await CandidatesAsync(source, asset.Id, cancellationToken);
+        }
+        finally
+        {
+            database.Release();
+        }
+
         if (candidate is null)
         {
             return Outcome.Kept("no longer matches: its catalog rows changed since the plan");
@@ -215,30 +238,68 @@ public sealed class AssetDeletion(CatalogDbContext db, IBlobStore store, IManife
         await store.DeleteAsync(BlobLayout.OriginalsContainer, asset.Id, cancellationToken);
 
         // A manifest that came back means an upload ran meanwhile and its blobs are now gone: its rows stay, and it must be uploaded again.
-        if (await store.ReadAsync(BlobLayout.ManifestsContainer, name, cancellationToken) is not null)
+        if (await store.ReadAsync(BlobLayout.ManifestsContainer, name, cancellationToken) is { } returned)
         {
-            return Outcome.ReuploadNeeded;
+            return Outcome.ReuploadNeeded(ReuploadReason(returned, source));
         }
 
         // 4. The catalog rows, all or none.
-        await DeleteRowsAsync(asset.Id, name, cancellationToken);
+        await database.WaitAsync(cancellationToken);
+        try
+        {
+            await DeleteRowsAsync(asset.Id, name, cancellationToken);
+        }
+        finally
+        {
+            database.Release();
+        }
+
         return Outcome.Deleted;
+    }
+
+    // A manifest that came back is usually another source's upload of the same photo (the one it merged), whose work folder
+    // is the one to send again, not the deleted source's.
+    private string ReuploadReason(BlobContent manifest, string source)
+    {
+        var others = validator.TryValidate(manifest.Content.ToString(), out var stored, out _)
+            ? stored.Sources.Select(s => s.Name).Where(n => n != source).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList()
+            : [];
+        return others.Count > 0
+            ? $"re-upload needed: its manifest was written again after its blobs were deleted, by an upload of {string.Join(", ", others.Select(n => $"'{n}'"))}; "
+                + $"run upload with {string.Join(" and ", others.Select(n => $"--resend-source \"{n}\""))} on that work folder"
+            : "re-upload needed: its manifest was written again after its blobs were deleted; upload the work folder that wrote it again with --resend-source";
     }
 
     private async Task<Candidate?> CandidatesAsync(string source, string id, CancellationToken cancellationToken)
     {
         var rows = await db.Assets.AsNoTracking()
             .Where(a => a.Id == id && a.Sources.Any(s => s.Name == source) && a.Sources.All(s => s.Name == source))
-            .Select(a => new { a.Id, a.SizeBytes, a.OriginalStored, Paths = a.Sources.Select(s => s.Path).OrderBy(p => p).ToList() })
+            .Select(a => new { a.Id, a.SizeBytes, a.OriginalStored, Paths = a.Sources.Select(s => s.Path).OrderBy(p => p).ToList(), Types = a.Sources.Select(s => s.Type).Distinct().ToList() })
             .SingleOrDefaultAsync(cancellationToken);
-        return rows is null ? null : new Candidate(rows.Id, rows.SizeBytes, rows.OriginalStored, rows.Paths);
+        return rows is null ? null : new Candidate(rows.Id, rows.SizeBytes, rows.OriginalStored, rows.Paths, rows.Types);
     }
 
     private async Task DeleteRowsAsync(string id, string manifestBlobName, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // The people's stored count and centroid (an average of face embeddings, biometric data) are recomputed from the faces
+        // that remain, under the lock the importers and the family's edits take (D-077), so no trace of a deleted photo's faces is left.
+        await FaceAssigner.LockAsync(db, cancellationToken);
+        var personIds = await db.Faces.Where(f => f.AssetId == id && f.PersonId != null).Select(f => f.PersonId!.Value).Distinct().ToListAsync(cancellationToken);
         await db.AssetEmbeddings.Where(e => e.AssetId == id).ExecuteDeleteAsync(cancellationToken);
         await db.Faces.Where(f => f.AssetId == id).ExecuteDeleteAsync(cancellationToken);
+        if (personIds.Count > 0)
+        {
+            var assigner = new FaceAssigner(db);
+            foreach (var person in await db.People.Where(p => personIds.Contains(p.Id)).ToListAsync(cancellationToken))
+            {
+                // Removes an unnamed person with no face left, keeps a named one with a count of 0 and no centroid.
+                await assigner.RecomputeAsync(person, cancellationToken);
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         await db.ErasedFaces.Where(f => f.AssetId == id).ExecuteDeleteAsync(cancellationToken);
         await db.OccasionAssets.Where(l => l.AssetId == id).ExecuteDeleteAsync(cancellationToken);
         await db.Derivatives.Where(d => d.AssetId == id).ExecuteDeleteAsync(cancellationToken);
