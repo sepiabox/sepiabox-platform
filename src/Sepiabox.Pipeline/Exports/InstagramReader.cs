@@ -48,7 +48,7 @@ public sealed partial class InstagramReader : IExportReader
                 "No Instagram post list was found in the folder. Expected your_instagram_activity/content/posts_1.json (older downloads: content/posts_1.json) in a download requested in JSON format.");
         }
 
-        var described = new Dictionary<string, Described>(StringComparer.OrdinalIgnoreCase);
+        var described = new Dictionary<string, MetaFacts>(StringComparer.OrdinalIgnoreCase);
         var unreadable = new List<string>();
         var missing = 0;
         foreach (var (path, match) in lists)
@@ -71,14 +71,15 @@ public sealed partial class InstagramReader : IExportReader
                 var album = Albums(match.Groups["list"].Value);
                 foreach (var media in MetaExport.Items(document.RootElement))
                 {
-                    var relative = Resolve(root, baseFolder, media);
+                    var relative = MetaExport.Resolve(root, baseFolder, media);
                     if (relative is null)
                     {
                         missing++;
                         continue;
                     }
 
-                    described[relative] = described.TryGetValue(relative, out var earlier) ? earlier.Merge(media, album) : new Described(media, [.. album]);
+                    var facts = new MetaFacts(media.Title, media.PostedAt, media.Exif, album);
+                    described[relative] = described.TryGetValue(relative, out var earlier) ? earlier.Merge(facts) : facts;
                 }
             }
         }
@@ -113,51 +114,4 @@ public sealed partial class InstagramReader : IExportReader
             "reels" => [PostsAlbum, ReelsAlbum],
             _ => [PostsAlbum],
         };
-
-    // The media file's path under the scan root, as written or text-repaired, whichever exists; null when neither does or when
-    // the path leaves the download.
-    private static string? Resolve(string root, string baseFolder, MetaMedia media)
-    {
-        foreach (var uri in new[] { media.RawUri, media.Uri }.Distinct(StringComparer.Ordinal))
-        {
-            var relative = (baseFolder + uri.Replace('\\', '/').TrimStart('/')).Replace("//", "/", StringComparison.Ordinal);
-            var full = Path.GetFullPath(Path.Combine(root, relative));
-            var inside = Path.GetRelativePath(root, full);
-            if (inside.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(inside))
-            {
-                continue;
-            }
-
-            if (File.Exists(full) && MediaTypes.Classify(full) != MediaKind.Other)
-            {
-                return inside.Replace('\\', '/');
-            }
-        }
-
-        return null;
-    }
-
-    // What the lists say about one file, merged over the lists it is in (a post and its archived copy): the first caption,
-    // date and place found, and every album.
-    private sealed record Described(MetaMedia Media, List<string> Albums)
-    {
-        public Described Merge(MetaMedia other, string[] albums) =>
-            new(
-                Media with
-                {
-                    Title = Media.Title ?? other.Title,
-                    PostedAt = Media.PostedAt ?? other.PostedAt,
-                    Exif = new MetaExif(Media.Exif?.Location ?? other.Exif?.Location, Media.Exif?.TakenAt ?? other.Exif?.TakenAt),
-                },
-                [.. Albums.Concat(albums).Distinct(StringComparer.Ordinal)]);
-
-        public ExportMetadata ToMetadata() => new()
-        {
-            // The camera's own date when the post has one; otherwise the posting time, an approximation of the capture date.
-            CapturedAt = Media.Exif?.TakenAt ?? Media.PostedAt,
-            Location = Media.Exif?.Location,
-            Caption = Media.Title,
-            Albums = Albums,
-        };
-    }
 }

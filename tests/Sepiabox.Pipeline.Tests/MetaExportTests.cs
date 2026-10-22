@@ -150,4 +150,29 @@ public sealed class MetaExportTests
 
         Assert.Empty(MetaExport.Items(document.RootElement));
     }
+
+    [Fact]
+    public void Reads_facebooks_taken_timestamp_as_utc_and_prefers_a_camera_date_string()
+    {
+        using var facebook = JsonDocument.Parse("""{"photo_metadata": {"exif_data": [{"taken_timestamp": 1561975200, "latitude": 38.7, "longitude": -9.1}]}}""");
+        using var both = JsonDocument.Parse("""{"photo_metadata": {"exif_data": [{"date_time_original": "2019:06:30 18:00:00", "taken_timestamp": 1561975200}]}}""");
+
+        var taken = MetaExport.Exif(facebook.RootElement)!.TakenAt!.Value;
+
+        Assert.Equal(new DateTime(2019, 7, 1, 10, 0, 0, DateTimeKind.Utc), taken);
+        Assert.Equal(new DateTime(2019, 6, 30, 18, 0, 0), MetaExport.Exif(both.RootElement)!.TakenAt);
+    }
+
+    [Fact]
+    public void Takes_the_description_else_the_post_text_for_media_and_repairs_it()
+    {
+        using var document = JsonDocument.Parse("""
+            [{"uri": "a.jpg", "description": "Ol\u00c3\u00a1"}, {"uri": "b.jpg"}, {"uri": "c.jpg", "description": "  "}]
+            """);
+
+        var items = MetaExport.Items(document.RootElement, "post text", new DateTime(2019, 7, 1, 0, 0, 0, DateTimeKind.Utc)).ToList();
+
+        Assert.Equal(["Olá", "post text", "post text"], items.Select(i => i.Text));
+        Assert.All(items, i => Assert.Equal(2019, i.PostedAt!.Value.Year));
+    }
 }

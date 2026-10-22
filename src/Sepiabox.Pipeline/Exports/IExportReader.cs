@@ -96,7 +96,7 @@ public sealed class ExportReaderRegistry
     }
 
     /// <summary>The readers shipped with the tool; S-047 to S-049 add theirs.</summary>
-    public static ExportReaderRegistry Default { get; } = new([new AppleExportReader(), new GoogleTakeoutReader(), new InstagramReader()]);
+    public static ExportReaderRegistry Default { get; } = new([new AppleExportReader(), new GoogleTakeoutReader(), new FacebookReader(), new InstagramReader()]);
 
     /// <summary>The kinds <c>--export</c> accepts, in order.</summary>
     public IReadOnlyList<string> Kinds => [.. _readers.Keys.Order(StringComparer.Ordinal)];

@@ -205,7 +205,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` | A |
 | S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `doing` | B |
 | S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `doing` | B |
-| S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `todo` | B |
+| S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `doing` | B |
 
 ## Epics
 

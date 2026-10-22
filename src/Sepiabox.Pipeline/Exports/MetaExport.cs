@@ -12,10 +12,34 @@ namespace Sepiabox.Pipeline.Exports;
 /// <param name="Title">The caption of the media, else of the post it is in; null for none.</param>
 /// <param name="PostedAt">The creation timestamp (UTC epoch seconds) of the media, else of its post.</param>
 /// <param name="Exif">The first <c>exif_data</c> entry of the media with a place or a date.</param>
-public sealed record MetaMedia(string Uri, string RawUri, string? Title, DateTime? PostedAt, MetaExif? Exif);
+/// <param name="Text">The media's <c>description</c>, else the text of the post it is in (<c>post</c>), as Facebook writes them; null for none.</param>
+public sealed record MetaMedia(string Uri, string RawUri, string? Title, DateTime? PostedAt, MetaExif? Exif, string? Text = null);
 
 /// <summary>What <c>media_metadata</c> says: where and when the camera says the picture was taken.</summary>
 public sealed record MetaExif(GeoPoint? Location, DateTime? TakenAt);
+
+/// <summary>
+/// What a Meta download's lists say about one media file, merged over the lists it is in (a post and an album): the first
+/// caption, date and place found, and every album.
+/// </summary>
+public sealed record MetaFacts(string? Caption, DateTime? PostedAt, MetaExif? Exif, IReadOnlyList<string> Albums)
+{
+    public MetaFacts Merge(MetaFacts other) =>
+        new(
+            Caption ?? other.Caption,
+            PostedAt ?? other.PostedAt,
+            new MetaExif(Exif?.Location ?? other.Exif?.Location, Exif?.TakenAt ?? other.Exif?.TakenAt),
+            [.. Albums.Concat(other.Albums).Distinct(StringComparer.Ordinal)]);
+
+    public ExportMetadata ToMetadata() => new()
+    {
+        // The camera's date when the list has one; otherwise the posting time, an approximation of the capture date.
+        CapturedAt = Exif?.TakenAt ?? PostedAt,
+        Location = Exif?.Location,
+        Caption = Caption,
+        Albums = Albums,
+    };
+}
 
 /// <summary>
 /// The JSON helpers the Meta exports share (S-048, S-049, D-111): finding the media in a post list whatever its nesting,
@@ -131,6 +155,12 @@ public static partial class MetaExport
                 {
                     taken = ExifTime(original.GetString());
                 }
+
+                // Facebook writes the time the picture was taken as UTC epoch seconds.
+                if (taken is null && entry.TryGetProperty("taken_timestamp", out var stamp))
+                {
+                    taken = Epoch(stamp);
+                }
             }
         }
 
@@ -143,14 +173,20 @@ public static partial class MetaExport
     /// walked: a media item takes its own <c>title</c> and <c>creation_timestamp</c> when it has them, else those of the
     /// nearest enclosing object that has them.
     /// </summary>
-    public static IEnumerable<MetaMedia> Items(JsonElement root)
+    public static IEnumerable<MetaMedia> Items(JsonElement root) => Items(root, null, null);
+
+    /// <summary>
+    /// As <see cref="Items(JsonElement)"/>, for the media inside one post whose text and time are given: what the media
+    /// does not say itself falls back to them.
+    /// </summary>
+    public static IEnumerable<MetaMedia> Items(JsonElement root, string? postText, DateTime? postedAt)
     {
         var found = new List<MetaMedia>();
-        Walk(root, null, null, found, 0);
+        Walk(root, null, postedAt, postText, found, 0);
         return found;
     }
 
-    private static void Walk(JsonElement element, string? title, DateTime? postedAt, List<MetaMedia> found, int depth)
+    private static void Walk(JsonElement element, string? title, DateTime? postedAt, string? inheritedText, List<MetaMedia> found, int depth)
     {
         if (depth > MaxDepth)
         {
@@ -162,7 +198,7 @@ public static partial class MetaExport
             case JsonValueKind.Array:
                 foreach (var item in element.EnumerateArray())
                 {
-                    Walk(item, title, postedAt, found, depth + 1);
+                    Walk(item, title, postedAt, inheritedText, found, depth + 1);
                 }
 
                 break;
@@ -170,11 +206,12 @@ public static partial class MetaExport
                 var ownTitle = element.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String && t.GetString() is { Length: > 0 } text
                     ? RepairText(text)
                     : title;
+                var ownText = Text(element, "description") ?? Text(element, "post") ?? inheritedText;
                 var ownTime = element.TryGetProperty("creation_timestamp", out var c) && Epoch(c) is { } time ? time : postedAt;
                 if (element.TryGetProperty("uri", out var uri) && uri.ValueKind == JsonValueKind.String && uri.GetString() is { Length: > 0 } raw)
                 {
                     var metadata = element.TryGetProperty("media_metadata", out var m) ? Exif(m) : null;
-                    found.Add(new MetaMedia(RepairText(raw), raw, ownTitle, ownTime, metadata));
+                    found.Add(new MetaMedia(RepairText(raw), raw, ownTitle, ownTime, metadata, ownText));
                     break;
                 }
 
@@ -182,7 +219,7 @@ public static partial class MetaExport
                 {
                     if (property.Value.ValueKind is JsonValueKind.Array or JsonValueKind.Object)
                     {
-                        Walk(property.Value, ownTitle, ownTime, found, depth + 1);
+                        Walk(property.Value, ownTitle, ownTime, ownText, found, depth + 1);
                     }
                 }
 
@@ -190,6 +227,38 @@ public static partial class MetaExport
             default:
                 break;
         }
+    }
+
+    private static string? Text(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() is { } text && text.Trim().Length > 0
+            ? RepairText(text)
+            : null;
+
+    /// <summary>
+    /// The media file's path under the scan root, as written or text-repaired, whichever exists; null when neither does, when
+    /// the path leaves the download or when it is not a photo or a video. <paramref name="baseFolder"/> is the download's root
+    /// under <paramref name="root"/> (empty, or ending in a slash).
+    /// </summary>
+    public static string? Resolve(string root, string baseFolder, MetaMedia media)
+    {
+        ArgumentNullException.ThrowIfNull(media);
+        foreach (var uri in new[] { media.RawUri, media.Uri }.Distinct(StringComparer.Ordinal))
+        {
+            var relative = (baseFolder + uri.Replace('\\', '/').TrimStart('/')).Replace("//", "/", StringComparison.Ordinal);
+            var full = Path.GetFullPath(Path.Combine(root, relative));
+            var inside = Path.GetRelativePath(root, full);
+            if (inside.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(inside))
+            {
+                continue;
+            }
+
+            if (File.Exists(full) && IsMedia(full))
+            {
+                return inside.Replace('\\', '/');
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Whether <paramref name="path"/> is a photo or video file by its extension.</summary>
