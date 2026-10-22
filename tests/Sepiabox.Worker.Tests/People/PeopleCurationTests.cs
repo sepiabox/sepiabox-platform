@@ -371,6 +371,19 @@ public sealed class PeopleCurationTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Moves_the_user_link_to_the_person_that_stays_when_a_swap_merges_the_linked_one_away()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var me = await PersonAsync(db, null, 2, 1, user: Ana);
+        var other = await PersonAsync(db, null, 40, 100);
+
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MergeAsync(me, other, swap: true));
+
+        var person = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal((other, Ana), (person.Id, person.UserEmail));
+    }
+
+    [Fact]
     public async Task A_stale_or_hand_made_request_cannot_delete_a_named_or_linked_person_without_a_swap()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
