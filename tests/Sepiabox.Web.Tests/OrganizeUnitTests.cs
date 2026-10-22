@@ -29,6 +29,19 @@ public sealed class OrganizeUnitTests
     }
 
     [Fact]
+    public void Cuts_a_long_run_into_bursts_of_at_most_twelve_photos_and_drops_a_leftover_single_photo()
+    {
+        var run = Enumerable.Range(1, 25).Select(n => Burst(n, n - 1, Hash)).ToList();
+
+        var bursts = BurstFinder.Find(run);
+
+        Assert.Equal([12, 12], bursts.Select(b => b.Count));
+        Assert.Equal(BurstFinder.MaxPhotos, bursts[0].Count);
+        Assert.Equal(Ids.Of(13), bursts[1][0].Id);
+        Assert.Equal([3], BurstFinder.Find(Enumerable.Range(1, 15).Select(n => Burst(n, n - 1, Hash))).Skip(1).Select(b => b.Count));
+    }
+
+    [Fact]
     public void Leaves_out_photos_that_do_not_look_alike_and_single_photos()
     {
         var bursts = BurstFinder.Find([Burst(1, 0, Hash), Burst(2, 1, "ffffffffffffffff"), Burst(3, 2, Hash)]);

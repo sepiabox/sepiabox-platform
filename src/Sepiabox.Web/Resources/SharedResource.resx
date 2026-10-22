@@ -1283,4 +1283,7 @@
   <data name="Organize_Level_Sharp" xml:space="preserve">
     <value>Sharp</value>
   </data>
+  <data name="Organize_Done_Capped" xml:space="preserve">
+    <value>Only the first {0} checked photos were changed: check the others and press the button again.</value>
+  </data>
 </root>

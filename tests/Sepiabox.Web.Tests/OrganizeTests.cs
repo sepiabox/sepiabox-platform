@@ -155,6 +155,50 @@ public sealed partial class OrganizeTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Changes_only_the_first_500_checked_photos_and_says_so()
+    {
+        await using var db = await LibraryAsync();
+        await using var web = new WebFactory(catalog.ConnectionStringFor(db));
+        using var http = web.CreateSignedInClient(followRedirects: false);
+        var html = await http.GetStringAsync(new Uri("/organize?view=blurry", UriKind.Relative));
+        var fields = new List<KeyValuePair<string, string>>
+        {
+            new("__RequestVerificationToken", Token(html)), new("_handler", "organize"), new("View", "blurry"), new("Action", "hide"),
+            new("Ids", Ids.Of(4)),
+        };
+        fields.AddRange(Enumerable.Range(1000, 600).Select(n => new KeyValuePair<string, string>("Ids", Ids.Of(n))));
+
+        using var response = await http.PostAsync(new Uri("/organize?view=blurry", UriKind.Relative), new FormUrlEncodedContent(fields));
+
+        Assert.Equal("/organize?view=blurry&note=hidden&cap=1&n=1", response.Headers.Location!.PathAndQuery);
+        var page = await http.GetStringAsync(new Uri(response.Headers.Location.PathAndQuery.TrimStart('/'), UriKind.Relative));
+        Assert.Contains("Only the first 500 checked photos were changed", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Leaves_hidden_videos_out_of_the_largest_videos_and_hidden_photos_out_of_an_occasion()
+    {
+        await using var db = await LibraryAsync();
+        db.Assets.AddRange(CatalogData.Video(Ids.Of(20), s_shot), CatalogData.Video(Ids.Of(21), s_shot.AddHours(1)));
+        var occasion = new Occasion { StartsAt = s_shot, EndsAt = s_shot.AddSeconds(2), AssetCount = 3 };
+        db.Occasions.Add(occasion);
+        await db.SaveChangesAsync();
+        db.OccasionAssets.AddRange(Enumerable.Range(1, 3).Select(n => new OccasionAsset { EventId = occasion.Id, AssetId = Ids.Of(n) }));
+        await db.SaveChangesAsync();
+        await Organization(db).HideAsync([Ids.Of(20), Ids.Of(1)]);
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var storage = await queries.GetStorageAsync();
+        var page = await queries.GetOccasionsPageAsync(1);
+        var detail = await queries.GetOccasionAsync(occasion.Id);
+
+        Assert.Equal([Ids.Of(21)], storage.LargestVideos.Select(v => v.Id));
+        Assert.DoesNotContain(Ids.Of(1), page.Items.Single().Thumbnails);
+        Assert.Equal(2, page.Items.Single().AssetCount);
+        Assert.Equal(2, detail!.AssetCount);
+    }
+
+    [Fact]
     public async Task Asks_nothing_of_the_catalog_for_an_address_that_is_not_a_view_or_a_page()
     {
         await using var db = await LibraryAsync();

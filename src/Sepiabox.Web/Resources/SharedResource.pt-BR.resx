@@ -1221,4 +1221,7 @@
   <data name="Organize_Level_Sharp" xml:space="preserve">
     <value>Nítida</value>
   </data>
+  <data name="Organize_Done_Capped" xml:space="preserve">
+    <value>Só as primeiras {0} fotos marcadas foram alteradas: marque as outras e aperte o botão de novo.</value>
+  </data>
 </root>

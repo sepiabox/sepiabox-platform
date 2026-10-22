@@ -114,6 +114,11 @@ h1:focus {
     outline: none;
 }
 
+/* An author display rule (flex, grid) beats the hidden attribute, so an element made visible by a script only would show without it. */
+[hidden] {
+    display: none !important;
+}
+
 .visually-hidden {
     position: absolute !important;
     width: 1px !important;

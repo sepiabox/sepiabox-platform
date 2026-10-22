@@ -131,6 +131,10 @@ else
     [SupplyParameterFromQuery(Name = "n")]
     public string? NoteCount { get; set; }
 
+    // Set when more photos were checked than one request takes: only the first ones were changed.
+    [SupplyParameterFromQuery(Name = "cap")]
+    public string? NoteCap { get; set; }
+
     [SupplyParameterFromForm(FormName = "organize")]
     public string? View { get; set; }
 
@@ -141,13 +145,22 @@ else
     private OrganizePage<BurstGroup>? _bursts;
     private OrganizePage<OrganizeItem>? _photos;
 
-    private string? NoteText => Note switch
+    private string? NoteText
     {
-        "hidden" or "restored" when int.TryParse(NoteCount, NumberStyles.None, CultureInfo.InvariantCulture, out var count) =>
-            Text[Note == "hidden" ? "Organize_Done_Hidden" : "Organize_Done_Restored", count.ToString("N0", CultureInfo.CurrentCulture)].Value,
-        "none" => Text["Organize_Done_None"].Value,
-        _ => null,
-    };
+        get
+        {
+            var done = Note switch
+            {
+                "hidden" or "restored" when int.TryParse(NoteCount, NumberStyles.None, CultureInfo.InvariantCulture, out var count) =>
+                    Text[Note == "hidden" ? "Organize_Done_Hidden" : "Organize_Done_Restored", count.ToString("N0", CultureInfo.CurrentCulture)].Value,
+                "none" => Text["Organize_Done_None"].Value,
+                _ => null,
+            };
+            return done is not null && NoteCap == "1"
+                ? $"{done} {Text["Organize_Done_Capped", Sepiabox.Web.Services.Organization.MaxIdsPerAction.ToString("N0", CultureInfo.CurrentCulture)].Value}"
+                : done;
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -191,6 +204,11 @@ else
         var changed = ids.Length == 0 ? 0 : restore ? await Organization.UnhideAsync(ids) : await Organization.HideAsync(ids);
         var note = changed == 0 ? "none" : restore ? "restored" : "hidden";
         var query = new Dictionary<string, string?> { ["view"] = view, ["note"] = note };
+        if (ids.Length > Sepiabox.Web.Services.Organization.MaxIdsPerAction)
+        {
+            query["cap"] = "1";
+        }
+
         if (changed > 0)
         {
             query["n"] = changed.ToString(CultureInfo.InvariantCulture);

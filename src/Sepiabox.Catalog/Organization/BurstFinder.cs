@@ -15,6 +15,12 @@ public static class BurstFinder
     public const int MaxDistance = 10;
 
     /// <summary>
+    /// The most photos in a burst: a longer run of photos is cut into bursts of this many. Chaining alone has no end, and
+    /// "check all but the sharpest" on a long slow run would set aside most of an afternoon in one click.
+    /// </summary>
+    public const int MaxPhotos = 12;
+
+    /// <summary>
     /// The bursts of two photos or more, each in capture order (then by id), the oldest burst first. A photo follows the one
     /// before it in the burst: a slow change across a long run still chains, which is what a burst of a moving subject is.
     /// </summary>
@@ -25,7 +31,7 @@ public static class BurstFinder
         var current = new List<BurstPhoto>();
         foreach (var photo in photos.OrderBy(p => p.CapturedAt).ThenBy(p => p.Id, StringComparer.Ordinal))
         {
-            if (current.Count > 0 && !Follows(current[^1], photo))
+            if (current.Count > 0 && (current.Count >= MaxPhotos || !Follows(current[^1], photo)))
             {
                 Close();
             }
