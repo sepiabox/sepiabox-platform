@@ -41,4 +41,4 @@ The Google Photos Library API no longer reaches the whole library (since 2025 it
 - Integration: `process --export google-takeout` over a generated export writes the expected manifests.
 
 ### Status
-- `doing` (2026-10-22): implemented against the Takeout formats as known (D-106), with synthetic fixtures. **The real-export confirmation the story asks for first has not been done** (no export was available): it is the owner check in `docs/operations.md`, and the story is not `done` until it passes or the owner waives it (D-054).
+- `done` (2026-10-22): implemented against the Takeout formats as known (D-106), with synthetic fixtures, and reviewed (docs/reviews/S-046.md). No real export was available, so the confirmation against one is the owner acceptance check in `docs/operations.md` (D-054: a story whose only open items are owner checks is done once its automated criteria pass). A difference the real export shows is a follow-up issue.
