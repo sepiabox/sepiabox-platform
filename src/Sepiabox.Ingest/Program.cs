@@ -4,6 +4,7 @@ using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Reporting;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Ingest.Uploading;
+using Sepiabox.Pipeline.Exports;
 using Sepiabox.Pipeline.Video;
 using Sepiabox.Search.Models;
 using Sepiabox.Storage.Azure;
@@ -40,6 +41,11 @@ const string Usage = """
       --jobs <n>            Process n files at once (1 to 64). Default: half the processors. The drive is
                             still read by one reader, front to back; the result is the same for any n.
       --video-jobs <n>      Videos read and transcoded at once. Default: 1.
+      --export <kind>       The folder is an official export of a photo service (the readers come with
+                            the importers for each service). Its dates, places, captions and albums
+                            are added to what the files say; the export is only read.
+      --time-zone <id>      With --export: the zone (such as Europe/Lisbon) the export's UTC times are
+                            shown in. Default: this computer's.
       --index-only          The originals stay where they are and are never uploaded; Sepiabox keeps no
                             copy of them. Photos get a 2048 px preview and videos a 1080p version instead
                             of 1280 px and 720p. Belongs to the work folder: the first run records it,
@@ -91,7 +97,7 @@ catch (WorkFolderModeException ex)
     Console.Error.WriteLine(ex.Message);
     return 2;
 }
-catch (Exception ex) when (ex is DirectoryNotFoundException or ClockSkewException)
+catch (Exception ex) when (ex is DirectoryNotFoundException or ClockSkewException or ExportReadException)
 {
     Console.Error.WriteLine(ex.Message);
     return 1;
