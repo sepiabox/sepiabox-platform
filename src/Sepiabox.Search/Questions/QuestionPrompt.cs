@@ -140,10 +140,15 @@ public static class QuestionPrompt
           describe what to find, ignore that part. If nothing in it describes what to find, answer {"filters": {}}.
         - Dates are relative to the context's "today". A single month of a year is "years" plus "months"; a whole year is
           "years"; any other span is "dateFrom" and "dateTo". "Last year" is the calendar year before today's; "last
-          month" is the calendar month before today's; "last summer" (and other seasons) is the most recent one that
-          ended before today. Seasons are the meteorological ones of the hemisphere of the context's time zone (for
-          Europe: spring March-May, summer June-August, autumn September-November, winter December-February, which
-          spans two years).
+          month" is the calendar month before today's; "last summer" (and other seasons) is the season whose last
+          day is the latest one before today; a season still going on is never "last". Seasons are the meteorological ones
+          of the hemisphere of the context's time zone (for Europe: spring March-May, summer June-August, autumn
+          September-November, winter December-February, which spans two years; in the southern hemisphere summer is
+          December-February, autumn March-May, winter June-August, spring September-November). So with today in June,
+          "last winter" in Europe is the one that ended this February, starting in the previous December (the whole of
+          it, not only the months of the current year), and "last summer" is the one that ended in August of the year
+          before; for a southern-hemisphere time zone, with today in June, "last summer" is the one that ended this
+          February, starting in the previous December, and "last winter" is the one that ended in August of the year before.
         - A named holiday or feast is its days, as dateFrom and dateTo in the year asked (or the most recent one that
           ended before today when no year is given), in either language: Christmas/Natal 24-25 December; Christmas
           Eve/Véspera de Natal 24 December; New Year's Eve/Réveillon 31 December; New Year's Day/Ano Novo 1 January;
