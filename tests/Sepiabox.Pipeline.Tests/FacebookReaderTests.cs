@@ -98,7 +98,9 @@ public sealed class FacebookReaderTests : IDisposable
 
         Assert.True(scan.IsLeftOut("messages/inbox/chat/photos/m.jpg"));
         Assert.Equal(1, scan.Count);
-        Assert.Contains("1 photos and videos in the download are in no album or post list", Assert.Single(scan.Warnings), StringComparison.Ordinal);
+        var warning = Assert.Single(scan.Warnings);
+        Assert.Contains("1 photos and videos in the download are in no album or post list", warning, StringComparison.Ordinal);
+        Assert.Contains("Check this number against your account", warning, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -132,7 +132,10 @@ public sealed class InstagramReaderTests : IDisposable
         Assert.True(scan.IsLeftOut("media/other/x.mp4"));
         Assert.False(scan.IsLeftOut("media/posts/a.jpg"));
         Assert.Equal(1, scan.Count);
-        Assert.Contains("2 photos and videos in the download are in no post list", Assert.Single(scan.Warnings), StringComparison.Ordinal);
+        var warning = Assert.Single(scan.Warnings);
+        Assert.Contains("2 photos and videos in the download are in no post list", warning, StringComparison.Ordinal);
+        Assert.Contains("highlights, IGTV and archived stories", warning, StringComparison.Ordinal);
+        Assert.Contains("Check this number against your account", warning, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -146,6 +149,19 @@ public sealed class InstagramReaderTests : IDisposable
 
         Assert.Equal(1, scan.Count);
         Assert.Contains(scan.Warnings, w => w.Contains("3 media files named in the post lists are not in the download", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Reads_a_folder_named_like_dot_dot_and_still_refuses_to_leave_the_download()
+    {
+        Put("..hidden/a.jpg");
+        Put("outside.jpg");
+        Json(Posts, """[{"media": [{"uri": "..hidden/a.jpg"}, {"uri": "../outside.jpg"}, {"uri": ".."}]}]""");
+
+        var scan = Read();
+
+        Assert.NotNull(scan.Find("..hidden/a.jpg"));
+        Assert.Equal(1, scan.Count);
     }
 
     [Fact]

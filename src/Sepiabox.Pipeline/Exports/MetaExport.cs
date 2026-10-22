@@ -47,7 +47,8 @@ public sealed record MetaFacts(string? Caption, DateTime? PostedAt, MetaExif? Ex
 /// </summary>
 public static partial class MetaExport
 {
-    private const int MaxDepth = 24;
+    /// <summary>The deepest nesting the walk follows; JSON parsed with the default options cannot be deeper than 64.</summary>
+    public const int MaxDepth = 64;
 
     [GeneratedRegex(@"^(\d{4})[:\-](\d\d)[:\-](\d\d)[T ](\d\d):(\d\d):(\d\d)(?:[.,]\d+)?\s*(Z|[+-]\d\d(?::?\d\d)?)?$", RegexOptions.IgnoreCase)]
     private static partial Regex ExifDate();
@@ -173,23 +174,24 @@ public static partial class MetaExport
     /// walked: a media item takes its own <c>title</c> and <c>creation_timestamp</c> when it has them, else those of the
     /// nearest enclosing object that has them.
     /// </summary>
-    public static IEnumerable<MetaMedia> Items(JsonElement root) => Items(root, null, null);
+    public static IEnumerable<MetaMedia> Items(JsonElement root, Action? tooDeep = null) => Items(root, null, null, tooDeep);
 
     /// <summary>
-    /// As <see cref="Items(JsonElement)"/>, for the media inside one post whose text and time are given: what the media
+    /// As <see cref="Items(JsonElement, Action?)"/>, for the media inside one post whose text and time are given: what the media
     /// does not say itself falls back to them.
     /// </summary>
-    public static IEnumerable<MetaMedia> Items(JsonElement root, string? postText, DateTime? postedAt)
+    public static IEnumerable<MetaMedia> Items(JsonElement root, string? postText, DateTime? postedAt, Action? tooDeep = null)
     {
         var found = new List<MetaMedia>();
-        Walk(root, null, postedAt, postText, found, 0);
+        Walk(root, null, postedAt, postText, found, 0, tooDeep);
         return found;
     }
 
-    private static void Walk(JsonElement element, string? title, DateTime? postedAt, string? inheritedText, List<MetaMedia> found, int depth)
+    private static void Walk(JsonElement element, string? title, DateTime? postedAt, string? inheritedText, List<MetaMedia> found, int depth, Action? tooDeep)
     {
         if (depth > MaxDepth)
         {
+            tooDeep?.Invoke();
             return;
         }
 
@@ -198,7 +200,7 @@ public static partial class MetaExport
             case JsonValueKind.Array:
                 foreach (var item in element.EnumerateArray())
                 {
-                    Walk(item, title, postedAt, inheritedText, found, depth + 1);
+                    Walk(item, title, postedAt, inheritedText, found, depth + 1, tooDeep);
                 }
 
                 break;
@@ -219,7 +221,7 @@ public static partial class MetaExport
                 {
                     if (property.Value.ValueKind is JsonValueKind.Array or JsonValueKind.Object)
                     {
-                        Walk(property.Value, ownTitle, ownTime, ownText, found, depth + 1);
+                        Walk(property.Value, ownTitle, ownTime, ownText, found, depth + 1, tooDeep);
                     }
                 }
 
@@ -247,7 +249,7 @@ public static partial class MetaExport
             var relative = (baseFolder + uri.Replace('\\', '/').TrimStart('/')).Replace("//", "/", StringComparison.Ordinal);
             var full = Path.GetFullPath(Path.Combine(root, relative));
             var inside = Path.GetRelativePath(root, full);
-            if (inside.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(inside))
+            if (inside == ".." || inside.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(inside))
             {
                 continue;
             }

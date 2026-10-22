@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Sepiabox.Pipeline.Exports;
 
@@ -127,20 +128,86 @@ public sealed class AppleExportReaderTests : IDisposable
     }
 
     [Fact]
-    public void Ignores_details_rows_that_disagree_and_names_that_two_files_share()
+    public void Ignores_the_dates_of_rows_that_disagree_and_of_names_that_two_files_share()
     {
         Put("One/IMG_0001.HEIC");
         Put("Two/IMG_0001.HEIC");
         Put("IMG_0002.HEIC");
-        Text("Photo Details.csv", $"{Header}\nIMG_0001.HEIC,a,N,N,N,\"Wednesday May 23,2018 4:16 PM GMT\",0,\nIMG_0002.HEIC,b,N,N,N,\"Wednesday May 23,2018 4:16 PM GMT\",0,\nIMG_0002.HEIC,b,N,N,Y,\"Wednesday May 23,2018 4:16 PM GMT\",0,\n");
+        Put("IMG_0003.HEIC");
+        Text("Photo Details.csv", $"{Header}\nIMG_0001.HEIC,a,N,N,N,\"Wednesday May 23,2018 4:16 PM GMT\",0,\nIMG_0003.HEIC,b,N,N,N,\"Wednesday May 23,2018 4:16 PM GMT\",0,\nIMG_0003.HEIC,b,N,N,N,\"Thursday May 24,2018 4:16 PM GMT\",0,\n");
 
         var scan = Read();
 
         Assert.Null(scan.Find("One/IMG_0001.HEIC")!.CapturedAt);
         Assert.Null(scan.Find("Two/IMG_0001.HEIC")!.CapturedAt);
-        Assert.Null(scan.Find("IMG_0002.HEIC")!.CapturedAt);
-        Assert.False(scan.IsLeftOut("IMG_0002.HEIC"));
-        Assert.Contains(scan.Warnings, w => w.Contains("2 photos and videos share a file name", StringComparison.Ordinal));
+        Assert.Null(scan.Find("IMG_0003.HEIC")!.CapturedAt);
+        Assert.Contains(scan.Warnings, w => w.Contains("3 photos and videos share a file name", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Leaves_out_a_file_whose_ambiguous_name_has_a_row_that_says_deleted()
+    {
+        Put("One/IMG_0001.HEIC");
+        Put("Two/IMG_0001.HEIC");
+        Put("IMG_0002.HEIC");
+        Text("Photo Details.csv", $"{Header}\nIMG_0001.HEIC,a,N,N,Y,,0,\nIMG_0002.HEIC,b,N,N,N,,0,\nIMG_0002.HEIC,b,N,N,Y,,0,\n");
+
+        var scan = Read();
+
+        Assert.True(scan.IsLeftOut("One/IMG_0001.HEIC"));
+        Assert.True(scan.IsLeftOut("Two/IMG_0001.HEIC"));
+        Assert.True(scan.IsLeftOut("IMG_0002.HEIC"));
+        Assert.Contains(scan.Warnings, w => w.Contains("3 photos and videos are marked deleted", StringComparison.Ordinal));
+        Assert.Contains(scan.Warnings, w => w.Contains("3 of them share a file name", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Lists_the_values_of_the_deleted_column_with_their_counts()
+    {
+        Put("a.heic");
+        Put("b.heic");
+        Put("c.heic");
+        Put("d.heic");
+        Text("Photo Details.csv", $"{Header}\na.heic,x,N,N,N/A,,0,\nb.heic,x,N,N,N/A,,0,\nc.heic,x,N,N,Y,,0,\nd.heic,x,N,N,N,,0,\n");
+
+        var warning = Assert.Single(Read().Warnings, w => w.StartsWith("The deleted column holds", StringComparison.Ordinal));
+
+        Assert.Contains("\"N/A\" x 2", warning, StringComparison.Ordinal);
+        Assert.Contains("\"Y\" x 1", warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"N\"", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Warns_loudly_when_most_rows_are_marked_deleted()
+    {
+        var rows = new StringBuilder(Header + "\n");
+        for (var n = 1; n <= 12; n++)
+        {
+            Put($"IMG_{n:0000}.HEIC");
+            rows.Append(CultureInfo.InvariantCulture, $"IMG_{n:0000}.HEIC,x,N,N,{(n <= 9 ? "Nao" : "N")},,0,\n");
+        }
+
+        Text("Photo Details.csv", rows.ToString());
+
+        Assert.Contains(Read().Warnings, w => w.Contains("Most rows (9 of 12) are marked deleted", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Reads_a_folder_with_a_sidecar_per_file_in_time_that_grows_with_the_files_not_with_their_square()
+    {
+        for (var n = 0; n < 6000; n++)
+        {
+            Put($"IMG_{n:00000}.HEIC");
+            _export.Write($"IMG_{n:00000}.HEIC.xmp", Encoding.UTF8.GetBytes(XmpText($"<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">{n}</rdf:li></rdf:Alt></dc:description>")));
+        }
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var scan = Read();
+        clock.Stop();
+
+        Assert.Equal("5999", scan.Find("IMG_05999.HEIC")!.Caption);
+        // A search of the folder for each sidecar took about 15 seconds at this size.
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(6), $"took {clock.Elapsed}");
     }
 
     [Fact]

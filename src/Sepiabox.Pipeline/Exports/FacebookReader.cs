@@ -47,6 +47,7 @@ public sealed partial class FacebookReader : IExportReader
         var described = new Dictionary<string, MetaFacts>(StringComparer.OrdinalIgnoreCase);
         var unreadable = new List<string>();
         var missing = 0;
+        var tooDeep = 0;
         foreach (var (path, match) in lists)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -65,8 +66,8 @@ public sealed partial class FacebookReader : IExportReader
             {
                 var baseFolder = Activity().Replace(match.Groups["root"].Value, string.Empty);
                 foreach (var (media, albums) in match.Groups["list"].Value.StartsWith("album/", StringComparison.OrdinalIgnoreCase)
-                    ? AlbumMedia(document.RootElement)
-                    : PostMedia(document.RootElement))
+                    ? AlbumMedia(document.RootElement, () => tooDeep++)
+                    : PostMedia(document.RootElement, () => tooDeep++))
                 {
                     var relative = MetaExport.Resolve(root, baseFolder, media);
                     if (relative is null)
@@ -88,12 +89,17 @@ public sealed partial class FacebookReader : IExportReader
         var warnings = new List<string>();
         if (unlisted.Count > 0)
         {
-            warnings.Add($"{unlisted.Count:N0} photos and videos in the download are in no album or post list (Messenger, profile pictures, other people's media) and were not imported.");
+            warnings.Add($"{unlisted.Count:N0} photos and videos in the download are in no album or post list (Messenger, profile pictures, other people's media, and possibly lists this reader does not read) and were not imported. Check this number against your account.");
         }
 
         if (missing > 0)
         {
             warnings.Add($"{missing:N0} media files named in the lists are not in the download.");
+        }
+
+        if (tooDeep > 0)
+        {
+            warnings.Add($"{tooDeep:N0} entries in the lists are nested deeper than {MetaExport.MaxDepth} levels and were not read.");
         }
 
         if (unreadable.Count > 0)
@@ -105,7 +111,7 @@ public sealed partial class FacebookReader : IExportReader
     }
 
     // An album file: its name, and the photos (only: the album's own description and cover are not a photo's caption).
-    private static IEnumerable<(MetaMedia Media, string[] Albums)> AlbumMedia(JsonElement root)
+    private static IEnumerable<(MetaMedia Media, string[] Albums)> AlbumMedia(JsonElement root, Action tooDeep)
     {
         if (root.ValueKind != JsonValueKind.Object)
         {
@@ -121,7 +127,7 @@ public sealed partial class FacebookReader : IExportReader
                 continue;
             }
 
-            foreach (var media in MetaExport.Items(items))
+            foreach (var media in MetaExport.Items(items, tooDeep))
             {
                 yield return (media, albums);
             }
@@ -129,7 +135,7 @@ public sealed partial class FacebookReader : IExportReader
     }
 
     // The posts file: a list of posts, each with the text in data[].post, a time in timestamp and its media in attachments[].
-    private static IEnumerable<(MetaMedia Media, string[] Albums)> PostMedia(JsonElement root)
+    private static IEnumerable<(MetaMedia Media, string[] Albums)> PostMedia(JsonElement root, Action tooDeep)
     {
         var posts = root.ValueKind switch
         {
@@ -146,7 +152,7 @@ public sealed partial class FacebookReader : IExportReader
                 continue;
             }
 
-            foreach (var media in MetaExport.Items(attachments, text, postedAt))
+            foreach (var media in MetaExport.Items(attachments, text, postedAt, tooDeep))
             {
                 yield return (media, [FacebookAlbum]);
             }
