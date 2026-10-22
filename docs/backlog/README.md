@@ -190,7 +190,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-057 | [Delete a source's assets from the library](S-057-delete-a-source-s-assets-from-the.md) | Cloud catalog | S-008, S-050, S-058 | Medium | M | `todo` | A |
 | S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010, S-051, S-063 | Medium | S | `todo` | A |
 | S-045 | [Read metadata from photo exports during process](S-045-read-metadata-from-photo-exports-during-process.md) | Import exports | S-004, S-043 | Medium | M | `done` | B |
-| S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
+| S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `done` | B |
 
 ### Sprint 16 — Drive and OneDrive sync, Apple Photos and social exports
 
