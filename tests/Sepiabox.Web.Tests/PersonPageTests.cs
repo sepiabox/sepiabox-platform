@@ -60,6 +60,20 @@ public sealed class PersonPageFormTests : LocalizedContext
     public void Lands_on_the_next_card_of_the_list_else_the_one_before(long faceId, string? expected) =>
         Assert.Equal(expected, PersonLinks.AnchorAfter(PersonPages.Person(7, "Ana", null), faceId));
 
+    [Theory]
+    [InlineData(81L, "face-82")]
+    [InlineData(82L, "face-81")]
+    public void Lands_on_the_next_card_when_the_face_has_one_on_each_side(long faceId, string expected)
+    {
+        var three = PersonPages.Person(7, "Ana", null) with
+        {
+            Faces = [new PersonFace(80, Ids.Of(1), null), new PersonFace(81, Ids.Of(2), null), new PersonFace(82, Ids.Of(3), null)],
+            ExcludedFaces = [],
+        };
+
+        Assert.Equal(expected, PersonLinks.AnchorAfter(three, faceId));
+    }
+
     [Fact]
     public void Lands_nowhere_in_particular_after_the_only_face_of_a_list_and_for_no_person()
     {
