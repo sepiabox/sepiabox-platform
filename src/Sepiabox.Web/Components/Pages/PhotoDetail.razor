@@ -100,7 +100,7 @@
                         @if (line is not null)
                         {
                             @* An original Sepiabox does not keep, with no address: say where it is (S-064). *@
-                            <span class="source-line">@line</span>
+                            <span class="source-line">@line.Text@if (line.Path is { } path){@(" ")<span class="mono">@path</span>}</span>
                         }
                         else
                         {
@@ -120,6 +120,11 @@
             @if (_asset.OriginalStored)
             {
                 <p><a class="button" href="photos/@_asset.Id/original" data-enhance-nav="false">@Text["Detail_DownloadOriginal"]</a></p>
+            }
+            else
+            {
+                @* Where the button would be: say why there is none (S-064). *@
+                <p class="muted kept-at-source">@Text["Download_KeptAtSource"]</p>
             }
         </section>
     </div>

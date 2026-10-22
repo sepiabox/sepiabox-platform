@@ -89,7 +89,7 @@ public sealed class IndexOnlyWebTests(CatalogFixture catalog)
         var html = await http.GetStringAsync(new Uri($"/photos/{Ids.Of(4)}", UriKind.Relative));
 
         Assert.DoesNotContain("javascript", html, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Stored in Takeout 2026; it can&#x27;t be opened from here.", html.Replace("&#39;", "&#x27;"), StringComparison.Ordinal);
+        Assert.Contains("Original in Takeout 2026; it can&#x27;t be opened from here.", html.Replace("&#39;", "&#x27;"), StringComparison.Ordinal);
     }
 
     private static Asset IndexOnlyPhoto(string id)

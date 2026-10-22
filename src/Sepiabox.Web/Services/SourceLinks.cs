@@ -48,20 +48,24 @@ public static class SourceLinks
     }
 
     /// <summary>
-    /// Where an original that Sepiabox does not keep is, for a source with no link: the drive and the path, or the export
-    /// it stayed in; null for a cloud source, whose line the cloud stories add.
+    /// Where an original that Sepiabox does not keep is, for a source with no link: a sentence about the drive or the
+    /// export it stayed in, and the drive path to show after it in its own markup (null when the sentence is whole).
+    /// Null for a cloud source, whose line the cloud stories add.
     /// </summary>
-    public static string? StoredLine(AssetSourceDetail source, IStringLocalizer<SharedResource> text)
+    public static SourceLine? StoredLine(AssetSourceDetail source, IStringLocalizer<SharedResource> text)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(text);
         if (source.Type == LocalType)
         {
-            return text["Source_StoredOnDrive", source.Name, source.Path].Value;
+            return new SourceLine(text["Source_StoredOnDrive", source.Name].Value, source.Path);
         }
 
         return s_cloudTypes.Contains(source.Type)
             ? null
-            : s_storedLine.TryGetValue(source.Type, out var key) ? text[key].Value : text["Source_StoredIn", source.Name].Value;
+            : new SourceLine(s_storedLine.TryGetValue(source.Type, out var key) ? text[key].Value : text["Source_StoredIn", source.Name].Value, null);
     }
 }
+
+/// <summary>A sentence about where an original is, and the path that follows it when it has one.</summary>
+public sealed record SourceLine(string Text, string? Path);

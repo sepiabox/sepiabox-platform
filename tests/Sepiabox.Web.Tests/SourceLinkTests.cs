@@ -44,17 +44,19 @@ public sealed class SourceLinkTests : LocalizedContext
     {
         var page = RenderDetail(Photo(false, new AssetSourceDetail("local", "Life", "2019/IMG_0001.jpg")));
 
-        Assert.Equal("Stored on the drive 'Life': 2019/IMG_0001.jpg", page.Find("ul.sources .source-line").TextContent);
+        Assert.Equal("Original on the drive 'Life': 2019/IMG_0001.jpg", page.Find("ul.sources .source-line").TextContent);
+        Assert.Equal("2019/IMG_0001.jpg", page.Find("ul.sources .source-line .mono").TextContent);
+        Assert.Equal("Sepiabox keeps no copy of this original: it stays at its source.", page.Find("p.kept-at-source").TextContent);
         Assert.Empty(page.FindAll("ul.sources a"));
         Assert.Empty(page.FindAll("a.button"));
     }
 
     [Theory]
-    [InlineData("apple-photos", "Apple", "Stored in Apple Photos / iCloud Photos; it can't be opened from here.")]
-    [InlineData("facebook", "Facebook", "Stored on Facebook; it can't be opened from here.")]
-    [InlineData("google-takeout", "Takeout 2026", "Stored in Takeout 2026; it can't be opened from here.")]
-    [InlineData("instagram", "Instagram", "Stored in Instagram; it can't be opened from here.")]
-    [InlineData("some-new-export", "Mum's export", "Stored in Mum's export; it can't be opened from here.")]
+    [InlineData("apple-photos", "Apple", "Original in Apple Photos / iCloud Photos; it can't be opened from here.")]
+    [InlineData("facebook", "Facebook", "Original on Facebook; it can't be opened from here.")]
+    [InlineData("google-takeout", "Takeout 2026", "Original in Takeout 2026; it can't be opened from here.")]
+    [InlineData("instagram", "Instagram", "Original in Instagram; it can't be opened from here.")]
+    [InlineData("some-new-export", "Mum's export", "Original in Mum's export; it can't be opened from here.")]
     public void An_export_source_without_an_address_says_where_the_original_is_kept(string type, string name, string line)
     {
         var page = RenderDetail(Photo(false, new AssetSourceDetail(type, name, "x/1.jpg")));
@@ -95,7 +97,7 @@ public sealed class SourceLinkTests : LocalizedContext
         Assert.Empty(page.FindAll("ul.sources a"));
         Assert.DoesNotContain("javascript", page.Markup, StringComparison.OrdinalIgnoreCase);
         // With no usable address the original is still said to be kept at the source.
-        Assert.Equal("Stored in Takeout 2026; it can't be opened from here.", page.Find(".source-line").TextContent);
+        Assert.Equal("Original in Takeout 2026; it can't be opened from here.", page.Find(".source-line").TextContent);
     }
 
     [Fact]
@@ -124,6 +126,7 @@ public sealed class SourceLinkTests : LocalizedContext
         Assert.Empty(page.FindAll(".source-line"));
         Assert.Equal("Life", page.Find("ul.sources .source-name").TextContent);
         Assert.NotEmpty(page.FindAll("a.button"));
+        Assert.Empty(page.FindAll("p.kept-at-source"));
     }
 
     [Theory]
@@ -160,10 +163,10 @@ public sealed class SourceLinkTests : LocalizedContext
     }
 
     [Theory]
-    [InlineData("local", "Life", "Guardada no HD 'Life': 2019/IMG_0001.jpg")]
-    [InlineData("apple-photos", "Apple", "Guardada no Fotos da Apple / Fotos do iCloud; não dá para abrir daqui.")]
-    [InlineData("facebook", "Facebook", "Guardada no Facebook; não dá para abrir daqui.")]
-    [InlineData("google-takeout", "Takeout 2026", "Guardada em Takeout 2026; não dá para abrir daqui.")]
+    [InlineData("local", "Life", "Original no HD 'Life': 2019/IMG_0001.jpg")]
+    [InlineData("apple-photos", "Apple", "Original no Fotos da Apple / Fotos do iCloud; não dá para abrir daqui.")]
+    [InlineData("facebook", "Facebook", "Original no Facebook; não dá para abrir daqui.")]
+    [InlineData("google-takeout", "Takeout 2026", "Original em Takeout 2026; não dá para abrir daqui.")]
     public void Speaks_brazilian_portuguese_for_a_line(string type, string name, string line)
     {
         using var language = Cultures.Use(Cultures.BrazilianPortuguese);
@@ -171,6 +174,7 @@ public sealed class SourceLinkTests : LocalizedContext
         var page = RenderDetail(Photo(false, new AssetSourceDetail(type, name, "2019/IMG_0001.jpg")));
 
         Assert.Equal(line, page.Find("ul.sources .source-line").TextContent);
+        Assert.Equal("O Sepiabox não guarda uma cópia deste original: ele fica na origem.", page.Find("p.kept-at-source").TextContent);
     }
 
     private static AssetDetail Photo(bool stored, params AssetSourceDetail[] sources) =>

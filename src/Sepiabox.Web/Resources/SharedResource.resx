@@ -1092,17 +1092,17 @@
     <comment>Read by screen readers after a link to a source.</comment>
   </data>
   <data name="Source_StoredOnDrive" xml:space="preserve">
-    <value>Stored on the drive '{0}': {1}</value>
-    <comment>{0} is the drive's name, {1} the file's path on it.</comment>
+    <value>Original on the drive '{0}':</value>
+    <comment>{0} is the drive's name; the file's path follows, in its own markup.</comment>
   </data>
   <data name="Source_StoredApple" xml:space="preserve">
-    <value>Stored in Apple Photos / iCloud Photos; it can't be opened from here.</value>
+    <value>Original in Apple Photos / iCloud Photos; it can't be opened from here.</value>
   </data>
   <data name="Source_StoredFacebook" xml:space="preserve">
-    <value>Stored on Facebook; it can't be opened from here.</value>
+    <value>Original on Facebook; it can't be opened from here.</value>
   </data>
   <data name="Source_StoredIn" xml:space="preserve">
-    <value>Stored in {0}; it can't be opened from here.</value>
+    <value>Original in {0}; it can't be opened from here.</value>
     <comment>{0} is the export's name.</comment>
   </data>
   <data name="Download_KeptAtSource_Title" xml:space="preserve">

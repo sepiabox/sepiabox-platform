@@ -452,6 +452,12 @@ main {
     height: auto;
 }
 
+/* The larger previews of an index-only photo (2048 px) must not push the facts off a tall screen. */
+.preview img {
+    max-height: 85vh;
+    object-fit: contain;
+}
+
 .preview video {
     max-height: 80vh;
     background: var(--developer);
@@ -499,6 +505,11 @@ main {
 
 .sources {
     padding-left: 18px;
+    overflow-wrap: anywhere;
+}
+
+/* A path has no spaces to break at: it may break anywhere, the sentences around it only when a word does not fit. */
+.sources .mono {
     word-break: break-all;
 }
 
@@ -507,8 +518,8 @@ main {
 }
 
 .source-link {
+    display: inline-block;
     margin-left: 8px;
-    white-space: nowrap;
 }
 
 .button {
