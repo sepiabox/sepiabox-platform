@@ -91,6 +91,15 @@
           "maxItems": 50,
           "items": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
         },
+        "sourceCount": {
+          "description": "How many different sources the item was found in (S-028, D-093): eq is exactly that many (1 is \"in only one source\"), gte at least that many (2 is \"in several\"). Exactly one of eq and gte. The same source name twice counts once. Source names are compared exactly as stored, case-sensitively, unlike sources, which ignores case. Never part of the question translator's output format.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "eq": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "gte": { "type": "integer", "minimum": 1, "maximum": 1000 }
+          }
+        },
         "people": {
           "description": "People who are all in the photo (S-021): every name in all (people's names as the family wrote them, matched ignoring case; an unknown name is an error) and, with includeMe, the signed-in user's own person (\"This is me\"). At least one of the two.",
           "type": "object",
@@ -158,6 +167,10 @@
         "groupBy": {
           "description": "Absent or null for the total only. year and month are the capture year and the month of the year (1-12) on the camera's wall clock; an asset with several sources counts in each source; person is each named person in the photos, once per photo, without the people the filters name.",
           "enum": ["year", "month", "kind", "city", "source", "person", null]
+        },
+        "sum": {
+          "description": "Also add up the sizes of the matching items (S-028, D-093): bytes is the size of the originals. Not together with groupBy person. Never part of the question translator's output format.",
+          "enum": ["bytes"]
         },
         "top": { "description": "Only with groupBy: the largest this many groups. Absent: every year, month or kind group in its own order, or the largest 10 cities, sources or people.", "type": "integer", "minimum": 1, "maximum": 100 }
       }

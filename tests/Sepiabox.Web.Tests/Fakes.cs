@@ -102,6 +102,11 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
 
     public Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Options);
 
+    /// <summary>What the storage page shows (S-028).</summary>
+    public StorageReport Storage { get; set; } = new([], 0, 0, 0, 0, [], []);
+
+    public Task<StorageReport> GetStorageAsync(CancellationToken cancellationToken = default) => Task.FromResult(Storage);
+
     /// <summary>The people page's people, as the query returns them.</summary>
     public List<PersonSummary> People { get; init; } = [];
 

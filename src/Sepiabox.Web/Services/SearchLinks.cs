@@ -20,6 +20,9 @@ public sealed record FilterFields(int? Year, int? Month, string? Kind, string? C
 
     /// <summary>The occasions chosen (S-023), which the bar keeps while it narrows them; it offers no way to choose one.</summary>
     public IReadOnlyList<long> EventIds { get; init; } = [];
+
+    /// <summary>The number of sources chosen (S-028), which the bar keeps while it narrows them; it offers no way to choose one.</summary>
+    public SourceCountFilter? SourceCount { get; init; }
 }
 
 /// <summary>
@@ -37,6 +40,11 @@ public static class SearchLinks
 
     /// <summary>The bar's hidden fields for a search inside occasions (S-023): one per occasion id.</summary>
     public const string EventParameter = "event";
+
+    /// <summary>The bar's hidden fields for a search by the number of sources (S-028): exactly, or at least.</summary>
+    public const string SourceEqParameter = "source-eq";
+
+    public const string SourceGteParameter = "source-gte";
 
     /// <summary>The "On this day" shortcut: today's day and month in every earlier year.</summary>
     public static SearchQuery OnThisDay { get; } = new() { Filters = new SearchFilters { OnThisDay = new OnThisDayFilter() } };
@@ -65,7 +73,9 @@ public static class SearchLinks
         IEnumerable<string?>? savedPlaces = null,
         string? similar = null,
         string? similarLimit = null,
-        IEnumerable<string?>? eventIds = null)
+        IEnumerable<string?>? eventIds = null,
+        string? sourceEq = null,
+        string? sourceGte = null)
     {
         var events = EventIds(eventIds);
         var names = Names(people);
@@ -87,12 +97,19 @@ public static class SearchLinks
             People = names.Count > 0 || me ? new PeopleFilter { All = names.Count > 0 ? names : null, IncludeMe = me } : null,
             SavedPlaces = places.Count > 0 ? places : null,
             EventIds = events.Count > 0 ? events : null,
+            SourceCount = SourceCount(sourceEq, sourceGte),
         };
         // As many as were asked for: the query's own limit would otherwise cap a raised one (SearchQuery.ResultLimit).
         return similarTo?.Limit is > SearchQuery.DefaultLimit and var raised
             ? new SearchQuery { Filters = filters, Limit = raised }
             : new SearchQuery { Filters = filters };
     }
+
+    // One of the two, a whole number the DSL accepts; anything else a hand-edited address holds is ignored.
+    private static SourceCountFilter? SourceCount(string? eq, string? gte) =>
+        Number(eq, 1, SourceCountFilter.Max) is { } exactly ? new SourceCountFilter { Eq = exactly }
+        : Number(gte, 1, SourceCountFilter.Max) is { } atLeast ? new SourceCountFilter { Gte = atLeast }
+        : null;
 
     // Ids of occasions are positive whole numbers; anything else a hand-edited address holds is ignored.
     private static List<long> EventIds(IEnumerable<string?>? values) =>
@@ -120,6 +137,7 @@ public static class SearchLinks
             SavedPlaces = filters?.SavedPlaces ?? [],
             SimilarTo = filters?.SimilarTo,
             EventIds = filters?.EventIds ?? [],
+            SourceCount = filters?.SourceCount,
         };
     }
 

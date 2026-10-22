@@ -5,15 +5,23 @@
 <section class="answer" aria-label="@Text["Count_Label"]">
     @if (Query.Aggregate?.GroupBy is null)
     {
-        <p class="number">@Count.Total.ToString("N0", CultureInfo.CurrentCulture)</p>
-        <p class="sentence">@CountAnswers.Sentence(Query, Count.Total, Text)</p>
+        @if (Count.Bytes is { } bytes)
+        {
+            <p class="number">@ByteSizes.Format(bytes)</p>
+            <p class="sentence">@CountAnswers.SizeSentence(Query, Count.Total, Text)</p>
+        }
+        else
+        {
+            <p class="number">@Count.Total.ToString("N0", CultureInfo.CurrentCulture)</p>
+            <p class="sentence">@CountAnswers.Sentence(Query, Count.Total, Text)</p>
+        }
     }
     else
     {
         <h2>@CountAnswers.Heading(Query, Text)</h2>
         <table class="ranking">
             <thead>
-                <tr><th scope="col">@Text["Count_Group"]</th><th scope="col">@Text["Count_Count"]</th></tr>
+                <tr><th scope="col">@Text["Count_Group"]</th><th scope="col">@Text["Count_Count"]</th>@if (Count.Bytes is not null){<th scope="col">@Text["Count_Size"]</th>}</tr>
             </thead>
             <tbody>
                 @foreach (var row in CountAnswers.Rows(Query, Count, Text))
@@ -30,6 +38,10 @@
                             }
                         </th>
                         <td>@row.Count.ToString("N0", CultureInfo.CurrentCulture)</td>
+                        @if (Count.Bytes is not null)
+                        {
+                            <td>@ByteSizes.Format(row.Bytes ?? 0)</td>
+                        }
                     </tr>
                 }
             </tbody>

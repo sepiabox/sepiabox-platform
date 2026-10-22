@@ -193,6 +193,9 @@ namespace Sepiabox.Catalog.Migrations
                     b.HasKey("Id")
                         .HasName("pk_asset_sources");
 
+                    b.HasIndex("AssetId", "Name")
+                        .HasDatabaseName("ix_asset_sources_asset_id_name");
+
                     b.HasIndex("AssetId", "Type", "Name", "Path")
                         .IsUnique()
                         .HasDatabaseName("ix_asset_sources_asset_id_type_name_path");

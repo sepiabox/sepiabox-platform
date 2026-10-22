@@ -48,7 +48,13 @@ public static class QuestionPrompt
     /// asset by its id, which only the photo detail page knows (S-017), and <c>eventIds</c> names occasions by ids, which
     /// only the occasions pages know (S-023).
     /// </summary>
-    public static readonly IReadOnlyList<string> NotFromQuestions = ["similarTo", "eventIds"];
+    public static readonly IReadOnlyList<string> NotFromQuestions = ["similarTo", "eventIds", "sourceCount"];
+
+    /// <summary>
+    /// The <c>aggregate</c> fields a question cannot express yet (S-028, D-093): sizes and the number of sources are
+    /// shown by the storage page, and need the prompt and the golden questions recorded with the live API first.
+    /// </summary>
+    public static readonly IReadOnlyList<string> AggregateNotFromQuestions = ["sum"];
 
     /// <summary>
     /// The DSL schema (<c>docs/schemas/search.v1.json</c>, the same file) as the output format: unchanged apart from
@@ -276,6 +282,14 @@ public static class QuestionPrompt
             foreach (var field in NotFromQuestions)
             {
                 filters.Remove(field);
+            }
+        }
+
+        if (schema["properties"]?["aggregate"]?["properties"] is JsonObject aggregate)
+        {
+            foreach (var field in AggregateNotFromQuestions)
+            {
+                aggregate.Remove(field);
             }
         }
 

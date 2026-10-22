@@ -56,12 +56,25 @@ public sealed record SearchAggregate
     /// </summary>
     public int? Top { get; init; }
 
+    /// <summary>
+    /// Also add up the matching assets' sizes (S-028, D-093): <see cref="SearchSum.Bytes"/>, or absent for the count only.
+    /// Not with <see cref="SearchGroupBy.Person"/>: a person's photos are counted through their faces, not their sizes.
+    /// </summary>
+    public string? Sum { get; init; }
+
     public int EffectiveTop => Top ?? DefaultTop;
 }
 
 public static class SearchCount
 {
     public const string Assets = "assets";
+}
+
+/// <summary>What a count can add up besides the number of assets (S-028).</summary>
+public static class SearchSum
+{
+    /// <summary>The size of the originals, in bytes (<c>assets.size_bytes</c>).</summary>
+    public const string Bytes = "bytes";
 }
 
 /// <summary>
@@ -119,6 +132,9 @@ public sealed record SearchFilters
     /// <summary>Source names, such as the drive's name given to <c>process</c>.</summary>
     public IReadOnlyList<string>? Sources { get; init; }
 
+    /// <summary>How many different sources the asset was found in (S-028, D-093): the same name twice counts once.</summary>
+    public SourceCountFilter? SourceCount { get; init; }
+
     /// <summary>People who are all in the photo (S-021): named ones, and the signed-in user's own person.</summary>
     public PeopleFilter? People { get; init; }
 
@@ -164,13 +180,26 @@ public sealed record SearchFilters
         && Same(Kinds, other.Kinds) && DateFrom == other.DateFrom && DateTo == other.DateTo
         && Same(Years, other.Years) && Same(Months, other.Months) && OnThisDay == other.OnThisDay
         && Equals(Places, other.Places) && Same(SavedPlaces, other.SavedPlaces) && DistanceFrom == other.DistanceFrom
-        && Same(Sources, other.Sources) && Equals(People, other.People) && Same(EventIds, other.EventIds) && UndatedOnly == other.UndatedOnly
+        && Same(Sources, other.Sources) && SourceCount == other.SourceCount && Equals(People, other.People) && Same(EventIds, other.EventIds) && UndatedOnly == other.UndatedOnly
         && Visual == other.Visual && SimilarTo == other.SimilarTo;
 
     public override int GetHashCode() => HashCode.Combine(DateFrom, DateTo, OnThisDay, Places, UndatedOnly);
 
     internal static bool Same<T>(IReadOnlyList<T>? a, IReadOnlyList<T>? b) =>
         a is null ? b is null : b is not null && a.SequenceEqual(b);
+}
+
+/// <summary>
+/// The number of different sources an asset has (S-028, D-093): exactly <see cref="Eq"/> (<c>{"eq": 1}</c> is "in only one
+/// source"), or at least <see cref="Gte"/> (<c>{"gte": 2}</c> is "in several"); exactly one of the two.
+/// </summary>
+public sealed record SourceCountFilter
+{
+    public const int Max = 1000;
+
+    public int? Eq { get; init; }
+
+    public int? Gte { get; init; }
 }
 
 /// <summary>
@@ -378,6 +407,16 @@ public static class SearchQueryJson
                 return $"aggregate.groupBy must be one of {string.Join(", ", SearchGroupBy.All.Select(g => $"'{g}'"))}.";
             }
 
+            if (aggregate.Sum is { } sum && sum != SearchSum.Bytes)
+            {
+                return $"aggregate.sum must be '{SearchSum.Bytes}'.";
+            }
+
+            if (aggregate is { Sum: not null, GroupBy: SearchGroupBy.Person })
+            {
+                return "aggregate.sum cannot be added up per person: a photo with several people has one size.";
+            }
+
             if (aggregate.Top is not null && aggregate.GroupBy is null)
             {
                 return "aggregate.top needs aggregate.groupBy: a total has no groups to keep.";
@@ -402,6 +441,7 @@ public static class SearchQueryJson
             ?? List("filters.savedPlaces", filters.SavedPlaces, Name)
             ?? Distance(filters.DistanceFrom)
             ?? List("filters.sources", filters.Sources, Name)
+            ?? SourceCount(filters.SourceCount)
             ?? List("filters.eventIds", filters.EventIds, id => id >= 1 ? null : "must be an occasion id, 1 or more")
             ?? List("filters.people.all", filters.People?.All, Name)
             ?? (filters.People is { All: null, IncludeMe: false } ? "filters.people needs all, includeMe or both." : null)
@@ -440,6 +480,23 @@ public static class SearchQueryJson
         }
 
         return distance.MinKm >= distance.MaxKm ? "filters.distanceFrom.minKm must be less than maxKm." : null;
+    }
+
+    private static string? SourceCount(SourceCountFilter? count)
+    {
+        if (count is null)
+        {
+            return null;
+        }
+
+        if ((count.Eq is null) == (count.Gte is null))
+        {
+            return "filters.sourceCount needs exactly one of eq or gte.";
+        }
+
+        return count.Eq is < 1 or > SourceCountFilter.Max || count.Gte is < 1 or > SourceCountFilter.Max
+            ? string.Create(CultureInfo.InvariantCulture, $"filters.sourceCount.eq and gte must be between 1 and {SourceCountFilter.Max}.")
+            : null;
     }
 
     private static string? Visual(VisualFilter? visual)
