@@ -1430,4 +1430,67 @@
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
     <value>{0}: {1}, current page</value>
   </data>
+  <data name="Detail_IgnoreFace" xml:space="preserve">
+    <value>Ignore this face</value>
+  </data>
+  <data name="Detail_IgnoreUnnamed" xml:space="preserve">
+    <value>Ignore the unnamed faces in this photo</value>
+  </data>
+  <data name="Detail_Done_Ignored" xml:space="preserve">
+    <value>The faces were ignored.</value>
+  </data>
+  <data name="Ignore_Title" xml:space="preserve">
+    <value>Ignore faces</value>
+  </data>
+  <data name="Ignore_NothingTitle" xml:space="preserve">
+    <value>Nothing to ignore</value>
+  </data>
+  <data name="Ignore_Nothing" xml:space="preserve">
+    <value>There is no unnamed face here to ignore.</value>
+  </data>
+  <data name="Ignore_Faces_One" xml:space="preserve">
+    <value>1 unnamed face in this photo will be ignored.</value>
+  </data>
+  <data name="Ignore_Faces_Other" xml:space="preserve">
+    <value>{0} unnamed faces in this photo will be ignored.</value>
+  </data>
+  <data name="Ignore_Explain" xml:space="preserve">
+    <value>Ignored faces are deleted for good and are not found again when the photos are imported again; people with a name are never touched. The photos stay. This cannot be undone. The copies of the library's information kept in the cloud (manifests) keep the deleted faces until face recognition is turned off in Settings, and automatic backups hold them for up to 7 days.</value>
+  </data>
+  <data name="Ignore_Confirm" xml:space="preserve">
+    <value>Ignore for good</value>
+  </data>
+  <data name="IgnorePerson_Title" xml:space="preserve">
+    <value>Ignore this person</value>
+  </data>
+  <data name="IgnorePerson_Named" xml:space="preserve">
+    <value>Only an unnamed person can be ignored; people with a name are never deleted this way.</value>
+  </data>
+  <data name="Person_Ignore" xml:space="preserve">
+    <value>Ignore this person</value>
+  </data>
+  <data name="IgnoreMany_Title" xml:space="preserve">
+    <value>Ignore the unnamed people with few faces</value>
+  </data>
+  <data name="IgnoreMany_None" xml:space="preserve">
+    <value>There are no unnamed people with one or two faces.</value>
+  </data>
+  <data name="IgnoreMany_One" xml:space="preserve">
+    <value>1 unnamed person with one or two faces will be ignored.</value>
+  </data>
+  <data name="IgnoreMany_Other" xml:space="preserve">
+    <value>{0} unnamed people with one or two faces will be ignored.</value>
+  </data>
+  <data name="IgnoreMany_Changed" xml:space="preserve">
+    <value>The people changed since you opened this page, so nothing was ignored. Check the number and confirm again.</value>
+  </data>
+  <data name="People_IgnoreMany_One" xml:space="preserve">
+    <value>Ignore the unnamed person with one or two faces (1)</value>
+  </data>
+  <data name="People_IgnoreMany_Other" xml:space="preserve">
+    <value>Ignore the unnamed people with one or two faces ({0})</value>
+  </data>
+  <data name="People_Done_Ignored" xml:space="preserve">
+    <value>The faces were ignored.</value>
+  </data>
 </root>

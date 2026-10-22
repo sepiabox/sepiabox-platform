@@ -364,6 +364,32 @@ internal sealed class FakeFaceSettings : IFaceSettings
         Calls.Add($"delete {personId} {email}");
         return Task.FromResult(PersonFound);
     }
+
+    /// <summary>How many unnamed people with few faces the bulk action finds.</summary>
+    public int FewFaces { get; set; }
+
+    /// <summary>What the catalog answers to "ignore": nothing to ignore when false.</summary>
+    public bool CanIgnore { get; set; } = true;
+
+    public Task<bool> IgnoreFacesAsync(string assetId, long? faceId, string email, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"ignore-faces {assetId[..4]} {(faceId is { } id ? id.ToString(System.Globalization.CultureInfo.InvariantCulture) : "all")} {email}");
+        return Task.FromResult(CanIgnore);
+    }
+
+    public Task<bool> IgnorePersonAsync(long personId, string email, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"ignore-person {personId} {email}");
+        return Task.FromResult(CanIgnore);
+    }
+
+    public Task<int> CountUnnamedWithFewFacesAsync(CancellationToken cancellationToken = default) => Task.FromResult(FewFaces);
+
+    public Task<Sepiabox.Catalog.People.IgnoreResult> IgnoreUnnamedPeopleAsync(int expected, string email, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"ignore-many {expected} {email}");
+        return Task.FromResult(new Sepiabox.Catalog.People.IgnoreResult(expected * 2, expected, Refused: !CanIgnore));
+    }
 }
 
 internal sealed class FakeSavedPlaces : ISavedPlaces

@@ -1363,4 +1363,67 @@
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
     <value>{0}: {1}, página atual</value>
   </data>
+  <data name="Detail_IgnoreFace" xml:space="preserve">
+    <value>Ignorar este rosto</value>
+  </data>
+  <data name="Detail_IgnoreUnnamed" xml:space="preserve">
+    <value>Ignorar os rostos sem nome desta foto</value>
+  </data>
+  <data name="Detail_Done_Ignored" xml:space="preserve">
+    <value>Os rostos foram ignorados.</value>
+  </data>
+  <data name="Ignore_Title" xml:space="preserve">
+    <value>Ignorar rostos</value>
+  </data>
+  <data name="Ignore_NothingTitle" xml:space="preserve">
+    <value>Nada para ignorar</value>
+  </data>
+  <data name="Ignore_Nothing" xml:space="preserve">
+    <value>Não há aqui nenhum rosto sem nome para ignorar.</value>
+  </data>
+  <data name="Ignore_Faces_One" xml:space="preserve">
+    <value>1 rosto sem nome desta foto será ignorado.</value>
+  </data>
+  <data name="Ignore_Faces_Other" xml:space="preserve">
+    <value>{0} rostos sem nome desta foto serão ignorados.</value>
+  </data>
+  <data name="Ignore_Explain" xml:space="preserve">
+    <value>Os rostos ignorados são apagados de vez e não são encontrados de novo quando as fotos forem importadas outra vez; pessoas com nome nunca são tocadas. As fotos ficam. Isso não pode ser desfeito. As cópias das informações da biblioteca guardadas na nuvem (manifestos) mantêm os rostos apagados até o reconhecimento facial ser desligado em Configurações, e os backups automáticos os mantêm por até 7 dias.</value>
+  </data>
+  <data name="Ignore_Confirm" xml:space="preserve">
+    <value>Ignorar de vez</value>
+  </data>
+  <data name="IgnorePerson_Title" xml:space="preserve">
+    <value>Ignorar esta pessoa</value>
+  </data>
+  <data name="IgnorePerson_Named" xml:space="preserve">
+    <value>Só uma pessoa sem nome pode ser ignorada; pessoas com nome nunca são apagadas assim.</value>
+  </data>
+  <data name="Person_Ignore" xml:space="preserve">
+    <value>Ignorar esta pessoa</value>
+  </data>
+  <data name="IgnoreMany_Title" xml:space="preserve">
+    <value>Ignorar as pessoas sem nome com poucos rostos</value>
+  </data>
+  <data name="IgnoreMany_None" xml:space="preserve">
+    <value>Não há pessoas sem nome com um ou dois rostos.</value>
+  </data>
+  <data name="IgnoreMany_One" xml:space="preserve">
+    <value>1 pessoa sem nome com um ou dois rostos será ignorada.</value>
+  </data>
+  <data name="IgnoreMany_Other" xml:space="preserve">
+    <value>{0} pessoas sem nome com um ou dois rostos serão ignoradas.</value>
+  </data>
+  <data name="IgnoreMany_Changed" xml:space="preserve">
+    <value>As pessoas mudaram desde que você abriu esta página, então nada foi ignorado. Confira o número e confirme de novo.</value>
+  </data>
+  <data name="People_IgnoreMany_One" xml:space="preserve">
+    <value>Ignorar a pessoa sem nome com um ou dois rostos (1)</value>
+  </data>
+  <data name="People_IgnoreMany_Other" xml:space="preserve">
+    <value>Ignorar as pessoas sem nome com um ou dois rostos ({0})</value>
+  </data>
+  <data name="People_Done_Ignored" xml:space="preserve">
+    <value>Os rostos foram ignorados.</value>
+  </data>
 </root>

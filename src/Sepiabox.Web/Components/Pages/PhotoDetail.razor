@@ -11,6 +11,11 @@
 
     <p class="back"><a href="@BackLink">@Text["Detail_Back"]</a></p>
 
+    @if (Note == "ignored")
+    {
+        <p class="note" role="status">@Text["Detail_Done_Ignored"]</p>
+    }
+
     <div class="detail">
         <figure class="preview">
             @if (AssetKinds.IsVideo(_asset.Kind))
@@ -110,10 +115,19 @@
                             else
                             {
                                 <a href="people/@person.Id">@Text["People_Unnamed"]</a>
+                                @if (person.FaceId != 0)
+                                {
+                                    @* Opens a confirmation; a stranger's face (a poster, a crowd) is deleted for good there (#107). *@
+                                    <a href="photos/@_asset.Id/ignore-faces?face=@person.FaceId" class="small ignore-face">@Text["Detail_IgnoreFace"]</a>
+                                }
                             }
                         </li>
                     }
                 </ul>
+                @if (_asset.People.Count(p => p.Name is null && p.FaceId != 0) > 1)
+                {
+                    <p class="ignore-faces"><a href="photos/@_asset.Id/ignore-faces">@Text["Detail_IgnoreUnnamed"]</a></p>
+                }
             }
 
             <h2>@Text["Detail_Sources"]</h2>
@@ -163,6 +177,10 @@
     /// <summary>The timeline page the visitor came from, so "back" returns there.</summary>
     [SupplyParameterFromQuery(Name = "page")]
     public string? PageQuery { get; set; }
+
+    // Only "ignored" is shown; nothing else from the address.
+    [SupplyParameterFromQuery(Name = "note")]
+    public string? Note { get; set; }
 
     private AssetDetail? _asset;
 

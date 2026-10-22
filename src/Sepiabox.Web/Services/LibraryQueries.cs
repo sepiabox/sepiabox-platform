@@ -81,8 +81,8 @@ public sealed record AssetDetail(
     public string? ProxyName { get; init; }
 }
 
-/// <summary>A person in a photo; <see cref="Name"/> is null while they are unnamed.</summary>
-public sealed record AssetPerson(long Id, string? Name);
+/// <summary>A person in a photo, with the one face of them in it (#107: to ignore it); <see cref="Name"/> is null while they are unnamed.</summary>
+public sealed record AssetPerson(long Id, string? Name, long FaceId = 0);
 
 /// <summary>The assets a search found, up to its limit; <see cref="HasMore"/> says whether more matched.</summary>
 public sealed record SearchPage(IReadOnlyList<TimelineItem> Items, bool HasMore);
@@ -419,7 +419,7 @@ public sealed class LibraryQueries(
         var people = await db.Faces.AsNoTracking()
             .Where(f => f.AssetId == id && f.PersonId != null
                 && (f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual))
-            .Select(f => new AssetPerson(f.PersonId!.Value, f.Person!.Name))
+            .Select(f => new AssetPerson(f.PersonId!.Value, f.Person!.Name, f.Id))
             .Distinct()
             .ToListAsync(cancellationToken);
         var hasEmbedding = await db.AssetEmbeddings.AnyAsync(e => e.AssetId == id && e.Model == PgvectorSimilarity.ModelKey, cancellationToken);

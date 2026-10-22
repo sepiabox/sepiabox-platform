@@ -159,6 +159,144 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Ignoring_a_strangers_face_deletes_it_recomputes_the_people_and_a_re_import_does_not_bring_it_back()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var ana = SyntheticFaces.Unit(seed: 1);
+        var bruno = SyntheticFaces.Unit(seed: 3);
+        var photo1 = FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, ana), FaceImportTests.Face([0.6, 0.2, 0.3, 0.4], bruno));
+        var photo2 = FaceImportTests.WithFaces(2, FaceImportTests.Face(s_box, SyntheticFaces.Near(ana, seed: 2)));
+        await PutAsync(container, photo1);
+        await PutAsync(container, photo2);
+        await ImportAsync(db, container);
+        var brunoFace = await db.Faces.SingleAsync(f => f.AssetId == photo1.Id && f.Box[0] == 0.6);
+        var anaFaceOnPhoto2 = await db.Faces.AsNoTracking().SingleAsync(f => f.AssetId == photo2.Id);
+
+        var deletion = await Recognition(db).IgnoreFacesAsync(photo1.Id, brunoFace.Id, Ana);
+
+        Assert.Equal((FaceDataDeletionScopes.Person, 1, 1), (deletion!.Scope, deletion.Faces, deletion.People));
+        // Bruno was unnamed with that one face: gone. Ana's person keeps both faces.
+        var people = await db.People.AsNoTracking().ToListAsync();
+        Assert.Equal(2, Assert.Single(people).FaceCount);
+        Assert.Equal(2, await db.Faces.CountAsync());
+        Assert.Equal(1, await db.ErasedFaces.CountAsync());
+        // The manifests still list the face; the same box is not found again.
+        await PutAsync(container, photo1 with { Sources = [.. photo1.Sources, photo1.Sources[0] with { Name = "HD do Bruno" }] });
+        await ImportAsync(db, container);
+        Assert.Equal(2, await db.Faces.CountAsync());
+        Assert.Single(await db.People.ToListAsync());
+
+        // Ana's person is recomputed from what is left when one of her two faces goes.
+        var second = await Recognition(db).IgnoreFacesAsync(photo2.Id, anaFaceOnPhoto2.Id, Ana);
+
+        Assert.Equal((1, 0), (second!.Faces, second.People));
+        var left = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal(1, left.FaceCount);
+        Assert.True(Cosine(left.Centroid!.ToArray(), ana) > 0.999);
+    }
+
+    [Fact]
+    public async Task Ignoring_the_unnamed_faces_of_a_photo_never_touches_a_named_person_s_face()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var photo = FaceImportTests.WithFaces(
+            1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 1)), FaceImportTests.Face([0.6, 0.2, 0.3, 0.4], SyntheticFaces.Unit(seed: 3)));
+        await PutAsync(container, photo);
+        await ImportAsync(db, container);
+        var named = await db.Faces.AsNoTracking().SingleAsync(f => f.AssetId == photo.Id && f.Box[0] == s_box[0]);
+        Assert.Equal(CurationOutcome.Done, await new PeopleCuration(db).RenameAsync(named.PersonId!.Value, "Ana"));
+
+        // Asked for the named face by id, and then for "all the unnamed" ones.
+        Assert.Null(await Recognition(db).IgnoreFacesAsync(photo.Id, named.Id, Ana));
+        var all = await Recognition(db).IgnoreFacesAsync(photo.Id, null, Ana);
+
+        Assert.Equal((1, 1), (all!.Faces, all.People));
+        Assert.Equal(named.Id, (await db.Faces.AsNoTracking().SingleAsync()).Id);
+        Assert.Equal("Ana", (await db.People.AsNoTracking().SingleAsync()).Name);
+        Assert.Null(await Recognition(db).IgnoreFacesAsync(photo.Id, null, Ana));
+    }
+
+    [Fact]
+    public async Task Ignoring_a_person_refuses_a_named_one_and_remembers_every_box_of_an_unnamed_one()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var ana = SyntheticFaces.Unit(seed: 1);
+        var photo1 = FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, ana));
+        var photo2 = FaceImportTests.WithFaces(2, FaceImportTests.Face(s_box, SyntheticFaces.Near(ana, seed: 2)));
+        await PutAsync(container, photo1);
+        await PutAsync(container, photo2);
+        await ImportAsync(db, container);
+        var person = await db.People.SingleAsync();
+        // One of the two faces was excluded by the family: it is not counted, but it is theirs to be rid of.
+        var excluded = await db.Faces.FirstAsync(f => f.AssetId == photo2.Id);
+        excluded.Assignment = FaceAssignments.Excluded;
+        await db.SaveChangesAsync();
+        Assert.Equal(CurationOutcome.Done, await new PeopleCuration(db).RenameAsync(person.Id, "Ana"));
+        Assert.Null(await Recognition(db).IgnorePersonAsync(person.Id, Ana));
+        Assert.Equal(CurationOutcome.Done, await new PeopleCuration(db).RenameAsync(person.Id, null));
+
+        var deletion = await Recognition(db).IgnorePersonAsync(person.Id, Ana);
+
+        Assert.Equal((2, 1), (deletion!.Faces, deletion.People));
+        Assert.Equal(0, await db.Faces.CountAsync());
+        Assert.Equal(2, await db.ErasedFaces.CountAsync());
+        Assert.Equal(2, await db.Assets.CountAsync());
+        Assert.Null(await Recognition(db).IgnorePersonAsync(person.Id, Ana));
+    }
+
+    [Fact]
+    public async Task Ignoring_the_unnamed_people_with_few_faces_checks_the_number_and_leaves_everyone_else()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        for (var n = 1; n <= 3; n++)
+        {
+            await PutAsync(container, FaceImportTests.WithFaces(n));
+        }
+
+        await ImportAsync(db, container);
+        var one = new Person { FaceCount = 1 };
+        var two = new Person { FaceCount = 2 };
+        var three = new Person { FaceCount = 3 };
+        var named = new Person { Name = "Carla", FaceCount = 1 };
+        var linked = new Person { UserEmail = Ana, FaceCount = 1 };
+        db.People.AddRange(one, two, three, named, linked);
+        await db.SaveChangesAsync();
+        var assets = await db.Assets.OrderBy(a => a.Id).Select(a => a.Id).ToListAsync();
+        Face Row(Person person, string asset, double left) => new()
+        {
+            AssetId = asset,
+            Box = [left, 0.1, 0.2, 0.2],
+            Score = 0.9,
+            Embedding = new Pgvector.Vector(SyntheticFaces.Unit(seed: (int)(left * 100))),
+            Assignment = FaceAssignments.Auto,
+            PersonId = person.Id,
+        };
+        db.Faces.AddRange(
+            Row(one, assets[0], 0.1), Row(two, assets[0], 0.3), Row(two, assets[1], 0.3), Row(three, assets[0], 0.5), Row(three, assets[1], 0.5),
+            Row(three, assets[2], 0.5), Row(named, assets[2], 0.7), Row(linked, assets[1], 0.7));
+        await db.SaveChangesAsync();
+
+        var wrong = await Recognition(db).IgnoreUnnamedPeopleAsync(FaceRecognition.FewFaces, 3, Ana);
+        Assert.True(wrong.Refused);
+        Assert.Equal(5, await db.People.CountAsync());
+
+        var done = await Recognition(db).IgnoreUnnamedPeopleAsync(FaceRecognition.FewFaces, 2, Ana);
+
+        Assert.Equal((3, 2, false), (done.Faces, done.People, done.Refused));
+        Assert.Equal(["Carla", null, null], (await db.People.AsNoTracking().OrderBy(p => p.Name == null).ThenBy(p => p.Id).Select(p => p.Name).ToListAsync()).Cast<string?>());
+        Assert.Equal(5, await db.Faces.CountAsync());
+        Assert.Equal(3, await db.ErasedFaces.CountAsync());
+        Assert.Equal(3, await db.Assets.CountAsync());
+        var recorded = await db.FaceDataDeletions.AsNoTracking().SingleAsync();
+        Assert.Equal((FaceDataDeletionScopes.Person, 3, 2, Ana), (recorded.Scope, recorded.Faces, recorded.People, recorded.DeletedBy));
+        Assert.True((await Recognition(db).IgnoreUnnamedPeopleAsync(FaceRecognition.FewFaces, 0, Ana)).Refused);
+    }
+
+    [Fact]
     public async Task Sweeps_the_erase_into_every_stored_manifest_then_only_into_those_written_since()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
@@ -573,4 +711,17 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
     private static async Task PutAsync(BlobContainerClient container, Manifest manifest) =>
         await container.GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id))
             .UploadAsync(BinaryData.FromString(ManifestJson.Serialize(manifest)), overwrite: true);
+
+    private static double Cosine(float[] a, float[] b)
+    {
+        double dot = 0, na = 0, nb = 0;
+        for (var i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
+        }
+
+        return dot / Math.Sqrt(na * nb);
+    }
 }

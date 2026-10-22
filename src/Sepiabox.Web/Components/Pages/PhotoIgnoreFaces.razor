@@ -1,0 +1,68 @@
+@page "/photos/{Id}/ignore-faces"
+@inject ILibraryQueries Library
+@inject IFaceSettings Faces
+@inject NavigationManager Navigation
+@* "Ignore this face" and "Ignore the unnamed faces in this photo" ask first (#107, D-117): the faces of strangers are deleted for good; only this page's POST deletes. *@
+
+<PageTitle>@Text["Ignore_Title"] · Sepiabox</PageTitle>
+
+@if (_asset is null || _count == 0)
+{
+    <p class="back"><a href="photos/@Id">@Text["Detail_Back"]</a></p>
+    <h1 class="page-heading">@Text["Ignore_NothingTitle"]</h1>
+    <p>@Text["Ignore_Nothing"]</p>
+}
+else
+{
+    <p class="back"><a href="photos/@Id">@Text["Detail_Back"]</a></p>
+    <h1 class="page-heading">@Text["Ignore_Title"]</h1>
+    <figure class="preview">
+        @if (_asset.PreviewName is { } preview)
+        {
+            <img src="photos/@_asset.Id/@preview" alt="@Text.KindLabel(_asset.Kind)" />
+        }
+    </figure>
+    <p class="note">@(_count == 1 ? Text["Ignore_Faces_One"] : Text["Ignore_Faces_Other", _count])</p>
+    <p class="note">@Text["Ignore_Explain"]</p>
+    <form method="post" @formname="ignore" @onsubmit="ConfirmAsync" class="confirm">
+        <AntiforgeryToken />
+        <input type="hidden" name="Confirmed" value="yes" />
+        <button type="submit">@Text["Ignore_Confirm"]</button>
+        <a href="photos/@Id">@Text["Merge_Cancel"]</a>
+    </form>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    // One face when given, every unnamed face of the photo otherwise.
+    [SupplyParameterFromQuery(Name = "face")]
+    public long? FaceId { get; set; }
+
+    [SupplyParameterFromForm(FormName = "ignore")]
+    public string? Confirmed { get; set; }
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    private AssetDetail? _asset;
+    private int _count;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _asset = AssetIds.IsValid(Id) ? await Library.GetAssetAsync(Id) : null;
+        _count = _asset?.People.Count(p => p.Name is null && p.FaceId != 0 && (FaceId is null || p.FaceId == FaceId)) ?? 0;
+        if (_asset is null && HttpContext is not null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        var email = HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+        var ignored = email is not null && AssetIds.IsValid(Id) && await Faces.IgnoreFacesAsync(Id, FaceId, email);
+        Navigation.NavigateTo(ignored ? $"photos/{Id}?note=ignored" : $"photos/{Id}");
+    }
+}

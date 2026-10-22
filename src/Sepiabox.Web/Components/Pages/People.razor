@@ -11,6 +11,10 @@
 {
     <p class="note" role="status">@Text["People_Done_Deleted"]</p>
 }
+else if (Note == "ignored")
+{
+    <p class="note" role="status">@Text["People_Done_Ignored"]</p>
+}
 
 @if (_off)
 {
@@ -19,6 +23,11 @@
 else if (_people is { Count: > 0 } people)
 {
     <PeopleGrid People="people" />
+    @if (_fewFaces > 0)
+    {
+        @* Opens a confirmation; strangers (posters, crowds) seen once or twice are deleted for good there (#107). *@
+        <p class="ignore-many"><a href="people/ignore">@(_fewFaces == 1 ? Text["People_IgnoreMany_One"] : Text["People_IgnoreMany_Other", _fewFaces])</a></p>
+    }
 }
 else
 {
@@ -28,6 +37,7 @@ else
 @code {
     private IReadOnlyList<PersonSummary>? _people;
     private bool _off;
+    private int _fewFaces;
 
     // Only "deleted" is shown; nothing else from the address.
     [SupplyParameterFromQuery(Name = PersonLinks.NoteParameter)]
@@ -37,5 +47,6 @@ else
     {
         _off = !(await Faces.GetAsync()).State.On;
         _people = _off ? [] : await Library.GetPeopleAsync();
+        _fewFaces = _off ? 0 : await Faces.CountUnnamedWithFewFacesAsync();
     }
 }

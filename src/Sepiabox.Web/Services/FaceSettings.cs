@@ -22,6 +22,18 @@ public interface IFaceSettings
 
     /// <summary>Deletes the person and their faces; false when the person is not there.</summary>
     Task<bool> DeletePersonAsync(long personId, string email, CancellationToken cancellationToken = default);
+
+    /// <summary>"Ignore this face" (<paramref name="faceId"/>) or "Ignore the unnamed faces in this photo" (#107); false when nothing was ignored.</summary>
+    Task<bool> IgnoreFacesAsync(string assetId, long? faceId, string email, CancellationToken cancellationToken = default);
+
+    /// <summary>"Ignore this person": an unnamed one only; false when the person is not there or is named.</summary>
+    Task<bool> IgnorePersonAsync(long personId, string email, CancellationToken cancellationToken = default);
+
+    /// <summary>How many unnamed people have at most <see cref="FaceRecognition.FewFaces"/> faces, for the bulk action.</summary>
+    Task<int> CountUnnamedWithFewFacesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Ignores the unnamed people with few faces, only when exactly <paramref name="expected"/> match.</summary>
+    Task<IgnoreResult> IgnoreUnnamedPeopleAsync(int expected, string email, CancellationToken cancellationToken = default);
 }
 
 /// <summary><see cref="FaceRecognition"/> on the catalog, under the importer's people lock (D-077).</summary>
@@ -54,5 +66,29 @@ public sealed class FaceSettings(IDbContextFactory<CatalogDbContext> contexts, T
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         return await new FaceRecognition(db, clock).DeletePersonAsync(personId, email, cancellationToken) is not null;
+    }
+
+    public async Task<bool> IgnoreFacesAsync(string assetId, long? faceId, string email, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        return await new FaceRecognition(db, clock).IgnoreFacesAsync(assetId, faceId, email, cancellationToken) is not null;
+    }
+
+    public async Task<bool> IgnorePersonAsync(long personId, string email, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        return await new FaceRecognition(db, clock).IgnorePersonAsync(personId, email, cancellationToken) is not null;
+    }
+
+    public async Task<int> CountUnnamedWithFewFacesAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        return await FaceRecognition.UnnamedWithFewFaces(db, FaceRecognition.FewFaces).CountAsync(cancellationToken);
+    }
+
+    public async Task<IgnoreResult> IgnoreUnnamedPeopleAsync(int expected, string email, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        return await new FaceRecognition(db, clock).IgnoreUnnamedPeopleAsync(FaceRecognition.FewFaces, expected, email, cancellationToken);
     }
 }

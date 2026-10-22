@@ -70,6 +70,11 @@ else
         }
         @* Only opens the confirmation, which deletes on its own POST (S-022). *@
         <p class="delete-face-data"><a href="people/@_person.Id/delete">@Text["Person_Delete"]</a></p>
+        @if (_person.Name is null && _person.UserEmail is null)
+        {
+            @* A stranger (a poster, a face in a crowd): opens a confirmation, which deletes the faces for good (#107). *@
+            <p class="ignore-person"><a href="people/@_person.Id/ignore">@Text["Person_Ignore"]</a></p>
+        }
     </section>
 
     <h2>@Text["Person_Faces_Heading"]</h2>
