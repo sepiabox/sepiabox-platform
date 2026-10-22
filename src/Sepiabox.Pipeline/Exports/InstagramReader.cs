@@ -48,10 +48,9 @@ public sealed partial class InstagramReader : IExportReader
                 "No Instagram post list was found in the folder. Expected your_instagram_activity/content/posts_1.json (older downloads: content/posts_1.json) in a download requested in JSON format.");
         }
 
-        var described = new Dictionary<string, Described>(StringComparer.OrdinalIgnoreCase);
+        var described = new Dictionary<string, MetaFacts>(StringComparer.OrdinalIgnoreCase);
         var unreadable = new List<string>();
         var missing = 0;
-        var tooDeep = 0;
         foreach (var (path, match) in lists)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -70,7 +69,7 @@ public sealed partial class InstagramReader : IExportReader
             {
                 var baseFolder = Activity().Replace(match.Groups["root"].Value, string.Empty);
                 var album = Albums(match.Groups["list"].Value);
-                foreach (var media in MetaExport.Items(document.RootElement, () => tooDeep++))
+                foreach (var media in MetaExport.Items(document.RootElement))
                 {
                     var relative = MetaExport.Resolve(root, baseFolder, media);
                     if (relative is null)
@@ -79,7 +78,8 @@ public sealed partial class InstagramReader : IExportReader
                         continue;
                     }
 
-                    described[relative] = described.TryGetValue(relative, out var earlier) ? earlier.Merge(media, album) : new Described(media, [.. album]);
+                    var facts = new MetaFacts(media.Title, media.PostedAt, media.Exif, album);
+                    described[relative] = described.TryGetValue(relative, out var earlier) ? earlier.Merge(facts) : facts;
                 }
             }
         }
@@ -100,11 +100,6 @@ public sealed partial class InstagramReader : IExportReader
             warnings.Add($"{missing:N0} media files named in the post lists are not in the download.");
         }
 
-        if (tooDeep > 0)
-        {
-            warnings.Add($"{tooDeep:N0} entries in the post lists are nested deeper than {MetaExport.MaxDepth} levels and were not read.");
-        }
-
         if (unreadable.Count > 0)
         {
             warnings.Add($"{unreadable.Count:N0} post lists could not be read and were ignored: {string.Join(", ", unreadable.Take(5))}.");
@@ -120,28 +115,4 @@ public sealed partial class InstagramReader : IExportReader
             "reels" => [PostsAlbum, ReelsAlbum],
             _ => [PostsAlbum],
         };
-
-    // What the lists say about one file, merged over the lists it is in (a post and its archived copy): the first caption,
-    // date and place found, and every album.
-    private sealed record Described(MetaMedia Media, List<string> Albums)
-    {
-        public Described Merge(MetaMedia other, string[] albums) =>
-            new(
-                Media with
-                {
-                    Title = Media.Title ?? other.Title,
-                    PostedAt = Media.PostedAt ?? other.PostedAt,
-                    Exif = new MetaExif(Media.Exif?.Location ?? other.Exif?.Location, Media.Exif?.TakenAt ?? other.Exif?.TakenAt),
-                },
-                [.. Albums.Concat(albums).Distinct(StringComparer.Ordinal)]);
-
-        public ExportMetadata ToMetadata() => new()
-        {
-            // The camera's own date when the post has one; otherwise the posting time, an approximation of the capture date.
-            CapturedAt = Media.Exif?.TakenAt ?? Media.PostedAt,
-            Location = Media.Exif?.Location,
-            Caption = Media.Title,
-            Albums = Albums,
-        };
-    }
 }
