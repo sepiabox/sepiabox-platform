@@ -111,7 +111,14 @@ public sealed class DeployScriptTests : IDisposable
               "keyvault show"*) echo "/subscriptions/s/resourceGroups/rg-sepiabox/providers/Microsoft.KeyVault/vaults/sepiabox-kv" ;;
               "keyvault secret show"*)
                 # The owner has not set the client secret yet.
-                if [ "$STUB_SECRETS" = "MISSING" ] && echo "$*" | grep -q -- "--name Auth--Google--ClientSecret"; then exit 1; fi ;;
+                if [ "$STUB_SECRETS" = "MISSING" ] && echo "$*" | grep -q -- "--name Auth--Google--ClientSecret"; then
+                  echo "(SecretNotFound) A secret with (name/id) Auth--Google--ClientSecret was not found in this key vault." >&2
+                  exit 1
+                fi
+                if [ "$STUB_SECRETS" = "FORBIDDEN" ]; then
+                  echo "(Forbidden) Caller is not authorized to perform action on resource." >&2
+                  exit 1
+                fi ;;
               "containerapp job start"*) echo "$STUB_EXECUTION" ;;
               "containerapp hostname list"*)
                 if [ "$STUB_HOSTNAMES" = "FAIL" ]; then exit 1; fi
@@ -235,6 +242,19 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Contains("/secrets/Auth--Google--ClientId", assignments[0], StringComparison.Ordinal);
         Assert.Contains("Auth--Google--ClientSecret is not set yet; run deploy again after setting it.", result.Output, StringComparison.Ordinal);
         // The deploy goes on: a secret that is not set yet does not stop it.
+        Assert.Contains(DeploySync, Calls());
+    }
+
+    [UnixFact]
+    public async Task Deploy_says_the_identity_cannot_read_the_vault_when_that_is_why_a_secret_could_not_be_checked()
+    {
+        var result = await RunDeployAsync("Succeeded", extra: new() { ["STUB_SECRETS"] = "FORBIDDEN" });
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("This identity cannot read the vault's secrets", result.Output, StringComparison.Ordinal);
+        Assert.Contains("az role assignment create --assignee-object-id 00000000-0000-0000-0000-0000000000aa", result.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("is not set yet", result.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("az role assignment create", StringComparison.Ordinal));
         Assert.Contains(DeploySync, Calls());
     }
 

@@ -123,11 +123,15 @@ if [[ -z "$vault_name" || -z "$sync_principal" ]]; then
 fi
 vault_id=$(az keyvault show --name "$vault_name" --query id --output tsv)
 for secret in Auth--Google--ClientId Auth--Google--ClientSecret OneDrive--ClientId OneDrive--ClientSecret; do
-  if az keyvault secret show --vault-name "$vault_name" --name "$secret" --output none 2>/dev/null; then
+  # A data-plane read: an identity with Owner on the resource group but no data access is refused even when the secret exists, which is
+  # not the same as the secret not being there.
+  if show_error=$(az keyvault secret show --vault-name "$vault_name" --name "$secret" --output none 2>&1); then
     az role assignment create --assignee-object-id "$sync_principal" --assignee-principal-type ServicePrincipal \
       --role "Key Vault Secrets User" --scope "$vault_id/secrets/$secret" --output none
-  else
+  elif [[ "$show_error" == *SecretNotFound* || "$show_error" == *"was not found"* ]]; then
     echo "$secret is not set yet; run deploy again after setting it."
+  else
+    echo "This identity cannot read the vault's secrets, so $secret was not checked: run ./scripts/deploy.sh once from a computer where you can, or run: az role assignment create --assignee-object-id $sync_principal --role \"Key Vault Secrets User\" --scope $vault_id/secrets/$secret"
   fi
 done
 
