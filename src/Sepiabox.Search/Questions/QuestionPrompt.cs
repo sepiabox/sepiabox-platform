@@ -217,6 +217,8 @@ public static class QuestionPrompt
         "Sítio da avó" and "Apartamento Graça" in its saved places list, "Apartamento Graça" being the home place:
         "videos from Lisbon in December 2019" -> {"filters": {"kinds": ["video"], "years": [2019], "months": [12], "places": {"cities": ["Lisbon"]}}}
         "vídeos de Lisboa em dezembro de 2019" -> {"filters": {"kinds": ["video"], "years": [2019], "months": [12], "places": {"cities": ["Lisbon"]}}}
+        "videos from August, every year" -> {"filters": {"kinds": ["video"], "months": [8]}}
+        "vídeos de agosto de todos os anos" -> {"filters": {"kinds": ["video"], "months": [8]}}
         "photos in the snow last winter" -> {"filters": {"kinds": ["photo"], "dateFrom": "2024-12-01", "dateTo": "2025-02-28", "visual": {"text": "snow"}}}
         "fotos na neve no inverno passado" -> {"filters": {"kinds": ["photo"], "dateFrom": "2024-12-01", "dateTo": "2025-02-28", "visual": {"text": "snow"}}}
         "photos from Porto last summer" -> {"filters": {"kinds": ["photo"], "dateFrom": "2024-06-01", "dateTo": "2024-08-31", "places": {"cities": ["Porto"]}}}
