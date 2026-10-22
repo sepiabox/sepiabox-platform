@@ -1363,6 +1363,15 @@
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
     <value>{0}: {1}, página atual</value>
   </data>
+  <data name="Source_OpenOriginal" xml:space="preserve">
+    <value>Abrir original</value>
+  </data>
+  <data name="Source_Removed" xml:space="preserve">
+    <value>Não está mais na origem</value>
+  </data>
+  <data name="Source_OpenOriginalHint" xml:space="preserve">
+    <value>Baixado do Drive pelo Sepiabox, de uma vez só; um vídeo muito grande pode não terminar.</value>
+  </data>
   <data name="Settings_Export_Link" xml:space="preserve">
     <value>Exportar todos os dados</value>
   </data>

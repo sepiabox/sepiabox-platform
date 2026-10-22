@@ -1430,6 +1430,15 @@
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
     <value>{0}: {1}, current page</value>
   </data>
+  <data name="Source_OpenOriginal" xml:space="preserve">
+    <value>Open original</value>
+  </data>
+  <data name="Source_Removed" xml:space="preserve">
+    <value>No longer at the source</value>
+  </data>
+  <data name="Source_OpenOriginalHint" xml:space="preserve">
+    <value>Downloaded from Drive through Sepiabox, in one piece; a very large video may not finish.</value>
+  </data>
   <data name="Settings_Export_Link" xml:space="preserve">
     <value>Export all data</value>
     <comment>Link on the settings page to the export page (S-040).</comment>

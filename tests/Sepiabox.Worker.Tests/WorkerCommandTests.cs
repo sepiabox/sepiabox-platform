@@ -57,6 +57,19 @@ public sealed class WorkerCommandTests
     }
 
     [Fact]
+    public void Parses_sync_google_drive_which_never_migrates()
+    {
+        Assert.True(WorkerCommand.TryParse(["sync", "google-drive"], out var command, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.SyncGoogleDrive, false), command);
+        Assert.False(WorkerCommand.TryParse(["sync"], out _, out _));
+        Assert.False(WorkerCommand.TryParse(["sync", "onedrive"], out _, out _));
+        Assert.False(WorkerCommand.TryParse(["sync", "google-drive", "--migrate"], out _, out _));
+        Assert.True(WorkerCommand.TryParse(["sync", "google-drive", "--rescan", "ana@example.com"], out var rescan, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.SyncGoogleDrive, false, Rescan: "ana@example.com"), rescan);
+        Assert.False(WorkerCommand.TryParse(["sync", "google-drive", "--rescan"], out _, out _));
+    }
+
+    [Fact]
     public void Parses_export_which_never_migrates()
     {
         Assert.True(WorkerCommand.TryParse(["export"], out var command, out _));

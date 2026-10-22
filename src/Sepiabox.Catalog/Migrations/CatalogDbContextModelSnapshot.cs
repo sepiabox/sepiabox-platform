@@ -231,6 +231,10 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("text")
                         .HasColumnName("path");
 
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("removed_at");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasColumnType("text")
@@ -295,6 +299,19 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("status");
 
+                    b.Property<string>("SyncChangesToken")
+                        .HasColumnType("text")
+                        .HasColumnName("sync_changes_token");
+
+                    b.Property<string>("SyncListToken")
+                        .HasColumnType("text")
+                        .HasColumnName("sync_list_token");
+
+                    b.Property<bool>("SyncListing")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("sync_listing");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -350,6 +367,44 @@ namespace Sepiabox.Catalog.Migrations
                         .HasName("pk_derivatives");
 
                     b.ToTable("derivatives", (string)null);
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.DriveFile", b =>
+                {
+                    b.Property<long>("ConnectedSourceId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("connected_source_id");
+
+                    b.Property<string>("FileId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("file_id");
+
+                    b.Property<string>("Checksum")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("checksum");
+
+                    b.Property<DateTimeOffset>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("path");
+
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.HasKey("ConnectedSourceId", "FileId")
+                        .HasName("pk_drive_files");
+
+                    b.HasIndex("ConnectedSourceId", "Path")
+                        .HasDatabaseName("ix_drive_files_path");
+
+                    b.ToTable("drive_files", (string)null);
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.ErasedFace", b =>
@@ -879,6 +934,16 @@ namespace Sepiabox.Catalog.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_derivatives_assets_asset_id");
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.DriveFile", b =>
+                {
+                    b.HasOne("Sepiabox.Catalog.ConnectedSource", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_drive_files_connected_sources_connected_source_id");
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.ErasedFace", b =>

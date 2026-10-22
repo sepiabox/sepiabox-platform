@@ -12,6 +12,9 @@ public static class SourceLinks
 {
     public const string LocalType = "local";
 
+    /// <summary>The type of a source found in a connected Google Drive (S-037, S-038).</summary>
+    public const string GoogleDriveType = "google-drive";
+
     // The link's text by source type; any other type reads "Open at the source".
     private static readonly Dictionary<string, string> s_linkText = new(StringComparer.Ordinal)
     {
@@ -41,6 +44,19 @@ public static class SourceLinks
         && uri.UserInfo.Length == 0
             ? uri.AbsoluteUri
             : null;
+
+    /// <summary>
+    /// The address of "Open original" through the server (S-038), for a Google Drive source whose file is still there: the server reads the
+    /// file from the Drive and passes it on. Null for any other source, for a file the sync found gone, and when the original is stored (the
+    /// page's own download button serves it).
+    /// </summary>
+    public static string? OriginalHref(string assetId, AssetSourceDetail source, bool originalStored)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return !originalStored && source is { Type: GoogleDriveType, Id: > 0, Removed: false }
+            ? $"photos/{assetId}/sources/{source.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)}/original"
+            : null;
+    }
 
     /// <summary>"Open in Google Photos", "Open on Instagram" or "Open at the source".</summary>
     public static string LinkText(AssetSourceDetail source, IStringLocalizer<SharedResource> text)
