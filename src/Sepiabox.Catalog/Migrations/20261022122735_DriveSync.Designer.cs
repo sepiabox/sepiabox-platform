@@ -14,7 +14,7 @@ using Sepiabox.Catalog;
 namespace Sepiabox.Catalog.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
-    [Migration("20261022112615_DriveSync")]
+    [Migration("20261022122735_DriveSync")]
     partial class DriveSync
     {
         /// <inheritdoc />
@@ -370,6 +370,10 @@ namespace Sepiabox.Catalog.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("path");
+
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
 
                     b.HasKey("ConnectedSourceId", "FileId")
                         .HasName("pk_drive_files");

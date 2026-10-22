@@ -89,7 +89,7 @@ public sealed class DriveSyncTests(CatalogFixture fixture)
     {
         var (db, store, drive, account) = await SetUpAsync(files: 2);
         await Sync(db, store, drive).RunAsync(CancellationToken.None);
-        await SeedSourceAsync(db, "Fotos/photo-0.jpg");
+        await SeedSourceAsync(db, "Fotos/photo-0.jpg", ContentLength("id-0"));
         drive.Changes.Add(new DriveChange("id-0", true, null));
 
         var result = await Sync(db, store, drive).RunAsync(CancellationToken.None);
@@ -101,11 +101,29 @@ public sealed class DriveSyncTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Marks_only_the_source_of_the_file_that_was_removed_when_two_files_share_a_path()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 1);
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+        // Another asset, from another file of the same name in the same folder, with another size and time.
+        await SeedSourceAsync(db, "Fotos/photo-0.jpg", ContentLength("id-0"), 'a');
+        await SeedSourceAsync(db, "Fotos/photo-0.jpg", 999, 'b');
+        await SeedSourceAsync(db, "Fotos/photo-0.jpg", ContentLength("id-0"), 'd', s_modified.AddDays(5));
+        drive.Changes.Add(new DriveChange("id-0", true, null));
+
+        var result = await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.Removed);
+        var marked = await db.AssetSources.AsNoTracking().Where(s => s.RemovedAt != null).Select(s => s.AssetId).ToListAsync();
+        Assert.Equal(["a"], marked.Select(id => id[..1]).ToList());
+    }
+
+    [Fact]
     public async Task A_file_that_comes_back_clears_the_mark()
     {
         var (db, store, drive, _) = await SetUpAsync(files: 1);
         await Sync(db, store, drive).RunAsync(CancellationToken.None);
-        await SeedSourceAsync(db, "Fotos/photo-0.jpg");
+        await SeedSourceAsync(db, "Fotos/photo-0.jpg", ContentLength("id-0"));
         drive.Changes.Add(new DriveChange("id-0", true, null));
         await Sync(db, store, drive).RunAsync(CancellationToken.None);
         Assert.NotNull((await db.AssetSources.AsNoTracking().SingleAsync()).RemovedAt);
@@ -122,7 +140,7 @@ public sealed class DriveSyncTests(CatalogFixture fixture)
     {
         var (db, store, drive, _) = await SetUpAsync(files: 1);
         await Sync(db, store, drive).RunAsync(CancellationToken.None);
-        await SeedSourceAsync(db, "Fotos/photo-0.jpg");
+        await SeedSourceAsync(db, "Fotos/photo-0.jpg", ContentLength("id-0"));
         drive.Files[0] = drive.Files[0] with { Parents = ["folder-2"], ModifiedTime = s_modified.AddHours(1) };
         drive.Changes.Add(new DriveChange("id-0", false, drive.Files[0]));
 
@@ -219,6 +237,61 @@ public sealed class DriveSyncTests(CatalogFixture fixture)
         Assert.Empty(await store.ListAsync("incoming").ToListAsync());
         // A later run leaves the account alone until the family connects it again.
         Assert.Equal(0, (await Sync(db, store, new FakeDriveSync()).RunAsync(CancellationToken.None)).Accounts);
+    }
+
+    [Fact]
+    public async Task A_timeout_stops_that_account_without_reconnecting_it_and_the_next_account_still_runs()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 2);
+        db.ConnectedSources.Add(new ConnectedSource
+        {
+            Type = ConnectedSourceTypes.GoogleDrive,
+            AccountEmail = "bia@example.com",
+            EncryptedRefreshToken = s_keys.CreateProtector(ConnectedSource.RefreshTokenPurpose).Protect(Token),
+            Status = ConnectedSourceStatuses.Connected,
+            ConnectedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        // The first account's first call times out (an HttpClient timeout is a TaskCanceledException); the second account's is fine.
+        var calls = 0;
+        drive.Failure = () => ++calls == 1 ? new TaskCanceledException("timed out") : null;
+
+        var result = await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal((2, 1, 0), (result.Accounts, result.Failed, result.Reconnect));
+        Assert.Equal(2, (await store.ListAsync("incoming").ToListAsync()).Count);
+        Assert.All(await db.ConnectedSources.AsNoTracking().ToListAsync(), s => Assert.Equal(ConnectedSourceStatuses.Connected, s.Status));
+    }
+
+    [Fact]
+    public async Task A_key_ring_that_cannot_be_read_just_now_fails_the_run_and_leaves_the_account_connected()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 2);
+
+        var result = await new DriveSync(db, store, drive, new FailingKeys(), TimeProvider.System, NullLogger.Instance).RunAsync(CancellationToken.None);
+
+        Assert.Equal((1, 0), (result.Failed, result.Reconnect));
+        Assert.Equal(ConnectedSourceStatuses.Connected, (await db.ConnectedSources.AsNoTracking().SingleAsync()).Status);
+        Assert.Empty(drive.TokensUsed);
+    }
+
+    [Fact]
+    public async Task Rescan_forgets_the_cursor_and_the_staged_files_so_the_next_run_stages_everything_again()
+    {
+        var (db, store, drive, account) = await SetUpAsync(files: 3);
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+        Assert.Equal(3, await db.DriveFiles.CountAsync(f => f.ConnectedSourceId == account));
+
+        var found = await Sync(db, store, drive).RescanAsync(" Ana@Example.com ", CancellationToken.None);
+
+        Assert.True(found);
+        Assert.Equal(0, await db.DriveFiles.CountAsync(f => f.ConnectedSourceId == account));
+        var stored = await db.ConnectedSources.AsNoTracking().SingleAsync();
+        Assert.Equal((null, null, false), (stored.SyncChangesToken, stored.SyncListToken, stored.SyncListing));
+        var again = await Sync(db, store, drive).RunAsync(CancellationToken.None);
+        Assert.Equal(3, again.Staged);
+        Assert.Equal(6, (await store.ListAsync("incoming").ToListAsync()).Count);
+        Assert.False(await Sync(db, store, drive).RescanAsync("nobody@example.com", CancellationToken.None));
     }
 
     [Fact]
@@ -340,17 +413,37 @@ public sealed class DriveSyncTests(CatalogFixture fixture)
         return (db, store, drive, account.Id);
     }
 
-    private static async Task SeedSourceAsync(CatalogDbContext db, string path)
+    // What the fake Drive's file of that id holds.
+    private static long ContentLength(string id) => System.Text.Encoding.UTF8.GetByteCount("content of " + id);
+
+    private static async Task SeedSourceAsync(CatalogDbContext db, string path, long size, char id = 'c', DateTimeOffset? modifiedAt = null)
     {
+        var assetId = new string(id, 64);
         db.Assets.Add(new Asset
         {
-            Id = new string('c', 64),
+            Id = assetId,
             Kind = "photo",
             ContentType = "image/jpeg",
-            Sources = [new AssetSource { AssetId = new string('c', 64), Type = "google-drive", Name = Account, Path = path, ModifiedAt = s_modified }],
+            SizeBytes = size,
+            Sources = [new AssetSource { AssetId = assetId, Type = "google-drive", Name = Account, Path = path, ModifiedAt = modifiedAt ?? s_modified }],
         });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
+    }
+
+    // A key ring whose storage fails: not a missing key, which would be a CryptographicException.
+    private sealed class FailingKeys : IDataProtectionProvider
+    {
+        public IDataProtector CreateProtector(string purpose) => new Failing();
+
+        private sealed class Failing : IDataProtector
+        {
+            public IDataProtector CreateProtector(string purpose) => this;
+
+            public byte[] Protect(byte[] plaintext) => throw new IOException("the key ring's storage is down");
+
+            public byte[] Unprotect(byte[] protectedData) => throw new IOException("the key ring's storage is down");
+        }
     }
 
     private sealed class ListLogger : ILogger

@@ -33,9 +33,36 @@ public sealed class GoogleDriveSyncClientTests
         Assert.Equal(["f1"], first.Parents);
         Assert.Equal(("b", "video/mp4", 0), (page.Files[1].Id, page.Files[1].MimeType, page.Files[1].Parents.Count));
         var query = google.Requests.Single(r => r.Path == "/drive/v3/files").Query;
-        Assert.Equal("(mimeType contains 'image/' or mimeType contains 'video/') and trashed = false", query["q"]);
+        Assert.Equal("(mimeType contains 'image/' or mimeType contains 'video/') and trashed = false and 'me' in owners", query["q"]);
         Assert.Equal("from-here", query["pageToken"]);
         Assert.Contains("md5Checksum", query["fields"], StringComparison.Ordinal);
+        Assert.Contains("ownedByMe", query["fields"], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Leaves_out_a_change_to_a_file_somebody_else_owns()
+    {
+        var google = new FakeGoogle();
+        google.Json["/drive/v3/changes"] = """
+            {"newStartPageToken":"9","changes":[
+              {"fileId":"mine","removed":false,"file":{"id":"mine","name":"a.jpg","mimeType":"image/jpeg","ownedByMe":true}},
+              {"fileId":"theirs","removed":false,"file":{"id":"theirs","name":"b.jpg","mimeType":"image/jpeg","ownedByMe":false}}]}
+            """;
+
+        var page = await Client(google).ListChangesAsync(RefreshToken, "8");
+
+        Assert.Equal(["mine"], page.Changes.Select(c => c.FileId));
+    }
+
+    [Fact]
+    public async Task A_token_error_that_is_not_a_revoked_grant_is_a_transient_failure_and_not_an_authorization_one()
+    {
+        var google = new FakeGoogle { RefreshStatus = HttpStatusCode.ServiceUnavailable, RefreshBody = """{"error":"temporarily_unavailable"}""" };
+
+        var failure = await Record.ExceptionAsync(() => Client(google).GetStartPageTokenAsync(RefreshToken));
+
+        Assert.IsType<HttpRequestException>(failure);
+        Assert.DoesNotContain("refresh-token", failure.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

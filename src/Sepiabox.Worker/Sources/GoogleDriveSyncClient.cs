@@ -19,10 +19,11 @@ public sealed class GoogleDriveSyncClient(string clientId, string clientSecret, 
 {
     private const string UserId = "sepiabox";
 
-    private const string FileFields = "id,name,mimeType,size,modifiedTime,md5Checksum,parents,webViewLink";
+    private const string FileFields = "id,name,mimeType,size,modifiedTime,md5Checksum,parents,webViewLink,ownedByMe";
 
-    // Photos and videos that are not in the trash, wherever they are in the Drive.
-    private const string MediaQuery = "(mimeType contains 'image/' or mimeType contains 'video/') and trashed = false";
+    // The photos and videos the account owns that are not in the trash, wherever they are in the Drive. Files other people shared with the
+    // account are not the family's: their photos, faces and embeddings must not enter the library (D-115).
+    private const string MediaQuery = "(mimeType contains 'image/' or mimeType contains 'video/') and trashed = false and 'me' in owners";
 
     public async Task<string> GetStartPageTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
@@ -65,7 +66,7 @@ public sealed class GoogleDriveSyncClient(string clientId, string clientSecret, 
             {
                 changes.Add(new DriveChange(change.FileId, true, null));
             }
-            else if (IsMedia(change.File.MimeType))
+            else if (IsMedia(change.File.MimeType) && change.File.OwnedByMe != false)
             {
                 changes.Add(new DriveChange(change.FileId, false, Info(change.File)));
             }
@@ -139,6 +140,11 @@ public sealed class GoogleDriveSyncClient(string clientId, string clientSecret, 
         catch (TokenResponseException ex) when (ex.Error?.Error == "invalid_grant")
         {
             throw new DriveAuthorizationException("Google no longer honours the token.", ex);
+        }
+        catch (TokenResponseException ex)
+        {
+            // Any other refusal of the token request is not the account's: reported without what Google said.
+            throw new HttpRequestException($"Google answered {(int?)ex.StatusCode ?? 0} to the token request.", null, ex.StatusCode);
         }
         catch (GoogleApiException ex)
         {

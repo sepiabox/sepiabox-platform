@@ -113,7 +113,7 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
         Assert.Equal("false", account.Property("allowBlobPublicAccess"));
         Assert.Equal("'francecentral'", account.Property("location"));
         Assert.Equal(
-            ["dataprotection", "derivatives", "exports", "incoming", "manifests", "originals"],
+            ["dataprotection", "derivatives", "exports", "incoming", "manifests", "originals", "tokenring"],
             containers.Select(c => c.Property("name")!.Trim('\'')).Order(StringComparer.Ordinal));
         Assert.All(containers, c => Assert.Equal("'None'", c.Property("publicAccess")));
     }

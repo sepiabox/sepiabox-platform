@@ -230,18 +230,20 @@ else
         .WithParameter("uploaderPrincipalIds", uploaders);
 
     // Syncs the connected Google Drives into `incoming` every day (S-038, D-115). It connects as the application role, reads the
-    // Google OAuth client from the owner's Key Vault (the same secrets as the web's sign-in) and the web's key ring, read-only,
-    // to unprotect the refresh tokens; its storage roles (write incoming, read the key ring) and its use of the key are in
-    // access.bicep.
+    // Google OAuth client from the owner's Key Vault (two secrets, the same as the web's sign-in, and no other: its role on each is
+    // assigned by scripts/deploy.sh, and it loads only those two) and the token ring, read-only, to unprotect the refresh tokens;
+    // its storage roles (write incoming, read the token ring) and its use of the ring's key are in access.bicep.
     builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.SyncResourceName)
         .WithArgs("sync", "google-drive")
         .WithReferenceEnvironment(ConnectionStringsOnly)
         .WithReference(blobs)
-        .WithReference(vault)
+        // The vault's address only: a reference would also give the identity a role on the whole vault (see scripts/deploy.sh).
+        .WithEnvironment("ConnectionStrings__vault", vault.Resource.ConnectionStringExpression)
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
-        .WithEnvironment("DataProtection__KeyUri", access.GetOutput("dataProtectionKeyUri"))
+        .WithEnvironment("DataProtection__TokenKeyUri", access.GetOutput("tokenRingKeyUri"))
         .WithAzureUserAssignedIdentity(syncIdentity)
-        .WithRoleAssignments(vault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
+        // No role on the vault, nor the default one that naming it would give.
+        .WithRoleAssignments(vault, [])
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureSyncJob);
 
@@ -254,6 +256,7 @@ else
         .WithRoleAssignments(vault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
         .WithEnvironment("DataProtection__KeyUri", access.GetOutput("dataProtectionKeyUri"))
+        .WithEnvironment("DataProtection__TokenKeyUri", access.GetOutput("tokenRingKeyUri"))
         .WithEnvironment("Search__TimeZone", AzureInfrastructure.SearchTimeZone)
         // The CLIP text model in the web's image (S-056): its base image sepiabox-web-models, built by scripts/web-models.sh.
         .WithEnvironment("Search__ModelFolder", AzureInfrastructure.WebModelFolder)

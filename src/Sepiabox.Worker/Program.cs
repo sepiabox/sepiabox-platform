@@ -1,3 +1,4 @@
+using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
@@ -188,23 +189,33 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
     if (command.Action == WorkerAction.SyncGoogleDrive)
     {
         var configuration = services.GetRequiredService<IConfiguration>();
-        var client = OAuthClientFrom(configuration);
+        var db = services.GetRequiredService<CatalogDbContext>();
+        var client = OAuthClientFrom(configuration, "Auth:Google");
         if (client is null)
         {
-            // Nothing is connected without it (the web needs the same client), so there is nothing to sync.
+            // With nothing connected there is nothing to sync, and no OAuth client is how it is before the owner sets one up; with an
+            // account connected, a client that is gone is a fault the job must show: it ends Failed.
+            var connected = await db.ConnectedSources.AnyAsync(
+                s => s.Type == ConnectedSourceTypes.GoogleDrive && s.Status == ConnectedSourceStatuses.Connected, cancellationToken);
             Log.DriveSyncNotConfigured(logger);
-            return ExitCodes.Success;
+            return connected ? ExitCodes.Failed : ExitCodes.Success;
         }
 
-        var synced = await new DriveSync(
-                services.GetRequiredService<CatalogDbContext>(),
-                services.GetRequiredService<IBlobStore>(),
-                new GoogleDriveSyncClient(client.Value.Id, client.Value.Secret),
-                services.GetRequiredService<IDataProtectionProvider>(),
-                services.GetRequiredService<TimeProvider>(),
-                logger,
-                configuration.GetValue("Sync:MaxFilesPerRun", DriveSync.DefaultMaxFilesPerRun))
-            .RunAsync(cancellationToken);
+        var sync = new DriveSync(
+            db,
+            services.GetRequiredService<IBlobStore>(),
+            new GoogleDriveSyncClient(client.Value.Id, client.Value.Secret),
+            services.GetRequiredService<IDataProtectionProvider>(),
+            services.GetRequiredService<TimeProvider>(),
+            logger,
+            configuration.GetValue("Sync:MaxFilesPerRun", DriveSync.DefaultMaxFilesPerRun));
+        if (command.Rescan is { } account && !await sync.RescanAsync(account, cancellationToken))
+        {
+            Log.DriveRescanNotFound(logger);
+            return ExitCodes.Usage;
+        }
+
+        var synced = await sync.RunAsync(cancellationToken);
         Log.DriveSyncFinished(logger, synced.Accounts, synced.Staged, synced.Removed, synced.Skipped, synced.Reconnect, synced.Failed);
         return synced.Failed == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }
@@ -312,30 +323,39 @@ static async Task<int> ProcessFromQueueAsync(IServiceProvider services, ILogger 
     return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
 }
 
-// The sync's two outside inputs (S-038): the Google OAuth client from Key Vault (Auth--Google--ClientId and ClientSecret, the owner's
-// secrets, as the web reads them), and the web's key ring, read-only, to unprotect the refresh tokens the web protected.
+// The sync's two outside inputs (S-038, D-115): the Google OAuth client, read from the owner's Key Vault as these two secrets and no
+// other (the Anthropic key is in the same vault), and the token ring, read-only, to unprotect the refresh tokens the web protected.
+// That ring is not the web's cookie ring: this job holds nothing that could sign a session.
 static void AddDriveSyncServices(HostApplicationBuilder builder)
 {
     if (!string.IsNullOrEmpty(builder.Configuration.GetConnectionString("vault")))
     {
-        builder.Configuration.AddAzureKeyVaultSecrets("vault");
+        builder.Configuration.AddAzureKeyVaultSecrets(
+            "vault", options: new AzureKeyVaultConfigurationOptions { Manager = new NamedSecrets(NamedSecrets.GoogleOAuthClient) });
     }
 
-    var protection = builder.Services.AddDataProtection().SetApplicationName(BlobLayout.KeyRingApplicationName);
-    if (builder.Configuration["DataProtection:KeyUri"] is { Length: > 0 } keyUri)
+    builder.Services.AddSingleton<IDataProtectionProvider>(services =>
     {
-        protection
-            .PersistKeysToAzureBlobStorage(services => services.GetRequiredService<BlobServiceClient>()
-                .GetBlobContainerClient(BlobLayout.DataProtectionContainer)
-                .GetBlobClient(BlobLayout.KeyRingBlobName))
-            .ProtectKeysWithAzureKeyVault(new Uri(keyUri), new DefaultAzureCredential())
-            // The job only reads the ring: it never makes a key, which the web does (D-062).
-            .DisableAutomaticKeyGeneration();
-    }
+        var ring = new ServiceCollection();
+        ring.AddLogging();
+        var protection = ring.AddDataProtection().SetApplicationName(BlobLayout.TokenRingApplicationName);
+        if (services.GetRequiredService<IConfiguration>()["DataProtection:TokenKeyUri"] is { Length: > 0 } keyUri)
+        {
+            protection
+                .PersistKeysToAzureBlobStorage(services.GetRequiredService<BlobServiceClient>()
+                    .GetBlobContainerClient(BlobLayout.TokenRingContainer)
+                    .GetBlobClient(BlobLayout.TokenRingBlobName))
+                .ProtectKeysWithAzureKeyVault(new Uri(keyUri), new DefaultAzureCredential())
+                // The job only reads the ring: it never makes a key, which the web does.
+                .DisableAutomaticKeyGeneration();
+        }
+
+        return ring.BuildServiceProvider().GetRequiredService<IDataProtectionProvider>();
+    });
 }
 
-static (string Id, string Secret)? OAuthClientFrom(IConfiguration configuration) =>
-    configuration["Auth:Google:ClientId"] is { Length: > 0 } id && configuration["Auth:Google:ClientSecret"] is { Length: > 0 } secret
+static (string Id, string Secret)? OAuthClientFrom(IConfiguration configuration, string section) =>
+    configuration[$"{section}:ClientId"] is { Length: > 0 } id && configuration[$"{section}:ClientSecret"] is { Length: > 0 } secret
         ? (id, secret)
         : null;
 

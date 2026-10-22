@@ -1436,4 +1436,7 @@
   <data name="Source_Removed" xml:space="preserve">
     <value>No longer at the source</value>
   </data>
+  <data name="Source_OpenOriginalHint" xml:space="preserve">
+    <value>Downloaded from Drive through Sepiabox, in one piece; a very large video may not finish.</value>
+  </data>
 </root>

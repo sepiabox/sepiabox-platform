@@ -41,10 +41,8 @@ public sealed partial class DriveOriginals(
         // The account the source was found in, and the id the sync gave the file: the manifest only has the path.
         var account = await db.ConnectedSources.SingleOrDefaultAsync(
             s => s.Type == ConnectedSourceTypes.GoogleDrive && s.AccountEmail == source.Name, cancellationToken);
-        var file = account is null
-            ? null
-            : await db.DriveFiles.AsNoTracking().SingleOrDefaultAsync(f => f.ConnectedSourceId == account.Id && f.Path == source.Path, cancellationToken);
-        if (account is null || file is null || source.RemovedAt is not null)
+        var file = account is null || source.RemovedAt is not null ? null : await FileOfAsync(db, account.Id, source, assetId, cancellationToken);
+        if (account is null || file is null)
         {
             return (DriveOriginalOutcome.NotFound, null);
         }
@@ -69,6 +67,17 @@ public sealed partial class DriveOriginals(
             LogOpenFailed(log, account.Id, ex);
             return (DriveOriginalOutcome.Failed, null);
         }
+    }
+
+    // A Drive can hold two files of one name in one folder, so the path alone may name several. The one the source describes has the
+    // source's modification time and the asset's size; when the time is not the same yet (a change the import has not reached), the one
+    // file at that path is it. Anything still ambiguous is not found, never a guess and never an error.
+    private static async Task<DriveFile?> FileOfAsync(CatalogDbContext db, long accountId, AssetSource source, string assetId, CancellationToken cancellationToken)
+    {
+        var atPath = await db.DriveFiles.AsNoTracking().Where(f => f.ConnectedSourceId == accountId && f.Path == source.Path).ToListAsync(cancellationToken);
+        var size = await db.Assets.AsNoTracking().Where(a => a.Id == assetId).Select(a => (long?)a.SizeBytes).SingleOrDefaultAsync(cancellationToken);
+        var same = atPath.Where(f => f.ModifiedAt == source.ModifiedAt && (f.SizeBytes is null || f.SizeBytes == size)).ToList();
+        return same.Count == 1 ? same[0] : same.Count == 0 && atPath.Count == 1 ? atPath[0] : null;
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Opening a file of the Drive of connection {Id} failed.")]

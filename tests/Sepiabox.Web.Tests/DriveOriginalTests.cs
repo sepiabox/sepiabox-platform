@@ -54,6 +54,15 @@ public sealed class DriveOriginalLinkTests : LocalizedContext
         var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Sources = [s_drive], OriginalStored = false });
 
         Assert.Equal("Abrir original", page.Find("ul.sources a[href$='/original']").TextContent);
+        Assert.Contains("pode não terminar", page.Find("ul.sources .original-hint").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_detail_page_warns_that_the_download_goes_through_the_server_in_one_piece()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Sources = [s_drive], OriginalStored = false });
+
+        Assert.Contains("through Sepiabox, in one piece", page.Find("ul.sources .original-hint").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -176,6 +185,37 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
         // The sync recorded the file, but Drive no longer has it.
         Assert.Equal(DriveOriginalOutcome.NotFound, (await originals.OpenAsync(Ids.Of(1), missing)).Outcome);
         Assert.Equal(DriveOriginalOutcome.NotFound, (await originals.OpenAsync(Ids.Of(1), 999_999)).Outcome);
+    }
+
+    [Fact]
+    public async Task Two_files_of_one_name_in_one_folder_open_the_one_the_source_describes_and_an_ambiguous_one_is_not_found()
+    {
+        await using var db = await SeedAsync();
+        var account = await db.ConnectedSources.AsNoTracking().SingleAsync();
+        var when = new DateTimeOffset(2020, 5, 1, 10, 0, 0, TimeSpan.Zero);
+        // Another file at the same path, modified at another time, and the asset's own file with the time its source has.
+        db.AssetSources.Add(new AssetSource { AssetId = Ids.Of(2), Type = "google-drive", Name = Account, Path = "Fotos/Dupe.jpg", ModifiedAt = when });
+        db.DriveFiles.AddRange(
+            new DriveFile { ConnectedSourceId = account.Id, FileId = "dupe-a", Path = "Fotos/Dupe.jpg", ModifiedAt = when },
+            new DriveFile { ConnectedSourceId = account.Id, FileId = "dupe-b", Path = "Fotos/Dupe.jpg", ModifiedAt = when.AddDays(1) });
+        await db.SaveChangesAsync();
+        var drive = new FakeDrive();
+        drive.Files["dupe-a"] = [1];
+        drive.Files["dupe-b"] = [2];
+        var dupe = await SourceIdAsync(db, "Fotos/Dupe.jpg");
+
+        var (outcome, file) = await Originals(db, drive).OpenAsync(Ids.Of(2), dupe);
+
+        Assert.Equal(DriveOriginalOutcome.Opened, outcome);
+        await using (file)
+        {
+            Assert.Equal(1, file!.Content.ReadByte());
+        }
+
+        // Both at the source's time: nothing says which, so it is not found, and nothing throws.
+        db.DriveFiles.Single(f => f.FileId == "dupe-b").ModifiedAt = when;
+        await db.SaveChangesAsync();
+        Assert.Equal(DriveOriginalOutcome.NotFound, (await Originals(db, drive).OpenAsync(Ids.Of(2), dupe)).Outcome);
     }
 
     [Fact]

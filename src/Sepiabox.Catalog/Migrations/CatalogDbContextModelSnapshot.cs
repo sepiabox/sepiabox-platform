@@ -368,6 +368,10 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("text")
                         .HasColumnName("path");
 
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
                     b.HasKey("ConnectedSourceId", "FileId")
                         .HasName("pk_drive_files");
 
