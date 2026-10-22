@@ -33,6 +33,17 @@ public class UploadOptionsTests
         Assert.Equal(new UploadOptions("work", UploadDestination.Azure, "sepiaboxdata"), options);
     }
 
+    [Fact]
+    public void Parses_resend_source_and_refuses_it_without_a_name()
+    {
+        Assert.True(UploadOptions.TryParse(["work", "--destination", "local", "--resend-source", " wrong-drive "], out var options, out _));
+        Assert.Equal(new UploadOptions("work", UploadDestination.Local, ResendSource: "wrong-drive"), options);
+        Assert.False(UploadOptions.TryParse(["work", "--destination", "local", "--resend-source"], out _, out var missing));
+        Assert.Equal("--resend-source needs a value.", missing);
+        Assert.False(UploadOptions.TryParse(["work", "--destination", "local", "--resend-source", " "], out _, out var blank));
+        Assert.Equal("--resend-source needs the name of a source.", blank);
+    }
+
     [Theory]
     [MemberData(nameof(InvalidArguments))]
     public void Rejects_incomplete_or_unknown_arguments(string[] args)

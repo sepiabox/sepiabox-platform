@@ -64,6 +64,10 @@ const string Usage = """
       --destination local   Azurite, or the connection string in SEPIABOX_BLOB_CONNECTION.
       --destination azure   An Azure storage account; sign in first with az login.
       --account <name>      Storage account name, for --destination azure.
+      --resend-source <name>
+                            Send the assets of this source again, even though upload's record says they are
+                            there: for after sepiabox-worker assets delete --source <name> removed them from
+                            the library and the same work folder is uploaded again.
     """;
 
 if (args.Length == 0 || args[0] is "-h" or "--help" or "help")
@@ -213,6 +217,11 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
     Console.Error.WriteLine();
 
     Console.WriteLine($"{result.Assets:N0} assets: uploaded {result.Uploaded:N0} files ({ScanReport.FormatBytes(result.Bytes)}), already there {result.Skipped:N0}, {(result.IndexOnly ? $"originals left at their source {result.OriginalsLeftAtSource:N0}, " : "")}problems {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
+    if (options.ResendSource is not null)
+    {
+        Console.WriteLine($"Sent again, as asked: {result.AssetsResent:N0} assets of the source '{options.ResendSource}'.");
+    }
+
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");

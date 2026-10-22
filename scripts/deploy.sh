@@ -202,6 +202,9 @@ azd deploy import-all --no-prompt
 imports_deployed=true
 # Scheduled (S-022): after migrate, so it never runs an image older than the schema.
 azd deploy faces --no-prompt
+# Event-driven (S-036), from its own Dockerfile (FFmpeg and the models): after the import jobs, so a failed build leaves the
+# queue receiving again with the new import image, and before it can receive, since it reads the schema (the face setting).
+azd deploy process --no-prompt
 # Manual (S-059): started by hand only, but never with an image older than the schema. After the import
 # jobs, so that if this deploy fails the queue still receives again with the new import image.
 azd deploy geonames --no-prompt
