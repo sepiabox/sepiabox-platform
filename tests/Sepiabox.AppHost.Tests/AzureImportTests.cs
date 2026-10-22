@@ -163,8 +163,11 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
         Assert.Contains("parallelism: 1", trigger, StringComparison.Ordinal);
         Assert.Equal("0", job.Property("replicaRetryLimit"));
         Assert.Equal(["sync", "google-drive"], Arguments("sync"));
-        // It unprotects the tokens with the web's key ring: the URI of the key that wraps it, as the web has.
-        Assert.Equal("{access.outputs.dataProtectionKeyUri}", published.Resource("sync")["env"]!["DataProtection__KeyUri"]!.GetValue<string>());
+        // It unprotects the tokens with the token ring, the URI of the key that wraps it, and has no setting for the cookie ring's key.
+        var environment = published.Resource("sync")["env"]!.AsObject();
+        Assert.Equal("{access.outputs.tokenRingKeyUri}", environment["DataProtection__TokenKeyUri"]!.GetValue<string>());
+        Assert.False(environment.ContainsKey("DataProtection__KeyUri"));
+        Assert.Equal("{access.outputs.tokenRingKeyUri}", published.Resource("web")["env"]!["DataProtection__TokenKeyUri"]!.GetValue<string>());
     }
 
     [Theory]

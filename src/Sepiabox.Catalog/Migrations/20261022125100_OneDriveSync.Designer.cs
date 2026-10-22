@@ -14,8 +14,8 @@ using Sepiabox.Catalog;
 namespace Sepiabox.Catalog.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
-    [Migration("20261022112615_DriveSync")]
-    partial class DriveSync
+    [Migration("20261022125100_OneDriveSync")]
+    partial class OneDriveSync
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -275,13 +275,11 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnName("status");
 
                     b.Property<string>("SyncChangesToken")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
+                        .HasColumnType("text")
                         .HasColumnName("sync_changes_token");
 
                     b.Property<string>("SyncListToken")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
+                        .HasColumnType("text")
                         .HasColumnName("sync_list_token");
 
                     b.Property<bool>("SyncListing")
@@ -370,6 +368,10 @@ namespace Sepiabox.Catalog.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("path");
+
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
 
                     b.HasKey("ConnectedSourceId", "FileId")
                         .HasName("pk_drive_files");

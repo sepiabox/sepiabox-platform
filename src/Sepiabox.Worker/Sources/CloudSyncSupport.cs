@@ -1,6 +1,4 @@
 using System.Text;
-using Microsoft.EntityFrameworkCore;
-using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Incoming;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Storage;
@@ -48,26 +46,6 @@ public sealed class IncomingStager(IBlobStore store)
 
     private static int MetadataBytes(IReadOnlyDictionary<string, string> metadata) =>
         metadata.Sum(p => Encoding.UTF8.GetByteCount(p.Key) + Encoding.UTF8.GetByteCount(p.Value));
-}
-
-/// <summary>
-/// The marks a sync keeps on the sources of a cloud account (S-038, D-115): a source whose file is gone from the cloud is marked removed,
-/// and the mark is cleared when the file is there again. The source itself stays (sources are only added to, D-032).
-/// </summary>
-public sealed class SourceMarks(CatalogDbContext db, TimeProvider clock)
-{
-    public Task<int> MarkRemovedAsync(string type, string accountName, string path, CancellationToken cancellationToken)
-    {
-        var now = clock.GetUtcNow();
-        return db.AssetSources
-            .Where(s => s.Type == type && s.Name == accountName && s.Path == path && s.RemovedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.RemovedAt, now), cancellationToken);
-    }
-
-    public Task<int> ClearRemovedAsync(string type, string accountName, string path, CancellationToken cancellationToken) =>
-        db.AssetSources
-            .Where(s => s.Type == type && s.Name == accountName && s.Path == path && s.RemovedAt != null)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.RemovedAt, (DateTimeOffset?)null), cancellationToken);
 }
 
 /// <summary>How a cloud file's name and folders become a source's path (S-038, S-039): the same for every cloud service.</summary>

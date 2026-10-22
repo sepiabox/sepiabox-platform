@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -64,14 +65,51 @@ public sealed class DriveSync(
         return new DriveSyncResult(accounts.Count, totals.Staged, totals.Removed, totals.Skipped, totals.Reconnect, totals.Failed);
     }
 
+    /// <summary>
+    /// Forgets where the sync was in an account and what it staged (<c>--rescan</c>): the next run lists the whole Drive again and stages every
+    /// file, so those the processing job skipped (a problem, left in incoming and deleted after 30 days) are put there again. Files already
+    /// processed are found by their content and only gain the source they already had. False when no such account is connected.
+    /// </summary>
+    public async Task<bool> RescanAsync(string accountEmail, CancellationToken cancellationToken)
+    {
+        var email = accountEmail.Trim().ToLowerInvariant();
+        var account = await db.ConnectedSources.SingleOrDefaultAsync(s => s.Type == ConnectedSourceTypes.GoogleDrive && s.AccountEmail == email, cancellationToken);
+        if (account is null)
+        {
+            return false;
+        }
+
+        await db.DriveFiles.Where(f => f.ConnectedSourceId == account.Id).ExecuteDeleteAsync(cancellationToken);
+        foreach (var entry in db.ChangeTracker.Entries<DriveFile>().ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
+
+        (account.SyncChangesToken, account.SyncListToken, account.SyncListing) = (null, null, false);
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     private async Task SyncAccountAsync(ConnectedSource account, Totals totals, CancellationToken cancellationToken)
     {
-        var token = Unprotect(account.EncryptedRefreshToken);
-        if (token is null)
+        string token;
+        try
         {
-            // Another key ring, a changed purpose or a damaged value: the family connects the account again.
+            token = Encoding.UTF8.GetString(_tokens.Unprotect(Microsoft.AspNetCore.WebUtilities.WebEncoders.Base64UrlDecode(account.EncryptedRefreshToken)));
+        }
+        catch (Exception ex) when (ex is System.Security.Cryptography.CryptographicException or FormatException)
+        {
+            // The key is not in the ring, the purpose changed or the value is damaged: the family connects the account again.
             Log.DriveTokenUnreadable(logger, account.Id);
             await MarkReconnectAsync(account, totals, cancellationToken);
+            return;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The key ring could not be read just now (storage or Key Vault failing): nothing is wrong with the account, so it is
+            // tried again next run, not sent to be connected again.
+            Log.DriveAccountStopped(logger, account.Id, ex.GetType().Name);
+            totals.Failed++;
             return;
         }
 
@@ -103,7 +141,7 @@ public sealed class DriveSync(
         {
             await MarkReconnectAsync(account, totals, cancellationToken);
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException || store.IsStoreFailure(ex))
+        catch (Exception ex) when (ex is HttpRequestException or IOException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested) || store.IsStoreFailure(ex))
         {
             // The page the run stopped on is tried again next time: its cursor was not moved, and what it staged is known.
             Log.DriveAccountStopped(logger, account.Id, ex.GetType().Name);
@@ -179,7 +217,7 @@ public sealed class DriveSync(
         if (known is not null && known.ModifiedAt == file.ModifiedTime && known.Checksum == file.Md5 && known.Path == path)
         {
             // Not changed since it was staged (a listing run twice, a change that is only a view or a share): the source is not removed.
-            await ClearRemovedAsync(account, path, cancellationToken);
+            await ClearRemovedAsync(account, path, file.ModifiedTime, file.Size, cancellationToken);
             return;
         }
 
@@ -205,20 +243,20 @@ public sealed class DriveSync(
 
         if (known is null)
         {
-            db.DriveFiles.Add(new DriveFile { ConnectedSourceId = account.Id, FileId = file.Id, Path = path, ModifiedAt = file.ModifiedTime, Checksum = file.Md5 });
+            db.DriveFiles.Add(new DriveFile { ConnectedSourceId = account.Id, FileId = file.Id, Path = path, ModifiedAt = file.ModifiedTime, Checksum = file.Md5, SizeBytes = file.Size });
         }
         else
         {
             if (known.Path != path)
             {
                 // Moved or renamed: the file is at its new path now, and no longer at the old one.
-                totals.Removed += await MarkRemovedAsync(account, known.Path, cancellationToken);
+                totals.Removed += await MarkRemovedAsync(account, known.Path, known.ModifiedAt, known.SizeBytes, cancellationToken);
             }
 
-            (known.Path, known.ModifiedAt, known.Checksum) = (path, file.ModifiedTime, file.Md5);
+            (known.Path, known.ModifiedAt, known.Checksum, known.SizeBytes) = (path, file.ModifiedTime, file.Md5, file.Size);
         }
 
-        await ClearRemovedAsync(account, path, cancellationToken);
+        await ClearRemovedAsync(account, path, file.ModifiedTime, file.Size, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -230,17 +268,17 @@ public sealed class DriveSync(
             return 0;
         }
 
-        var marked = await MarkRemovedAsync(account, known.Path, cancellationToken);
+        var marked = await MarkRemovedAsync(account, known.Path, known.ModifiedAt, known.SizeBytes, cancellationToken);
         db.DriveFiles.Remove(known);
         await db.SaveChangesAsync(cancellationToken);
         return marked;
     }
 
-    private Task<int> MarkRemovedAsync(ConnectedSource account, string path, CancellationToken cancellationToken) =>
-        _marks.MarkRemovedAsync(ConnectedSourceTypes.GoogleDrive, account.AccountEmail, path, cancellationToken);
+    private Task<int> MarkRemovedAsync(ConnectedSource account, string path, DateTimeOffset modifiedAt, long? size, CancellationToken cancellationToken) =>
+        _marks.MarkRemovedAsync(ConnectedSourceTypes.GoogleDrive, account.AccountEmail, path, modifiedAt, size, cancellationToken);
 
-    private Task<int> ClearRemovedAsync(ConnectedSource account, string path, CancellationToken cancellationToken) =>
-        _marks.ClearRemovedAsync(ConnectedSourceTypes.GoogleDrive, account.AccountEmail, path, cancellationToken);
+    private Task<int> ClearRemovedAsync(ConnectedSource account, string path, DateTimeOffset modifiedAt, long? size, CancellationToken cancellationToken) =>
+        _marks.ClearRemovedAsync(ConnectedSourceTypes.GoogleDrive, account.AccountEmail, path, modifiedAt, size, cancellationToken);
 
     // The folders' names and the file's, with '/', and an extension if the name has none; null when it is not a photo or video.
     private async Task<string?> PathAsync(AccountRun run, DriveFileInfo file, CancellationToken cancellationToken)
@@ -275,17 +313,6 @@ public sealed class DriveSync(
         return ManifestSource.NormalizePath(string.Join('/', names.Where(n => n.Length > 0)));
     }
 
-    private string? Unprotect(string value)
-    {
-        try
-        {
-            return _tokens.Unprotect(value);
-        }
-        catch (System.Security.Cryptography.CryptographicException)
-        {
-            return null;
-        }
-    }
 
     private async Task MarkReconnectAsync(ConnectedSource account, Totals totals, CancellationToken cancellationToken)
     {

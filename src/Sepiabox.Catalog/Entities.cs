@@ -454,6 +454,12 @@ public sealed class DriveFile
 
     /// <summary>The cloud's checksum of the content, when it gives one.</summary>
     public string? Checksum { get; set; }
+
+    /// <summary>
+    /// The file's size in bytes when it was staged. With the path and the modification time it tells apart two files of one name in one
+    /// folder (a Drive allows that), which the path alone cannot.
+    /// </summary>
+    public long? SizeBytes { get; set; }
 }
 
 /// <summary>The services a <see cref="ConnectedSource"/> can be.</summary>

@@ -20,6 +20,9 @@ public static partial class AzureSetup
     /// <summary>The versionless URI of the Key Vault key that wraps the key ring.</summary>
     public const string KeyUriKey = "DataProtection:KeyUri";
 
+    /// <summary>The versionless URI of the Key Vault key that wraps the token ring (S-038, D-115).</summary>
+    public const string TokenKeyUriKey = "DataProtection:TokenKeyUri";
+
     /// <summary>The key ring's blob in <see cref="StorageContainers.DataProtection"/>.</summary>
     public const string KeyRingBlobName = BlobLayout.KeyRingBlobName;
 
@@ -70,6 +73,31 @@ public static partial class AzureSetup
             // The managed identity, named by AZURE_CLIENT_ID, which the AppHost sets.
             .ProtectKeysWithAzureKeyVault(new Uri(keyUri), new DefaultAzureCredential());
         return builder;
+    }
+
+    /// <summary>
+    /// The provider that protects the cloud accounts' refresh tokens (S-037, S-038, D-115). In Azure it is a ring of its own, in the
+    /// <c>tokenring</c> container and wrapped by its own Key Vault key, so the sync job, which reads it, never holds the key that signs
+    /// the sign-in cookies. Without <see cref="TokenKeyUriKey"/> (locally) it is the app's own ring.
+    /// </summary>
+    public static IDataProtectionProvider TokenProtectionProvider(IServiceProvider services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (configuration[TokenKeyUriKey] is not { Length: > 0 } keyUri)
+        {
+            return services.GetRequiredService<IDataProtectionProvider>();
+        }
+
+        var ring = new ServiceCollection();
+        ring.AddLogging();
+        ring.AddDataProtection()
+            .SetApplicationName(BlobLayout.TokenRingApplicationName)
+            .PersistKeysToAzureBlobStorage(services.GetRequiredService<BlobServiceClient>()
+                .GetBlobContainerClient(BlobLayout.TokenRingContainer)
+                .GetBlobClient(BlobLayout.TokenRingBlobName))
+            .ProtectKeysWithAzureKeyVault(new Uri(keyUri), new DefaultAzureCredential());
+        return ring.BuildServiceProvider().GetRequiredService<IDataProtectionProvider>();
     }
 
     /// <summary>Warns at start when the web runs in Production with keys that a restart would lose.</summary>

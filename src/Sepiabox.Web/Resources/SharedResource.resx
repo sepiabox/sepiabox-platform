@@ -1359,16 +1359,40 @@
     <value>Counted.</value>
   </data>
   <data name="Sources_Note_disconnected" xml:space="preserve">
-    <value>Disconnected. Nothing changed in Google Drive; you can connect it again at any time.</value>
+    <value>Disconnected. Nothing changed in the cloud account; you can connect it again at any time.</value>
   </data>
   <data name="Sources_Note_reconnect" xml:space="preserve">
-    <value>Google no longer accepts the access to this account. Reconnect it.</value>
+    <value>The access to this account is no longer accepted. Reconnect it.</value>
   </data>
   <data name="Sources_Note_countFailed" xml:space="preserve">
     <value>Could not count right now. Try again later.</value>
   </data>
   <data name="Sources_Note_notFound" xml:space="preserve">
     <value>That connection is gone.</value>
+  </data>
+  <data name="Sources_OneDrive" xml:space="preserve">
+    <value>OneDrive</value>
+  </data>
+  <data name="Sources_ConnectOneDrive" xml:space="preserve">
+    <value>Connect OneDrive</value>
+  </data>
+  <data name="Sources_ExpiredHintOneDrive" xml:space="preserve">
+    <value>Microsoft no longer accepts the access to this account (it ends after 90 days without use, or when the access is removed in the Microsoft account). Reconnect to count again.</value>
+  </data>
+  <data name="Sources_NotConfiguredOneDrive" xml:space="preserve">
+    <value>OneDrive is not set up yet, so it cannot be connected.</value>
+  </data>
+  <data name="Sources_DisconnectHintOneDrive" xml:space="preserve">
+    <value>Disconnecting deletes the stored access to the account. Nothing in OneDrive changes. To remove the app from the Microsoft account as well, use the app permissions page of that account.</value>
+  </data>
+  <data name="Sources_Note_connectedOneDrive" xml:space="preserve">
+    <value>OneDrive connected.</value>
+  </data>
+  <data name="Sources_Note_deniedOneDrive" xml:space="preserve">
+    <value>OneDrive was not connected: access was not granted.</value>
+  </data>
+  <data name="Sources_Note_failedOneDrive" xml:space="preserve">
+    <value>OneDrive could not be connected. Try again.</value>
   </data>
   <data name="Sources_DisconnectAria" xml:space="preserve">
     <value>Disconnect {0}</value>
@@ -1435,5 +1459,8 @@
   </data>
   <data name="Source_Removed" xml:space="preserve">
     <value>No longer at the source</value>
+  </data>
+  <data name="Source_OpenOriginalHint" xml:space="preserve">
+    <value>Downloaded from the cloud account through Sepiabox, in one piece; a very large video may not finish.</value>
   </data>
 </root>

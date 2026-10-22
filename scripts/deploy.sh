@@ -111,6 +111,24 @@ export SEPIABOX_DEPLOY_SCRIPT=1
 
 azd provision --no-prompt
 
+# The sync job (S-038, D-115) reads the Google OAuth client (and, S-039, the OneDrive one) from the owner's Key Vault, and nothing else in it: a role on each of
+# the four secrets, not on the vault. Bicep cannot give a role on a secret the owner has not created yet, so this script creates each missing secret
+# with an empty value, which the web reads as "not configured", and assigns the role on it. The owner sets the values (docs/operations.md);
+# they are never in this script, the repository or a log. Re-running changes nothing that exists.
+vault_name=$(azd env get-value VAULT_NAME 2>/dev/null) || vault_name=""
+sync_principal=$(azd env get-value SYNC_IDENTITY_PRINCIPALID 2>/dev/null) || sync_principal=""
+if [[ -z "$vault_name" || -z "$sync_principal" ]]; then
+  echo "The azd environment has no VAULT_NAME or SYNC_IDENTITY_PRINCIPALID (the AppHost's outputs): run azd provision again." >&2
+  exit 1
+fi
+vault_id=$(az keyvault show --name "$vault_name" --query id --output tsv)
+for secret in Auth--Google--ClientId Auth--Google--ClientSecret OneDrive--ClientId OneDrive--ClientSecret; do
+  az keyvault secret show --vault-name "$vault_name" --name "$secret" --output none 2>/dev/null \
+    || az keyvault secret set --vault-name "$vault_name" --name "$secret" --value "" --output none
+  az role assignment create --assignee-object-id "$sync_principal" --assignee-principal-type ServicePrincipal \
+    --role "Key Vault Secrets User" --scope "$vault_id/secrets/$secret" --output none
+done
+
 # The web's base image with the CLIP text model (S-056): built only when models.json or the ASP.NET Core image
 # changed, and the web's publish builds on it (src/Sepiabox.Web/Sepiabox.Web.csproj, ContainerBaseImage). Before
 # the queue is paused and the database migrated, so a Docker or download failure stops the deploy while the

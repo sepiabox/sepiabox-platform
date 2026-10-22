@@ -67,6 +67,11 @@ resource derivativesContainer 'Microsoft.Storage/storageAccounts/blobServices/co
   name: 'derivatives'
 }
 
+resource tokenRingContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
+  parent: blobService
+  name: 'tokenring'
+}
+
 resource vault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
   name: vaultName
 }
@@ -82,6 +87,43 @@ resource dataProtectionKey 'Microsoft.KeyVault/vaults/keys@2024-11-01' = {
       'wrapKey'
       'unwrapKey'
     ]
+  }
+}
+
+// Wraps the token ring (S-038, D-115): the keys that protect the cloud accounts' refresh tokens, in a ring of their own so the sync job,
+// which reads it, never holds what signs the sign-in cookies. The web writes the ring and the sync reads it.
+resource tokenRingKey 'Microsoft.KeyVault/vaults/keys@2024-11-01' = {
+  parent: vault
+  name: 'tokenring'
+  properties: {
+    kty: 'RSA'
+    keySize: 2048
+    keyOps: [
+      'wrapKey'
+      'unwrapKey'
+    ]
+  }
+}
+
+resource webTokenRingWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(tokenRingContainer.id, webPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: tokenRingContainer
+  properties: {
+    principalId: webPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource webTokenKeyUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(tokenRingKey.id, webPrincipalId, '12338af0-0e69-4776-bea7-57ae8d297424')
+  scope: tokenRingKey
+  properties: {
+    principalId: webPrincipalId
+    // Key Vault Crypto User
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12338af0-0e69-4776-bea7-57ae8d297424')
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -119,8 +161,9 @@ resource facesManifestsWriter 'Microsoft.Authorization/roleAssignments@2022-04-0
   }
 }
 
-// The sync job (S-038, D-115): writes incoming, reads the key ring and uses the key that wraps it, and nothing else in storage. It
-// reads the owner's Key Vault secrets through the AppHost's role helper (the Google OAuth client is one of them).
+// The sync job (S-038, D-115): writes incoming, reads the token ring and uses the key that wraps it, and nothing else in storage. It has no
+// role on the cookie ring or its key, and none on the owner's Key Vault here: scripts/deploy.sh gives it a role on each of the two secrets
+// of the Google OAuth client, which Bicep cannot do for secrets the owner has not created yet.
 resource syncIncomingWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(incomingContainer.id, syncPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
   scope: incomingContainer
@@ -133,8 +176,8 @@ resource syncIncomingWriter 'Microsoft.Authorization/roleAssignments@2022-04-01'
 }
 
 resource syncKeyRingReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyRingContainer.id, syncPrincipalId, '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
-  scope: keyRingContainer
+  name: guid(tokenRingContainer.id, syncPrincipalId, '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
+  scope: tokenRingContainer
   properties: {
     principalId: syncPrincipalId
     // Storage Blob Data Reader
@@ -144,8 +187,8 @@ resource syncKeyRingReader 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 }
 
 resource syncKeyUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(dataProtectionKey.id, syncPrincipalId, '12338af0-0e69-4776-bea7-57ae8d297424')
-  scope: dataProtectionKey
+  name: guid(tokenRingKey.id, syncPrincipalId, '12338af0-0e69-4776-bea7-57ae8d297424')
+  scope: tokenRingKey
   properties: {
     principalId: syncPrincipalId
     // Key Vault Crypto User
@@ -214,3 +257,5 @@ resource uploaderWriters 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
 ]
 
 output dataProtectionKeyUri string = dataProtectionKey.properties.keyUri
+
+output tokenRingKeyUri string = tokenRingKey.properties.keyUri

@@ -46,7 +46,8 @@ namespace Sepiabox.Catalog.Migrations
                     file_id = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     path = table.Column<string>(type: "text", nullable: false),
                     modified_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    checksum = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true)
+                    checksum = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    size_bytes = table.Column<long>(type: "bigint", nullable: true)
                 },
                 constraints: table =>
                 {

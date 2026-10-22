@@ -63,7 +63,12 @@ builder.Services.AddScoped<IOrganization, Organization>();
 builder.Services.AddSingleton(services => new GoogleDrive(services.GetRequiredService<SignInProviders>().Google));
 builder.Services.AddSingleton<IDriveClient>(services => services.GetRequiredService<GoogleDrive>());
 builder.Services.AddSingleton<IDriveAuthorization>(services => services.GetRequiredService<GoogleDrive>());
-builder.Services.AddSingleton<DriveTokenProtector>();
+// OneDrive (S-039): its own Microsoft app registration (OneDrive:ClientId, OneDrive:ClientSecret), not the sign-in's.
+builder.Services.AddSingleton(services => new MicrosoftOneDrive(OAuthClient.From(services.GetRequiredService<IConfiguration>(), "OneDrive")));
+builder.Services.AddSingleton<IOneDriveClient>(services => services.GetRequiredService<MicrosoftOneDrive>());
+builder.Services.AddSingleton<IOneDriveAuthorization>(services => services.GetRequiredService<MicrosoftOneDrive>());
+builder.Services.AddSingleton(services => new DriveTokenProtector(
+    AzureSetup.TokenProtectionProvider(services, services.GetRequiredService<IConfiguration>())));
 builder.Services.AddScoped<IConnectedSources, ConnectedSources>();
 builder.Services.AddScoped<IDriveOriginals, DriveOriginals>();
 // Questions (S-025): Claude through the project's own interface (D-051), with a daily limit per person.

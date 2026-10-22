@@ -10,6 +10,9 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Warning, Message = "Processing incoming files without {Step}: {Reason}")]
     public static partial void IncomingStepUnavailable(ILogger logger, string step, string reason);
 
+    [LoggerMessage(Level = LogLevel.Error, Message = "No connected Google Drive matches the account given to --rescan.")]
+    public static partial void DriveRescanNotFound(ILogger logger);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "No Google OAuth client is configured (Auth:Google): there is nothing to sync.")]
     public static partial void DriveSyncNotConfigured(ILogger logger);
 

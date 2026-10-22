@@ -1,3 +1,4 @@
+using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
@@ -187,7 +188,7 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
 
     if (command.Action is WorkerAction.SyncGoogleDrive or WorkerAction.SyncOneDrive or WorkerAction.SyncAll)
     {
-        return await RunSyncAsync(command.Action, services, logger, cancellationToken);
+        return await RunSyncAsync(command, services, logger, cancellationToken);
     }
 
     if (command.Action == WorkerAction.ImportFromQueue)
@@ -293,26 +294,35 @@ static async Task<int> ProcessFromQueueAsync(IServiceProvider services, ILogger 
     return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
 }
 
-// The sync's two outside inputs (S-038): the Google OAuth client from Key Vault (Auth--Google--ClientId and ClientSecret, the owner's
-// secrets, as the web reads them), and the web's key ring, read-only, to unprotect the refresh tokens the web protected.
+// The sync's two outside inputs (S-038, D-115): the Google OAuth client, read from the owner's Key Vault as these two secrets and no
+// other (the Anthropic key is in the same vault), and the token ring, read-only, to unprotect the refresh tokens the web protected.
+// That ring is not the web's cookie ring: this job holds nothing that could sign a session.
 static void AddDriveSyncServices(HostApplicationBuilder builder)
 {
     if (!string.IsNullOrEmpty(builder.Configuration.GetConnectionString("vault")))
     {
-        builder.Configuration.AddAzureKeyVaultSecrets("vault");
+        builder.Configuration.AddAzureKeyVaultSecrets(
+            "vault", options: new AzureKeyVaultConfigurationOptions { Manager = new NamedSecrets(NamedSecrets.All) });
     }
 
-    var protection = builder.Services.AddDataProtection().SetApplicationName(BlobLayout.KeyRingApplicationName);
-    if (builder.Configuration["DataProtection:KeyUri"] is { Length: > 0 } keyUri)
+    builder.Services.AddSingleton<IDataProtectionProvider>(services =>
     {
-        protection
-            .PersistKeysToAzureBlobStorage(services => services.GetRequiredService<BlobServiceClient>()
-                .GetBlobContainerClient(BlobLayout.DataProtectionContainer)
-                .GetBlobClient(BlobLayout.KeyRingBlobName))
-            .ProtectKeysWithAzureKeyVault(new Uri(keyUri), new DefaultAzureCredential())
-            // The job only reads the ring: it never makes a key, which the web does (D-062).
-            .DisableAutomaticKeyGeneration();
-    }
+        var ring = new ServiceCollection();
+        ring.AddLogging();
+        var protection = ring.AddDataProtection().SetApplicationName(BlobLayout.TokenRingApplicationName);
+        if (services.GetRequiredService<IConfiguration>()["DataProtection:TokenKeyUri"] is { Length: > 0 } keyUri)
+        {
+            protection
+                .PersistKeysToAzureBlobStorage(services.GetRequiredService<BlobServiceClient>()
+                    .GetBlobContainerClient(BlobLayout.TokenRingContainer)
+                    .GetBlobClient(BlobLayout.TokenRingBlobName))
+                .ProtectKeysWithAzureKeyVault(new Uri(keyUri), new DefaultAzureCredential())
+                // The job only reads the ring: it never makes a key, which the web does.
+                .DisableAutomaticKeyGeneration();
+        }
+
+        return ring.BuildServiceProvider().GetRequiredService<IDataProtectionProvider>();
+    });
 }
 
 static (string Id, string Secret)? OAuthClientFrom(IConfiguration configuration, string section) =>
@@ -322,8 +332,9 @@ static (string Id, string Secret)? OAuthClientFrom(IConfiguration configuration,
 
 // The Google Drive sync, the OneDrive sync or both (S-038, S-039): each needs its service's OAuth client, and one that is not configured
 // has nothing connected, so there is nothing to sync. The exit code is Failed if any account's run stopped early.
-static async Task<int> RunSyncAsync(WorkerAction action, IServiceProvider services, ILogger logger, CancellationToken cancellationToken)
+static async Task<int> RunSyncAsync(WorkerCommand command, IServiceProvider services, ILogger logger, CancellationToken cancellationToken)
 {
+    var action = command.Action;
     var configuration = services.GetRequiredService<IConfiguration>();
     var db = services.GetRequiredService<CatalogDbContext>();
     var store = services.GetRequiredService<IBlobStore>();
@@ -331,17 +342,28 @@ static async Task<int> RunSyncAsync(WorkerAction action, IServiceProvider servic
     var clock = services.GetRequiredService<TimeProvider>();
     var maxFiles = configuration.GetValue("Sync:MaxFilesPerRun", DriveSync.DefaultMaxFilesPerRun);
     var total = new DriveSyncResult(0, 0, 0, 0, 0, 0);
+    var notConfigured = false;
 
     if (action is WorkerAction.SyncGoogleDrive or WorkerAction.SyncAll)
     {
         if (OAuthClientFrom(configuration, "Auth:Google") is { } google)
         {
-            var done = await new DriveSync(db, store, new GoogleDriveSyncClient(google.Id, google.Secret), protection, clock, logger, maxFiles).RunAsync(cancellationToken);
-            total = Add(total, done);
+            var sync = new DriveSync(db, store, new GoogleDriveSyncClient(google.Id, google.Secret), protection, clock, logger, maxFiles);
+            if (command.Rescan is { } account && !await sync.RescanAsync(account, cancellationToken))
+            {
+                Log.DriveRescanNotFound(logger);
+                return ExitCodes.Usage;
+            }
+
+            total = Add(total, await sync.RunAsync(cancellationToken));
         }
         else
         {
+            // With nothing connected there is nothing to sync, and no OAuth client is how it is before the owner sets one up; with an
+            // account connected, a client that is gone is a fault the job must show: it ends Failed.
             Log.DriveSyncNotConfigured(logger);
+            notConfigured |= await db.ConnectedSources.AnyAsync(
+                s => s.Type == ConnectedSourceTypes.GoogleDrive && s.Status == ConnectedSourceStatuses.Connected, cancellationToken);
         }
     }
 
@@ -349,17 +371,18 @@ static async Task<int> RunSyncAsync(WorkerAction action, IServiceProvider servic
     {
         if (OAuthClientFrom(configuration, "OneDrive") is { } microsoft)
         {
-            var done = await new OneDriveSync(db, store, new GraphOneDriveSyncClient(microsoft.Id, microsoft.Secret), protection, clock, logger, maxFiles).RunAsync(cancellationToken);
-            total = Add(total, done);
+            total = Add(total, await new OneDriveSync(db, store, new GraphOneDriveSyncClient(microsoft.Id, microsoft.Secret), protection, clock, logger, maxFiles).RunAsync(cancellationToken));
         }
         else
         {
             Log.OneDriveSyncNotConfigured(logger);
+            notConfigured |= await db.ConnectedSources.AnyAsync(
+                s => s.Type == ConnectedSourceTypes.OneDrive && s.Status == ConnectedSourceStatuses.Connected, cancellationToken);
         }
     }
 
     Log.DriveSyncFinished(logger, total.Accounts, total.Staged, total.Removed, total.Skipped, total.Reconnect, total.Failed);
-    return total.Failed == 0 ? ExitCodes.Success : ExitCodes.Failed;
+    return total.Failed == 0 && !notConfigured ? ExitCodes.Success : ExitCodes.Failed;
 }
 
 static DriveSyncResult Add(DriveSyncResult a, DriveSyncResult b) =>

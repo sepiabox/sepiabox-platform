@@ -1,3 +1,5 @@
+using System.Text;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -48,11 +50,23 @@ public sealed class OneDriveSync(
 
     private async Task SyncAccountAsync(ConnectedSource account, Totals totals, CancellationToken cancellationToken)
     {
-        var refreshToken = Unprotect(account.EncryptedRefreshToken);
-        if (refreshToken is null)
+        string refreshToken;
+        try
         {
+            refreshToken = Encoding.UTF8.GetString(_tokens.Unprotect(WebEncoders.Base64UrlDecode(account.EncryptedRefreshToken)));
+        }
+        catch (Exception ex) when (ex is System.Security.Cryptography.CryptographicException or FormatException)
+        {
+            // The key is not in the ring, the purpose changed or the value is damaged: the family connects the account again.
             Log.DriveTokenUnreadable(logger, account.Id);
             await MarkReconnectAsync(account, totals, cancellationToken);
+            return;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The key ring could not be read just now: nothing is wrong with the account, so it is tried again next run.
+            Log.DriveAccountStopped(logger, account.Id, ex.GetType().Name);
+            totals.Failed++;
             return;
         }
 
@@ -76,7 +90,7 @@ public sealed class OneDriveSync(
         {
             await MarkReconnectAsync(account, totals, cancellationToken);
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException || store.IsStoreFailure(ex))
+        catch (Exception ex) when (ex is HttpRequestException or IOException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested) || store.IsStoreFailure(ex))
         {
             // The page the run stopped on is asked for again next time: its link was not kept, and what it staged is known.
             Log.DriveAccountStopped(logger, account.Id, ex.GetType().Name);
@@ -133,7 +147,7 @@ public sealed class OneDriveSync(
         var known = await db.DriveFiles.SingleOrDefaultAsync(f => f.ConnectedSourceId == account.Id && f.FileId == file.Id, cancellationToken);
         if (known is not null && known.ModifiedAt == file.ModifiedTime && known.Checksum == file.Hash && known.Path == path)
         {
-            await _marks.ClearRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, path, cancellationToken);
+            await _marks.ClearRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, path, file.ModifiedTime, file.Size, cancellationToken);
             return;
         }
 
@@ -158,19 +172,19 @@ public sealed class OneDriveSync(
         totals.Staged++;
         if (known is null)
         {
-            db.DriveFiles.Add(new DriveFile { ConnectedSourceId = account.Id, FileId = file.Id, Path = path, ModifiedAt = file.ModifiedTime, Checksum = file.Hash });
+            db.DriveFiles.Add(new DriveFile { ConnectedSourceId = account.Id, FileId = file.Id, Path = path, ModifiedAt = file.ModifiedTime, Checksum = file.Hash, SizeBytes = file.Size });
         }
         else
         {
             if (known.Path != path)
             {
-                totals.Removed += await _marks.MarkRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, known.Path, cancellationToken);
+                totals.Removed += await _marks.MarkRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, known.Path, known.ModifiedAt, known.SizeBytes, cancellationToken);
             }
 
-            (known.Path, known.ModifiedAt, known.Checksum) = (path, file.ModifiedTime, file.Hash);
+            (known.Path, known.ModifiedAt, known.Checksum, known.SizeBytes) = (path, file.ModifiedTime, file.Hash, file.Size);
         }
 
-        await _marks.ClearRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, path, cancellationToken);
+        await _marks.ClearRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, path, file.ModifiedTime, file.Size, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -182,7 +196,7 @@ public sealed class OneDriveSync(
             return 0;
         }
 
-        var marked = await _marks.MarkRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, known.Path, cancellationToken);
+        var marked = await _marks.MarkRemovedAsync(ConnectedSourceTypes.OneDrive, account.AccountEmail, known.Path, known.ModifiedAt, known.SizeBytes, cancellationToken);
         db.DriveFiles.Remove(known);
         await db.SaveChangesAsync(cancellationToken);
         return marked;
@@ -220,18 +234,6 @@ public sealed class OneDriveSync(
         names.Reverse();
         names.Add(name);
         return ManifestSource.NormalizePath(string.Join('/', names.Where(n => n.Length > 0)));
-    }
-
-    private string? Unprotect(string value)
-    {
-        try
-        {
-            return _tokens.Unprotect(value);
-        }
-        catch (System.Security.Cryptography.CryptographicException)
-        {
-            return null;
-        }
     }
 
     private async Task MarkReconnectAsync(ConnectedSource account, Totals totals, CancellationToken cancellationToken)

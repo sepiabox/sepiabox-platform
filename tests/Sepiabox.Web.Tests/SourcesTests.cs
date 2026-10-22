@@ -188,8 +188,8 @@ public sealed class SourcesPageTests : LocalizedContext
     [Theory]
     [InlineData("connected", "Google Drive connected.")]
     [InlineData("denied", "Google Drive was not connected: access was not granted.")]
-    [InlineData("reconnect", "Google no longer accepts the access to this account. Reconnect it.")]
-    [InlineData("disconnected", "Disconnected. Nothing changed in Google Drive; you can connect it again at any time.")]
+    [InlineData("reconnect", "The access to this account is no longer accepted. Reconnect it.")]
+    [InlineData("disconnected", "Disconnected. Nothing changed in the cloud account; you can connect it again at any time.")]
     public void Shows_what_happened_from_a_note_in_the_address_and_nothing_else(string note, string text)
     {
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/sources?note={note}");
@@ -645,7 +645,7 @@ public sealed class ConnectedSourcesCatalogTests(CatalogFixture catalog)
         var drive = new FakeDrive { RefreshToken = "1//the-later-token" };
         var rival = new RivalInsert(connection);
         var sources = new ConnectedSources(
-            new TestContexts(connection, rival), new DriveTokenProtector(s_keys), drive, drive, TimeProvider.System, NullLogger<ConnectedSources>.Instance);
+            new TestContexts(connection, rival), new DriveTokenProtector(s_keys), drive, drive, new FakeOneDrive(), new FakeOneDrive(), TimeProvider.System, NullLogger<ConnectedSources>.Instance);
 
         var outcome = await sources.CompleteGoogleDriveConnectionAsync(Code, Redirect);
 
@@ -768,7 +768,7 @@ public sealed class ConnectedSourcesCatalogTests(CatalogFixture catalog)
         keys ??= s_keys;
         tokens = new DriveTokenProtector(keys);
         return new ConnectedSources(
-            new TestContexts(catalog.ConnectionStringFor(db)), tokens, drive, drive, TimeProvider.System, NullLogger<ConnectedSources>.Instance);
+            new TestContexts(catalog.ConnectionStringFor(db)), tokens, drive, drive, new FakeOneDrive(), new FakeOneDrive(), TimeProvider.System, NullLogger<ConnectedSources>.Instance);
     }
 
     // One key ring for the tests that connect and then count, as the app's.

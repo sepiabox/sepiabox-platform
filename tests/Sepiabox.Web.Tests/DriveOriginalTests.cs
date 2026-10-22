@@ -22,7 +22,8 @@ public sealed class DriveOriginalLinkTests : LocalizedContext
     [InlineData("google-drive", 7, false, true, false)]
     [InlineData("google-drive", 7, true, false, false)]
     [InlineData("google-drive", 0, false, false, false)]
-    [InlineData("onedrive", 7, false, false, false)]
+    [InlineData("onedrive", 7, false, false, true)]
+    [InlineData("onedrive", 7, false, true, false)]
     [InlineData("local", 7, false, false, false)]
     public void Offers_the_original_through_the_server_only_for_a_drive_file_that_is_there_and_not_stored(
         string type, long id, bool stored, bool removed, bool offered)
@@ -54,6 +55,15 @@ public sealed class DriveOriginalLinkTests : LocalizedContext
         var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Sources = [s_drive], OriginalStored = false });
 
         Assert.Equal("Abrir original", page.Find("ul.sources a[href$='/original']").TextContent);
+        Assert.Contains("pode não terminar", page.Find("ul.sources .original-hint").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_detail_page_warns_that_the_download_goes_through_the_server_in_one_piece()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Sources = [s_drive], OriginalStored = false });
+
+        Assert.Contains("through Sepiabox, in one piece", page.Find("ul.sources .original-hint").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -179,6 +189,37 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Two_files_of_one_name_in_one_folder_open_the_one_the_source_describes_and_an_ambiguous_one_is_not_found()
+    {
+        await using var db = await SeedAsync();
+        var account = await db.ConnectedSources.AsNoTracking().SingleAsync();
+        var when = new DateTimeOffset(2020, 5, 1, 10, 0, 0, TimeSpan.Zero);
+        // Another file at the same path, modified at another time, and the asset's own file with the time its source has.
+        db.AssetSources.Add(new AssetSource { AssetId = Ids.Of(2), Type = "google-drive", Name = Account, Path = "Fotos/Dupe.jpg", ModifiedAt = when });
+        db.DriveFiles.AddRange(
+            new DriveFile { ConnectedSourceId = account.Id, FileId = "dupe-a", Path = "Fotos/Dupe.jpg", ModifiedAt = when },
+            new DriveFile { ConnectedSourceId = account.Id, FileId = "dupe-b", Path = "Fotos/Dupe.jpg", ModifiedAt = when.AddDays(1) });
+        await db.SaveChangesAsync();
+        var drive = new FakeDrive();
+        drive.Files["dupe-a"] = [1];
+        drive.Files["dupe-b"] = [2];
+        var dupe = await SourceIdAsync(db, "Fotos/Dupe.jpg");
+
+        var (outcome, file) = await Originals(db, drive).OpenAsync(Ids.Of(2), dupe);
+
+        Assert.Equal(DriveOriginalOutcome.Opened, outcome);
+        await using (file)
+        {
+            Assert.Equal(1, file!.Content.ReadByte());
+        }
+
+        // Both at the source's time: nothing says which, so it is not found, and nothing throws.
+        db.DriveFiles.Single(f => f.FileId == "dupe-b").ModifiedAt = when;
+        await db.SaveChangesAsync();
+        Assert.Equal(DriveOriginalOutcome.NotFound, (await Originals(db, drive).OpenAsync(Ids.Of(2), dupe)).Outcome);
+    }
+
+    [Fact]
     public async Task A_token_google_refuses_or_a_key_ring_that_cannot_read_it_makes_the_account_reconnect()
     {
         await using var db = await SeedAsync();
@@ -193,7 +234,7 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
         db.ChangeTracker.Clear();
         (await db.ConnectedSources.SingleAsync()).Status = ConnectedSourceStatuses.Connected;
         await db.SaveChangesAsync();
-        var otherRing = new DriveOriginals(new TestContexts(catalog.ConnectionStringFor(db)), new DriveTokenProtector(new EphemeralDataProtectionProvider()), new FakeDrive(), NullLogger<DriveOriginals>.Instance);
+        var otherRing = new DriveOriginals(new TestContexts(catalog.ConnectionStringFor(db)), new DriveTokenProtector(new EphemeralDataProtectionProvider()), new FakeDrive(), new FakeOneDrive(), NullLogger<DriveOriginals>.Instance);
 
         Assert.Equal(DriveOriginalOutcome.Reconnect, (await otherRing.OpenAsync(Ids.Of(1), source)).Outcome);
     }
@@ -211,7 +252,7 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
     }
 
     private DriveOriginals Originals(CatalogDbContext db, FakeDrive drive) =>
-        new(new TestContexts(catalog.ConnectionStringFor(db)), new DriveTokenProtector(s_keys), drive, NullLogger<DriveOriginals>.Instance);
+        new(new TestContexts(catalog.ConnectionStringFor(db)), new DriveTokenProtector(s_keys), drive, new FakeOneDrive(), NullLogger<DriveOriginals>.Instance);
 
     private static Task<long> SourceIdAsync(CatalogDbContext db, string path) =>
         db.AssetSources.AsNoTracking().Where(s => s.Path == path).Select(s => s.Id).SingleAsync();

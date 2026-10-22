@@ -115,7 +115,7 @@ public static class AzureInfrastructure
     /// <c>BlobLayout</c> containers; <c>dataprotection</c> holds the web's key ring (S-058).
     /// </summary>
     public static readonly IReadOnlyList<string> BlobContainers =
-        ["originals", "derivatives", "manifests", "incoming", "exports", "dataprotection"];
+        ["originals", "derivatives", "manifests", "incoming", "exports", "dataprotection", "tokenring"];
 
     /// <summary>
     /// The least-privilege PostgreSQL role the web connects with; <c>sepiabox-worker migrate</c> creates it
