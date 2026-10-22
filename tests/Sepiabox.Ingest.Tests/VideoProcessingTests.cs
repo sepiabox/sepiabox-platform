@@ -549,6 +549,45 @@ public class VideoProcessingTests
         Assert.Equal(VideoSound.Undecodable, StateOf(work, Path.Combine(drive.Path, "MOV001.MOD")).Sound);
     }
 
+    // Some MPEG files declare an AC-3 stream first whose packets never decode, and a good stream after it (issue #94).
+    [Fact]
+    public void Takes_the_second_sound_stream_when_the_first_does_not_decode()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV003.mkv");
+        MakeFileWithUndecodableFirstSound(clip);
+        Assert.Equal(["video", "audio", "audio"], StreamTypes(clip));
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        Assert.Empty(result.WithoutSound);
+        var proxy = ProxyOf(work, Assert.Single(ReadManifests(work)));
+        Assert.Equal(["video", "audio"], StreamTypes(proxy));
+        Assert.Equal("aac", Run(s_tools.Ffprobe, ["-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_name", "-of", "csv=p=0", proxy]).Output.Trim());
+        Assert.Equal(VideoSound.Kept, StateOf(work, clip).Sound);
+        // The processor says which stream it took.
+        var processor = new VideoProcessor(s_tools);
+        Assert.Equal((VideoSound.Kept, 1), processor.ChooseSound(clip));
+    }
+
+    [Fact]
+    public void Makes_the_720p_version_without_sound_and_says_so_when_no_sound_stream_decodes()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var clip = Path.Combine(drive.Path, "MOV004.mkv");
+        MakeFileWithUndecodableFirstSound(clip, secondSound: false);
+
+        var result = Process(drive, work);
+
+        Assert.Empty(result.Problems);
+        Assert.Single(result.WithoutSound);
+        Assert.Equal(["video"], StreamTypes(ProxyOf(work, Assert.Single(ReadManifests(work)))));
+        Assert.Equal(VideoSound.Undecodable, StateOf(work, clip).Sound);
+    }
+
     [Fact]
     public void Keeps_the_sound_of_a_camcorder_file_whose_ac3_sound_decodes()
     {
@@ -1085,6 +1124,42 @@ public class VideoProcessingTests
 
     // As the owner's SD camcorder files (D-084): MPEG-2 video and a declared AC-3 stream that FFmpeg cannot decode, so
     // the file plays without sound. Made by blanking every AC-3 frame in the program stream's private stream 1 packets.
+    // Matroska with a video stream, an AC-3 stream and (unless left out) an AAC one. Every AC-3 frame's header then gets an
+    // invalid sample-rate code, so FFmpeg reads its packets and decodes none; the container stays intact.
+    private static void MakeFileWithUndecodableFirstSound(string path, bool secondSound = true)
+    {
+        var ac3 = path + ".ac3";
+        try
+        {
+            Run(s_tools.Ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "2", "-c:a", "ac3", ac3]);
+            Run(s_tools.Ffmpeg,
+            [
+                "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+                "-f", "lavfi", "-i", "testsrc=size=320x240:rate=25:duration=2",
+                "-f", "ac3", "-i", ac3,
+                .. secondSound ? (string[])["-f", "lavfi", "-i", "sine=frequency=440:duration=2"] : [],
+                "-map", "0:v", "-map", "1:a", .. secondSound ? (string[])["-map", "2:a"] : [],
+                "-c:v", "libx264", "-preset", "ultrafast", "-c:a:0", "copy", .. secondSound ? (string[])["-c:a:1", "aac"] : [],
+                path,
+            ]);
+        }
+        finally
+        {
+            File.Delete(ac3);
+        }
+
+        var bytes = File.ReadAllBytes(path);
+        for (var i = 0; i + 4 < bytes.Length; i++)
+        {
+            if (bytes[i] == 0x0B && bytes[i + 1] == 0x77)
+            {
+                bytes[i + 4] = 0xFF;
+            }
+        }
+
+        File.WriteAllBytes(path, bytes);
+    }
+
     private static void MakeCamcorderFileWithEmptySound(string path)
     {
         Run(s_tools.Ffmpeg,

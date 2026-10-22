@@ -97,15 +97,15 @@ public sealed record FfmpegTools(string Ffmpeg, string Ffprobe)
 /// <summary>What became of a video's sound in its 720p version (D-087).</summary>
 public enum VideoSound
 {
-    /// <summary>The 720p version has the source's first sound stream.</summary>
+    /// <summary>The 720p version has the source's first sound stream that decodes (D-105; before it, the first).</summary>
     Kept,
 
     /// <summary>The source has no sound stream, so neither has the 720p version.</summary>
     NoStream,
 
     /// <summary>
-    /// The source declares a sound stream that FFmpeg cannot decode a single frame of (D-084): the 720p version was made
-    /// without sound.
+    /// The source declares sound streams and FFmpeg cannot decode a single frame of any of them (D-084, D-105): the
+    /// 720p version was made without sound.
     /// </summary>
     Undecodable,
 }
@@ -118,6 +118,12 @@ public enum VideoSound
 public sealed record VideoDerivatives(IReadOnlyList<ManifestDerivative> Derivatives, string? WithoutSoundBecause = null)
 {
     public VideoSound Sound { get; init; } = WithoutSoundBecause is null ? VideoSound.Kept : VideoSound.Undecodable;
+
+    /// <summary>
+    /// Which sound stream the 720p version has, counting sound streams from 0 (D-105): 0, the first, unless the first
+    /// does not decode and a later one does. Meaningless without sound.
+    /// </summary>
+    public int AudioStream { get; init; }
 }
 
 /// <summary>What <c>process</c> needs from a video processor; tests stand in for FFmpeg with it.</summary>
@@ -327,29 +333,45 @@ public sealed class VideoProcessor : IVideoProcessor
         FfmpegArguments.CountStreams(Run(tools.Ffprobe, FfmpegArguments.SoundStreams(path), cancellationToken)) > 0;
 
     /// <summary>
-    /// Whether the first sound stream of <paramref name="path"/> is the reason a transcode with sound failed: it is when
-    /// the file has one and FFmpeg decodes not a single frame of it (D-087). Decoding stops at the first frame, so a
-    /// file whose sound works is read only as far as that; one whose sound never decodes is read to its end, which
-    /// only happens after its transcode has already failed.
+    /// Whether the sound of <paramref name="path"/> is the reason a transcode with sound failed: it is when the file has
+    /// sound streams and FFmpeg decodes not a single frame of any of them (D-087, D-105). Decoding stops at the first
+    /// frame, so a stream that works is read only as far as that; one that never decodes is read to its end, which only
+    /// happens after the transcode has already failed.
     /// </summary>
-    public VideoSound CheckSound(string path, CancellationToken cancellationToken = default)
+    public VideoSound CheckSound(string path, CancellationToken cancellationToken = default) => ChooseSound(path, cancellationToken).Sound;
+
+    /// <summary>
+    /// The sound stream a 720p version should have (D-105): the first, counting from 0, of which FFmpeg decodes a frame.
+    /// Some MPEG files declare an AC-3 stream first that holds a few undecodable packets and a good MP1 stream after it,
+    /// and mapping only the first made FFmpeg write nothing. <see cref="VideoSound.NoStream"/> when the file has no sound
+    /// stream, <see cref="VideoSound.Undecodable"/> when none decodes (the stream is then 0). Throws
+    /// <see cref="VideoProcessingException"/> when the file cannot be read at the moment.
+    /// </summary>
+    public (VideoSound Sound, int Stream) ChooseSound(string path, CancellationToken cancellationToken = default)
     {
-        if (!HasSound(path, cancellationToken))
+        var streams = FfmpegArguments.CountStreams(Run(tools.Ffprobe, FfmpegArguments.SoundStreams(path), cancellationToken));
+        if (streams == 0)
         {
-            return VideoSound.NoStream;
+            return (VideoSound.NoStream, 0);
         }
 
-        // Its exit code alone says little: FFmpeg fails when no frame decodes, and can fail after one did. But a file it
-        // could not open or read at that moment (a USB drive that dropped out) proves nothing about the sound.
-        var (exitCode, frames, errors) = RunCapturing(tools.Ffmpeg, FfmpegArguments.FirstSoundFrame(path), cancellationToken);
-        if (FfmpegArguments.CountFrames(frames) > 0)
+        for (var stream = 0; stream < streams; stream++)
         {
-            return VideoSound.Kept;
+            // Its exit code alone says little: FFmpeg fails when no frame decodes, and can fail after one did. But a file it
+            // could not open or read at that moment (a USB drive that dropped out) proves nothing about the sound.
+            var (exitCode, frames, errors) = RunCapturing(tools.Ffmpeg, FfmpegArguments.SoundFrame(path, stream), cancellationToken);
+            if (FfmpegArguments.CountFrames(frames) > 0)
+            {
+                return (VideoSound.Kept, stream);
+            }
+
+            if (exitCode != 0 && FfmpegArguments.IsInputFailure(errors))
+            {
+                throw new VideoProcessingException($"ffmpeg could not read the file to check its sound: {FfmpegArguments.Message(errors)}");
+            }
         }
 
-        return exitCode != 0 && FfmpegArguments.IsInputFailure(errors)
-            ? throw new VideoProcessingException($"ffmpeg could not read the file to check its sound: {FfmpegArguments.Message(errors)}")
-            : VideoSound.Undecodable;
+        return (VideoSound.Undecodable, 0);
     }
 
     /// <summary>Writes the poster, thumbnail and 720p version into <paramref name="workFolder"/>/<paramref name="relativeFolder"/>.</summary>
@@ -410,6 +432,7 @@ public sealed class VideoProcessor : IVideoProcessor
         var temporary = proxy + ".tmp";
         string? withoutSoundBecause = null;
         VideoSound sound;
+        var audioStream = 0;
         try
         {
             Encode(FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, videoCodec: videoCodec), cancellationToken);
@@ -421,33 +444,56 @@ public sealed class VideoProcessor : IVideoProcessor
             // can declare one that plays as silence (D-084). Any other failure, such as an encoder that cannot open
             // (whose FFmpeg message also ends in "received no packets"), stays a failure with its full message, and
             // the next run tries the file again.
-            VideoSound cause;
+            (VideoSound Sound, int Stream) cause;
             try
             {
-                cause = CheckSound(sourcePath, cancellationToken);
+                cause = ChooseSound(sourcePath, cancellationToken);
             }
             catch (VideoProcessingException)
             {
                 // The check itself failing proves nothing about the sound: the transcode's own failure is reported.
-                cause = VideoSound.Kept;
+                cause = (VideoSound.Kept, 0);
             }
 
-            if (cause != VideoSound.Undecodable)
+            if (cause.Sound == VideoSound.NoStream || (cause.Sound == VideoSound.Kept && cause.Stream == 0))
             {
                 throw;
             }
 
-            withoutSoundBecause = withSound.Message;
-            sound = VideoSound.Undecodable;
-            try
+            var madeWithLaterSound = false;
+            if (cause.Sound == VideoSound.Kept)
             {
-                Encode(FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, withAudio: false, videoCodec), cancellationToken);
+                // The first sound stream does not decode but a later one does (D-105): map that one. If it too yields
+                // nothing, the 720p version is made without sound, as when none decodes.
+                try
+                {
+                    Encode(FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, audioStream: cause.Stream, videoCodec: videoCodec), cancellationToken);
+                    (sound, audioStream, madeWithLaterSound) = (VideoSound.Kept, cause.Stream, true);
+                }
+                catch (VideoProcessingException)
+                {
+                    sound = VideoSound.Undecodable;
+                }
             }
-            catch (VideoProcessingException withoutSound)
+            else
             {
-                throw withoutSound.Message == withSound.Message
-                    ? withSound
-                    : new VideoProcessingException($"{withSound.Message} Without sound: {withoutSound.Message}", withoutSound);
+                sound = VideoSound.Undecodable;
+            }
+
+            if (!madeWithLaterSound)
+            {
+                withoutSoundBecause = withSound.Message;
+                sound = VideoSound.Undecodable;
+                try
+                {
+                    Encode(FfmpegArguments.Proxy(sourcePath, width, height, encoder, probe.VideoStream, temporary, withAudio: false, videoCodec: videoCodec), cancellationToken);
+                }
+                catch (VideoProcessingException withoutSound)
+                {
+                    throw withoutSound.Message == withSound.Message
+                        ? withSound
+                        : new VideoProcessingException($"{withSound.Message} Without sound: {withoutSound.Message}", withoutSound);
+                }
             }
         }
 
@@ -456,6 +502,7 @@ public sealed class VideoProcessor : IVideoProcessor
         return new VideoDerivatives([.. posters, new ManifestDerivative(version.Name, proxyPath, width, height, ProxyContentType)], withoutSoundBecause)
         {
             Sound = sound,
+            AudioStream = audioStream,
         };
     }
 
@@ -596,17 +643,18 @@ public static class FfmpegArguments
     public const int MaxMessageLength = 1000;
 
     /// <summary>
-    /// The 720p version; <paramref name="withAudio"/> false leaves out the sound (D-084, D-087).
+    /// The 720p version; <paramref name="withAudio"/> false leaves out the sound (D-084, D-087), and
+    /// <paramref name="audioStream"/> is the sound stream it takes, counting sound streams from 0 (D-105).
     /// <paramref name="videoCodec"/> replaces the encoder's arguments, for tests.
     /// </summary>
     public static IReadOnlyList<string> Proxy(
         string input, int width, int height, VideoEncoder encoder, int videoStream, string output, bool withAudio = true,
-        IReadOnlyList<string>? videoCodec = null) =>
+        IReadOnlyList<string>? videoCodec = null, int audioStream = 0) =>
     [
         "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
         "-i", input,
         "-map", $"0:v:{videoStream}",
-        .. withAudio ? (string[])["-map", "0:a:0?"] : ["-an"],
+        .. withAudio ? (string[])["-map", $"0:a:{audioStream}?"] : ["-an"],
         .. Encoding(width, height, encoder, withAudio, output, videoCodec),
     ];
 
@@ -633,14 +681,14 @@ public static class FfmpegArguments
         ["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", input];
 
     /// <summary>
-    /// Decodes the first frame of the first sound stream and writes one line for it (FFmpeg's <c>framecrc</c>) on the
-    /// standard output (D-087); no line when not a single frame decodes.
+    /// Decodes the first frame of sound stream number <paramref name="audioStream"/> (counting from 0) and writes one line
+    /// for it (FFmpeg's <c>framecrc</c>) on the standard output (D-087); no line when not a single frame decodes.
     /// </summary>
-    public static IReadOnlyList<string> FirstSoundFrame(string input) =>
+    public static IReadOnlyList<string> SoundFrame(string input, int audioStream = 0) =>
     [
         "-hide_banner", "-loglevel", "error", "-nostdin",
         "-i", input,
-        "-map", "0:a:0", "-frames:a", "1",
+        "-map", $"0:a:{audioStream}", "-frames:a", "1",
         "-f", "framecrc", "-",
     ];
 

@@ -168,6 +168,14 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
     // Next to the problems, on the same output: not failures, but never catalogued, so each one can be checked.
     LeftOutReport.Write(result.LeftOut, options.ListLeftOut, Console.Out);
     WithoutSoundReport.Write(result.WithoutSound, Console.Out);
+    if (result.DamagedEarlier > 0)
+    {
+        // Reported by the run that found them; they would repeat on every run of a large drive.
+        Console.WriteLine(result.DamagedEarlier == 1
+            ? "1 damaged photo reported by an earlier run is unchanged and was not read again; run process with --retry-left-out to read it again."
+            : $"{result.DamagedEarlier:N0} damaged photos reported by earlier runs are unchanged and were not read again; run process with --retry-left-out to read them again.");
+    }
+
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");

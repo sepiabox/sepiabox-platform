@@ -218,6 +218,51 @@ public class ProcessCommandTests
         Assert.Equal(1, result.Processed);
     }
 
+    // A truncated or corrupt photo is reported by the run that finds it and not read again while it is unchanged (D-105).
+    [Fact]
+    public void Reports_a_damaged_photo_once_and_leaves_it_alone_until_it_changes()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var broken = drive.Write("IMG_0001.jpg", RandomBytes(2_000));
+        drive.Write("good.jpg", TestPhotos.Porto());
+
+        var first = Process(drive, work);
+
+        var problem = Assert.Single(first.Problems);
+        Assert.EndsWith("IMG_0001.jpg", problem.Path, StringComparison.Ordinal);
+        Assert.Contains("Damaged", problem.Reason, StringComparison.Ordinal);
+        Assert.Equal(FileStatus.Damaged, StateOf(work, broken).Status);
+        Assert.Equal(0, first.DamagedEarlier);
+
+        var second = Process(drive, work);
+
+        Assert.Empty(second.Problems);
+        Assert.Equal(1, second.DamagedEarlier);
+        // Still catalogued, without thumbnails, as when it was found.
+        Assert.Empty(Assert.Single(ReadManifests(work), m => m.Sources[0].Path == "IMG_0001.jpg").Derivatives);
+
+        var retried = ProcessCommand.Run(new ProcessOptions(drive.Path, work.Path, "HD da Ana", FfmpegFolder: TestFfmpeg.None, ModelFolder: TestModels.None, RetryLeftOut: true));
+
+        Assert.Equal(["IMG_0001.jpg"], retried.Problems.Select(p => Path.GetFileName(p.Path)));
+        Assert.Equal(0, retried.DamagedEarlier);
+
+        // A different file under the same name is read again, and a good one is no longer damaged.
+        File.WriteAllBytes(broken, TestPhotos.Porto("blue"));
+        File.SetLastWriteTimeUtc(broken, DateTime.UtcNow.AddMinutes(5));
+        var changed = Process(drive, work);
+
+        Assert.Empty(changed.Problems);
+        Assert.Equal(0, changed.DamagedEarlier);
+        Assert.Equal(FileStatus.Done, StateOf(work, broken).Status);
+    }
+
+    private static FileState StateOf(TempFolder work, string path)
+    {
+        using var state = new StateStore(Path.Combine(work.Path, "state.db"));
+        return state.Get(path)!;
+    }
+
     [Fact]
     public void Does_not_regenerate_thumbnails_when_nothing_changed()
     {
