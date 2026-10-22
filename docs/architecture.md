@@ -65,7 +65,7 @@ Originals are **never re-read** in the cloud during local ingest (reading the Co
 
 ## Search
 
-All search goes through a **JSON DSL** (`docs/schemas/search.v1.json`): filters for time, place, people, source, kind, occasion, visual similarity and aggregations. The filter UI and the question translator produce the same DSL; a single service executes it (SQL + kNN in pgvector).
+All search goes through a **JSON DSL** (`docs/schemas/search.v1.json`): filters for time, place, people, source, album, kind, occasion, visual similarity and aggregations. The filter UI and the question translator produce the same DSL; a single service executes it (SQL + kNN in pgvector).
 
 Natural-language questions: the text (never the photos) goes to **Claude Haiku 5.5** (`claude-haiku-5-5`) through the **Anthropic API** (D-052), with *structured outputs* restricted to the DSL schema. Visual terms are translated to English (CLIP is English-only). Daily question limit per user.
 

@@ -1444,4 +1444,28 @@
   <data name="Export_LinksUntil" xml:space="preserve">
     <value>Os links para os originais dentro dela valem até {0}</value>
   </data>
+  <data name="Detail_Caption" xml:space="preserve">
+    <value>Legenda</value>
+  </data>
+  <data name="Detail_Albums" xml:space="preserve">
+    <value>Álbuns</value>
+  </data>
+  <data name="Filter_Album" xml:space="preserve">
+    <value>Álbum</value>
+  </data>
+  <data name="Chip_Albums" xml:space="preserve">
+    <value>Álbum: {0}</value>
+  </data>
+  <data name="Detail_DateSource" xml:space="preserve">
+    <value>Origem da data</value>
+  </data>
+  <data name="Detail_DateFromExport" xml:space="preserve">
+    <value>Exportação</value>
+  </data>
+  <data name="Detail_MoreAlbums_One" xml:space="preserve">
+    <value>Mais {0} álbum</value>
+  </data>
+  <data name="Detail_MoreAlbums_Other" xml:space="preserve">
+    <value>Mais {0} álbuns</value>
+  </data>
 </root>

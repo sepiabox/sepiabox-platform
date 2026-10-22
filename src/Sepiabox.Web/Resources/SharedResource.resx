@@ -1514,4 +1514,31 @@
   <data name="Export_LinksUntil" xml:space="preserve">
     <value>Links to the originals inside work until {0}</value>
   </data>
+  <data name="Detail_Caption" xml:space="preserve">
+    <value>Caption</value>
+    <comment>What the owner or an export's maker wrote about the photo; shown as written.</comment>
+  </data>
+  <data name="Detail_Albums" xml:space="preserve">
+    <value>Albums</value>
+    <comment>Heading of the albums the photo is in; each links to the photos in it.</comment>
+  </data>
+  <data name="Filter_Album" xml:space="preserve">
+    <value>Album</value>
+    <comment>The albums that exports of Google Photos or Apple Photos put photos in.</comment>
+  </data>
+  <data name="Chip_Albums" xml:space="preserve">
+    <value>Album: {0}</value>
+  </data>
+  <data name="Detail_DateSource" xml:space="preserve">
+    <value>Date source</value>
+  </data>
+  <data name="Detail_DateFromExport" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="Detail_MoreAlbums_One" xml:space="preserve">
+    <value>{0} more album</value>
+  </data>
+  <data name="Detail_MoreAlbums_Other" xml:space="preserve">
+    <value>{0} more albums</value>
+  </data>
 </root>

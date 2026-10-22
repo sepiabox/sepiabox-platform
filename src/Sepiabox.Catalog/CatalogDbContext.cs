@@ -12,6 +12,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<AssetSource> AssetSources => Set<AssetSource>();
 
+    public DbSet<AssetAlbum> AssetAlbums => Set<AssetAlbum>();
+
     public DbSet<Derivative> Derivatives => Set<Derivative>();
 
     public DbSet<ManifestImport> ManifestImports => Set<ManifestImport>();
@@ -78,6 +80,7 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             asset.ToTable("assets");
             asset.Property(a => a.Id).HasMaxLength(64);
             asset.Property(a => a.Kind).HasMaxLength(16);
+            asset.Property(a => a.CapturedAtSource).HasMaxLength(16);
             // True for every asset before index-only mode (S-063). Never generated, as belt and braces: a column with a
             // default and a CLR default of false is the case where EF may leave the value out of the insert.
             asset.Property(a => a.OriginalStored).HasDefaultValue(true).ValueGeneratedNever();
@@ -102,6 +105,16 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
                 .HasNullSortOrder(NullSortOrder.NullsLast, NullSortOrder.NullsLast);
             asset.HasMany(a => a.Sources).WithOne().HasForeignKey(s => s.AssetId);
             asset.HasMany(a => a.Derivatives).WithOne().HasForeignKey(d => d.AssetId);
+            // Cascade: deleting an asset (S-057) takes its album memberships with it.
+            asset.HasMany(a => a.Albums).WithOne().HasForeignKey(l => l.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AssetAlbum>(album =>
+        {
+            album.ToTable("asset_albums");
+            album.HasKey(l => new { l.AssetId, l.Name });
+            // The filter bar's list of albums, and the albums of one name.
+            album.HasIndex(l => l.Name).HasDatabaseName("ix_asset_albums_name");
         });
 
         modelBuilder.Entity<AssetSource>(source =>
