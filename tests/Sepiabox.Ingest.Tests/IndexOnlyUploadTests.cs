@@ -4,6 +4,7 @@ using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Storage;
+using Sepiabox.Storage.Azure;
 using Testcontainers.Azurite;
 
 namespace Sepiabox.Ingest.Tests;
@@ -24,6 +25,8 @@ public sealed class IndexOnlyUploadTests : IAsyncLifetime, IDisposable
     private readonly TempFolder _otherWork = new();
 
     private BlobServiceClient Service => new(_azurite.GetConnectionString());
+
+    private AzureBlobStore Store => new(Service);
 
     public Task InitializeAsync() => _azurite.StartAsync();
 
@@ -199,7 +202,7 @@ public sealed class IndexOnlyUploadTests : IAsyncLifetime, IDisposable
     }
 
     private Task<UploadResult> Upload(TempFolder work) =>
-        UploadCommand.RunAsync(new UploadOptions(work.Path, UploadDestination.Local), Service);
+        UploadCommand.RunAsync(new UploadOptions(work.Path, UploadDestination.Local), Store);
 
     private static List<UploadRecord> ReadUploads(TempFolder work)
     {

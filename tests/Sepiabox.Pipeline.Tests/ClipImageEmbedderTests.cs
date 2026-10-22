@@ -94,6 +94,37 @@ public sealed class ClipImageEmbedderTests(ITestOutputHelper output) : IDisposab
         Assert.True(cosine > 0.999, $"cosine with the reference was {cosine}");
     }
 
+    // S-041: the web embeds a region with its own encoder (Sepiabox.Search), which must land where `process` put the whole
+    // photo: the region that is the whole photo is the stored embedding.
+    [ClipFact]
+    public void The_web_s_encoder_gives_the_stored_embedding_for_a_region_that_is_the_whole_photo()
+    {
+        using var embedder = CreateEmbedder();
+        using var encoder = Sepiabox.Search.Clip.ClipImageEncoder.TryCreate(TestModels.Folder, out var warning, out _)
+            ?? throw new InvalidOperationException(warning);
+        var path = WriteScene("whole.webp", 1280, 960);
+
+        var stored = embedder.Embed(path);
+        var region = encoder.Encode(Sepiabox.Search.Clip.RegionCrop.Prepare(File.ReadAllBytes(path), [0, 0, 1, 1]));
+
+        var cosine = EmbeddingCodec.Cosine(stored, region);
+        Assert.True(cosine > 0.9999, $"cosine was {cosine}");
+    }
+
+    [ClipFact]
+    public void A_region_with_the_sun_is_closer_to_the_sun_than_to_the_ground()
+    {
+        using var encoder = Sepiabox.Search.Clip.ClipImageEncoder.TryCreate(TestModels.Folder, out var warning, out _)
+            ?? throw new InvalidOperationException(warning);
+        var bytes = File.ReadAllBytes(WriteScene("scene.webp", 1280, 960));
+
+        var sun = encoder.Encode(Sepiabox.Search.Clip.RegionCrop.Prepare(bytes, [0.6, 0.05, 0.35, 0.4]));
+        var sunAgain = encoder.Encode(Sepiabox.Search.Clip.RegionCrop.Prepare(bytes, [0.62, 0.07, 0.3, 0.35]));
+        var ground = encoder.Encode(Sepiabox.Search.Clip.RegionCrop.Prepare(bytes, [0.05, 0.75, 0.4, 0.2]));
+
+        Assert.True(EmbeddingCodec.Cosine(sun, sunAgain) > EmbeddingCodec.Cosine(sun, ground));
+    }
+
     private static ClipImageEmbedder CreateEmbedder() =>
         ClipImageEmbedder.TryCreate(TestModels.Folder, out var warning) ?? throw new InvalidOperationException(warning);
 

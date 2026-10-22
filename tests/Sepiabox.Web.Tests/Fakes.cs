@@ -63,6 +63,14 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
         return Task.FromResult(new OccasionsPage(page, slice, matching.Count > page * OccasionPageSize));
     }
 
+    /// <summary>The occasion of each asset, for the results grouped by occasion (S-041).</summary>
+    public Dictionary<string, OccasionSummary> OccasionOf { get; } = [];
+
+    public Task<IReadOnlyDictionary<string, OccasionSummary>> GetOccasionsOfAsync(
+        IReadOnlyCollection<string> assetIds, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, OccasionSummary>>(
+            assetIds.Where(OccasionOf.ContainsKey).ToDictionary(id => id, id => OccasionOf[id]));
+
     public Task<OccasionSummary?> GetOccasionAsync(long id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Occasions.FirstOrDefault(o => o.Id == id));
 

@@ -73,6 +73,37 @@ public sealed class ExportMetadataTests
     }
 
     [Fact]
+    public void Uses_a_local_kind_time_as_wall_clock_time_without_converting_it()
+    {
+        var local = new ExportMetadata { CapturedAt = new DateTime(2015, 6, 1, 10, 0, 0, DateTimeKind.Local) };
+
+        Assert.Equal(new DateTime(2015, 6, 1, 10, 0, 0), ExportFacts.WallClock(local, s_lisbon));
+        Assert.Equal(DateTimeKind.Unspecified, ExportFacts.WallClock(local, s_lisbon)!.Value.Kind);
+    }
+
+    [Fact]
+    public void Does_not_leave_a_space_at_the_end_of_a_caption_it_cut()
+    {
+        // The cut falls on a space: 1,999 letters, a space, then more.
+        var caption = ExportFacts.Caption(new ExportMetadata { Caption = new string('a', 1999) + " " + new string('b', 10) })!;
+
+        Assert.Equal(1999, caption.Length);
+        Assert.False(char.IsWhiteSpace(caption[^1]));
+    }
+
+    [Theory]
+    [InlineData("/Photos/a.jpg")]
+    [InlineData("//Photos/a.jpg")]
+    [InlineData(@"\Photos\a.jpg")]
+    public void Finds_a_file_whatever_leading_slashes_the_path_has(string asked)
+    {
+        var scan = new ExportScan([new KeyValuePair<string, ExportMetadata>("Photos/a.jpg", new ExportMetadata { Caption = "x" })]);
+
+        Assert.Equal("x", scan.Find(asked)?.Caption);
+        Assert.True(new ExportScan(leftOut: ["Photos/a.jpg"]).IsLeftOut(asked));
+    }
+
+    [Fact]
     public void Cleans_albums_to_distinct_trimmed_names_in_ordinal_order()
     {
         Assert.Equal(["Ferias", "Viagem"], ExportFacts.Albums(new ExportMetadata { Albums = [" Viagem", "Ferias", "Viagem", "", "  "] }));

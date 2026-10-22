@@ -24,7 +24,7 @@ public sealed record ExportMetadata
 {
     /// <summary>
     /// When the file was taken. A <see cref="DateTimeKind.Utc"/> value is UTC and becomes wall-clock time in the zone given
-    /// to <c>process --time-zone</c>; any other kind is already wall-clock time and is used as it is (D-037).
+    /// to <c>process --time-zone</c>; any other kind, <see cref="DateTimeKind.Local"/> and <see cref="DateTimeKind.Unspecified"/> alike, is already wall-clock time and is used as it is (D-037), so a reader must not hand over a time converted to the computer's zone.
     /// </summary>
     public DateTime? CapturedAt { get; init; }
 

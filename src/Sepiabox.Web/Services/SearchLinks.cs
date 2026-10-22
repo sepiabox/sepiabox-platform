@@ -18,6 +18,9 @@ public sealed record FilterFields(int? Year, int? Month, string? Kind, string? C
     /// <summary>The photo whose similar ones are shown (S-017), which the bar keeps while it narrows them.</summary>
     public SimilarToFilter? SimilarTo { get; init; }
 
+    /// <summary>The region of a photo whose similar ones are shown (S-041), which the bar keeps while it narrows them.</summary>
+    public SimilarToRegionFilter? SimilarToRegion { get; init; }
+
     /// <summary>The occasions chosen (S-023), which the bar keeps while it narrows them; it offers no way to choose one.</summary>
     public IReadOnlyList<long> EventIds { get; init; } = [];
 
@@ -44,6 +47,16 @@ public static class SearchLinks
 
     public const string SimilarLimitParameter = "similar-limit";
 
+    /// <summary>
+    /// The hidden fields of a search for a region of a photo (S-041, D-099), which the photo's page also submits: the
+    /// asset's id, the box as <c>x,y,width,height</c> and the number asked for.
+    /// </summary>
+    public const string RegionAssetParameter = "region-asset";
+
+    public const string RegionBoxParameter = "region";
+
+    public const string RegionLimitParameter = "region-limit";
+
     /// <summary>The bar's hidden fields for a search inside occasions (S-023): one per occasion id.</summary>
     public const string EventParameter = "event";
 
@@ -63,6 +76,38 @@ public static class SearchLinks
     /// <summary>"More photos similar to this one" (S-017): the photo's own embedding, the default number of results.</summary>
     public static SearchQuery Similar(string assetId) =>
         new() { Filters = new SearchFilters { SimilarTo = new SimilarToFilter { AssetId = assetId } } };
+
+    /// <summary>A box as the address writes it: four numbers with up to 4 decimals, comma separated.</summary>
+    public static string FormatBox(IReadOnlyList<double> box)
+    {
+        ArgumentNullException.ThrowIfNull(box);
+        return string.Join(',', box.Select(v => v.ToString("0.####", CultureInfo.InvariantCulture)));
+    }
+
+    /// <summary>The box an address holds, or null when it is not four numbers that make a box inside the photo (S-041).</summary>
+    public static IReadOnlyList<double>? ParseBox(string? value)
+    {
+        var parts = value?.Split(',');
+        if (parts is not { Length: 4 })
+        {
+            return null;
+        }
+
+        var box = new double[4];
+        for (var i = 0; i < 4; i++)
+        {
+            if (!double.TryParse(parts[i], NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out box[i]))
+            {
+                return null;
+            }
+        }
+
+        return SimilarToRegionFilter.IsValidBox(box) ? box : null;
+    }
+
+    /// <summary>"Photos like this part of a photo" (S-041): the region, the default number of results.</summary>
+    public static SearchQuery Region(string assetId, IReadOnlyList<double> box) =>
+        new() { Filters = new SearchFilters { SimilarToRegion = new SimilarToRegionFilter { AssetId = assetId, Box = box } } };
 
     /// <summary>The timeline with these filters (or this count, S-026); the plain timeline when there are none.</summary>
     public static string Timeline(SearchQuery? query) =>
@@ -87,6 +132,9 @@ public static class SearchLinks
         IEnumerable<string?>? eventIds = null,
         string? sourceEq = null,
         string? sourceGte = null,
+        string? regionAsset = null,
+        string? regionBox = null,
+        string? regionLimit = null,
         string? blurry = null,
         string? includeHidden = null)
     {
@@ -95,7 +143,10 @@ public static class SearchLinks
         var places = Names(savedPlaces);
         var visual = Description(text) is { } t ? new VisualFilter { Text = t } : null;
         // A description typed in the bar is a new search by similarity, which replaces the one to a photo (D-086).
-        var similarTo = visual is null && similar is not null && AssetIds.IsValid(similar)
+        var region = visual is null && regionAsset is not null && AssetIds.IsValid(regionAsset) && ParseBox(regionBox) is { } box
+            ? new SimilarToRegionFilter { AssetId = regionAsset, Box = box, Limit = Number(regionLimit, 1, SearchQuery.MaxLimit) }
+            : null;
+        var similarTo = visual is null && region is null && similar is not null && AssetIds.IsValid(similar)
             ? new SimilarToFilter { AssetId = similar, Limit = Number(similarLimit, 1, SearchQuery.MaxLimit) }
             : null;
         var filters = new SearchFilters
@@ -107,6 +158,7 @@ public static class SearchLinks
             Sources = Name(source) is { } s ? [s] : null,
             Visual = visual,
             SimilarTo = similarTo,
+            SimilarToRegion = region,
             People = names.Count > 0 || me ? new PeopleFilter { All = names.Count > 0 ? names : null, IncludeMe = me } : null,
             SavedPlaces = places.Count > 0 ? places : null,
             EventIds = events.Count > 0 ? events : null,
@@ -115,7 +167,7 @@ public static class SearchLinks
             IncludeHidden = includeHidden == "1",
         };
         // As many as were asked for: the query's own limit would otherwise cap a raised one (SearchQuery.ResultLimit).
-        return similarTo?.Limit is > SearchQuery.DefaultLimit and var raised
+        return (similarTo?.Limit ?? region?.Limit) is > SearchQuery.DefaultLimit and var raised
             ? new SearchQuery { Filters = filters, Limit = raised }
             : new SearchQuery { Filters = filters };
     }
@@ -151,6 +203,7 @@ public static class SearchLinks
             Me = filters?.People?.IncludeMe ?? false,
             SavedPlaces = filters?.SavedPlaces ?? [],
             SimilarTo = filters?.SimilarTo,
+            SimilarToRegion = filters?.SimilarToRegion,
             EventIds = filters?.EventIds ?? [],
             SourceCount = filters?.SourceCount,
             Quality = filters?.Quality,

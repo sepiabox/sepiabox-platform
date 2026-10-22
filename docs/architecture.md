@@ -33,7 +33,7 @@ Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsof
 
 | Project | Runs on | Responsibility |
 |---|---|---|
-| `Sepiabox.Search` | library | The pinned models (`models.json`, verification, ONNX sessions) and CLIP's text side: tokenizer and text encoder for search by description. ONNX Runtime only, so the web can use it (D-055, D-070). |
+| `Sepiabox.Search` | library | The pinned models (`models.json`, verification, ONNX sessions), CLIP's text side (tokenizer and text encoder for search by description) and its image preprocessing and region cut (`ClipPreprocessor`, `RegionCrop`, `ClipImageEncoder`, S-041). ONNX Runtime and Magick.NET, so the web can use it without the pipeline (D-055, D-070, D-099). |
 | `Sepiabox.Pipeline` | library | Processing stages: classification, hashing, metadata, thumbnails, video, embeddings, faces. Does not know where a file comes from. |
 | `Sepiabox.Ingest` (`sepiabox-ingest`) | user's PC | `scan`, `process`, `upload`, `report` (unique assets in a work folder, S-062), `models download`. Processes the drive locally and uploads only what is new. |
 | `Sepiabox.Catalog` | library | EF Core + Npgsql: schema, migrations, queries. |
@@ -82,7 +82,7 @@ Natural-language questions: the text (never the photos) goes to **Claude Haiku 5
 - Container Apps (web scales to zero; worker as a job), PostgreSQL B1ms, Storage, Service Bus Basic, Event Grid, Key Vault, Application Insights with a daily cap, Container Registry Basic.
 - Safeguards (repository `sepiabox-infra`): €50 budget with alerts at €25/€40/forecast, anomaly alerts, automatic shutdown at €45, Azure Policy of allowed resource types, log cap.
 - Deploy: `azd` from the AppHost through `scripts/deploy.sh`, which runs the `sepiabox-migrate` Container Apps job before the web's new revision (D-061); GitHub Actions with OIDC (no secrets in the repository).
-- **Portability (D-051):** an architecture principle that must not slow the MVP. Blob storage, queue and events, secrets and the LLM sit behind the project's own small interfaces, Azure (and the Anthropic API for Claude) being one implementation wired in the composition roots; catalog access stays behind EF Core and the project's query services, with pgvector/PostGIS queries in provider-specific classes, so PostgreSQL could give way to another relational database (for example SQL Server) and Azure to another cloud (for example AWS). It applies to new code now; existing code is refactored after the MVP (S-050, S-051). No alternative implementation is built yet.
+- **Portability (D-051):** an architecture principle that must not slow the MVP. Blob storage, queue and events, secrets and the LLM sit behind the project's own small interfaces, Azure (and the Anthropic API for Claude) being one implementation wired in the composition roots; catalog access stays behind EF Core and the project's query services, with pgvector/PostGIS queries in provider-specific classes, so PostgreSQL could give way to another relational database (for example SQL Server) and Azure to another cloud (for example AWS). It applies to new code now; existing code was refactored after the MVP (S-050, S-051): the Azure Blob SDK is now only in `Sepiabox.Storage` and the composition roots. No alternative implementation is built yet.
 
 ## Repositories (organization `sepiabox`)
 

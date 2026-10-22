@@ -40,6 +40,96 @@ public abstract class BlobStoreContract
     }
 
     [Fact]
+    public async Task A_staged_upload_makes_the_blob_from_its_blocks_only_when_committed()
+    {
+        await using var upload = Store.BeginUpload(Container, "big.bin");
+        await upload.AppendAsync(new byte[] { 1, 2, 3 });
+        await upload.AppendAsync(new byte[] { 4, 5 });
+
+        Assert.Null(await Store.GetSizeAsync(Container, "big.bin"));
+        Assert.Null(await Store.ReadAsync(Container, "big.bin"));
+
+        await upload.CommitAsync("application/octet-stream");
+
+        var read = await Store.ReadAsync(Container, "big.bin");
+        Assert.NotNull(read);
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, read.Content.ToArray());
+        Assert.Equal(5, await Store.GetSizeAsync(Container, "big.bin"));
+    }
+
+    [Fact]
+    public async Task A_staged_upload_that_is_not_committed_leaves_no_blob()
+    {
+        await using (var upload = Store.BeginUpload(Container, "never.bin"))
+        {
+            await upload.AppendAsync(new byte[] { 1, 2, 3 });
+        }
+
+        Assert.Null(await Store.ReadAsync(Container, "never.bin"));
+        Assert.Empty(await ToListAsync(Store.ListAsync(Container, "never")));
+    }
+
+    [Fact]
+    public async Task A_staged_upload_replaces_a_blob_that_is_there_and_may_be_empty()
+    {
+        await Write("a.bin", "old content");
+        await using var upload = Store.BeginUpload(Container, "a.bin");
+
+        await upload.CommitAsync("application/octet-stream", BlobStorageClass.Default);
+
+        Assert.Equal(0, await Store.GetSizeAsync(Container, "a.bin"));
+    }
+
+    [Fact]
+    public async Task A_staged_upload_commits_once()
+    {
+        await using var upload = Store.BeginUpload(Container, "once.bin");
+        await upload.AppendAsync(new byte[] { 1 });
+        await upload.CommitAsync("application/octet-stream");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => upload.CommitAsync("application/octet-stream"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => upload.AppendAsync(new byte[] { 2 }));
+    }
+
+    [Fact]
+    public async Task A_staged_upload_to_a_container_that_is_not_there_fails_when_committed()
+    {
+        await using var upload = Store.BeginUpload("no-such-container", "a.bin");
+
+        await Assert.ThrowsAnyAsync<Exception>(async () =>
+        {
+            await upload.AppendAsync(new byte[] { 1 });
+            await upload.CommitAsync("application/octet-stream");
+        });
+        Assert.False(await Store.ContainerExistsAsync("no-such-container"));
+    }
+
+    [Fact]
+    public async Task The_size_of_a_missing_blob_or_container_is_null()
+    {
+        Assert.Null(await Store.GetSizeAsync(Container, "nothing"));
+        Assert.Null(await Store.GetSizeAsync("no-such-container", "nothing"));
+    }
+
+    [Fact]
+    public async Task Creating_a_container_twice_is_not_an_error()
+    {
+        await Store.CreateContainerAsync("fresh");
+        await Store.CreateContainerAsync("fresh");
+
+        Assert.True(await Store.ContainerExistsAsync("fresh"));
+    }
+
+    [Fact]
+    public async Task The_server_time_is_about_now()
+    {
+        var time = await Store.GetServerTimeAsync(Container);
+
+        Assert.NotNull(time);
+        Assert.InRange(time.Value, DateTimeOffset.UtcNow.AddMinutes(-2), DateTimeOffset.UtcNow.AddMinutes(2));
+    }
+
+    [Fact]
     public async Task Writing_if_new_fails_when_the_blob_exists_and_leaves_it_alone()
     {
         await Write("a.json", "first");
@@ -314,6 +404,16 @@ public sealed class InMemoryBlobStoreTests : BlobStoreContract
 
         Assert.Equal("application/json", Memory.ContentTypeOf(Container, "a.json"));
         Assert.Null(Memory.ContentTypeOf(Container, "b.json"));
+    }
+
+    [Fact]
+    public async Task Remembers_the_storage_class_a_staged_upload_was_committed_with()
+    {
+        await using var upload = Memory.BeginUpload(Container, "cold.bin");
+        await upload.AppendAsync(new byte[] { 1 });
+        await upload.CommitAsync("application/octet-stream", BlobStorageClass.Cold);
+
+        Assert.Equal(BlobStorageClass.Cold, Memory.StorageClassOf(Container, "cold.bin"));
     }
 
     [Fact]
