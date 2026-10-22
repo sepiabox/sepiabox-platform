@@ -711,7 +711,7 @@ public sealed class LibraryQueries(
             .GroupBy(l => l.Name).Select(g => new { Name = g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
         var albums = counted
-            .GroupBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+            .GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
             .Select(g => new { Name = g.OrderByDescending(a => a.Count).ThenBy(a => a.Name, StringComparer.Ordinal).First().Name, Count = g.Sum(a => a.Count) })
             .OrderByDescending(a => a.Count).ThenBy(a => a.Name, StringComparer.Ordinal)
             .Take(MaxAlbums).Select(a => a.Name).ToList();

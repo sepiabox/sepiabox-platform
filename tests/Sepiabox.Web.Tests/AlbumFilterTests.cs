@@ -242,6 +242,42 @@ public sealed class AlbumsCatalogTests(CatalogFixture catalog)
         Assert.Equal(["Summer 2019", "Verão", "Wedding"], albums);
     }
 
+    [Fact]
+    public async Task Offers_the_spelling_that_sorts_first_when_two_spellings_are_used_as_often()
+    {
+        await using var db = await CatalogWithAlbumsAsync();
+        db.AssetAlbums.AddRange(
+            new AssetAlbum { AssetId = Ids.Of(1), Name = "praia" },
+            new AssetAlbum { AssetId = Ids.Of(2), Name = "Praia" });
+        await db.SaveChangesAsync();
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var albums = (await queries.GetFilterOptionsAsync()).Albums;
+
+        Assert.Equal(["Praia", "Summer 2019", "Wedding"], albums);
+    }
+
+    [Fact]
+    public async Task Counts_every_spelling_of_an_album_when_choosing_which_albums_the_bar_holds()
+    {
+        await using var db = await CatalogWithAlbumsAsync();
+        // Two spellings used once each make an album used twice, as often as "Summer 2019", "Wedding" and the fillers, so more
+        // albums are used twice than the bar holds and the ordinal tie-break keeps "A". Counted by its most used spelling only,
+        // it would be used once and cut.
+        db.AssetAlbums.AddRange(
+            new AssetAlbum { AssetId = Ids.Of(1), Name = "a" },
+            new AssetAlbum { AssetId = Ids.Of(2), Name = "A" });
+        db.AssetAlbums.AddRange(Enumerable.Range(0, LibraryQueries.MaxAlbums - 1)
+            .SelectMany(n => new[] { Ids.Of(1), Ids.Of(2) }.Select(id => new AssetAlbum { AssetId = id, Name = $"Filler {n:000}" })));
+        await db.SaveChangesAsync();
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var albums = (await queries.GetFilterOptionsAsync()).Albums;
+
+        Assert.Equal(LibraryQueries.MaxAlbums, albums.Count);
+        Assert.Contains("A", albums);
+    }
+
     // Assets 1 (a photo) and 3 (a video) in "Summer 2019", asset 2 in "Wedding", and asset 1 in both; asset 4 in none.
     private async Task<CatalogDbContext> CatalogWithAlbumsAsync()
     {
