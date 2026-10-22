@@ -143,15 +143,45 @@ public sealed class MetaExportTests
     }
 
     [Fact]
-    public void Stops_at_the_deepest_nesting_and_says_so_instead_of_silently()
+    public void Stops_following_the_nesting_past_its_limit_without_failing()
     {
         var json = string.Concat(Enumerable.Repeat("[", 200)) + """{"uri": "a.jpg"}""" + string.Concat(Enumerable.Repeat("]", 200));
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 300 });
-        var reported = 0;
 
-        Assert.Empty(MetaExport.Items(document.RootElement, () => reported++));
+        Assert.Empty(MetaExport.Items(document.RootElement));
+    }
 
-        Assert.True(reported > 0);
+    [Fact]
+    public void Prefers_a_camera_date_in_any_entry_to_a_timestamp_in_an_earlier_one()
+    {
+        using var document = JsonDocument.Parse("""{"photo_metadata": {"exif_data": [{"taken_timestamp": 1561975200}, {"date_time_original": "2019:06:30 18:00:00"}]}}""");
+
+        Assert.Equal(new DateTime(2019, 6, 30, 18, 0, 0), MetaExport.Exif(document.RootElement)!.TakenAt);
+    }
+
+    [Fact]
+    public void Reads_facebooks_taken_timestamp_as_utc_and_prefers_a_camera_date_string()
+    {
+        using var facebook = JsonDocument.Parse("""{"photo_metadata": {"exif_data": [{"taken_timestamp": 1561975200, "latitude": 38.7, "longitude": -9.1}]}}""");
+        using var both = JsonDocument.Parse("""{"photo_metadata": {"exif_data": [{"date_time_original": "2019:06:30 18:00:00", "taken_timestamp": 1561975200}]}}""");
+
+        var taken = MetaExport.Exif(facebook.RootElement)!.TakenAt!.Value;
+
+        Assert.Equal(new DateTime(2019, 7, 1, 10, 0, 0, DateTimeKind.Utc), taken);
+        Assert.Equal(new DateTime(2019, 6, 30, 18, 0, 0), MetaExport.Exif(both.RootElement)!.TakenAt);
+    }
+
+    [Fact]
+    public void Takes_the_description_else_the_post_text_for_media_and_repairs_it()
+    {
+        using var document = JsonDocument.Parse("""
+            [{"uri": "a.jpg", "description": "Ol\u00c3\u00a1"}, {"uri": "b.jpg"}, {"uri": "c.jpg", "description": "  "}]
+            """);
+
+        var items = MetaExport.Items(document.RootElement, "post text", new DateTime(2019, 7, 1, 0, 0, 0, DateTimeKind.Utc)).ToList();
+
+        Assert.Equal(["Olá", "post text", "post text"], items.Select(i => i.Text));
+        Assert.All(items, i => Assert.Equal(2019, i.PostedAt!.Value.Year));
     }
 
     [Theory]
@@ -220,5 +250,16 @@ public sealed class MetaExportTests
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 300 });
 
         Assert.Equal(found, MetaExport.Items(document.RootElement).Any());
+    }
+
+    [Fact]
+    public void Takes_a_timestamp_from_a_later_entry_when_the_first_has_only_a_place()
+    {
+        using var document = JsonDocument.Parse("""{"photo_metadata": {"exif_data": [{"latitude": 38.7, "longitude": -9.1}, {"taken_timestamp": 1561975200}]}}""");
+
+        var exif = MetaExport.Exif(document.RootElement)!;
+
+        Assert.Equal(new GeoPoint(38.7, -9.1), exif.Location);
+        Assert.Equal(new DateTime(2019, 7, 1, 10, 0, 0, DateTimeKind.Utc), exif.TakenAt);
     }
 }
