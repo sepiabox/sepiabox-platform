@@ -10,9 +10,9 @@ using Sepiabox.Worker.Cloud;
 namespace Sepiabox.Worker.Tests.Cloud;
 
 /// <summary>
-/// <see cref="CloudFileProcessor"/> keeps about a hundred lines of <c>ProcessCommand</c> (D-107 (6)). Until the shared code
-/// moves into Pipeline (docs/backlog/S-065), this test is what keeps them from drifting: the same photos through
-/// <c>process --index-only</c> and through the worker in reference mode must give the same manifests, source apart.
+/// <see cref="CloudFileProcessor"/> and <c>ProcessCommand</c> share their describe, derivative and step code (S-065, D-118); this
+/// test stays as the guard against what each does around it drifting: the same photos through <c>process --index-only</c> and
+/// through the worker in reference mode must give the same manifests, source apart.
 /// </summary>
 public sealed class ProcessParityTests
 {
