@@ -276,6 +276,10 @@ Photos and videos are grouped into occasions (a wedding, a trip) by `sepiabox-wo
 - **Owner acceptance.** After the first `events classify` on the real library, open about 20 occasions of different types on **Occasions** (`?type=`), and compare the numbers of each type with what you remember (how many weddings, how many beach days): a type that is far too common means the photos' CLIP embeddings or the prompts need another look (D-094).
 - Assets without a capture date are in no occasion. Re-running `places refresh` renames places on assets, not on occasions: run `events rebuild` after it for their labels to follow.
 
+## Blurry photos and bursts
+
+Run `sepiabox-ingest process` again on each work folder (S-027, D-098): every photo gets its sharpness and a 64-bit hash in its manifest, from the preview already in the folder, so the drive does not need to be connected; then upload as usual and the import stores them (`sepiabox-ingest upload`, then the automatic import, or `sepiabox-worker import`). Photos processed before this have none until then and are not offered as blurry or in a burst. Open **Organize** in the web app: bursts (photos taken within 2 seconds of each other that look alike, the sharpest left unchecked), photos below the blurry threshold (`Search:BlurryBelow`, 100 by default; raise it to see more) and what was set aside. "Set aside" only hides a photo from search, counts and the timeline; nothing is deleted and no original is touched. Bring it back from the **Set aside** list, or find it in a search with `"includeHidden": true` in the filters of `POST /api/search`. A re-import never brings a set-aside photo back. Questions in the search box do not ask for blurry photos yet.
+
 ## Uploading the drive to Azure
 
 1. Once: be listed in `uploaderPrincipalIds` (see the prerequisites) and run `az login` on the computer with the work folder; `upload` signs in with `DefaultAzureCredential`, so the Azure CLI login is enough.

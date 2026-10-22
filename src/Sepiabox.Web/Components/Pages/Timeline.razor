@@ -188,6 +188,13 @@ else
     [SupplyParameterFromQuery(Name = SearchLinks.SourceGteParameter)]
     public string? SourceGte { get; set; }
 
+    /// <summary>The sharpness filter and including what was set aside (S-027), carried in hidden fields.</summary>
+    [SupplyParameterFromQuery(Name = SearchLinks.BlurryParameter)]
+    public string? Blurry { get; set; }
+
+    [SupplyParameterFromQuery(Name = SearchLinks.HiddenParameter)]
+    public string? IncludeHidden { get; set; }
+
     /// <summary>The question the search came from, shown again in the box (S-025).</summary>
     [SupplyParameterFromQuery(Name = AskedParameter)]
     public string? Asked { get; set; }
@@ -257,7 +264,7 @@ else
         {
             // One address per set of filters, so the URL can be copied and opened again.
             Navigation.NavigateTo(SearchLinks.Timeline(
-                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit, EventIds, SourceEq, SourceGte)));
+                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit, EventIds, SourceEq, SourceGte, Blurry, IncludeHidden)));
             return;
         }
 

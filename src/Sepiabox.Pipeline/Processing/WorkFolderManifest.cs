@@ -1,5 +1,6 @@
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Faces;
+using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
 
 namespace Sepiabox.Pipeline.Processing;
@@ -8,7 +9,12 @@ namespace Sepiabox.Pipeline.Processing;
 /// read or write the manifest is reported on the faces instead.</param>
 /// <param name="Faces">What happened to the faces; null when there was no detector, or when the failure to read or
 /// write the manifest is reported on the embedding instead.</param>
-public sealed record WorkFolderOutcome(EmbeddingOutcome? Embedding, EmbeddingOutcome? Faces);
+public sealed record WorkFolderOutcome(EmbeddingOutcome? Embedding, EmbeddingOutcome? Faces)
+{
+    /// <summary>What happened to the photo's sharpness and hash (S-027); null when they were not asked for, or when the failure
+    /// to read or write the manifest is reported on the embedding or the faces instead.</summary>
+    public EmbeddingOutcome? Quality { get; init; }
+}
 
 /// <summary>
 /// Adds what an unchanged file's manifest is missing, its embedding and its faces, from the work folder: the manifest
@@ -23,10 +29,11 @@ public static class WorkFolderManifest
     /// <param name="embedder">The CLIP image model, or none.</param>
     /// <param name="faces">The face detector, or none.</param>
     /// <param name="clock">When faces are found (D-081); the system clock when null.</param>
+    /// <param name="quality">Also measure a photo's sharpness and hash from its preview (S-027, D-098).</param>
     public static WorkFolderOutcome TryAdd(
-        string manifestPath, string workFolder, IImageEmbedder? embedder, IFaceDetector? faces, TimeProvider? clock = null)
+        string manifestPath, string workFolder, IImageEmbedder? embedder, IFaceDetector? faces, TimeProvider? clock = null, bool quality = false)
     {
-        if (embedder is null && faces is null)
+        if (embedder is null && faces is null && !quality)
         {
             return new WorkFolderOutcome(null, null);
         }
@@ -44,26 +51,33 @@ public static class WorkFolderManifest
         catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
         {
             var failure = Failed(null, "Could not read its manifest", ex);
-            return embedder is not null ? new WorkFolderOutcome(failure, null) : new WorkFolderOutcome(null, failure);
+            return embedder is not null || faces is null
+                ? new WorkFolderOutcome(failure, null)
+                : new WorkFolderOutcome(null, failure);
         }
 
         var embedding = embedder is null ? null : ManifestEmbeddings.TryAdd(manifest, workFolder, embedder);
         var current = embedding?.Manifest ?? manifest;
         var found = faces is null ? null : ManifestFaces.TryAdd(current, workFolder, faces, clock);
         current = found?.Manifest ?? current;
-        if (!IsAdded(embedding) && !IsAdded(found))
+        var measured = quality ? ManifestQualityStep.TryAdd(current, workFolder) : null;
+        current = measured?.Manifest ?? current;
+        if (!IsAdded(embedding) && !IsAdded(found) && !IsAdded(measured))
         {
-            return new WorkFolderOutcome(embedding, found);
+            return new WorkFolderOutcome(embedding, found) { Quality = measured };
         }
 
         try
         {
             ManifestJson.WriteFile(manifestPath, current);
-            return new WorkFolderOutcome(embedding, found);
+            return new WorkFolderOutcome(embedding, found) { Quality = measured };
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
         {
-            return WriteFailed(Failed(manifest, "Could not write its manifest", ex), embedding, found);
+            // Nothing was stored, so the measure is not "added" either; the failure is reported on the embedding or the faces,
+            // or, when the sharpness is all that was asked for, on the measure itself.
+            var failure = Failed(manifest, "Could not write its manifest", ex);
+            return embedding is null && found is null ? new WorkFolderOutcome(null, null) { Quality = failure } : WriteFailed(failure, embedding, found);
         }
     }
 

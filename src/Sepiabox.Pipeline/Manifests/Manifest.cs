@@ -79,6 +79,12 @@ public sealed record Manifest
     public IReadOnlyDictionary<string, JsonNode> Embeddings { get; init; } = new Dictionary<string, JsonNode>();
 
     /// <summary>
+    /// How sharp the photo is and its perceptual hash (S-027, D-098); absent for a video and for a photo not measured yet.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ManifestQuality? Quality { get; init; }
+
+    /// <summary>
     /// Whether faces were looked for (<c>process --faces</c>, S-018). False means unknown, not "no faces": face
     /// detection is opt-in, so <see cref="Faces"/> is then always empty.
     /// </summary>
@@ -115,6 +121,25 @@ public sealed record Manifest
     /// <summary><see cref="FacesVersion"/> with a missing value read as 1, the first face pipeline.</summary>
     [JsonIgnore]
     public int EffectiveFacesVersion => FacesVersion ?? 1;
+}
+
+/// <summary>
+/// A photo's <c>quality</c> (S-027, D-098): <see cref="Sharpness"/>, the variance of the Laplacian of its grayscale image
+/// at 512 px (rounded to 2 decimals), and <see cref="DHash"/>, its 64-bit difference hash as 16 lower-case hex characters.
+/// </summary>
+public sealed record ManifestQuality(
+    double Sharpness,
+    [property: JsonPropertyName("dhash")] string DHash)
+{
+    /// <summary>Which of two measures of the same photo a merge keeps: the sharper, then the larger hash; the same in any order.</summary>
+    public static ManifestQuality? Stronger(ManifestQuality? a, ManifestQuality? b) =>
+        a is null ? b : b is null ? a : Compare(a, b) >= 0 ? a : b;
+
+    private static int Compare(ManifestQuality a, ManifestQuality b)
+    {
+        var bySharpness = a.Sharpness.CompareTo(b.Sharpness);
+        return bySharpness != 0 ? bySharpness : string.CompareOrdinal(a.DHash, b.DHash);
+    }
 }
 
 /// <summary>One place where the asset's bytes were found.</summary>

@@ -10,6 +10,11 @@ public sealed record SearchOptions
 {
     /// <summary>Null: the clock's local time zone (UTC in Container Apps).</summary>
     public TimeZoneInfo? TimeZone { get; init; }
+
+    /// <summary>The sharpness below which a photo is blurry (S-027, D-098); <c>Search:BlurryBelow</c>.</summary>
+    public const double DefaultBlurryBelow = 100;
+
+    public double BlurryBelow { get; init; } = DefaultBlurryBelow;
 }
 
 /// <summary>How a search by description ranks its candidates (D-070).</summary>
@@ -437,6 +442,20 @@ public sealed class SearchService(
 
     private IQueryable<Asset> Filter(IQueryable<Asset> assets, SearchFilters filters, ResolvedPlaces places)
     {
+        // Set aside by the family (S-027): left out unless the query asks for them.
+        if (!filters.IncludeHidden)
+        {
+            assets = assets.Where(a => !a.Hidden);
+        }
+
+        if (filters.Quality is { } quality)
+        {
+            var below = options?.BlurryBelow ?? SearchOptions.DefaultBlurryBelow;
+            assets = quality.Blurry
+                ? assets.Where(a => a.Sharpness != null && a.Sharpness < below)
+                : assets.Where(a => a.Sharpness != null && a.Sharpness >= below);
+        }
+
         if (filters.Kinds is { } kinds)
         {
             assets = assets.Where(a => kinds.Contains(a.Kind));

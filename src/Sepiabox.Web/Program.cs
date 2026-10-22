@@ -42,6 +42,7 @@ builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 builder.Services.AddScoped<IPeopleEditor, PeopleEditor>();
 builder.Services.AddScoped<IFaceSettings, FaceSettings>();
 builder.Services.AddScoped<ISavedPlaces, SavedPlaces>();
+builder.Services.AddScoped<IOrganization, Organization>();
 // Questions (S-025): Claude through the project's own interface (D-051), with a daily limit per person.
 builder.Services.AddSingleton<IQuestionTranslator, ConfiguredQuestionTranslator>();
 builder.Services.AddSingleton<IQuestionQuota, CatalogQuestionQuota>();

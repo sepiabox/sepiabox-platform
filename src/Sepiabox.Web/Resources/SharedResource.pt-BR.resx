@@ -1122,4 +1122,82 @@
     <value>O Sepiabox não guarda uma cópia deste original: ele fica na origem.</value>
     <comment>Answer to a download of an index-only asset.</comment>
   </data>
+  <data name="Layout_Organize" xml:space="preserve">
+    <value>Organizar</value>
+  </data>
+  <data name="Organize_Heading" xml:space="preserve">
+    <value>Organizar</value>
+  </data>
+  <data name="Organize_Intro" xml:space="preserve">
+    <value>Fotos em sequência e fotos tremidas, para você separar as que não quer ver. Separar apenas esconde a foto da busca e da linha do tempo: nada é apagado e os originais nunca são tocados.</value>
+  </data>
+  <data name="Organize_Views" xml:space="preserve">
+    <value>Listas</value>
+  </data>
+  <data name="Organize_View_bursts" xml:space="preserve">
+    <value>Sequências</value>
+  </data>
+  <data name="Organize_View_blurry" xml:space="preserve">
+    <value>Tremidas</value>
+  </data>
+  <data name="Organize_View_hidden" xml:space="preserve">
+    <value>Separadas</value>
+  </data>
+  <data name="Organize_NoBursts" xml:space="preserve">
+    <value>Nenhuma sequência encontrada. Uma sequência são fotos tiradas com até dois segundos de intervalo e parecidas entre si.</value>
+  </data>
+  <data name="Organize_NoBlurry" xml:space="preserve">
+    <value>Nenhuma foto tremida encontrada.</value>
+  </data>
+  <data name="Organize_NoHidden" xml:space="preserve">
+    <value>Nada está separado.</value>
+  </data>
+  <data name="Organize_BurstsCount" xml:space="preserve">
+    <value>Sequências: {0}. A foto mais nítida de cada uma fica desmarcada.</value>
+  </data>
+  <data name="Organize_BlurryCount" xml:space="preserve">
+    <value>Fotos com nitidez abaixo de {1}: {0}, as mais tremidas primeiro.</value>
+  </data>
+  <data name="Organize_HiddenCount" xml:space="preserve">
+    <value>Fotos separadas: {0}.</value>
+  </data>
+  <data name="Organize_Burst" xml:space="preserve">
+    <value>Sequência de {0} fotos</value>
+  </data>
+  <data name="Organize_Sharpest" xml:space="preserve">
+    <value>Mais nítida, manter</value>
+  </data>
+  <data name="Organize_SetAsideOne" xml:space="preserve">
+    <value>Separar</value>
+  </data>
+  <data name="Organize_BringBackOne" xml:space="preserve">
+    <value>Trazer de volta</value>
+  </data>
+  <data name="Organize_Sharpness" xml:space="preserve">
+    <value>Nitidez {0}</value>
+  </data>
+  <data name="Organize_HideSelected" xml:space="preserve">
+    <value>Separar as fotos marcadas</value>
+  </data>
+  <data name="Organize_UnhideSelected" xml:space="preserve">
+    <value>Trazer de volta as fotos marcadas</value>
+  </data>
+  <data name="Organize_Done_Hidden" xml:space="preserve">
+    <value>Fotos separadas: {0}. Nada foi apagado: veja em Separadas.</value>
+  </data>
+  <data name="Organize_Done_Restored" xml:space="preserve">
+    <value>Fotos trazidas de volta: {0}.</value>
+  </data>
+  <data name="Organize_Done_None" xml:space="preserve">
+    <value>Nenhuma foto estava marcada.</value>
+  </data>
+  <data name="Chip_Blurry" xml:space="preserve">
+    <value>Fotos tremidas</value>
+  </data>
+  <data name="Chip_Sharp" xml:space="preserve">
+    <value>Fotos nítidas</value>
+  </data>
+  <data name="Chip_IncludeHidden" xml:space="preserve">
+    <value>Incluindo separadas</value>
+  </data>
 </root>

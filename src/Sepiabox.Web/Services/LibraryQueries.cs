@@ -300,6 +300,7 @@ public sealed class LibraryQueries(
             SELECT a.id, a.kind, a.captured_at, a.duration_seconds,
                    EXISTS (SELECT 1 FROM derivatives d WHERE d.asset_id = a.id AND d.name = {DerivativeNames.Thumbnail}) AS has_thumbnail
             FROM assets a
+            WHERE NOT a.hidden
             ORDER BY a.captured_at DESC NULLS LAST, a.id
             OFFSET {offset} LIMIT {PageSize + 1}
             """).ToListAsync(cancellationToken);

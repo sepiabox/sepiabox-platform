@@ -1,0 +1,23 @@
+@* Newer and older links under a list; the page decides what a link to another page is. *@
+
+<nav class="pages" aria-label="@Text["Timeline_Pages"]">
+    @if (Page > 1)
+    {
+        <a href="@Link(Page - 1)">@Text["Timeline_Newer"]</a>
+    }
+    @if (HasMore)
+    {
+        <a href="@Link(Page + 1)">@Text["Timeline_Older"]</a>
+    }
+</nav>
+
+@code {
+    [Parameter, EditorRequired]
+    public int Page { get; set; }
+
+    [Parameter]
+    public bool HasMore { get; set; }
+
+    [Parameter, EditorRequired]
+    public Func<int, string> Link { get; set; } = default!;
+}

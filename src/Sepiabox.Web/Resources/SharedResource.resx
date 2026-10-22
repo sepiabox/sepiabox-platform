@@ -1184,4 +1184,82 @@
     <value>Sepiabox keeps no copy of this original: it stays at its source.</value>
     <comment>Answer to a download of an index-only asset.</comment>
   </data>
+  <data name="Layout_Organize" xml:space="preserve">
+    <value>Organize</value>
+  </data>
+  <data name="Organize_Heading" xml:space="preserve">
+    <value>Organize</value>
+  </data>
+  <data name="Organize_Intro" xml:space="preserve">
+    <value>Burst photos and blurry ones, so you can set aside the ones you do not need. Setting aside only hides a photo from search and the timeline: nothing is deleted and the originals are never touched.</value>
+  </data>
+  <data name="Organize_Views" xml:space="preserve">
+    <value>Lists</value>
+  </data>
+  <data name="Organize_View_bursts" xml:space="preserve">
+    <value>Bursts</value>
+  </data>
+  <data name="Organize_View_blurry" xml:space="preserve">
+    <value>Blurry</value>
+  </data>
+  <data name="Organize_View_hidden" xml:space="preserve">
+    <value>Set aside</value>
+  </data>
+  <data name="Organize_NoBursts" xml:space="preserve">
+    <value>No bursts found. A burst is photos taken within two seconds of each other that look alike.</value>
+  </data>
+  <data name="Organize_NoBlurry" xml:space="preserve">
+    <value>No blurry photos found.</value>
+  </data>
+  <data name="Organize_NoHidden" xml:space="preserve">
+    <value>Nothing is set aside.</value>
+  </data>
+  <data name="Organize_BurstsCount" xml:space="preserve">
+    <value>Bursts: {0}. The sharpest photo of each is left unchecked.</value>
+  </data>
+  <data name="Organize_BlurryCount" xml:space="preserve">
+    <value>Photos with sharpness below {1}: {0}, the blurriest first.</value>
+  </data>
+  <data name="Organize_HiddenCount" xml:space="preserve">
+    <value>Photos set aside: {0}.</value>
+  </data>
+  <data name="Organize_Burst" xml:space="preserve">
+    <value>Burst of {0} photos</value>
+  </data>
+  <data name="Organize_Sharpest" xml:space="preserve">
+    <value>Sharpest, keep</value>
+  </data>
+  <data name="Organize_SetAsideOne" xml:space="preserve">
+    <value>Set aside</value>
+  </data>
+  <data name="Organize_BringBackOne" xml:space="preserve">
+    <value>Bring back</value>
+  </data>
+  <data name="Organize_Sharpness" xml:space="preserve">
+    <value>Sharpness {0}</value>
+  </data>
+  <data name="Organize_HideSelected" xml:space="preserve">
+    <value>Set aside the checked photos</value>
+  </data>
+  <data name="Organize_UnhideSelected" xml:space="preserve">
+    <value>Bring back the checked photos</value>
+  </data>
+  <data name="Organize_Done_Hidden" xml:space="preserve">
+    <value>Photos set aside: {0}. Nothing was deleted: find them under Set aside.</value>
+  </data>
+  <data name="Organize_Done_Restored" xml:space="preserve">
+    <value>Photos brought back: {0}.</value>
+  </data>
+  <data name="Organize_Done_None" xml:space="preserve">
+    <value>No photo was checked.</value>
+  </data>
+  <data name="Chip_Blurry" xml:space="preserve">
+    <value>Blurry photos</value>
+  </data>
+  <data name="Chip_Sharp" xml:space="preserve">
+    <value>Sharp photos</value>
+  </data>
+  <data name="Chip_IncludeHidden" xml:space="preserve">
+    <value>Including set aside</value>
+  </data>
 </root>

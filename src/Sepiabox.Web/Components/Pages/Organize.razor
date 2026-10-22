@@ -1,0 +1,218 @@
+@page "/organize"
+@inject IOrganization Organization
+@inject NavigationManager Navigation
+@using System.Globalization
+@using Microsoft.AspNetCore.WebUtilities
+@using Sepiabox.Web.Services
+@* Bursts and blurry photos (S-027, D-098): three lists, one form each, in static server rendering as the places page.
+   "Set aside" only flags a photo as hidden: nothing is deleted and no original is touched. A burst's sharpest photo
+   is left unchecked, so pressing the button sets the rest aside. *@
+
+<PageTitle>@Text["Organize_Heading"] · Sepiabox</PageTitle>
+
+<h1 class="page-heading">@Text["Organize_Heading"]</h1>
+<p class="hint muted">@Text["Organize_Intro"]</p>
+
+<nav class="organize-views" aria-label="@Text["Organize_Views"]">
+    @foreach (var name in s_views)
+    {
+        if (name == _view)
+        {
+            <strong aria-current="page">@Text[$"Organize_View_{name}"]</strong>
+        }
+        else
+        {
+            <a href="organize?view=@name">@Text[$"Organize_View_{name}"]</a>
+        }
+    }
+</nav>
+
+@if (NoteText is { } note)
+{
+    <p class="note" role="status">@note</p>
+}
+
+@if (_view == "bursts")
+{
+    @if (_bursts is null || _bursts.Items.Count == 0)
+    {
+        <p class="empty">@Text["Organize_NoBursts"]</p>
+    }
+    else
+    {
+        <p class="muted small">@Text["Organize_BurstsCount", _bursts.Total.ToString("N0", CultureInfo.CurrentCulture)]</p>
+        <form method="post" @formname="organize" @onsubmit="ActAsync" class="organize-form">
+            <AntiforgeryToken />
+            <input type="hidden" name="View" value="bursts" />
+            @foreach (var burst in _bursts.Items)
+            {
+                <section class="burst">
+                    <h2>@Text["Organize_Burst", burst.Items.Count]</h2>
+                    <ul class="grid">
+                        @foreach (var photo in burst.Items)
+                        {
+                            <li class="organize-item">
+                                <MediaCard Item="photo.Item" Href="@($"photos/{photo.Item.Id}")" />
+                                <label>
+                                    <input type="checkbox" name="Ids" value="@photo.Item.Id" checked="@(photo.Item.Id != burst.KeepId)" />
+                                    <span>@(photo.Item.Id == burst.KeepId ? Text["Organize_Sharpest"] : Text["Organize_SetAsideOne"])</span>
+                                </label>
+                                <span class="muted small">@Sharpness(photo)</span>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+            <button type="submit" name="Action" value="hide">@Text["Organize_HideSelected"]</button>
+        </form>
+        <Pager Page="_bursts.Page" HasMore="_bursts.HasMore" Link="PageLink" />
+    }
+}
+else if (_view == "blurry")
+{
+    @if (_photos is null || _photos.Items.Count == 0)
+    {
+        <p class="empty">@Text["Organize_NoBlurry"]</p>
+    }
+    else
+    {
+        <p class="muted small">@Text["Organize_BlurryCount", _photos.Total.ToString("N0", CultureInfo.CurrentCulture), Organization.BlurryBelow.ToString("0.#", CultureInfo.CurrentCulture)]</p>
+        <form method="post" @formname="organize" @onsubmit="ActAsync" class="organize-form">
+            <AntiforgeryToken />
+            <input type="hidden" name="View" value="blurry" />
+            <ul class="grid">
+                @foreach (var photo in _photos.Items)
+                {
+                    <li class="organize-item">
+                        <MediaCard Item="photo.Item" Href="@($"photos/{photo.Item.Id}")" />
+                        <label>
+                            <input type="checkbox" name="Ids" value="@photo.Item.Id" />
+                            <span>@Text["Organize_SetAsideOne"]</span>
+                        </label>
+                        <span class="muted small">@Sharpness(photo)</span>
+                    </li>
+                }
+            </ul>
+            <button type="submit" name="Action" value="hide">@Text["Organize_HideSelected"]</button>
+        </form>
+        <Pager Page="_photos.Page" HasMore="_photos.HasMore" Link="PageLink" />
+    }
+}
+else
+{
+    @if (_photos is null || _photos.Items.Count == 0)
+    {
+        <p class="empty">@Text["Organize_NoHidden"]</p>
+    }
+    else
+    {
+        <p class="muted small">@Text["Organize_HiddenCount", _photos.Total.ToString("N0", CultureInfo.CurrentCulture)]</p>
+        <form method="post" @formname="organize" @onsubmit="ActAsync" class="organize-form">
+            <AntiforgeryToken />
+            <input type="hidden" name="View" value="hidden" />
+            <ul class="grid">
+                @foreach (var photo in _photos.Items)
+                {
+                    <li class="organize-item">
+                        <MediaCard Item="photo.Item" Href="@($"photos/{photo.Item.Id}")" />
+                        <label>
+                            <input type="checkbox" name="Ids" value="@photo.Item.Id" />
+                            <span>@Text["Organize_BringBackOne"]</span>
+                        </label>
+                    </li>
+                }
+            </ul>
+            <button type="submit" name="Action" value="unhide">@Text["Organize_UnhideSelected"]</button>
+        </form>
+        <Pager Page="_photos.Page" HasMore="_photos.HasMore" Link="PageLink" />
+    }
+}
+
+@code {
+    private static readonly string[] s_views = ["bursts", "blurry", "hidden"];
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    // Text, not int: a hand-typed "abc" must become a page, not a binding error.
+    [SupplyParameterFromQuery(Name = "page")]
+    public string? PageQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "view")]
+    public string? ViewQuery { get; set; }
+
+    // What a redirect back says: "hidden" or "restored", and how many.
+    [SupplyParameterFromQuery(Name = "note")]
+    public string? Note { get; set; }
+
+    [SupplyParameterFromQuery(Name = "n")]
+    public string? NoteCount { get; set; }
+
+    [SupplyParameterFromForm(FormName = "organize")]
+    public string? View { get; set; }
+
+    [SupplyParameterFromForm(FormName = "organize")]
+    public string? Action { get; set; }
+
+    private string _view = "bursts";
+    private OrganizePage<BurstGroup>? _bursts;
+    private OrganizePage<OrganizeItem>? _photos;
+
+    private string? NoteText => Note switch
+    {
+        "hidden" or "restored" when int.TryParse(NoteCount, NumberStyles.None, CultureInfo.InvariantCulture, out var count) =>
+            Text[Note == "hidden" ? "Organize_Done_Hidden" : "Organize_Done_Restored", count.ToString("N0", CultureInfo.CurrentCulture)].Value,
+        "none" => Text["Organize_Done_None"].Value,
+        _ => null,
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _view = ViewQuery is not null && s_views.Contains(ViewQuery, StringComparer.Ordinal) ? ViewQuery : "bursts";
+        var page = LibraryQueries.ParsePage(PageQuery);
+        switch (_view)
+        {
+            case "bursts":
+                _bursts = await Organization.GetBurstsAsync(page);
+                break;
+            case "blurry":
+                _photos = await Organization.GetBlurryAsync(page);
+                break;
+            default:
+                _photos = await Organization.GetHiddenAsync(page);
+                break;
+        }
+    }
+
+    private string Sharpness(OrganizeItem photo) =>
+        photo.Sharpness is { } value ? Text["Organize_Sharpness", value.ToString("0.#", CultureInfo.CurrentCulture)].Value : string.Empty;
+
+    // Relative, so links work under whatever base path the app has.
+    private string PageLink(int page)
+    {
+        var query = new Dictionary<string, string?> { ["view"] = _view };
+        if (page > 1)
+        {
+            query["page"] = page.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return QueryHelpers.AddQueryString("organize", query);
+    }
+
+    // The checked photos of whichever list was sent; done, the same list again with a note.
+    private async Task ActAsync()
+    {
+        var view = View is not null && s_views.Contains(View, StringComparer.Ordinal) ? View : "bursts";
+        var ids = HttpContext?.Request.HasFormContentType == true ? [.. HttpContext.Request.Form["Ids"].OfType<string>()] : Array.Empty<string>();
+        var restore = Action == "unhide";
+        var changed = ids.Length == 0 ? 0 : restore ? await Organization.UnhideAsync(ids) : await Organization.HideAsync(ids);
+        var note = changed == 0 ? "none" : restore ? "restored" : "hidden";
+        var query = new Dictionary<string, string?> { ["view"] = view, ["note"] = note };
+        if (changed > 0)
+        {
+            query["n"] = changed.ToString(CultureInfo.InvariantCulture);
+        }
+
+        Navigation.NavigateTo(QueryHelpers.AddQueryString("organize", query));
+    }
+}

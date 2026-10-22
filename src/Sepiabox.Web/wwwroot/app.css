@@ -855,3 +855,23 @@ main {
 .storage-assets .size {
     font-variant-numeric: tabular-nums;
 }
+
+.organize-views {
+    display: flex;
+    gap: 16px;
+    margin: 12px 0;
+}
+
+.organize-form button {
+    margin-top: 16px;
+}
+
+.burst h2 {
+    margin: 24px 0 8px;
+    font-size: 1.1rem;
+}
+
+.organize-item {
+    display: grid;
+    gap: 2px;
+}
