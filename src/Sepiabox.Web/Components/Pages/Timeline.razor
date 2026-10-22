@@ -228,6 +228,11 @@ else
         }
 
         await LoadAsync();
+        if (_options is not null)
+        {
+            // The question box is on the page: keep the question format warm in the background (D-101); it never waits.
+            Questions.WarmUp();
+        }
     }
 
     private async Task AskAsync()

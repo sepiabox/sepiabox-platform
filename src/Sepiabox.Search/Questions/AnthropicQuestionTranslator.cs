@@ -33,6 +33,13 @@ public sealed record AnthropicQuestionOptions
     /// </summary>
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(90);
 
+    /// <summary>
+    /// For the whole question, all its requests and retries together: the timeout above is per request, so without this a
+    /// slow API could keep one question running for minutes, past the 240 s the Container Apps ingress waits for a page
+    /// (D-101). Past it the outcome is <see cref="QuestionOutcome.Unavailable"/>.
+    /// </summary>
+    public TimeSpan Deadline { get; init; } = TimeSpan.FromSeconds(200);
+
     /// <summary>The SDK's own retries of 408, 409, 429, 5xx and connection errors, per request.</summary>
     public int MaxRetries { get; init; } = 1;
 
@@ -47,6 +54,7 @@ public sealed record AnthropicQuestionOptions
             .Append(", BaseUrl = ").Append(BaseUrl)
             .Append(", MaxTokens = ").Append(MaxTokens)
             .Append(", Timeout = ").Append(Timeout)
+            .Append(", Deadline = ").Append(Deadline)
             .Append(", MaxRetries = ").Append(MaxRetries)
             .Append(", MaxAttempts = ").Append(MaxAttempts);
         return true;
@@ -151,6 +159,9 @@ public sealed partial class AnthropicQuestionTranslator : IQuestionTranslator, I
             return QuestionTranslation.Of(QuestionOutcome.NotUnderstood, TokenUsage.None, 0);
         }
 
+        // One deadline over every request and retry of this question; the caller's own cancellation is still told apart below.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(_options.Deadline);
         var usage = TokenUsage.None;
         (string Answer, string Problem)? previous = null;
         for (var attempt = 1; attempt <= _options.MaxAttempts; attempt++)
@@ -160,7 +171,7 @@ public sealed partial class AnthropicQuestionTranslator : IQuestionTranslator, I
             try
             {
                 // The SDK reads the response's fields when they are used, so a malformed one throws here too.
-                var reply = await _client.Messages.Create(BuildRequest(cleaned, context, previous), cancellationToken);
+                var reply = await _client.Messages.Create(BuildRequest(cleaned, context, previous), deadline.Token);
                 usage = usage.Add(Usage(reply));
                 stopReason = reply.StopReason?.Raw();
                 // The output format writes null for what the DSL leaves out (D-085).

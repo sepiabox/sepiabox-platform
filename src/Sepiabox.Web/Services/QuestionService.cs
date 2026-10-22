@@ -117,9 +117,13 @@ public sealed class QuestionService(
     ILibraryQueries library,
     QuestionLimits limits,
     TimeProvider clock,
-    SearchOptions? searchOptions = null)
+    SearchOptions? searchOptions = null,
+    QuestionWarmUp? warmUp = null)
 {
     public bool IsConfigured => translator.IsConfigured;
+
+    /// <summary>Starts the background warm-up of the question format when it is due (D-101); never waits or throws.</summary>
+    public void WarmUp() => warmUp?.TryStart();
 
     public int DailyLimit => limits.DailyLimit;
 
@@ -205,6 +209,11 @@ public sealed class QuestionService(
             // Recorded whatever the outcome: a refused or invalid answer was billed too.
             await quota.RecordAsync(userKey, today, translation.Usage, CancellationToken.None);
         }
+        if (translation.Outcome == QuestionOutcome.Translated)
+        {
+            warmUp?.NoteSuccess();
+        }
+
         return translation.Outcome switch
         {
             // Parsed again here: the translator's own check is not what the search trusts.

@@ -94,6 +94,8 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             .UseSetting("Search:ModelFolder", Path.Combine(Path.GetTempPath(), "sepiabox-tests-no-models"))
             // Never the developer's key from user secrets: a test that needs questions gives a fake translator.
             .UseSetting("Anthropic:ApiKey", string.Empty)
+            // No background question when a page is shown, which would show up in a fake translator's calls (D-101).
+            .UseSetting("Questions:WarmUp", "false")
             // Nor the developer's Key Vault: Development loads user secrets, which these settings override (a
             // test that needs a key ring URI sets it in Settings).
             .UseSetting($"ConnectionStrings:{AzureSetup.VaultConnectionName}", string.Empty)

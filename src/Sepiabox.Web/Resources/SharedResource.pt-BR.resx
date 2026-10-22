@@ -1219,6 +1219,6 @@
     <value>Está demorando mais que o normal: a primeira pergunta depois de uma atualização do site pode levar até um minuto.</value>
   </data>
   <data name="Ask_TimedOut" xml:space="preserve">
-    <value>Está demorando mais do que o esperado. Tente de novo.</value>
+    <value>Ainda esperando. Você pode continuar esperando ou tentar de novo.</value>
   </data>
 </root>

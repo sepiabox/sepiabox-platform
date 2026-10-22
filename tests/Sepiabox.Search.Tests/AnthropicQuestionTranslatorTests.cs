@@ -204,6 +204,43 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.Equal(QuestionOutcome.Unavailable, result.Outcome);
     }
 
+    [Fact]
+    public async Task Stops_a_question_at_the_overall_deadline_though_each_request_may_take_longer()
+    {
+        // 90 s is per request (D-101); the question as a whole, retries included, ends at the deadline.
+        var api = new FakeApi { Delay = TimeSpan.FromSeconds(30) };
+        using var translator = Translator(api, options: new AnthropicQuestionOptions
+        {
+            ApiKey = Key,
+            Timeout = TimeSpan.FromSeconds(60),
+            MaxRetries = 2,
+            Deadline = TimeSpan.FromMilliseconds(300),
+        });
+        var started = DateTime.UtcNow;
+
+        var result = await translator.TranslateAsync("videos", Context());
+
+        Assert.Equal(QuestionOutcome.Unavailable, result.Outcome);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task Gives_a_caller_that_cancels_a_cancellation_not_an_outcome()
+    {
+        var api = new FakeApi { Delay = TimeSpan.FromSeconds(30) };
+        using var translator = Translator(api, options: new AnthropicQuestionOptions { ApiKey = Key, MaxRetries = 0 });
+        using var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => translator.TranslateAsync("videos", Context(), cancelled.Token));
+    }
+
+    [Fact]
+    public void Allows_the_whole_question_200_seconds_below_the_ingress_limit_of_240()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(200), new AnthropicQuestionOptions().Deadline);
+        Assert.Contains("Deadline = 00:03:20", new AnthropicQuestionOptions().ToString(), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
