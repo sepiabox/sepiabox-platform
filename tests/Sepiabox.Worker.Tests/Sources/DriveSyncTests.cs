@@ -500,16 +500,16 @@ public sealed class DriveSyncTests(CatalogFixture fixture)
         var (db, store, drive, _) = await SetUpAsync(files: 0);
         drive.AddFile("id-edge", "edge.mp4", "video/mp4", size: CloudFileProcessor.MaxFileBytes);
         drive.AddFile("id-over", "over.mp4", "video/mp4", size: CloudFileProcessor.MaxFileBytes + 1);
-        var exact = NameForMetadataBytes("id-fit", DriveSync.MaxMetadataBytes);
+        var exact = NameForMetadataBytes("id-fit", IncomingStager.MaxMetadataBytes);
         drive.AddFile("id-fit", exact, "image/jpeg", parent: "folder-1");
-        drive.AddFile("id-toolong", NameForMetadataBytes("id-toolong", DriveSync.MaxMetadataBytes + 1), "image/jpeg", parent: "folder-1");
+        drive.AddFile("id-toolong", NameForMetadataBytes("id-toolong", IncomingStager.MaxMetadataBytes + 1), "image/jpeg", parent: "folder-1");
 
         var result = await Sync(db, store, drive).RunAsync(CancellationToken.None);
 
         Assert.Equal((2, 2), (result.Staged, result.Skipped));
         var staged = (await IncomingFilesAsync(store)).Select(f => f.ExternalId).Order().ToList();
         Assert.Equal(["id-edge", "id-fit"], staged);
-        Assert.Equal(DriveSync.MaxMetadataBytes, MetadataBytes(new IncomingFile("google-drive", SourceName, (await IncomingFilesAsync(store)).Single(f => f.ExternalId == "id-fit").Path, IncomingMode.Reference, s_modified, "id-fit")));
+        Assert.Equal(IncomingStager.MaxMetadataBytes, MetadataBytes(new IncomingFile("google-drive", SourceName, (await IncomingFilesAsync(store)).Single(f => f.ExternalId == "id-fit").Path, IncomingMode.Reference, s_modified, "id-fit")));
     }
 
     [Theory]
