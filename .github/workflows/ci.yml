@@ -61,7 +61,12 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      # Only ffmpeg is installed, and it comes from Ubuntu: the runner's Microsoft sources (.list or .sources) are dropped first, because
+      # packages.microsoft.com has answered 403 (no longer signed), which failed `apt-get update` before any test ran.
+      - run: |
+          grep -rl packages.microsoft.com /etc/apt/sources.list.d/ | xargs -r sudo rm -f
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
       # Models are never committed (D-016): download them once per models.json and verify their SHA-256.
       - id: models-cache
         uses: actions/cache/restore@v4
