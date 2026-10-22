@@ -20,13 +20,13 @@ The Instagram API does not expose a person's own archive, so posts come from "Do
 - Comments, likes, messages and other people's media.
 
 ### Acceptance criteria
-- [ ] Given a synthetic `posts_1.json` with one post, `creation_timestamp` 1561975200 and `title` "Praia", when processed with `--time-zone Europe/Lisbon`, then the manifest has `capturedAt` `2019-07-01T11:00:00`, `capturedAtSource: export`, `caption` "Praia" and `albums: ["Instagram"]`.
-- [ ] Given a carousel post with three media, then each media file gets the post's caption and its own timestamp when present.
-- [ ] Given `exif_data` with latitude, longitude and `date_time_original`, then they are used for the location and date.
-- [ ] Given the escaped string "aniversÃ¡rio", then the caption is "aniversário"; a string that is not mojibake is left as it is.
-- [ ] Given a media file under `media/` that no JSON lists, then it produces no manifest and is counted in the summary.
-- [ ] Given a synthetic post with the permalink field found in the real download (if there is one), then the source's `url` is that permalink; given a post without it, then the source has none.
-- [ ] Given `process --export instagram --index-only`, then the manifests say `originalStored: false` and `upload` sends no original.
+- [x] Given a synthetic `posts_1.json` with one post, `creation_timestamp` 1561975200 and `title` "Praia", when processed with `--time-zone Europe/Lisbon`, then the manifest has `capturedAt` `2019-07-01T11:00:00`, `capturedAtSource: export`, `caption` "Praia" and `albums: ["Instagram"]`.
+- [x] Given a carousel post with three media, then each media file gets the post's caption and its own timestamp when present.
+- [x] Given `exif_data` with latitude, longitude and `date_time_original`, then they are used for the location and date.
+- [x] Given the escaped string "aniversÃ¡rio", then the caption is "aniversário"; a string that is not mojibake is left as it is.
+- [x] Given a media file under `media/` that no JSON lists, then it produces no manifest and is counted in the summary.
+- [x] Given a synthetic post with the permalink field found in the real download (if there is one), then the source's `url` is that permalink; given a post without it, then the source has none.
+- [x] Given `process --export instagram --index-only`, then the manifests say `originalStored: false` and `upload` sends no original.
 
 ### Technical notes
 - **Format confirmation first:** Meta changes the folder layout and field names between versions. Before writing the reader, confirm them against a small real download the owner provides, and record the paths and fields found in the PR. Fixtures stay synthetic (tests write the JSON and tiny media), never real personal data.
@@ -37,3 +37,6 @@ The Instagram API does not expose a person's own archive, so posts come from "Do
 ### Expected tests
 - Unit: post parsing variants, text repair, date choice.
 - Integration: `process --export instagram` over a generated download.
+
+### Status
+- `doing` (2026-10-22): implemented against the Instagram layout and fields as believed (D-111), with synthetic fixtures; the permalink field is not known, so no source has a `url`. **The real-download confirmation the story asks for first has not been done** (no download was available): it is the owner check in `docs/operations.md`, and the story is not `done` until it passes or the owner waives it (D-054).

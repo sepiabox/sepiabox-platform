@@ -302,7 +302,7 @@ public sealed class ExportMetadataTests
         Assert.True(registry.TryGet("instagram", out var reader));
         Assert.Equal("instagram", reader.Kind);
         Assert.False(registry.TryGet("Instagram", out _));
-        Assert.Equal(["apple-photos", "google-takeout"], ExportReaderRegistry.Default.Kinds);
+        Assert.Equal(["apple-photos", "google-takeout", "instagram"], ExportReaderRegistry.Default.Kinds);
     }
 
     private static Manifest Manifest(string id) => TestManifests.Photo(TestManifests.Source("HD da Ana", $"{id}.jpg")) with { Captured = null };
