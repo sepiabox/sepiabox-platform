@@ -93,6 +93,11 @@ public static class AzureInfrastructure
     /// <summary>A message that fails this many times goes to the dead-letter queue (S-036), as for the manifests.</summary>
     public const int IncomingMaxDeliveryCount = 5;
 
+    /// <summary>Days after which a blob left in <c>incoming</c> is deleted by a lifecycle rule (S-036).</summary>
+    public const int IncomingRetentionDays = 30;
+
+    private const string IncomingContainer = "incoming";
+
     /// <summary>Created by sepiabox-infra (S-031) with the daily cap; Application Insights writes to it.</summary>
     public const string LogAnalyticsWorkspaceName = "sepiabox-logs";
 
@@ -260,6 +265,37 @@ public static class AzureInfrastructure
             IsEnabled = true,
             Days = BlobSoftDeleteDays,
         };
+
+        // A file in incoming is normally deleted by the job that processes it; what is left after a month is a problem
+        // blob nobody dealt with (S-036), and it is a copy of a file that is still at its source.
+        infrastructure.Add(new StorageAccountManagementPolicy("lifecycle")
+        {
+            Parent = account,
+            Rules =
+            {
+                new ManagementPolicyRule
+                {
+                    Name = "delete-old-incoming",
+                    RuleType = ManagementPolicyRuleType.Lifecycle,
+                    IsEnabled = true,
+                    Definition = new ManagementPolicyDefinition
+                    {
+                        Filters = new ManagementPolicyFilter
+                        {
+                            BlobTypes = { "blockBlob" },
+                            PrefixMatch = { IncomingContainer + "/" },
+                        },
+                        Actions = new ManagementPolicyAction
+                        {
+                            BaseBlob = new ManagementPolicyBaseBlob
+                            {
+                                Delete = new DateAfterModification { DaysAfterModificationGreaterThan = IncomingRetentionDays },
+                            },
+                        },
+                    },
+                },
+            },
+        });
 
         foreach (var name in BlobContainers)
         {

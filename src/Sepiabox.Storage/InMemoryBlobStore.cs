@@ -154,29 +154,6 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
         return new BlobInfo(stored.Content.ToMemory().Length, stored.Version, stored.LastModified, stored.ContentType, stored.Metadata);
     }
 
-    public Task CopyAsync(
-        string sourceContainer, string sourceName, string container, string name, BlobStorageClass storageClass = BlobStorageClass.Default,
-        CancellationToken cancellationToken = default)
-    {
-        lock (_lock)
-        {
-            if (!_containers.TryGetValue(sourceContainer, out var from) || !from.TryGetValue(sourceName, out var source))
-            {
-                throw new InvalidOperationException($"{sourceContainer}/{sourceName} does not exist.");
-            }
-
-            if (!_containers.TryGetValue(container, out var to))
-            {
-                throw new InvalidOperationException($"The container {container} does not exist.");
-            }
-
-            // A copy is a new write: its own version and time, the bytes and the metadata of the source.
-            to[name] = source with { Version = (++_versions).ToString(CultureInfo.InvariantCulture), LastModified = _time.GetUtcNow(), StorageClass = storageClass };
-        }
-
-        return Task.CompletedTask;
-    }
-
     public Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default)
     {
         lock (_lock)
@@ -236,8 +213,13 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
             return Task.CompletedTask;
         }
 
-        public Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default)
+        public Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default) =>
+            CommitAsync(contentType, storageClass, new Dictionary<string, string>(), cancellationToken);
+
+        public Task CommitAsync(
+            string contentType, BlobStorageClass storageClass, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(metadata);
             if (_committed)
             {
                 throw new InvalidOperationException("The upload is already committed.");
@@ -258,7 +240,10 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
                     throw new InvalidOperationException($"The container {container} does not exist.");
                 }
 
-                blobs[name] = new Stored(BinaryData.FromBytes(content), contentType, (++store._versions).ToString(CultureInfo.InvariantCulture), store._time.GetUtcNow(), storageClass);
+                blobs[name] = new Stored(BinaryData.FromBytes(content), contentType, (++store._versions).ToString(CultureInfo.InvariantCulture), store._time.GetUtcNow(), storageClass)
+                {
+                    Metadata = new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase),
+                };
             }
 
             _committed = true;

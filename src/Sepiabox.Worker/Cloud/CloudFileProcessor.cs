@@ -45,7 +45,8 @@ public sealed record CloudFileResult(CloudFileStatus Status, string? Reason = nu
 /// <param name="clock">Dates the faces (D-081) and the path dates (D-046).</param>
 /// <param name="logger">Reports what is left out and what could not be done.</param>
 /// <param name="referenceVideo">The processor for reference mode, whose video version is 1080p because the original is not kept (D-088); null uses <paramref name="video"/>.</param>
-/// <param name="originalsCold">Whether the original is copied to the Cold tier: true in Azure, false on Azurite, which does not know it (D-004).</param>
+/// <param name="originalsCold">Whether the original is stored in the Cold tier: true in Azure, false on Azurite, which does not know it (D-004).</param>
+/// <param name="maxFileBytes">The largest file taken, which bounds the job's temporary disk; a larger one is a problem (D-107).</param>
 public sealed class CloudFileProcessor(
     IBlobStore store,
     ManifestStore manifests,
@@ -55,8 +56,15 @@ public sealed class CloudFileProcessor(
     TimeProvider clock,
     ILogger logger,
     bool originalsCold = false,
-    IVideoProcessor? referenceVideo = null)
+    IVideoProcessor? referenceVideo = null,
+    long maxFileBytes = CloudFileProcessor.MaxFileBytes)
 {
+    /// <summary>
+    /// The largest file taken: 3 GiB. The job's ephemeral disk is about 8 GiB at 2 vCPU, and the file is downloaded once, is
+    /// read by FFmpeg and has its derivatives beside it. A larger file stays in <c>incoming</c> as a problem for someone to look at.
+    /// </summary>
+    public const long MaxFileBytes = 3L * 1024 * 1024 * 1024;
+
     public async Task<CloudFileResult> ProcessAsync(string blobName, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(blobName);
@@ -82,6 +90,18 @@ public sealed class CloudFileProcessor(
 
     private async Task<CloudFileResult> RunAsync(string blobName, string work, CancellationToken cancellationToken)
     {
+        // Before the download, so that a file too large for the disk is never fetched.
+        if (await store.GetSizeAsync(BlobLayout.IncomingContainer, blobName, cancellationToken) is not { } size)
+        {
+            Log.IncomingAlreadyDone(logger, blobName);
+            return new CloudFileResult(CloudFileStatus.AlreadyDone);
+        }
+
+        if (size > maxFileBytes)
+        {
+            return Failed(blobName, null, TooLarge(size));
+        }
+
         var downloaded = Path.Combine(work, "download.tmp");
         BlobInfo? info;
         await using (var target = new FileStream(downloaded, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true))
@@ -93,6 +113,18 @@ public sealed class CloudFileProcessor(
         {
             Log.IncomingAlreadyDone(logger, blobName);
             return new CloudFileResult(CloudFileStatus.AlreadyDone);
+        }
+
+        if (info.Length > maxFileBytes)
+        {
+            return Failed(blobName, null, TooLarge(info.Length));
+        }
+
+        // A connector that writes the blob and then its metadata (or streams it without the commit carrying them) is seen
+        // by the event before the metadata is there: that passes, so the message is tried again rather than closed as a problem.
+        if (info.Metadata.Count == 0)
+        {
+            throw new InvalidOperationException($"The incoming blob {blobName} has no metadata yet; it is tried again.");
         }
 
         if (!IncomingFile.TryRead(info.Metadata, out var incoming, out var metadataProblem))
@@ -150,8 +182,7 @@ public sealed class CloudFileProcessor(
 
         if (!reference)
         {
-            // On the store's side, so a video's gigabytes never pass through the worker; replaces the same bytes if it was there.
-            await store.CopyAsync(BlobLayout.IncomingContainer, blobName, BlobLayout.OriginalsContainer, sha256, originalsCold ? BlobStorageClass.Cold : BlobStorageClass.Default, cancellationToken);
+            await StoreOriginalAsync(sha256, sourcePath, incoming.Path, cancellationToken);
         }
 
         // Last but the deletion: the manifest is what triggers the import, so everything it points to is stored first.
@@ -169,12 +200,29 @@ public sealed class CloudFileProcessor(
     /// <summary>The block size of a staged upload, as <c>upload</c> uses (D-030).</summary>
     public const int BlockSize = 8 * 1024 * 1024;
 
+    // The original is written from the file that was hashed, never copied from the incoming blob by name: that name could have
+    // been rewritten since the download, and `originals/<sha256>` must hold the bytes its name says (D-030). A blob there with
+    // the right size is the same content (the name is its hash), so it is left alone, as `upload` leaves it.
+    private async Task StoreOriginalAsync(string sha256, string localPath, string cloudPath, CancellationToken cancellationToken)
+    {
+        if (await store.GetSizeAsync(BlobLayout.OriginalsContainer, sha256, cancellationToken) == new FileInfo(localPath).Length)
+        {
+            return;
+        }
+
+        await UploadFileAsync(
+            BlobLayout.OriginalsContainer, sha256, localPath, MediaTypes.ContentType(cloudPath),
+            originalsCold ? BlobStorageClass.Cold : BlobStorageClass.Default, cancellationToken);
+    }
+
+    private string TooLarge(long bytes) =>
+        $"The file is {bytes / (1024 * 1024)} MiB, more than the {maxFileBytes / (1024 * 1024)} MiB the cloud worker takes; it stays in incoming.";
+
     // A file of less than a block (a thumbnail, a preview) is one write; a larger one (a video's version) is staged block by
     // block, so it is never held whole in memory (D-100).
     internal async Task WriteDerivativeAsync(string blobName, string path, string contentType, CancellationToken cancellationToken)
     {
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, useAsync: true);
-        if (stream.Length < BlockSize)
+        if (new FileInfo(path).Length < BlockSize)
         {
             await store.WriteAsync(
                 BlobLayout.DerivativesContainer, blobName, BinaryData.FromBytes(await File.ReadAllBytesAsync(path, cancellationToken)),
@@ -182,7 +230,14 @@ public sealed class CloudFileProcessor(
             return;
         }
 
-        await using var upload = store.BeginUpload(BlobLayout.DerivativesContainer, blobName);
+        await UploadFileAsync(BlobLayout.DerivativesContainer, blobName, path, contentType, BlobStorageClass.Default, cancellationToken);
+    }
+
+    private async Task UploadFileAsync(
+        string container, string blobName, string path, string contentType, BlobStorageClass storageClass, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, useAsync: true);
+        await using var upload = store.BeginUpload(container, blobName);
         var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(BlockSize);
         try
         {
@@ -197,7 +252,7 @@ public sealed class CloudFileProcessor(
             System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
         }
 
-        await upload.CommitAsync(contentType, BlobStorageClass.Default, cancellationToken);
+        await upload.CommitAsync(contentType, storageClass, cancellationToken);
     }
 
     private Manifest Describe(string sha256, MediaKind kind, IncomingFile incoming, BlobInfo info, string sourcePath, ManifestSource source, bool reference)

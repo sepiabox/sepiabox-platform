@@ -198,17 +198,6 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
         }
     }
 
-    public async Task CopyAsync(
-        string sourceContainer, string sourceName, string container, string name, BlobStorageClass storageClass = BlobStorageClass.Default,
-        CancellationToken cancellationToken = default)
-    {
-        // Inside one account the request's own authorization covers the source too, so no link is signed for it.
-        var source = Blob(sourceContainer, sourceName).Uri;
-        var operation = await Blob(container, name).StartCopyFromUriAsync(
-            source, new BlobCopyFromUriOptions { AccessTier = storageClass == BlobStorageClass.Cold ? AccessTier.Cold : (AccessTier?)null }, cancellationToken);
-        await operation.WaitForCompletionAsync(cancellationToken);
-    }
-
     public async Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default) =>
         (await Blob(container, name).DeleteIfExistsAsync(cancellationToken: cancellationToken)).Value;
 
@@ -273,8 +262,13 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
             _blockIds.Add(id);
         }
 
-        public async Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default)
+        public Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default) =>
+            CommitAsync(contentType, storageClass, new Dictionary<string, string>(), cancellationToken);
+
+        public async Task CommitAsync(
+            string contentType, BlobStorageClass storageClass, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(metadata);
             if (_committed)
             {
                 throw new InvalidOperationException("The upload is already committed.");
@@ -285,6 +279,7 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
                 new CommitBlockListOptions
                 {
                     HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
+                    Metadata = new Dictionary<string, string>(metadata),
                     AccessTier = storageClass == BlobStorageClass.Cold ? AccessTier.Cold : (AccessTier?)null,
                 },
                 cancellationToken);

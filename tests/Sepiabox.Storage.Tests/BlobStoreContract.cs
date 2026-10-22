@@ -87,28 +87,6 @@ public abstract class BlobStoreContract
     }
 
     [Fact]
-    public async Task Copies_a_blob_inside_the_store_and_replaces_a_blob_of_that_name()
-    {
-        await CreateContainerAsync("contract-other");
-        await Store.WriteAsync(Container, "from.bin", BinaryData.FromBytes([1, 2, 3]), "image/jpeg", BlobWriteCondition.Always);
-        await Store.WriteAsync("contract-other", "to.bin", BinaryData.FromBytes([9]), "text/plain", BlobWriteCondition.Always);
-
-        await Store.CopyAsync(Container, "from.bin", "contract-other", "to.bin");
-
-        Assert.Equal(new byte[] { 1, 2, 3 }, (await Store.ReadAsync("contract-other", "to.bin"))!.Content.ToArray());
-        Assert.NotNull(await Store.ReadAsync(Container, "from.bin"));
-    }
-
-    [Fact]
-    public async Task Copying_a_blob_that_is_not_there_fails()
-    {
-        await CreateContainerAsync("contract-other");
-
-        await Assert.ThrowsAnyAsync<Exception>(() => Store.CopyAsync(Container, "nothing.bin", "contract-other", "to.bin"));
-        Assert.Null(await Store.ReadAsync("contract-other", "to.bin"));
-    }
-
-    [Fact]
     public async Task A_staged_upload_makes_the_blob_from_its_blocks_only_when_committed()
     {
         await using var upload = Store.BeginUpload(Container, "big.bin");
@@ -136,6 +114,22 @@ public abstract class BlobStoreContract
 
         Assert.Null(await Store.ReadAsync(Container, "never.bin"));
         Assert.Empty(await ToListAsync(Store.ListAsync(Container, "never")));
+    }
+
+    [Fact]
+    public async Task A_staged_upload_commits_with_metadata_in_the_same_call_that_makes_the_blob()
+    {
+        var metadata = new Dictionary<string, string> { ["sourcetype"] = "gdrive", ["mode"] = "custody" };
+        await using var upload = Store.BeginUpload(Container, "big.mp4");
+        await upload.AppendAsync(new byte[] { 1, 2, 3 });
+
+        await upload.CommitAsync("video/mp4", BlobStorageClass.Default, metadata);
+
+        var read = await Store.ReadAsync(Container, "big.mp4");
+        Assert.Equal(
+            metadata.OrderBy(p => p.Key),
+            read!.Metadata.Select(p => KeyValuePair.Create(p.Key.ToLowerInvariant(), p.Value)).OrderBy(p => p.Key));
+        Assert.Equal(3, await Store.GetSizeAsync(Container, "big.mp4"));
     }
 
     [Fact]

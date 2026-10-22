@@ -48,10 +48,6 @@ internal class DelegatingBlobStore(IBlobStore inner) : IBlobStore
     public virtual Task<BlobInfo?> DownloadToAsync(string container, string name, Stream stream, CancellationToken cancellationToken = default) =>
         Inner.DownloadToAsync(container, name, stream, cancellationToken);
 
-    public virtual Task CopyAsync(
-        string sourceContainer, string sourceName, string container, string name, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default) =>
-        Inner.CopyAsync(sourceContainer, sourceName, container, name, storageClass, cancellationToken);
-
     public virtual Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default) =>
         Inner.DeleteAsync(container, name, cancellationToken);
 

@@ -202,6 +202,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 |---|---|---|---|---|---|---|---|
 | S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036, S-064 | Medium | M | `todo` | A |
 | S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010, S-064 | Medium | M | `todo` | A |
+| S-065 | [Move the code `process` and the cloud worker share into Pipeline](S-065-move-the-shared-process-code-into-pipeline.md) | Cloud sources | S-036, S-063 | Low | S | `todo` | A |
 | S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` | A |
 | S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
 | S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
@@ -221,7 +222,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Questions | S-025, S-026, S-054, S-061 |
 | Organization | S-027, S-028 |
 | Cloud and costs | S-029, S-030, S-031, S-032, S-033, S-034, S-035, S-058 |
-| Cloud sources | S-036, S-037, S-038, S-039 |
+| Cloud sources | S-036, S-037, S-038, S-039, S-065 |
 | Privacy | S-040 |
 | Site | S-042 |
 | Import exports | S-045, S-046, S-047, S-048, S-049, S-052 |

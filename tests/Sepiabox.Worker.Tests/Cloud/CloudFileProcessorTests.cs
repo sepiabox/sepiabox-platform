@@ -156,6 +156,76 @@ public sealed class CloudFileProcessorTests
     }
 
     [Fact]
+    public async Task Fails_the_message_for_a_blob_with_no_metadata_at_all_so_it_is_tried_again()
+    {
+        await _store.WriteAsync("incoming", "x2", BinaryData.FromBytes(TestPhotos.Porto()), "image/jpeg", BlobWriteCondition.Always);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Processor().ProcessAsync("x2", CancellationToken.None));
+
+        Assert.NotNull(await _store.ReadAsync("incoming", "x2"));
+        Assert.Empty(await _store.ListAsync("manifests").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Reports_a_file_larger_than_the_maximum_without_downloading_it_and_leaves_it_in_incoming()
+    {
+        var bytes = TestPhotos.Porto("silver");
+        await Put("big", bytes, File("Videos/big.jpg"));
+        var counting = new CountingStore(_store);
+
+        var result = await Processor(store: counting, maxFileBytes: bytes.Length - 1).ProcessAsync("big", CancellationToken.None);
+
+        Assert.Equal(CloudFileStatus.Problem, result.Status);
+        Assert.Contains("MiB", result.Reason, StringComparison.Ordinal);
+        Assert.False(counting.Downloaded);
+        Assert.NotNull(await _store.ReadAsync("incoming", "big"));
+        Assert.Empty(await _store.ListAsync("manifests").ToListAsync());
+        Assert.Empty(await _store.ListAsync("originals").ToListAsync());
+        // The maximum is a limit, not a threshold: a file of exactly that size is taken.
+        Assert.Equal(CloudFileStatus.Processed, (await Processor(maxFileBytes: bytes.Length).ProcessAsync("big", CancellationToken.None)).Status);
+    }
+
+    [Fact]
+    public void The_default_maximum_is_three_gibibytes()
+    {
+        Assert.Equal(3L * 1024 * 1024 * 1024, CloudFileProcessor.MaxFileBytes);
+    }
+
+    [Fact]
+    public async Task Stores_the_bytes_it_hashed_as_the_original_even_if_the_incoming_name_is_rewritten_meanwhile()
+    {
+        var bytes = TestPhotos.Porto("teal");
+        var other = TestPhotos.Porto("coral");
+        await Put("a1", bytes, File("a.jpg"));
+        var rewriting = new CountingStore(_store)
+        {
+            AfterDownload = () => Put("a1", other, File("a.jpg")),
+        };
+
+        var result = await Processor(store: rewriting).ProcessAsync("a1", CancellationToken.None);
+
+        Assert.Equal(MediaFile.Sha256Hex(bytes), result.AssetId);
+        Assert.Equal(bytes, (await _store.ReadAsync("originals", result.AssetId!))!.Content.ToArray());
+        Assert.Equal(["originals/" + result.AssetId], (await _store.ListAsync("originals").ToListAsync()).Select(b => "originals/" + b.Name));
+    }
+
+    [Fact]
+    public async Task Does_not_write_the_original_again_when_a_blob_of_its_name_and_size_is_there()
+    {
+        var bytes = TestPhotos.Porto("navy");
+        await Put("a1", bytes, File("a.jpg"));
+        var id = MediaFile.Sha256Hex(bytes);
+        await _store.WriteAsync("originals", id, BinaryData.FromBytes(bytes), "image/jpeg", BlobWriteCondition.Always);
+        var before = (await _store.ReadAsync("originals", id))!.Version;
+        var counting = new CountingStore(_store);
+
+        await Processor(store: counting).ProcessAsync("a1", CancellationToken.None);
+
+        Assert.False(counting.Staged);
+        Assert.Equal(before, (await _store.ReadAsync("originals", id))!.Version);
+    }
+
+    [Fact]
     public async Task Reports_a_photo_that_cannot_be_decoded_and_leaves_it_in_incoming()
     {
         await Put("c1", Enumerable.Range(0, 2_000).Select(i => (byte)(i * 31 % 251)).ToArray(), File("broken.jpg"));
@@ -235,6 +305,23 @@ public sealed class CloudFileProcessorTests
 
         public bool Written { get; private set; }
 
+        public bool Downloaded { get; private set; }
+
+        /// <summary>Runs once the download has finished, as a connector rewriting the blob would.</summary>
+        public Func<Task>? AfterDownload { get; init; }
+
+        public override async Task<BlobInfo?> DownloadToAsync(string container, string name, Stream stream, CancellationToken cancellationToken = default)
+        {
+            Downloaded = true;
+            var info = await base.DownloadToAsync(container, name, stream, cancellationToken);
+            if (AfterDownload is { } after)
+            {
+                await after();
+            }
+
+            return info;
+        }
+
         public override IStagedUpload BeginUpload(string container, string name)
         {
             Staged = true;
@@ -257,8 +344,9 @@ public sealed class CloudFileProcessorTests
     private Task<BlobWriteResult> Put(string name, byte[] bytes, IncomingFile file) =>
         _store.WriteAsync("incoming", name, BinaryData.FromBytes(bytes), "application/octet-stream", BlobWriteCondition.Always, file.ToMetadata());
 
-    private CloudFileProcessor Processor(Sepiabox.Pipeline.Faces.IFaceDetector? faces = null) =>
-        new(_store, new ManifestStore(new ManifestValidator(), _store), video: null, _embedder, faces, TimeProvider.System, NullLogger.Instance);
+    private CloudFileProcessor Processor(
+        Sepiabox.Pipeline.Faces.IFaceDetector? faces = null, IBlobStore? store = null, long maxFileBytes = CloudFileProcessor.MaxFileBytes) =>
+        new(store ?? _store, new ManifestStore(new ManifestValidator(), store ?? _store), video: null, _embedder, faces, TimeProvider.System, NullLogger.Instance, maxFileBytes: maxFileBytes);
 
     private async Task<Manifest> ManifestAsync(string id) =>
         ManifestJson.Deserialize((await _store.ReadAsync("manifests", BlobLayout.ManifestBlobName(id)))!.Content.ToString());
