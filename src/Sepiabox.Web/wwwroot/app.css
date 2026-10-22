@@ -503,14 +503,10 @@ main {
     margin: 0;
 }
 
+/* Names and paths may break anywhere, but only when they do not fit (not mid-word in a sentence that does). */
 .sources {
     padding-left: 18px;
     overflow-wrap: anywhere;
-}
-
-/* A path has no spaces to break at: it may break anywhere, the sentences around it only when a word does not fit. */
-.sources .mono {
-    word-break: break-all;
 }
 
 .source-name {

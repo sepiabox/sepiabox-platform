@@ -88,6 +88,8 @@ public sealed class SourceLinkTests : LocalizedContext
     [InlineData("/photo/1")]
     [InlineData("https:///photo/1")]
     [InlineData("https://")]
+    [InlineData("https://user:pass@photos.google.com/photo/1")]
+    [InlineData("https://user@photos.google.com/photo/1")]
     [InlineData("")]
     [InlineData("   ")]
     public void A_source_address_that_is_not_https_is_never_a_link(string url)

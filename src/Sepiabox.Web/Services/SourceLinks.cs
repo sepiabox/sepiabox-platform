@@ -31,11 +31,12 @@ public static class SourceLinks
     private static readonly HashSet<string> s_cloudTypes = new(StringComparer.Ordinal) { "google-drive", "onedrive" };
 
     /// <summary>
-    /// The address to link to, or null: only an absolute <c>https://</c> address is ever a link (a hand-edited catalog row
+    /// The address to link to, or null: only an absolute <c>https://</c> address without a user name or password is ever a link (a hand-edited catalog row
     /// could hold <c>javascript:</c> or anything else), and it is never followed by the server.
     /// </summary>
     public static string? SafeUrl(string? url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && !string.IsNullOrEmpty(uri.Host)
+        && uri.UserInfo.Length == 0
             ? uri.AbsoluteUri
             : null;
 
