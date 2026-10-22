@@ -1356,4 +1356,11 @@
   <data name="Region_Unavailable" xml:space="preserve">
     <value>A busca por uma parte da foto não está disponível agora.</value>
   </data>
+  <data name="Layout_More" xml:space="preserve">
+    <value>Mais</value>
+    <comment>The header's disclosure for the pages used now and then.</comment>
+  </data>
+  <data name="Layout_MoreCurrentLabel" xml:space="preserve">
+    <value>{0}: {1}, página atual</value>
+  </data>
 </root>
