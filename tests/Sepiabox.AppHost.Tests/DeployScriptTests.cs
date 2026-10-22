@@ -110,9 +110,8 @@ public sealed class DeployScriptTests : IDisposable
                 if [ "$STUB_PG_STATE" != "MISSING" ]; then echo "$STUB_PG_STATE"; fi ;;
               "keyvault show"*) echo "/subscriptions/s/resourceGroups/rg-sepiabox/providers/Microsoft.KeyVault/vaults/sepiabox-kv" ;;
               "keyvault secret show"*)
-                # A secret is missing until the script has set it.
-                secret=$(echo "$*" | sed -E 's/.*--name ([^ ]+).*/\1/')
-                if [ "$STUB_SECRETS" = "MISSING" ] && ! grep -q "keyvault secret set .*--name $secret " "$CALLS" 2>/dev/null; then exit 1; fi ;;
+                # The owner has not set the client secret yet.
+                if [ "$STUB_SECRETS" = "MISSING" ] && echo "$*" | grep -q -- "--name Auth--Google--ClientSecret"; then exit 1; fi ;;
               "containerapp job start"*) echo "$STUB_EXECUTION" ;;
               "containerapp hostname list"*)
                 if [ "$STUB_HOSTNAMES" = "FAIL" ]; then exit 1; fi
@@ -225,18 +224,18 @@ public sealed class DeployScriptTests : IDisposable
     }
 
     [UnixFact]
-    public async Task Deploy_creates_a_missing_google_secret_empty_so_the_owner_sets_its_value()
+    public async Task Deploy_never_creates_a_secret_and_gives_a_role_only_on_the_ones_that_exist_saying_so_for_the_rest()
     {
         var result = await RunDeployAsync("Succeeded", extra: new() { ["STUB_SECRETS"] = "MISSING" });
 
         Assert.Equal(0, result.ExitCode);
-        var sets = Calls().Where(call => call.StartsWith("az keyvault secret set", StringComparison.Ordinal)).ToList();
-        Assert.Equal(
-            [
-                "az keyvault secret set --vault-name sepiabox-kv --name Auth--Google--ClientId --value  --output none",
-                "az keyvault secret set --vault-name sepiabox-kv --name Auth--Google--ClientSecret --value  --output none",
-            ],
-            sets);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("az keyvault secret set", StringComparison.Ordinal));
+        var assignments = Calls().Where(call => call.StartsWith("az role assignment create", StringComparison.Ordinal)).ToList();
+        Assert.Single(assignments);
+        Assert.Contains("/secrets/Auth--Google--ClientId", assignments[0], StringComparison.Ordinal);
+        Assert.Contains("Auth--Google--ClientSecret is not set yet; run deploy again after setting it.", result.Output, StringComparison.Ordinal);
+        // The deploy goes on: a secret that is not set yet does not stop it.
+        Assert.Contains(DeploySync, Calls());
     }
 
     [UnixFact]

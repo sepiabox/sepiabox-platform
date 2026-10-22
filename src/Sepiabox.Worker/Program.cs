@@ -1,6 +1,6 @@
-using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
+using Azure.Security.KeyVault.Secrets;
 using Azure.Storage.Blobs;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -294,15 +294,15 @@ static async Task<int> ProcessFromQueueAsync(IServiceProvider services, ILogger 
     return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
 }
 
-// The sync's two outside inputs (S-038, D-115): the Google OAuth client, read from the owner's Key Vault as these two secrets and no
+// The sync's two outside inputs (S-038, D-115): the Google OAuth client, read from the owner's Key Vault by name, these two secrets and no
 // other (the Anthropic key is in the same vault), and the token ring, read-only, to unprotect the refresh tokens the web protected.
 // That ring is not the web's cookie ring: this job holds nothing that could sign a session.
 static void AddDriveSyncServices(HostApplicationBuilder builder)
 {
+    // The vault is read by name, never listed or loaded as configuration: the identity has a role on two secrets and none on the vault.
     if (!string.IsNullOrEmpty(builder.Configuration.GetConnectionString("vault")))
     {
-        builder.Configuration.AddAzureKeyVaultSecrets(
-            "vault", options: new AzureKeyVaultConfigurationOptions { Manager = new NamedSecrets(NamedSecrets.All) });
+        builder.AddAzureKeyVaultClient("vault");
     }
 
     builder.Services.AddSingleton<IDataProtectionProvider>(services =>
@@ -346,7 +346,11 @@ static async Task<int> RunSyncAsync(WorkerCommand command, IServiceProvider serv
 
     if (action is WorkerAction.SyncGoogleDrive or WorkerAction.SyncAll)
     {
-        if (OAuthClientFrom(configuration, "Auth:Google") is { } google)
+        // From the vault by name in Azure; from configuration (user secrets) on a computer without one.
+        var googleClient = services.GetService<SecretClient>() is { } vault
+            ? await VaultSecrets.ReadGoogleClientAsync(vault, logger, cancellationToken)
+            : OAuthClientFrom(configuration, "Auth:Google");
+        if (googleClient is { } google)
         {
             var sync = new DriveSync(db, store, new GoogleDriveSyncClient(google.Id, google.Secret), protection, clock, logger, maxFiles);
             if (command.Rescan is { } account && !await sync.RescanAsync(account, cancellationToken))
@@ -369,7 +373,10 @@ static async Task<int> RunSyncAsync(WorkerCommand command, IServiceProvider serv
 
     if (action is WorkerAction.SyncOneDrive or WorkerAction.SyncAll)
     {
-        if (OAuthClientFrom(configuration, "OneDrive") is { } microsoft)
+        var oneDriveClient = services.GetService<SecretClient>() is { } vault
+            ? await VaultSecrets.ReadOneDriveClientAsync(vault, logger, cancellationToken)
+            : OAuthClientFrom(configuration, "OneDrive");
+        if (oneDriveClient is { } microsoft)
         {
             total = Add(total, await new OneDriveSync(db, store, new GraphOneDriveSyncClient(microsoft.Id, microsoft.Secret), protection, clock, logger, maxFiles).RunAsync(cancellationToken));
         }
