@@ -36,6 +36,9 @@ public sealed record UploadResult(
     /// <summary>Whether the work folder is index-only (S-063): its originals are never uploaded.</summary>
     public bool IndexOnly { get; init; }
 
+    /// <summary>Assets whose upload records were forgotten by <c>--resend-source</c>, so they were sent again (S-057).</summary>
+    public int AssetsResent { get; init; }
+
     /// <summary>Assets whose original was left at its source, in an index-only work folder; the original is never opened.</summary>
     public int OriginalsLeftAtSource { get; init; }
 }
@@ -103,6 +106,7 @@ public static class UploadCommand
 
         var stopwatch = Stopwatch.StartNew();
         var manifestFiles = Directory.GetFiles(manifestFolder, "*.json");
+        var resent = options.ResendSource is { } resendSource ? ForgetSource(state, manifestFiles, resendSource, validator) : 0;
         await Parallel.ForEachAsync(
             manifestFiles,
             new ParallelOptions { MaxDegreeOfParallelism = ParallelUploads, CancellationToken = cancellationToken },
@@ -114,7 +118,25 @@ public static class UploadCommand
             Warnings = [.. run.Warnings.OrderBy(p => p.Path)],
             IndexOnly = run.IndexOnly,
             OriginalsLeftAtSource = run.LeftAtSource,
+            AssetsResent = resent,
         };
+    }
+
+    // The assets of a source whose records are forgotten, so they are sent again (S-057); a manifest that cannot be read
+    // is left to the upload itself to report.
+    private static int ForgetSource(UploadState state, IEnumerable<string> manifestFiles, string source, IManifestValidator validator)
+    {
+        var assets = 0;
+        foreach (var file in manifestFiles)
+        {
+            if (validator.TryValidate(File.ReadAllText(file), out var manifest, out _) && manifest.Sources.Any(s => s.Name == source))
+            {
+                state.Forget(manifest.Id);
+                assets++;
+            }
+        }
+
+        return assets;
     }
 
     /// <summary>

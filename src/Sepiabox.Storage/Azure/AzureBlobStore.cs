@@ -149,6 +149,23 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
     public async Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default) =>
         (await Blob(container, name).DeleteIfExistsAsync(cancellationToken: cancellationToken)).Value;
 
+    public async Task<BlobDeleteStatus> DeleteIfVersionAsync(string container, string name, string version, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(version);
+        try
+        {
+            await Blob(container, name).DeleteAsync(
+                DeleteSnapshotsOption.IncludeSnapshots, new BlobRequestConditions { IfMatch = new ETag(Quoted(version)) }, cancellationToken);
+            return BlobDeleteStatus.Deleted;
+        }
+        catch (RequestFailedException ex) when (ex.Status is 412 or 404)
+        {
+            // A condition on a blob that is not there fails with 412 in the emulator and 404 in Azure: look, so that a blob
+            // that is gone is told from one that changed.
+            return await Blob(container, name).ExistsAsync(cancellationToken) ? BlobDeleteStatus.ConditionNotMet : BlobDeleteStatus.NotFound;
+        }
+    }
+
     public async Task<Uri> CreateReadUrlAsync(
         string container, string name, DateTimeOffset expiresOn, BlobReadUrlOptions? options = null,
         CancellationToken cancellationToken = default)

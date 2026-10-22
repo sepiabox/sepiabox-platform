@@ -15,6 +15,12 @@ public enum FileStatus
 
     /// <summary>A file with a video extension that holds no video, such as a tracker-music <c>.mod</c> (D-045).</summary>
     NotVideo,
+
+    /// <summary>
+    /// A photo whose content cannot be decoded (a truncated or corrupt file, D-105): described, without thumbnails, and
+    /// not read again while its size and modification time stay the same, unless <c>--retry-left-out</c> asks.
+    /// </summary>
+    Damaged,
 }
 
 /// <summary>What <c>process</c> last saw of a source file.</summary>

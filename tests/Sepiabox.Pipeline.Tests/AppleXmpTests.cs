@@ -123,4 +123,35 @@ public sealed class AppleXmpTests
 
         Assert.Null(AppleXmp.Parse(text));
     }
+
+    [Theory]
+    [InlineData("90", null, "NS", 90.0)]
+    [InlineData("-90", null, "NS", -90.0)]
+    [InlineData("-0.5", null, "NS", -0.5)]
+    [InlineData("-9.1", "W", "EW", -9.1)]
+    [InlineData("9.1W", "W", "EW", -9.1)]
+    public void Accepts_the_edges_of_the_globe_and_a_sign_that_agrees_with_the_letter(string value, string? reference, string hemispheres, double expected) =>
+        Assert.Equal(expected, AppleXmp.Degrees(value, reference, hemispheres, hemispheres == "NS" ? 90 : 180)!.Value, 3);
+
+    [Theory]
+    [InlineData("38,60.0N", null, "NS")]
+    [InlineData("38,59,60N", null, "NS")]
+    [InlineData("-9.1", "N", "NS")]
+    [InlineData("-9.1", "E", "EW")]
+    [InlineData("9.1W", "E", "EW")]
+    [InlineData("9.1E", "W", "EW")]
+    [InlineData("90.1", null, "NS")]
+    public void Refuses_minutes_of_sixty_a_sign_against_the_letter_and_letters_that_disagree(string value, string? reference, string hemispheres) =>
+        Assert.Null(AppleXmp.Degrees(value, reference, hemispheres, hemispheres == "NS" ? 90 : 180));
+
+    [Fact]
+    public void Takes_the_photoshop_date_when_the_exif_date_differs()
+    {
+        var facts = AppleXmp.Parse(Xmp("""
+            <exif:DateTimeOriginal>2016-05-06T07:08:09</exif:DateTimeOriginal>
+            <photoshop:DateCreated>2017-01-02T03:04:05</photoshop:DateCreated>
+            """))!;
+
+        Assert.Equal(new DateTime(2017, 1, 2, 3, 4, 5), facts.CapturedAt);
+    }
 }
