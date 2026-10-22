@@ -1363,4 +1363,64 @@
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
     <value>{0}: {1}, página atual</value>
   </data>
+  <data name="Settings_Export_Link" xml:space="preserve">
+    <value>Exportar todos os dados</value>
+  </data>
+  <data name="Export_Heading" xml:space="preserve">
+    <value>Exportar todos os dados</value>
+  </data>
+  <data name="Export_Intro" xml:space="preserve">
+    <value>Suas fotos e vídeos são seus. Leve tudo com você, a qualquer momento, em formatos abertos.</value>
+  </data>
+  <data name="Export_Contents" xml:space="preserve">
+    <value>A exportação é um zip com o catalog.json (cada foto e vídeo com data, local, câmera e de onde veio cada cópia, as pessoas com seus nomes, as ocasiões e seus lugares), o originals.txt (um link de download para cada original guardado pelo Sepiabox, válido por 24 horas) e um LEIAME. Os originais em si não vão dentro do zip.</value>
+  </data>
+  <data name="Export_IncludeFaces" xml:space="preserve">
+    <value>Incluir dados de rostos</value>
+  </data>
+  <data name="Export_IncludeFacesHint" xml:space="preserve">
+    <value>As caixas dos rostos e os números com que a app compara rostos. São dados biométricos: deixe de fora se não precisar. Os nomes das pessoas em cada foto vão sempre.</value>
+  </data>
+  <data name="Export_Request" xml:space="preserve">
+    <value>Pedir uma exportação</value>
+  </data>
+  <data name="Export_History" xml:space="preserve">
+    <value>As suas exportações</value>
+  </data>
+  <data name="Export_Status_requested" xml:space="preserve">
+    <value>Na fila</value>
+  </data>
+  <data name="Export_Status_running" xml:space="preserve">
+    <value>Sendo gerada</value>
+  </data>
+  <data name="Export_Status_done" xml:space="preserve">
+    <value>Pronta</value>
+  </data>
+  <data name="Export_Status_failed" xml:space="preserve">
+    <value>Falhou</value>
+  </data>
+  <data name="Export_WithFaces" xml:space="preserve">
+    <value>com dados de rostos</value>
+  </data>
+  <data name="Export_Done" xml:space="preserve">
+    <value>{0} itens, {1}</value>
+  </data>
+  <data name="Export_Download" xml:space="preserve">
+    <value>Baixar</value>
+  </data>
+  <data name="Export_DownloadAria" xml:space="preserve">
+    <value>Baixar a exportação de {0}</value>
+  </data>
+  <data name="Export_LinkHint" xml:space="preserve">
+    <value>Uma exportação leva poucos minutos. O link de download funciona por uma hora; clique em Baixar outra vez para um novo. Os links dentro do originals.txt funcionam por 24 horas depois de a exportação ser escrita.</value>
+  </data>
+  <data name="Export_Back" xml:space="preserve">
+    <value>Voltar para as configurações</value>
+  </data>
+  <data name="Export_Note_requested" xml:space="preserve">
+    <value>A exportação foi pedida. Fica pronta em poucos minutos: recarregue esta página.</value>
+  </data>
+  <data name="Export_Note_busy" xml:space="preserve">
+    <value>Já há uma exportação em espera ou a ser escrita; espere terminar.</value>
+  </data>
 </root>

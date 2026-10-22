@@ -94,6 +94,9 @@ else
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
     var importIdentity = builder.AddAzureUserAssignedIdentity("import-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    // The export job writes the exports container (S-040) and signs links to the originals.
+    var exportIdentity = builder.AddAzureUserAssignedIdentity("export-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
     // The faces job writes manifests (S-022): its own identity, so the import jobs stay readers.
     var facesIdentity = builder.AddAzureUserAssignedIdentity("faces-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
@@ -179,6 +182,18 @@ else
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureFacesJob);
 
+    // Writes the exports people ask for (S-040, D-109), every 15 minutes. It connects as the application role. Its
+    // account-wide Storage Blob Data Reader lets it sign the 24 h links to the originals (a user delegation key); its
+    // only write role, on the exports container, is in access.bicep.
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.ExportResourceName)
+        .WithArgs("export")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(blobs)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithAzureUserAssignedIdentity(exportIdentity)
+        .WithRoleAssignments(storage, StorageBuiltInRole.StorageBlobDataReader)
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureExportJob);
+
     // The web's custom domain (S-035, D-065), empty for none. Set after the DNS records exist, first with the
     // binding Disabled (the host name is added), then SniEnabled (domain.bicep creates the managed certificate
     // and the web binds it); docs/operations.md has the steps. No published default: azd would then read only
@@ -200,6 +215,7 @@ else
         .WithParameter("vaultName", vault.GetOutput("name"))
         .WithParameter("webPrincipalId", webIdentity.Resource.PrincipalId)
         .WithParameter("facesPrincipalId", facesIdentity.Resource.PrincipalId)
+        .WithParameter("exportPrincipalId", exportIdentity.Resource.PrincipalId)
         .WithParameter("uploaderPrincipalIds", uploaders);
 
     web.WithReference(insights)

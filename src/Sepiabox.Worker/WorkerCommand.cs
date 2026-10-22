@@ -7,6 +7,7 @@ public enum WorkerAction
     Migrate,
     ImportOnce,
     ImportFromQueue,
+    Export,
     GeoNamesLoad,
     GeoNamesDownload,
     GeoNamesUpdate,
@@ -36,6 +37,10 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
           import --from-queue        Import the manifests named by the storage events waiting in the
                                      queue (ServiceBus:Namespace, ServiceBus:Queue), then exit when
                                      it is empty. Never migrates (D-063).
+          export                     Write the zip of each pending export request (S-040): catalog.json,
+                                     originals.txt with 24-hour links, and README.txt, to the exports
+                                     container; face data only when the request asked. Does nothing when no
+                                     one has asked. What the sepiabox-export job runs, every few minutes.
           geonames load <cities500.zip|txt> --admin1 <admin1CodesASCII.txt> --countries <countryInfo.txt>
                                      Replace the GeoNames cities with these dump files
                                      (https://download.geonames.org/export/dump/, CC BY 4.0).
@@ -68,6 +73,9 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
         {
             case ["migrate"]:
                 command = new WorkerCommand(WorkerAction.Migrate, false);
+                return true;
+            case ["export"]:
+                command = new WorkerCommand(WorkerAction.Export, false);
                 return true;
             case ["import", "--from-queue"]:
                 command = new WorkerCommand(WorkerAction.ImportFromQueue, false);

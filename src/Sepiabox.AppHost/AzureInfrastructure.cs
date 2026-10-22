@@ -69,6 +69,18 @@ public static class AzureInfrastructure
     /// </summary>
     public const string FacesSchedule = "17 * * * *";
 
+    /// <summary>The scheduled job that writes the exports people asked for (S-040): <c>export</c>.</summary>
+    public const string ExportJobName = "sepiabox-export";
+
+    /// <summary>The AppHost resource behind <see cref="ExportJobName"/>.</summary>
+    public const string ExportResourceName = "export";
+
+    /// <summary>
+    /// When <see cref="ExportJobName"/> runs: every 15 minutes. With no request waiting a run is one query, so the person
+    /// waits at most a quarter of an hour plus the time to write the file.
+    /// </summary>
+    public const string ExportSchedule = "*/15 * * * *";
+
     /// <summary>The Service Bus namespace; the shutdown runbook disables its queue (S-030).</summary>
     public const string ServiceBusName = "sepiabox-bus";
 
@@ -176,6 +188,9 @@ public static class AzureInfrastructure
 
     // Every manifest of a family library read and, the first time after an erase, written once: well within half an hour.
     private const int FacesTimeoutSeconds = 1800;
+
+    // Streams the catalog and one link per original into a zip; a family library is minutes of work.
+    private const int ExportTimeoutSeconds = 3600;
 
     // PostgreSQL 17 needs an API version newer than the 2024-08-01 the provisioning library defaults to.
     private const string PostgresApiVersion = "2025-08-01";
@@ -484,6 +499,32 @@ public static class AzureInfrastructure
         // Reading and merging small JSON blobs one at a time.
         var container = job.Template.Containers.Single().Value
             ?? throw new InvalidOperationException("The faces job has no container.");
+        container.Resources = new AppContainerResources { Cpu = 0.5, Memory = "1Gi" };
+    }
+
+    /// <summary>
+    /// <c>export</c> (S-040) every 15 minutes. A run that fails records the failure on the request, which the person sees on
+    /// the export page and asks for again; it is not repeated.
+    /// </summary>
+    public static void ConfigureExportJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        job.Name = ExportJobName;
+        job.Location = Region;
+
+        var configuration = job.Configuration;
+        configuration.TriggerType = ContainerAppJobTriggerType.Schedule;
+        configuration.ScheduleTriggerConfig = new JobConfigurationScheduleTriggerConfig
+        {
+            CronExpression = ExportSchedule,
+            Parallelism = 1,
+            ReplicaCompletionCount = 1,
+        };
+        configuration.ReplicaTimeout = ExportTimeoutSeconds;
+        configuration.ReplicaRetryLimit = 0;
+        // The zip is streamed in 8 MiB blocks; the catalog is paged.
+        var container = job.Template.Containers.Single().Value
+            ?? throw new InvalidOperationException("The export job has no container.");
         container.Resources = new AppContainerResources { Cpu = 0.5, Memory = "1Gi" };
     }
 

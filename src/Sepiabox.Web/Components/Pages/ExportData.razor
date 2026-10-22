@@ -1,0 +1,108 @@
+@page "/settings/export"
+@using Sepiabox.Catalog
+@using Sepiabox.Catalog.Search
+@using Microsoft.Extensions.DependencyInjection
+@inject IExportRequests Exports
+@inject NavigationManager Navigation
+@inject IServiceProvider Services
+@* Static server rendering with POST forms, as the settings page (S-022): asking is answered with a redirect back here and a
+   note. The zip is written by the worker's export job within minutes; the page lists the requests and gives a one-hour
+   link to each finished one (S-040, D-109). *@
+
+<PageTitle>@Text["Export_Heading"] · Sepiabox</PageTitle>
+
+<h1 class="page-heading">@Text["Export_Heading"]</h1>
+<p>@Text["Export_Intro"]</p>
+<p class="muted">@Text["Export_Contents"]</p>
+
+@if (NoteText is { } note)
+{
+    <p class="note" role="status">@note</p>
+}
+
+<form method="post" @formname="request" @onsubmit="RequestAsync" class="export-request">
+    <AntiforgeryToken />
+    <label>
+        <input type="checkbox" name="IncludeFaceData" value="yes" />
+        @Text["Export_IncludeFaces"]
+    </label>
+    <p class="hint muted">@Text["Export_IncludeFacesHint"]</p>
+    <button type="submit" class="button">@Text["Export_Request"]</button>
+</form>
+
+@if (_requests is { Count: > 0 } requests)
+{
+    <h2>@Text["Export_History"]</h2>
+    <ul class="exports">
+        @foreach (var request in requests)
+        {
+            <li class="export export-@request.Status">
+                <span class="when">@When(request.RequestedAt)</span>
+                <span class="status">@Text["Export_Status_" + request.Status]</span>
+                @if (request.IncludeFaceData)
+                {
+                    <span class="faces muted">@Text["Export_WithFaces"]</span>
+                }
+
+                @if (request.Status == ExportStatuses.Done)
+                {
+                    <span class="size muted">@Text["Export_Done", request.Assets ?? 0, ByteSizes.Format(request.SizeBytes ?? 0)]</span>
+                    <a class="button" href="settings/export/@request.Id/download" aria-label="@Text["Export_DownloadAria", When(request.RequestedAt)]">@Text["Export_Download"]</a>
+                }
+                else if (request.Status == ExportStatuses.Failed)
+                {
+                    <span class="error">@request.Error</span>
+                }
+            </li>
+        }
+    </ul>
+    <p class="muted small">@Text["Export_LinkHint"]</p>
+}
+
+<p><a href="settings">@Text["Export_Back"]</a></p>
+
+@code {
+    // What a note in the address may say, and its text: nothing else from the address is shown.
+    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    {
+        ["requested"] = "Export_Note_requested",
+        ["busy"] = "Export_Note_busy",
+        ["signed-out"] = "Settings_Error_NoEmail",
+    };
+
+    [SupplyParameterFromQuery(Name = "note")]
+    public string? Note { get; set; }
+
+    [SupplyParameterFromForm]
+    public string? IncludeFaceData { get; set; }
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    private IReadOnlyList<ExportRequest>? _requests;
+
+    private string? Email => HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+
+    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key) ? Text[key].Value : null;
+
+    protected override async Task OnInitializedAsync() => _requests = await Exports.RecentAsync();
+
+    private async Task RequestAsync()
+    {
+        if (Email is not { } email)
+        {
+            Navigation.NavigateTo("settings/export?note=signed-out");
+            return;
+        }
+
+        var asked = await Exports.RequestAsync(email, IncludeFaceData == "yes");
+        Navigation.NavigateTo($"settings/export?note={(asked ? "requested" : "busy")}");
+    }
+
+    // In the library's time zone (Search:TimeZone), as the settings page shows its history.
+    private string When(DateTimeOffset when)
+    {
+        var zone = Services.GetService<SearchOptions>()?.TimeZone ?? TimeZoneInfo.Utc;
+        return TimeZoneInfo.ConvertTime(when, zone).ToString("g", System.Globalization.CultureInfo.CurrentCulture);
+    }
+}

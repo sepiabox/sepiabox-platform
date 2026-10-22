@@ -357,6 +357,73 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("erased_faces", (string)null);
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.ExportRequest", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("Assets")
+                        .HasColumnType("integer")
+                        .HasColumnName("assets");
+
+                    b.Property<string>("BlobName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("blob_name");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("error");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<bool>("IncludeFaceData")
+                        .HasColumnType("boolean")
+                        .HasColumnName("include_face_data");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<string>("RequestedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("requested_by");
+
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_export_requests");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_export_requests_status");
+
+                    b.ToTable("export_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_export_requests_status", "status IN ('requested', 'running', 'done', 'failed')");
+                        });
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.Face", b =>
                 {
                     b.Property<long>("Id")

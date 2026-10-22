@@ -104,10 +104,24 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
         Assert.Equal(["faces", "sweep"], Arguments("faces"));
     }
 
+    [Fact]
+    public void Export_job_writes_the_requested_exports_every_fifteen_minutes_when_published()
+    {
+        var job = published.Named(Job, "sepiabox-export");
+        var trigger = job.Block("scheduleTriggerConfig");
+
+        Assert.Equal("'Schedule'", job.Property("triggerType"));
+        Assert.Contains("cronExpression: '*/15 * * * *'", trigger, StringComparison.Ordinal);
+        Assert.Contains("parallelism: 1", trigger, StringComparison.Ordinal);
+        Assert.Equal("0", job.Property("replicaRetryLimit"));
+        Assert.Equal(["export"], Arguments("export"));
+    }
+
     [Theory]
     [InlineData("import")]
     [InlineData("import-all")]
     [InlineData("faces")]
+    [InlineData("export")]
     public void Import_jobs_never_migrate_and_connect_as_the_application_role_when_published(string resource)
     {
         // D-063: only sepiabox-migrate changes the schema and grants the role its tables.
@@ -137,6 +151,7 @@ public sealed class AzureImportTests(PublishedInfrastructure published) : IClass
     [InlineData("import-all", "import-identity")]
     [InlineData("geonames", "migrate-identity")]
     [InlineData("faces", "faces-identity")]
+    [InlineData("export", "export-identity")]
     public void Migrate_and_import_jobs_run_as_separate_identities_when_published(string job, string identity)
     {
         // Only migrate's identity reads the database vault; only the import identity reads storage and the

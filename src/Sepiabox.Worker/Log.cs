@@ -7,6 +7,21 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Information, Message = "Container {Container} does not exist yet; nothing to import.")]
     public static partial void NoManifestContainer(ILogger logger, string container);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Export {Id} written to {BlobName}: {Assets} assets, {Bytes} bytes.")]
+    public static partial void ExportWritten(ILogger logger, long id, string blobName, int assets, long bytes);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Export {Id} failed.")]
+    public static partial void ExportFailed(ILogger logger, long id, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Export {Id} was running for too long and is failed as interrupted.")]
+    public static partial void ExportInterrupted(ILogger logger, long id);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Wrote {Exports} export(s).")]
+    public static partial void ExportsDone(ILogger logger, int exports);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Another export run holds the lock; nothing to do.")]
+    public static partial void ExportBusy(ILogger logger);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Skipping manifest {BlobName}: {Reason}")]
     public static partial void ManifestProblem(ILogger logger, string blobName, string reason);
 

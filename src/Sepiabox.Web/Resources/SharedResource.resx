@@ -1430,4 +1430,67 @@
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
     <value>{0}: {1}, current page</value>
   </data>
+  <data name="Settings_Export_Link" xml:space="preserve">
+    <value>Export all data</value>
+    <comment>Link on the settings page to the export page (S-040).</comment>
+  </data>
+  <data name="Export_Heading" xml:space="preserve">
+    <value>Export all data</value>
+    <comment>Heading of the export page.</comment>
+  </data>
+  <data name="Export_Intro" xml:space="preserve">
+    <value>Your photos and videos are yours. Take everything with you, at any time, in open formats.</value>
+  </data>
+  <data name="Export_Contents" xml:space="preserve">
+    <value>The export is a zip with catalog.json (every photo and video with its date, place, camera and where each copy came from, the people with their names, the occasions and your personal places), originals.txt (a download link for each original Sepiabox stores, valid for 24 hours) and a README. The originals themselves are not inside the zip.</value>
+  </data>
+  <data name="Export_IncludeFaces" xml:space="preserve">
+    <value>Include face data</value>
+  </data>
+  <data name="Export_IncludeFacesHint" xml:space="preserve">
+    <value>Face boxes and the numbers the app compares faces with. It is biometric data: leave it out unless you need it. The names of the people in each photo are always included.</value>
+  </data>
+  <data name="Export_Request" xml:space="preserve">
+    <value>Request an export</value>
+  </data>
+  <data name="Export_History" xml:space="preserve">
+    <value>Your exports</value>
+  </data>
+  <data name="Export_Status_requested" xml:space="preserve">
+    <value>Waiting</value>
+  </data>
+  <data name="Export_Status_running" xml:space="preserve">
+    <value>Being written</value>
+  </data>
+  <data name="Export_Status_done" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="Export_Status_failed" xml:space="preserve">
+    <value>Failed</value>
+  </data>
+  <data name="Export_WithFaces" xml:space="preserve">
+    <value>with face data</value>
+  </data>
+  <data name="Export_Done" xml:space="preserve">
+    <value>{0} items, {1}</value>
+  </data>
+  <data name="Export_Download" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="Export_DownloadAria" xml:space="preserve">
+    <value>Download the export of {0}</value>
+    <comment>{0} is the date and time the export was requested.</comment>
+  </data>
+  <data name="Export_LinkHint" xml:space="preserve">
+    <value>An export is written within a few minutes. The download link works for one hour; press Download again for a new one. The links inside originals.txt work for 24 hours from when the export was written.</value>
+  </data>
+  <data name="Export_Back" xml:space="preserve">
+    <value>Back to settings</value>
+  </data>
+  <data name="Export_Note_requested" xml:space="preserve">
+    <value>The export was requested. It is ready in a few minutes: reload this page.</value>
+  </data>
+  <data name="Export_Note_busy" xml:space="preserve">
+    <value>An export is already waiting or being written; wait for it to finish.</value>
+  </data>
 </root>

@@ -13,7 +13,13 @@ namespace Sepiabox.Storage.Azure;
 /// managed identity), which never exposes an account key (D-039); the key is requested once and reused while it outlives
 /// the longest link (D-049).
 /// </summary>
-public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time = null) : IBlobStore, IDisposable
+/// <param name="service">The account's client.</param>
+/// <param name="time">The clock.</param>
+/// <param name="maxReadUrlLifetime">
+/// The longest a link may last; <see cref="MaxReadUrlLifetime"/> (4 hours) unless given. The export's originals list asks
+/// for 24 hours (S-040, D-109): its store is made with that, and the delegation key then lasts that long and two hours more.
+/// </param>
+public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time = null, TimeSpan? maxReadUrlLifetime = null) : IBlobStore, IDisposable
 {
     /// <summary>
     /// The longest a link this store signs may last (a video's, D-049). A delegation key is reused while it outlives
@@ -23,8 +29,7 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
 
     private static readonly TimeSpan s_clockSkew = TimeSpan.FromMinutes(5);
 
-    // A user delegation SAS stops working when its key expires.
-    private static readonly TimeSpan s_delegationKeyLifetime = MaxReadUrlLifetime + TimeSpan.FromHours(2);
+    private readonly TimeSpan _maxLinkLifetime = maxReadUrlLifetime ?? MaxReadUrlLifetime;
 
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly SemaphoreSlim _keyLock = new(1, 1);
@@ -153,9 +158,9 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
         string container, string name, DateTimeOffset expiresOn, BlobReadUrlOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        if (expiresOn > _time.GetUtcNow() + MaxReadUrlLifetime)
+        if (expiresOn > _time.GetUtcNow() + _maxLinkLifetime)
         {
-            throw new ArgumentOutOfRangeException(nameof(expiresOn), expiresOn, $"A link lasts at most {MaxReadUrlLifetime}.");
+            throw new ArgumentOutOfRangeException(nameof(expiresOn), expiresOn, $"A link lasts at most {_maxLinkLifetime}.");
         }
 
         var blob = Blob(container, name);
@@ -264,7 +269,8 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
             if (_delegationKey is not { } key || !IsStillGood(key))
             {
                 var now = _time.GetUtcNow();
-                key = await service.GetUserDelegationKeyAsync(now - s_clockSkew, now + s_delegationKeyLifetime, cancellationToken);
+                // A user delegation SAS stops working when its key expires.
+                key = await service.GetUserDelegationKeyAsync(now - s_clockSkew, now + _maxLinkLifetime + TimeSpan.FromHours(2), cancellationToken);
                 _delegationKey = key;
             }
 
@@ -277,5 +283,5 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
     }
 
     private bool IsStillGood(UserDelegationKey key) =>
-        key.SignedExpiresOn - _time.GetUtcNow() >= MaxReadUrlLifetime + s_clockSkew;
+        key.SignedExpiresOn - _time.GetUtcNow() >= _maxLinkLifetime + s_clockSkew;
 }

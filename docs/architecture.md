@@ -74,7 +74,7 @@ Natural-language questions: the text (never the photos) goes to **Claude Haiku 5
 - Sign-in with **Google** and **Microsoft** (Apple will come with the iOS app). A **list of allowed e-mails** is checked when the sign-in returns (not on the list, no cookie) and a default authorization policy protects every route.
 - In Azure each service has its own managed identity with only the roles it uses; the web connects to PostgreSQL as a role that cannot change the schema, and reads the owner's secrets (sign-in, the access list, the Anthropic key) from Key Vault; its data protection keys live in Blob Storage under a Key Vault key (D-062).
 - Face recognition is optional; it can be turned off and face data deleted. No inference of sensitive categories (religion, health).
-- Full export at any time.
+- Full export at any time: Settings → Export all data asks the `sepiabox-export` job for a zip with `catalog.json`, `originals.txt` (24 h links) and a README, with face data only if asked (D-109).
 
 ## Cloud and costs
 

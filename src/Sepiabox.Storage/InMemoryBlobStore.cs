@@ -9,8 +9,10 @@ namespace Sepiabox.Storage;
 /// as Azure (S-050). Containers come into being with <see cref="CreateContainer"/>, as Azure containers are created beforehand; a write to one that is not there throws. Read URLs are
 /// <c>memory://</c> addresses that say what they were asked for.
 /// </summary>
-public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
+public sealed class InMemoryBlobStore(TimeProvider? time = null, TimeSpan? maxReadUrlLifetime = null) : IBlobStore
 {
+    private readonly TimeSpan _maxLinkLifetime = maxReadUrlLifetime ?? MaxReadUrlLifetime;
+
     /// <summary>The longest a link may last, as in Azure (<c>AzureBlobStore.MaxReadUrlLifetime</c>).</summary>
     public static readonly TimeSpan MaxReadUrlLifetime = TimeSpan.FromHours(4);
 
@@ -139,9 +141,9 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
         string container, string name, DateTimeOffset expiresOn, BlobReadUrlOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        if (expiresOn > _time.GetUtcNow() + MaxReadUrlLifetime)
+        if (expiresOn > _time.GetUtcNow() + _maxLinkLifetime)
         {
-            throw new ArgumentOutOfRangeException(nameof(expiresOn), expiresOn, $"A link lasts at most {MaxReadUrlLifetime}.");
+            throw new ArgumentOutOfRangeException(nameof(expiresOn), expiresOn, $"A link lasts at most {_maxLinkLifetime}.");
         }
 
         var url = $"memory://{container}/{Uri.EscapeDataString(name).Replace("%2F", "/", StringComparison.Ordinal)}"
