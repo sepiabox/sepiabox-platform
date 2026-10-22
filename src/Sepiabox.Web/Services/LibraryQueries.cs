@@ -65,6 +65,9 @@ public sealed record AssetDetail(
     /// <summary>The people in it (S-021): those with a counted face, named ones first, by name.</summary>
     public IReadOnlyList<AssetPerson> People { get; init; } = [];
 
+    /// <summary>Its counted faces, one thumbnail each (S-068): named ones first by name, then unnamed ones, each group from left to right.</summary>
+    public IReadOnlyList<AssetFace> Faces { get; init; } = [];
+
     /// <summary>Where its date came from (S-052): <c>metadata</c>, <c>export</c>, <c>fileName</c> or <c>folder</c>; null without a date.</summary>
     public string? CapturedAtSource { get; init; }
 
@@ -92,6 +95,12 @@ public sealed record AssetDetail(
 
 /// <summary>A person in a photo; <see cref="Name"/> is null while they are unnamed.</summary>
 public sealed record AssetPerson(long Id, string? Name);
+
+/// <summary>
+/// One counted face of a photo, for its thumbnail on the detail page (S-068): the face's own id, the person it points to
+/// (<see cref="Name"/> is null while unnamed) and where it is in the photo's thumbnail, null when the photo has none.
+/// </summary>
+public sealed record AssetFace(long FaceId, long PersonId, string? Name, FaceCrop? Crop);
 
 /// <summary>The assets a search found, up to its limit; <see cref="HasMore"/> says whether more matched.</summary>
 public sealed record SearchPage(IReadOnlyList<TimelineItem> Items, bool HasMore);
@@ -441,6 +450,12 @@ public sealed class LibraryQueries(
             .Select(f => new AssetPerson(f.PersonId!.Value, f.Person!.Name))
             .Distinct()
             .ToListAsync(cancellationToken);
+        var faceRows = await db.Faces.AsNoTracking()
+            .Where(f => f.AssetId == id && f.PersonId != null
+                && (f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual))
+            .Select(f => new { f.Id, PersonId = f.PersonId!.Value, f.Person!.Name, f.Box })
+            .ToListAsync(cancellationToken);
+        var thumbnailSizes = await ThumbnailSizesAsync(db, [id], cancellationToken);
         var hasEmbedding = await db.AssetEmbeddings.AnyAsync(e => e.AssetId == id && e.Model == PgvectorSimilarity.ModelKey, cancellationToken);
         // The largest the asset has (S-064): an index-only photo has the 2048 px preview and no 1280 px one, a video the
         // 1080p version and no 720p one; a work folder processed in both modes has both.
@@ -463,6 +478,9 @@ public sealed class LibraryQueries(
             proxy is not null,
             PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry))
         {
+            Faces = [.. faceRows.OrderBy(f => f.Name is null).ThenBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(f => f.Box.Length > 0 ? f.Box[0] : 0).ThenBy(f => f.Id)
+                .Select(f => new AssetFace(f.Id, f.PersonId, f.Name, Crop(id, f.Box, thumbnailSizes)))],
             People = [.. people.OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
             CapturedAtSource = asset.CapturedAtSource,
             Caption = TextSafety.WithoutBidiControls(asset.Caption),

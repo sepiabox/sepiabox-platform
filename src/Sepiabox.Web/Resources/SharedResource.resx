@@ -1556,4 +1556,19 @@
   <data name="Filter_NoMatch" xml:space="preserve">
     <value>No one matches</value>
   </data>
+  <data name="Detail_Panel" xml:space="preserve">
+    <value>Details of this photo</value>
+  </data>
+  <data name="Detail_Previous" xml:space="preserve">
+    <value>Previous photo</value>
+  </data>
+  <data name="Detail_Next" xml:space="preserve">
+    <value>Next photo</value>
+  </data>
+  <data name="Detail_AddName" xml:space="preserve">
+    <value>Add a name</value>
+  </data>
+  <data name="Detail_ShowFullPath" xml:space="preserve">
+    <value>Show full path</value>
+  </data>
 </root>

@@ -174,7 +174,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 |---|---|---|---|---|---|---|---|
 | S-050 | [Put blob storage behind the project's own interface](S-050-put-blob-storage-behind-the-project-s.md) | Foundation | S-007, S-008, S-009, S-033 | High | M | `doing` | A |
 | S-051 | [Upload originals through the storage interface](S-051-upload-originals-through-the-storage-interface.md) | Foundation | S-050, S-063 | Medium | M | `done` | A |
-| S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `doing` | A |
+| S-041 | [Find photos similar to a selected region](S-041-find-photos-similar-to-a-selected-region.md) | Search | S-017, S-023 | Low | S | `done` | A |
 | S-037 | [Connect a Google Drive account](S-037-connect-a-google-drive-account.md) | Cloud sources | S-010 | Medium | M | `done` | B |
 | S-027 | [Find blurry photos and bursts](S-027-find-blurry-photos-and-bursts.md) | Organization | S-005, S-013 | Low | M | `done` | B |
 
@@ -218,7 +218,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 |---|---|---|---|---|---|---|---|
 | S-066 | [Design tokens, base controls and the header](S-066-design-tokens-and-base-controls.md) | Visual design | S-013 | High | M | `doing` | A |
 | S-067 | [Timeline filters and the question box, redesigned](S-067-timeline-filters-and-search.md) | Visual design | S-066, S-052 | High | M | `doing` | A |
-| S-068 | [Photo grid and photo detail, redesigned](S-068-photo-grid-and-detail.md) | Visual design | S-066, S-041, S-052, S-064 | Medium | M | `todo` | A |
+| S-068 | [Photo grid and photo detail, redesigned](S-068-photo-grid-and-detail.md) | Visual design | S-066, S-041, S-052, S-064 | Medium | M | `doing` | A |
 | S-069 | [Remaining pages on the shared components](S-069-remaining-pages-on-shared-components.md) | Visual design | S-066, S-067, S-068, S-037, S-039, S-040 | Medium | M | `todo` | A |
 | S-070 | [Empty states, notes and a theme switch](S-070-empty-states-and-theme-switch.md) | Visual design | S-069 | Low | S | `todo` | A |
 

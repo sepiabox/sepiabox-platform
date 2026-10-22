@@ -3,7 +3,10 @@
 @foreach (var group in TimelineGroups.ByMonth(Items))
 {
     <section class="month">
-        <h2>@(group.Month is { } month ? Text.MonthAndYear(month) : Text["NoDate"])</h2>
+        <div class="month-head">
+            <h2>@(group.Month is { } month ? Text.MonthAndYear(month) : Text["NoDate"])</h2>
+            <span class="n">@group.Items.Count</span>
+        </div>
         <ul class="grid">
             @foreach (var item in group.Items)
             {

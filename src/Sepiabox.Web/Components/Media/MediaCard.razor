@@ -9,6 +9,11 @@
     {
         <span class="placeholder">@Text["MediaCard_NoThumbnail", Text.KindLabel(Item.Kind)]</span>
     }
+    @* The date, shown over the tile on hover and keyboard focus (S-068); the link's own name already says it. *@
+    @if (Item.CapturedAt is { } taken)
+    {
+        <span class="meta" aria-hidden="true">@Text.DateOrNoDate(taken)</span>
+    }
     @if (AssetKinds.IsVideo(Item.Kind))
     {
         @* Over the poster only: on the grey placeholder it would cover the text. *@
