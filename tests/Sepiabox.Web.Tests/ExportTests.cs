@@ -15,6 +15,13 @@ public sealed class ExportRequestsTests(CatalogFixture catalog)
     private static readonly FixedTime s_clock = new(new DateTimeOffset(2026, 10, 22, 9, 0, 0, TimeSpan.Zero));
 
     [Fact]
+    public void Keeps_a_zip_seven_days_as_the_lifecycle_rule_does()
+    {
+        // AzureInfrastructure.ExportRetentionDays (the AppHost, which cannot see the catalog) is pinned to 7 in its own test.
+        Assert.Equal(7, ExportRequest.RetentionDays);
+    }
+
+    [Fact]
     public async Task Records_a_request_for_the_person_who_asked_and_refuses_a_second_while_it_waits()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();
@@ -26,6 +33,35 @@ public sealed class ExportRequestsTests(CatalogFixture catalog)
         var request = Assert.Single(await exports.RecentAsync());
         Assert.Equal(("ana@example.com", true, ExportStatuses.Requested), (request.RequestedBy, request.IncludeFaceData, request.Status));
         Assert.Equal(s_clock.GetUtcNow(), request.RequestedAt);
+    }
+
+    [Fact]
+    public async Task Two_requests_at_the_same_moment_make_only_one_because_the_database_allows_one_active()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        var exports = Exports(catalog, db, new RecordingLinks());
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => exports.RequestAsync("ana@example.com", false)));
+
+        Assert.Single(results, r => r);
+        Assert.Single(await exports.RecentAsync());
+    }
+
+    [Fact]
+    public async Task Gives_no_link_to_a_zip_older_than_the_retention_the_lifecycle_rule_deletes()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        var links = new RecordingLinks();
+        var exports = Exports(catalog, db, links);
+        var written = s_clock.GetUtcNow().AddDays(-ExportRequest.RetentionDays).AddMinutes(1);
+        db.ExportRequests.AddRange(
+            new ExportRequest { RequestedBy = "a@b.c", RequestedAt = written, FinishedAt = written, Status = ExportStatuses.Done, BlobName = "kept.zip" },
+            new ExportRequest { RequestedBy = "a@b.c", RequestedAt = written.AddMinutes(-2), FinishedAt = written.AddMinutes(-2), Status = ExportStatuses.Done, BlobName = "old.zip" });
+        await db.SaveChangesAsync();
+
+        Assert.NotNull(await exports.DownloadAsync(db.ExportRequests.Single(e => e.BlobName == "kept.zip").Id));
+        Assert.Null(await exports.DownloadAsync(db.ExportRequests.Single(e => e.BlobName == "old.zip").Id));
+        Assert.Equal(["kept.zip"], links.Exports.Select(e => e.Blob));
     }
 
     [Fact]
@@ -106,7 +142,7 @@ public sealed class ExportPageTests : LocalizedContext
         _exports.Recent =
         [
             new ExportRequest { RequestedBy = "a@b.c", Id = 3, RequestedAt = DateTimeOffset.UnixEpoch, Status = ExportStatuses.Requested },
-            new ExportRequest { RequestedBy = "a@b.c", Id = 2, RequestedAt = DateTimeOffset.UnixEpoch, Status = ExportStatuses.Done, Assets = 12, SizeBytes = 2048, IncludeFaceData = true },
+            new ExportRequest { RequestedBy = "a@b.c", Id = 2, RequestedAt = DateTimeOffset.UtcNow, FinishedAt = DateTimeOffset.UtcNow, Status = ExportStatuses.Done, BlobName = "x.zip", Assets = 12, SizeBytes = 2048, IncludeFaceData = true },
             new ExportRequest { RequestedBy = "a@b.c", Id = 1, RequestedAt = DateTimeOffset.UnixEpoch, Status = ExportStatuses.Failed, Error = "The export could not be written (IOException). Ask for it again." },
         ];
 
@@ -120,6 +156,35 @@ public sealed class ExportPageTests : LocalizedContext
         Assert.Contains("with face data", items[1].TextContent, StringComparison.Ordinal);
         Assert.Contains("Ask for it again", items[2].TextContent, StringComparison.Ordinal);
         Assert.Empty(items[2].QuerySelectorAll("a"));
+    }
+
+    [Fact]
+    public void Says_how_long_each_zip_and_its_links_last_and_offers_no_download_for_a_deleted_one()
+    {
+        var now = DateTimeOffset.UtcNow;
+        Services.AddSingleton<TimeProvider>(new FixedTime(now));
+        _exports.Recent =
+        [
+            new ExportRequest { RequestedBy = "a@b.c", Id = 4, RequestedAt = now.AddHours(-1), FinishedAt = now.AddHours(-1), Status = ExportStatuses.Done, BlobName = "a.zip", Assets = 3, SizeBytes = 100 },
+            new ExportRequest { RequestedBy = "a@b.c", Id = 3, RequestedAt = now.AddDays(-2), FinishedAt = now.AddDays(-2), Status = ExportStatuses.Done, BlobName = "b.zip", Assets = 3, SizeBytes = 100 },
+            new ExportRequest { RequestedBy = "a@b.c", Id = 2, RequestedAt = now.AddDays(-8), FinishedAt = now.AddDays(-8), Status = ExportStatuses.Done, BlobName = "c.zip", Assets = 3, SizeBytes = 100 },
+            new ExportRequest { RequestedBy = "a@b.c", Id = 1, RequestedAt = now.AddDays(-1), FinishedAt = now.AddDays(-1), Status = ExportStatuses.Done, BlobName = null, IncludeFaceData = true, Assets = 3, SizeBytes = 100 },
+        ];
+
+        var page = Render<ExportData>();
+
+        var items = page.FindAll("ul.exports li");
+        Assert.Equal("settings/export/4/download", items[0].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Contains("Kept until", items[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Links to the originals inside work until", items[0].TextContent, StringComparison.Ordinal);
+        // After 24 hours the links inside are dead, so the page does not promise them; the zip is still kept.
+        Assert.Contains("Kept until", items[1].TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("Links to the originals", items[1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Deleted after 7 days", items[2].TextContent, StringComparison.Ordinal);
+        Assert.Empty(items[2].QuerySelectorAll("a"));
+        Assert.Contains("Deleted: face recognition was turned off", items[3].TextContent, StringComparison.Ordinal);
+        Assert.Empty(items[3].QuerySelectorAll("a"));
+        Assert.Contains("deleted after 7 days", page.Find("p.small").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -36,9 +36,11 @@ namespace Sepiabox.Catalog.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "ix_export_requests_status",
+                name: "ux_export_requests_active",
                 table: "export_requests",
-                column: "status");
+                column: "status",
+                unique: true,
+                filter: "status IN ('requested', 'running')");
         }
 
         /// <inheritdoc />

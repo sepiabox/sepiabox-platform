@@ -16,6 +16,9 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Warning, Message = "Export {Id} was running for too long and is failed as interrupted.")]
     public static partial void ExportInterrupted(ILogger logger, long id);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deleted the zip of export {Id}: it had face data and face recognition is off.")]
+    public static partial void ExportFaceDataErased(ILogger logger, long id);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Wrote {Exports} export(s).")]
     public static partial void ExportsDone(ILogger logger, int exports);
 

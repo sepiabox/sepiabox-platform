@@ -261,7 +261,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             export.Property(e => e.BlobName).HasMaxLength(200);
             export.Property(e => e.Error).HasMaxLength(500);
             export.ToTable(t => t.HasCheckConstraint("ck_export_requests_status", "status IN ('requested', 'running', 'done', 'failed')"));
-            export.HasIndex(e => e.Status);
+            // At most one request waiting and one running (D-110): two clicks, or two computers, make only one request.
+            export.HasIndex(e => e.Status).IsUnique().HasFilter("status IN ('requested', 'running')").HasDatabaseName("ux_export_requests_active");
         });
 
         modelBuilder.Entity<QuestionUsage>(usage =>

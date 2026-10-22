@@ -1,6 +1,6 @@
 // Access Aspire's role helpers cannot scope (S-058, D-062): the web's write access to the data protection
 // container only, its use of the data protection key only, the faces job's write access to the manifests container
-// only (S-022), the export job's write access to the exports container only (S-040), and the uploaders' write access to storage.
+// only (S-022), the export job's read access to the originals container and write access to the exports container only (S-040), and the uploaders' write access to storage.
 // The account-wide roles (the web's and the worker's Storage Blob Data Reader, the web's Key Vault Secrets
 // User) come from the AppHost's WithRoleAssignments.
 
@@ -44,6 +44,11 @@ resource keyRingContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
 resource manifestsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
   parent: blobService
   name: 'manifests'
+}
+
+resource originalsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
+  parent: blobService
+  name: 'originals'
 }
 
 resource exportsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
@@ -103,7 +108,20 @@ resource facesManifestsWriter 'Microsoft.Authorization/roleAssignments@2022-04-0
   }
 }
 
-// Writes the zip files, and nothing else in storage; it reads the originals through its account-wide reader role (S-040).
+// Reads the originals, only to sign links to them (S-040, D-110); the account-wide Storage Blob Delegator it also has (Aspire's
+// role helper) lets it ask for the delegation key.
+resource exportOriginalsReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(originalsContainer.id, exportPrincipalId, '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
+  scope: originalsContainer
+  properties: {
+    principalId: exportPrincipalId
+    // Storage Blob Data Reader
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Writes the zip files, and nothing else in storage (S-040).
 resource exportWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(exportsContainer.id, exportPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
   scope: exportsContainer

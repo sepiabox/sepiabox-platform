@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sepiabox.Catalog;
+using Sepiabox.Catalog.People;
 using Sepiabox.Storage;
 
 namespace Sepiabox.Worker.Exports;
@@ -50,6 +51,7 @@ public sealed class ExportGenerator(CatalogDbContext db, IBlobStore store, TimeP
             try
             {
                 await FailStaleAsync(cancellationToken);
+                await EraseFaceDataZipsAsync(cancellationToken);
                 var done = 0;
                 while (await ClaimAsync(cancellationToken) is { } request)
                 {
@@ -78,6 +80,26 @@ public sealed class ExportGenerator(CatalogDbContext db, IBlobStore store, TimeP
             stale.FinishedAt = clock.GetUtcNow();
             stale.Error = "The export was interrupted. Ask for it again.";
             Log.ExportInterrupted(logger, stale.Id);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    // Turning face recognition off erases the faces everywhere (D-081); a zip made with face data holds them too, so it goes with
+    // them, whatever its age (the lifecycle rule deletes the others after RetentionDays).
+    private async Task EraseFaceDataZipsAsync(CancellationToken cancellationToken)
+    {
+        if ((await FaceRecognition.ReadAsync(db, cancellationToken)).On)
+        {
+            return;
+        }
+
+        foreach (var request in await db.ExportRequests
+            .Where(e => e.IncludeFaceData && e.BlobName != null).ToListAsync(cancellationToken))
+        {
+            await store.DeleteAsync(Container, request.BlobName!, cancellationToken);
+            Log.ExportFaceDataErased(logger, request.Id);
+            request.BlobName = null;
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -445,6 +467,9 @@ public sealed class ExportGenerator(CatalogDbContext db, IBlobStore store, TimeP
         {(includeFaces ? "Face data is included: each photo's faces have a box, a score and the embedding the app compares faces with. It is biometric data; keep this zip private." : "Face data (face boxes and embeddings) is not included. Ask for an export with face data on the settings page if you want it.")}
         The search embeddings of the photos are never included: they are recomputed from the pictures.
 
+        WARNING: originals.txt holds a link to every original in the library, and each works for 24 hours from the time above, for
+        anyone who has it. Passing this zip on in that time shares the whole library. Keep it to yourself; it is deleted after 7 days.
+
         ---
 
         Exportação do Sepiabox, {now.UtcDateTime:yyyy-MM-dd HH:mm} UTC
@@ -458,5 +483,8 @@ public sealed class ExportGenerator(CatalogDbContext db, IBlobStore store, TimeP
                        por tabulações. Os links funcionam por 24 horas. Os originais que ficam na origem não
                        aparecem; o catalog.json diz onde estão.
         {(includeFaces ? "Os dados de rostos estão incluídos (caixa, pontuação e embedding): são dados biométricos; guarde este zip em privado." : "Os dados de rostos (caixas e embeddings) não estão incluídos. Peça uma exportação com dados de rostos nas configurações se quiser.")}
+
+        ATENÇÃO: o originals.txt tem um link para cada original da biblioteca, e cada um funciona por 24 horas a partir da hora acima, para
+        quem o tiver. Passar este zip adiante nesse prazo compartilha a biblioteca inteira. Não o compartilhe; ele é apagado depois de 7 dias.
         """;
 }

@@ -436,6 +436,12 @@ public static class ConnectedSourceStatuses
 /// </summary>
 public sealed class ExportRequest
 {
+    /// <summary>
+    /// Days a zip is kept in <c>exports</c> (D-110): a lifecycle rule deletes it then, and the page stops offering it. A zip with
+    /// face data (biometric data) must not outlive an erase for long, and nobody deletes the others by hand.
+    /// </summary>
+    public const int RetentionDays = 7;
+
     public long Id { get; set; }
 
     public DateTimeOffset RequestedAt { get; set; }
@@ -453,7 +459,10 @@ public sealed class ExportRequest
 
     public DateTimeOffset? FinishedAt { get; set; }
 
-    /// <summary>The zip's blob in the <c>exports</c> container, once it is written.</summary>
+    /// <summary>
+    /// The zip's blob in the <c>exports</c> container, once it is written; null again once the export job deleted it because
+    /// face recognition was turned off and the zip had face data (D-110).
+    /// </summary>
     public string? BlobName { get; set; }
 
     public int? Assets { get; set; }

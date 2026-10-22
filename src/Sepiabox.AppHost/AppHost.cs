@@ -182,16 +182,16 @@ else
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureFacesJob);
 
-    // Writes the exports people ask for (S-040, D-110), every 15 minutes. It connects as the application role. Its
-    // account-wide Storage Blob Data Reader lets it sign the 24 h links to the originals (a user delegation key); its
-    // only write role, on the exports container, is in access.bicep.
+    // Writes the exports people ask for (S-040, D-110), every 15 minutes. It connects as the application role. Its account-wide
+    // Storage Blob Delegator lets it ask for a user delegation key, with which it signs the 24 h links to the originals; its
+    // Data Reader role on the originals container and its Contributor role on the exports container are in access.bicep.
     builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.ExportResourceName)
         .WithArgs("export")
         .WithReferenceEnvironment(ConnectionStringsOnly)
         .WithReference(blobs)
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
         .WithAzureUserAssignedIdentity(exportIdentity)
-        .WithRoleAssignments(storage, StorageBuiltInRole.StorageBlobDataReader)
+        .WithRoleAssignments(storage, StorageBuiltInRole.StorageBlobDelegator)
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureExportJob);
 
     // The web's custom domain (S-035, D-065), empty for none. Set after the DNS records exist, first with the

@@ -81,6 +81,12 @@ public static class AzureInfrastructure
     /// </summary>
     public const string ExportSchedule = "*/15 * * * *";
 
+    /// <summary>
+    /// Days after which a zip in <c>exports</c> is deleted by a lifecycle rule (S-040, D-110). The page says the same number
+    /// (<c>ExportRequest.RetentionDays</c> in the catalog, which the AppHost cannot see); a test on each side pins both to 7.
+    /// </summary>
+    public const int ExportRetentionDays = 7;
+
     /// <summary>The Service Bus namespace; the shutdown runbook disables its queue (S-030).</summary>
     public const string ServiceBusName = "sepiabox-bus";
 
@@ -259,6 +265,37 @@ public static class AzureInfrastructure
             IsEnabled = true,
             Days = BlobSoftDeleteDays,
         };
+
+        // An export is a copy made on request; one with face data must not outlive an erase for long, and nobody deletes them by
+        // hand (S-040, D-110). Turning face recognition off also makes the export job delete those with face data at once.
+        infrastructure.Add(new StorageAccountManagementPolicy("lifecycle")
+        {
+            Parent = account,
+            Rules =
+            {
+                new ManagementPolicyRule
+                {
+                    Name = "delete-old-exports",
+                    RuleType = ManagementPolicyRuleType.Lifecycle,
+                    IsEnabled = true,
+                    Definition = new ManagementPolicyDefinition
+                    {
+                        Filters = new ManagementPolicyFilter
+                        {
+                            BlobTypes = { "blockBlob" },
+                            PrefixMatch = { "exports/" },
+                        },
+                        Actions = new ManagementPolicyAction
+                        {
+                            BaseBlob = new ManagementPolicyBaseBlob
+                            {
+                                Delete = new DateAfterModification { DaysAfterModificationGreaterThan = ExportRetentionDays },
+                            },
+                        },
+                    },
+                },
+            },
+        });
 
         foreach (var name in BlobContainers)
         {

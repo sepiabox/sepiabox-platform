@@ -13,6 +13,7 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
     {
         ["2a2b9908-6ea1-4ae2-8e65-a410df84e7d1"] = "Storage Blob Data Reader",
         ["ba92f5b4-2d11-453d-a403-e96b0029c9fe"] = "Storage Blob Data Contributor",
+        ["db58b8e5-c6ad-4a2a-8342-4190687cbf4a"] = "Storage Blob Delegator",
         ["4633458b-17de-408a-b874-0445c86b69e6"] = "Key Vault Secrets User",
         ["12338af0-0e69-4776-bea7-57ae8d297424"] = "Key Vault Crypto User",
         ["7f951dda-4ed3-4680-a7ca-43fe172d538d"] = "AcrPull",
@@ -31,9 +32,11 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
             {
                 // The Container Apps environment's identity pulls the images.
                 "aca_mi.properties.principalId: AcrPull on registries registry",
-                // The export job writes the exports container and signs links with the account-wide reader role (S-040).
+                // The export job writes the exports container, reads the originals only to sign links to them, and asks the
+                // account for a delegation key (S-040, D-110).
                 "export-identity: Storage Blob Data Contributor on containers exports",
-                "export-identity: Storage Blob Data Reader on storageAccounts storage",
+                "export-identity: Storage Blob Data Reader on containers originals",
+                "export-identity: Storage Blob Delegator on storageAccounts storage",
                 // The faces job rewrites manifests, and nothing else in storage (S-022).
                 "faces-identity: Storage Blob Data Contributor on containers manifests",
                 // The uploaders, one assignment per id in uploaderPrincipalIds.

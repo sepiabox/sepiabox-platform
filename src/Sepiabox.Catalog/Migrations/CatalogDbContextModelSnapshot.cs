@@ -416,7 +416,9 @@ namespace Sepiabox.Catalog.Migrations
                         .HasName("pk_export_requests");
 
                     b.HasIndex("Status")
-                        .HasDatabaseName("ix_export_requests_status");
+                        .IsUnique()
+                        .HasDatabaseName("ux_export_requests_active")
+                        .HasFilter("status IN ('requested', 'running')");
 
                     b.ToTable("export_requests", null, t =>
                         {

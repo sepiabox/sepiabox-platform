@@ -5,6 +5,7 @@
 @inject IExportRequests Exports
 @inject NavigationManager Navigation
 @inject IServiceProvider Services
+@inject TimeProvider Clock
 @* Static server rendering with POST forms, as the settings page (S-022): asking is answered with a redirect back here and a
    note. The zip is written by the worker's export job within minutes; the page lists the requests and gives a one-hour
    link to each finished one (S-040, D-110). *@
@@ -47,7 +48,24 @@
                 @if (request.Status == ExportStatuses.Done)
                 {
                     <span class="size muted">@Text["Export_Done", request.Assets ?? 0, ByteSizes.Format(request.SizeBytes ?? 0)]</span>
-                    <a class="button" href="settings/export/@request.Id/download" aria-label="@Text["Export_DownloadAria", When(request.RequestedAt)]">@Text["Export_Download"]</a>
+                    @if (request.BlobName is null)
+                    {
+                        @* The export job deleted a zip with face data when face recognition was turned off (D-110). *@
+                        <span class="removed muted">@Text["Export_Erased"]</span>
+                    }
+                    else if (ExportRequests.Expired(request, Clock.GetUtcNow()))
+                    {
+                        <span class="removed muted">@Text["Export_Expired", ExportRequest.RetentionDays]</span>
+                    }
+                    else
+                    {
+                        <a class="button" href="settings/export/@request.Id/download" aria-label="@Text["Export_DownloadAria", When(request.RequestedAt)]">@Text["Export_Download"]</a>
+                        <span class="kept muted">@Text["Export_KeptUntil", When(ExportRequests.KeptUntil(request))]</span>
+                        @if (request.FinishedAt is { } finished && finished.Add(ExportLinkHours) is var linksEnd && linksEnd > Clock.GetUtcNow())
+                        {
+                            <span class="links muted">@Text["Export_LinksUntil", When(linksEnd)]</span>
+                        }
+                    }
                 }
                 else if (request.Status == ExportStatuses.Failed)
                 {
@@ -78,6 +96,9 @@
 
     [CascadingParameter]
     public HttpContext? HttpContext { get; set; }
+
+    // The links to the originals inside a zip last 24 hours from the moment it was written (ExportGenerator.OriginalLinkLifetime).
+    private static readonly TimeSpan ExportLinkHours = TimeSpan.FromHours(24);
 
     private IReadOnlyList<ExportRequest>? _requests;
 

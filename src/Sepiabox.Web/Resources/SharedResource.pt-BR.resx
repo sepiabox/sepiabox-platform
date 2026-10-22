@@ -1412,7 +1412,7 @@
     <value>Baixar a exportação de {0}</value>
   </data>
   <data name="Export_LinkHint" xml:space="preserve">
-    <value>Uma exportação leva poucos minutos. O link de download funciona por uma hora; clique em Baixar outra vez para um novo. Os links dentro do originals.txt funcionam por 24 horas depois de a exportação ser escrita.</value>
+    <value>Uma exportação leva poucos minutos. O link de download funciona por uma hora; clique em Baixar outra vez para um novo. Os links dentro do originals.txt funcionam por 24 horas depois de a exportação ser escrita. Quem tiver o zip nesse prazo consegue baixar os seus originais, então não o compartilhe. Uma exportação é apagada depois de 7 dias.</value>
   </data>
   <data name="Export_Back" xml:space="preserve">
     <value>Voltar para as configurações</value>
@@ -1422,5 +1422,17 @@
   </data>
   <data name="Export_Note_busy" xml:space="preserve">
     <value>Já há uma exportação em espera ou a ser escrita; espere terminar.</value>
+  </data>
+  <data name="Export_Erased" xml:space="preserve">
+    <value>Apagada: o reconhecimento facial foi desligado</value>
+  </data>
+  <data name="Export_Expired" xml:space="preserve">
+    <value>Apagada depois de {0} dias</value>
+  </data>
+  <data name="Export_KeptUntil" xml:space="preserve">
+    <value>Guardada até {0}</value>
+  </data>
+  <data name="Export_LinksUntil" xml:space="preserve">
+    <value>Os links para os originais dentro dela valem até {0}</value>
   </data>
 </root>

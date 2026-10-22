@@ -118,6 +118,47 @@ public sealed class ExportGeneratorTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task The_readme_warns_in_both_languages_that_the_links_in_the_zip_share_the_library_for_24_hours()
+    {
+        await using var db = await SeedAsync();
+        var request = await RequestAsync(db, includeFaces: false);
+        await Generator(db).RunPendingAsync(CancellationToken.None);
+
+        var (_, _, readme) = await ReadZipAsync(db, request);
+
+        Assert.Contains("Passing this zip on in that time shares the whole library", readme, StringComparison.Ordinal);
+        Assert.Contains("compartilha a biblioteca inteira", readme, StringComparison.Ordinal);
+        Assert.Contains("deleted after 7 days", readme, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Turning_face_recognition_off_deletes_the_zips_that_have_face_data_and_keeps_the_others()
+    {
+        await using var db = await SeedAsync();
+        var withFaces = await RequestAsync(db, includeFaces: true);
+        await Generator(db).RunPendingAsync(CancellationToken.None);
+        var plain = await RequestAsync(db, includeFaces: false);
+        await Generator(db).RunPendingAsync(CancellationToken.None);
+        var faceBlob = (await db.ExportRequests.AsNoTracking().SingleAsync(e => e.Id == withFaces.Id)).BlobName!;
+        var plainBlob = (await db.ExportRequests.AsNoTracking().SingleAsync(e => e.Id == plain.Id)).BlobName!;
+        Assert.NotNull(await fixture.Store.ReadAsync("exports", faceBlob));
+
+        // While recognition is on, nothing is deleted.
+        await Generator(db).RunPendingAsync(CancellationToken.None);
+        Assert.NotNull(await fixture.Store.ReadAsync("exports", faceBlob));
+
+        db.Settings.Add(new Setting { Key = Sepiabox.Catalog.People.FaceRecognition.RecognitionKey, Value = "off" });
+        await db.SaveChangesAsync();
+        await Generator(db).RunPendingAsync(CancellationToken.None);
+
+        Assert.Null(await fixture.Store.ReadAsync("exports", faceBlob));
+        Assert.NotNull(await fixture.Store.ReadAsync("exports", plainBlob));
+        db.ChangeTracker.Clear();
+        Assert.Null((await db.ExportRequests.AsNoTracking().SingleAsync(e => e.Id == withFaces.Id)).BlobName);
+        Assert.Equal(plainBlob, (await db.ExportRequests.AsNoTracking().SingleAsync(e => e.Id == plain.Id)).BlobName);
+    }
+
+    [Fact]
     public async Task Does_nothing_when_no_one_asked()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
@@ -130,10 +171,13 @@ public sealed class ExportGeneratorTests(CatalogFixture fixture)
     {
         await using var db = await SeedAsync();
         var failing = await RequestAsync(db, includeFaces: false);
-        var good = await RequestAsync(db, includeFaces: false);
         var store = new FailOnceStore(new AzureBlobStore(fixture.Blobs, TimeProvider.System, ExportGenerator.OriginalLinkLifetime));
+        var generator = new ExportGenerator(db, store, TimeProvider.System, NullLogger.Instance);
 
-        var written = await new ExportGenerator(db, store, TimeProvider.System, NullLogger.Instance).RunPendingAsync(CancellationToken.None);
+        Assert.Equal(0, await generator.RunPendingAsync(CancellationToken.None));
+        // Only one request is active at a time (the unique index), so the next is asked once the failed one has ended.
+        var good = await RequestAsync(db, includeFaces: false);
+        var written = await generator.RunPendingAsync(CancellationToken.None);
 
         Assert.Equal(1, written);
         db.ChangeTracker.Clear();
@@ -145,7 +189,7 @@ public sealed class ExportGeneratorTests(CatalogFixture fixture)
     }
 
     [Fact]
-    public async Task A_request_left_running_for_hours_is_failed_as_interrupted()
+    public async Task A_request_left_running_for_hours_is_failed_as_interrupted_and_a_recent_one_is_left_running()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
         db.ExportRequests.Add(new ExportRequest
@@ -155,6 +199,15 @@ public sealed class ExportGeneratorTests(CatalogFixture fixture)
             Status = ExportStatuses.Running,
             StartedAt = s_now.AddHours(-4),
         });
+        await db.SaveChangesAsync();
+
+        await Generator(db).RunPendingAsync(CancellationToken.None);
+
+        var stale = await db.ExportRequests.AsNoTracking().SingleAsync();
+        Assert.Equal(ExportStatuses.Failed, stale.Status);
+        Assert.Contains("interrupted", stale.Error, StringComparison.Ordinal);
+
+        // One that started minutes ago may well be running (another run of the job holds the lock): it is left alone.
         db.ExportRequests.Add(new ExportRequest
         {
             RequestedAt = s_now.AddMinutes(-5),
@@ -166,9 +219,7 @@ public sealed class ExportGeneratorTests(CatalogFixture fixture)
 
         await Generator(db).RunPendingAsync(CancellationToken.None);
 
-        var rows = await db.ExportRequests.AsNoTracking().OrderBy(e => e.Id).ToListAsync();
-        Assert.Equal([ExportStatuses.Failed, ExportStatuses.Running], rows.Select(r => r.Status));
-        Assert.Contains("interrupted", rows[0].Error, StringComparison.Ordinal);
+        Assert.Equal([ExportStatuses.Failed, ExportStatuses.Running], (await db.ExportRequests.AsNoTracking().OrderBy(e => e.Id).ToListAsync()).Select(r => r.Status));
     }
 
     private ExportGenerator Generator(CatalogDbContext db) =>

@@ -14,7 +14,7 @@ using Sepiabox.Catalog;
 namespace Sepiabox.Catalog.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
-    [Migration("20261022090637_ExportRequests")]
+    [Migration("20261022102955_ExportRequests")]
     partial class ExportRequests
     {
         /// <inheritdoc />
@@ -419,7 +419,9 @@ namespace Sepiabox.Catalog.Migrations
                         .HasName("pk_export_requests");
 
                     b.HasIndex("Status")
-                        .HasDatabaseName("ix_export_requests_status");
+                        .IsUnique()
+                        .HasDatabaseName("ux_export_requests_active")
+                        .HasFilter("status IN ('requested', 'running')");
 
                     b.ToTable("export_requests", null, t =>
                         {

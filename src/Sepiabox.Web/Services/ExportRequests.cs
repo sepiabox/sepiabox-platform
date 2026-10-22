@@ -47,15 +47,32 @@ public sealed class ExportRequests(IDbContextFactory<CatalogDbContext> contexts,
             IncludeFaceData = includeFaceData,
             Status = ExportStatuses.Requested,
         });
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        {
+            // Another click, or another computer, asked in the same moment: the unique index lets only one through.
+            return false;
+        }
+
         return true;
     }
+
+    /// <summary>When the zip of a finished export is deleted: <see cref="ExportRequest.RetentionDays"/> after it was written.</summary>
+    public static DateTimeOffset KeptUntil(ExportRequest request) =>
+        (request.FinishedAt ?? request.RequestedAt).AddDays(ExportRequest.RetentionDays);
+
+    /// <summary>Whether the zip's retention has passed.</summary>
+    public static bool Expired(ExportRequest request, DateTimeOffset now) => now >= KeptUntil(request);
 
     public async Task<Uri?> DownloadAsync(long id, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var request = await db.ExportRequests.AsNoTracking().SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
-        return request is { Status: ExportStatuses.Done, BlobName: { } blob }
+        // The lifecycle rule deletes the zip after RetentionDays; until it does, the link would be a 404 from storage.
+        return request is { Status: ExportStatuses.Done, BlobName: { } blob } && !Expired(request, clock.GetUtcNow())
             ? await links.ForExportAsync(blob, $"sepiabox-export-{request.RequestedAt:yyyy-MM-dd}.zip", cancellationToken)
             : null;
     }

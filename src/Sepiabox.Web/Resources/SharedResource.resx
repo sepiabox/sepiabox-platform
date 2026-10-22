@@ -1482,7 +1482,7 @@
     <comment>{0} is the date and time the export was requested.</comment>
   </data>
   <data name="Export_LinkHint" xml:space="preserve">
-    <value>An export is written within a few minutes. The download link works for one hour; press Download again for a new one. The links inside originals.txt work for 24 hours from when the export was written.</value>
+    <value>An export is written within a few minutes. The download link works for one hour; press Download again for a new one. The links inside originals.txt work for 24 hours from when the export was written. Anyone who has the zip in that time can download your originals, so keep it to yourself. An export is deleted after 7 days.</value>
   </data>
   <data name="Export_Back" xml:space="preserve">
     <value>Back to settings</value>
@@ -1492,5 +1492,17 @@
   </data>
   <data name="Export_Note_busy" xml:space="preserve">
     <value>An export is already waiting or being written; wait for it to finish.</value>
+  </data>
+  <data name="Export_Erased" xml:space="preserve">
+    <value>Deleted: face recognition was turned off</value>
+  </data>
+  <data name="Export_Expired" xml:space="preserve">
+    <value>Deleted after {0} days</value>
+  </data>
+  <data name="Export_KeptUntil" xml:space="preserve">
+    <value>Kept until {0}</value>
+  </data>
+  <data name="Export_LinksUntil" xml:space="preserve">
+    <value>Links to the originals inside work until {0}</value>
   </data>
 </root>
