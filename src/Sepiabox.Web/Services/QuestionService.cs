@@ -117,9 +117,13 @@ public sealed class QuestionService(
     ILibraryQueries library,
     QuestionLimits limits,
     TimeProvider clock,
-    SearchOptions? searchOptions = null)
+    SearchOptions? searchOptions = null,
+    QuestionWarmUp? warmUp = null)
 {
     public bool IsConfigured => translator.IsConfigured;
+
+    /// <summary>Starts the background warm-up of the question format when it is due (D-101); never waits or throws.</summary>
+    public void WarmUp() => warmUp?.TryStart();
 
     public int DailyLimit => limits.DailyLimit;
 
@@ -131,6 +135,8 @@ public sealed class QuestionService(
         !SearchQueryJson.TryParse(json, out var query, out var error) ? error
         : query.Filters.SimilarTo is not null ? "filters.similarTo is not part of an answer: a question cannot name an asset."
         : query.Filters.SimilarToRegion is not null ? "filters.similarToRegion is not part of an answer: a question cannot name a photo and a box."
+        : query.Filters.Quality is not null ? "filters.quality is not part of an answer: the organize page shows blurry photos."
+        : query.Filters.IncludeHidden ? "filters.includeHidden is not part of an answer: a question never asks for what was set aside."
         : query.Filters.EventIds is not null ? "filters.eventIds is not part of an answer: a question cannot name an occasion."
         : query.Filters.SourceCount is not null ? "filters.sourceCount is not part of an answer yet: the storage page shows it."
         : query.Aggregate?.Sum is not null ? "aggregate.sum is not part of an answer yet: the storage page shows sizes."
@@ -206,6 +212,11 @@ public sealed class QuestionService(
             // Recorded whatever the outcome: a refused or invalid answer was billed too.
             await quota.RecordAsync(userKey, today, translation.Usage, CancellationToken.None);
         }
+        if (QuestionWarmUp.IsWarm(translation))
+        {
+            warmUp?.NoteSuccess();
+        }
+
         return translation.Outcome switch
         {
             // Parsed again here: the translator's own check is not what the search trusts.

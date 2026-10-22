@@ -1,12 +1,16 @@
+using Azure.Storage.Blobs;
 using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Catalog.Search;
 using Sepiabox.Search.Questions;
+using Sepiabox.Storage;
+using Sepiabox.Storage.Azure;
 using Sepiabox.Web;
 using Sepiabox.Web.Auth;
 using Sepiabox.Web.Components;
 using Sepiabox.Web.Localization;
 using Sepiabox.Web.Services;
+using Sepiabox.Web.Sources;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +22,9 @@ builder.AddSepiaboxSecrets();
 // EF uses this same data source, so the app and its health check share one pool.
 builder.AddNpgsqlDataSource("catalog", configureDataSourceBuilder: dataSource => CatalogDbContext.ConfigureDataSource(dataSource));
 builder.AddAzureBlobServiceClient("blobs");
+// The Azure implementation of IBlobStore (D-051), on the client Aspire registers.
+builder.Services.AddSingleton<IBlobStore>(services =>
+    new AzureBlobStore(services.GetRequiredService<BlobServiceClient>(), services.GetRequiredService<TimeProvider>()));
 
 // Pages render on the server per request, so each query gets its own short-lived context.
 builder.Services.AddDbContextFactory<CatalogDbContext>((services, options) =>
@@ -51,10 +58,22 @@ builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 builder.Services.AddScoped<IPeopleEditor, PeopleEditor>();
 builder.Services.AddScoped<IFaceSettings, FaceSettings>();
 builder.Services.AddScoped<ISavedPlaces, SavedPlaces>();
+builder.Services.AddScoped<IOrganization, Organization>();
+// Connected cloud accounts (S-037, D-097): Google Drive with the sign-in's OAuth client; tokens protected by Data Protection.
+builder.Services.AddSingleton(services => new GoogleDrive(services.GetRequiredService<SignInProviders>().Google));
+builder.Services.AddSingleton<IDriveClient>(services => services.GetRequiredService<GoogleDrive>());
+builder.Services.AddSingleton<IDriveAuthorization>(services => services.GetRequiredService<GoogleDrive>());
+builder.Services.AddSingleton<DriveTokenProtector>();
+builder.Services.AddScoped<IConnectedSources, ConnectedSources>();
 // Questions (S-025): Claude through the project's own interface (D-051), with a daily limit per person.
 builder.Services.AddSingleton<IQuestionTranslator, ConfiguredQuestionTranslator>();
 builder.Services.AddSingleton<IQuestionQuota, CatalogQuestionQuota>();
 builder.Services.AddSingleton(QuestionLimits.From(builder.Configuration));
+builder.Services.AddSingleton(services => new QuestionWarmUp(
+    services.GetRequiredService<IQuestionTranslator>(), services.GetRequiredService<TimeProvider>(), services.GetRequiredService<ILogger<QuestionWarmUp>>())
+{
+    Enabled = builder.Configuration.GetValue("Questions:WarmUp", true),
+});
 builder.Services.AddScoped<QuestionService>();
 
 builder.AddSepiaboxAuth();
@@ -98,6 +117,7 @@ app.MapSepiaboxAuth();
 app.MapLanguageSwitch();
 app.MapMediaEndpoints();
 app.MapSearchEndpoints();
+app.MapSourceEndpoints();
 app.MapQuestionEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

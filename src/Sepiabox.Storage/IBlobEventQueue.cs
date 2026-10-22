@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
-namespace Sepiabox.Worker.Events;
+namespace Sepiabox.Storage;
 
 /// <summary>A blob was created (or overwritten) in a container: what the worker needs from a storage event.</summary>
 public sealed record BlobCreated(string Container, string BlobName);

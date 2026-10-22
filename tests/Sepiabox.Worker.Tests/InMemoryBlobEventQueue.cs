@@ -1,4 +1,4 @@
-using Sepiabox.Worker.Events;
+using Sepiabox.Storage;
 
 namespace Sepiabox.Worker.Tests;
 

@@ -1,0 +1,147 @@
+@page "/sources"
+@using System.Globalization
+@using Sepiabox.Catalog
+@using Sepiabox.Web.Sources
+@inject IConnectedSources Connections
+@inject NavigationManager Navigation
+@* Static server rendering with POST forms, as the places page (S-014): an action is answered with a redirect back here
+   and a note, so reloading never repeats it. Connecting goes through Google and back (SourceEndpoints). *@
+
+<PageTitle>@Text["Sources_Heading"] · Sepiabox</PageTitle>
+
+<h1 class="page-heading">@Text["Sources_Heading"]</h1>
+<p class="muted">@Text["Sources_Intro"]</p>
+
+@if (NoteText is { } note)
+{
+    <p class="note" role="status">@note</p>
+}
+
+<section class="connection-service">
+    <h2>@Text["Sources_GoogleDrive"]</h2>
+
+    @if (_sources is null)
+    {
+        <p class="muted">@Text["Timeline_Loading"]</p>
+    }
+    else if (_sources.Count == 0)
+    {
+        <p class="empty">@Text["Sources_None"]</p>
+    }
+    else
+    {
+        <ul class="connections">
+            @foreach (var source in _sources)
+            {
+                <li class="connection">
+                    <p class="connection-account"><strong>@source.AccountEmail</strong>
+                        <span class="status @(source.NeedsReconnecting ? "status-expired" : "status-ok")">@Text["Sources_Status_" + source.Status]</span></p>
+
+                    @if (source.NeedsReconnecting)
+                    {
+                        <p class="muted">@Text["Sources_ExpiredHint"]</p>
+                    }
+
+                    @if (source is { PhotoCount: { } photos, VideoCount: { } videos })
+                    {
+                        <p class="counts">
+                            <span class="photos">@Text["Sources_Photos", photos.ToString("N0", CultureInfo.CurrentCulture)]</span>
+                            <span class="videos">@Text["Sources_Videos", videos.ToString("N0", CultureInfo.CurrentCulture)]</span>
+                            @if (source.CountedAt is { } counted)
+                            {
+                                <span class="muted small">@Text["Sources_CountedAt", Text.DateAndTime(counted.UtcDateTime)]</span>
+                            }
+                        </p>
+                    }
+                    else
+                    {
+                        <p class="muted">@Text["Sources_NotCounted"]</p>
+                    }
+
+                    <div class="connection-actions">
+                        @if (source.NeedsReconnecting)
+                        {
+                            <a class="button" href="@SourceEndpoints.ConnectPath.TrimStart('/')" aria-label="@Text["Sources_ReconnectAria", source.AccountEmail]">@Text["Sources_Reconnect"]</a>
+                        }
+                        else
+                        {
+                            <form method="post" @formname="@("count-" + source.Id.ToString(CultureInfo.InvariantCulture))" @onsubmit="CountAsync">
+                                <AntiforgeryToken />
+                                <input type="hidden" name="SourceId" value="@source.Id.ToString(CultureInfo.InvariantCulture)" />
+                                <button type="submit" class="button" aria-label="@Text["Sources_CountAria", source.AccountEmail]">@Text["Sources_Count"]</button>
+                            </form>
+                        }
+
+                        <form method="post" @formname="@("disconnect-" + source.Id.ToString(CultureInfo.InvariantCulture))" @onsubmit="DisconnectAsync">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="SourceId" value="@source.Id.ToString(CultureInfo.InvariantCulture)" />
+                            <button type="submit" class="button secondary" aria-label="@Text["Sources_DisconnectAria", source.AccountEmail]">@Text["Sources_Disconnect"]</button>
+                        </form>
+                    </div>
+                </li>
+            }
+        </ul>
+        <p class="muted small">@Text["Sources_DisconnectHint"]</p>
+    }
+
+    @if (Connections.CanConnectGoogleDrive)
+    {
+        <p><a class="button connect" href="@SourceEndpoints.ConnectPath.TrimStart('/')">@Text["Sources_Connect"]</a></p>
+    }
+    else
+    {
+        <p class="note">@Text["Sources_NotConfigured"]</p>
+    }
+</section>
+
+@code {
+    // What a note in the address may say, and its text: nothing else from the address is shown.
+    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    {
+        ["connected"] = "Sources_Note_connected",
+        ["denied"] = "Sources_Note_denied",
+        ["state"] = "Sources_Note_state",
+        ["failed"] = "Sources_Note_failed",
+        ["not-configured"] = "Sources_NotConfigured",
+        ["counted"] = "Sources_Note_counted",
+        ["disconnected"] = "Sources_Note_disconnected",
+        ["reconnect"] = "Sources_Note_reconnect",
+        ["count-failed"] = "Sources_Note_countFailed",
+        ["not-found"] = "Sources_Note_notFound",
+    };
+
+    [SupplyParameterFromQuery(Name = SourceEndpoints.NoteParameter)]
+    public string? Note { get; set; }
+
+    /// <summary>The connection whose form was sent (each has its own form name).</summary>
+    [SupplyParameterFromForm]
+    public string? SourceId { get; set; }
+
+    private IReadOnlyList<ConnectedSourceSummary>? _sources;
+
+    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key) ? Text[key].Value : null;
+
+    protected override async Task OnInitializedAsync() => _sources = await Connections.ListAsync();
+
+    private async Task CountAsync()
+    {
+        var outcome = TryId(out var id) ? await Connections.CountAsync(id) : SourceOutcome.NotFound;
+        Back(outcome switch
+        {
+            SourceOutcome.Done => "counted",
+            SourceOutcome.Reconnect => "reconnect",
+            SourceOutcome.Failed => "count-failed",
+            _ => "not-found",
+        });
+    }
+
+    private async Task DisconnectAsync()
+    {
+        var outcome = TryId(out var id) ? await Connections.DisconnectAsync(id) : SourceOutcome.NotFound;
+        Back(outcome == SourceOutcome.Done ? "disconnected" : "not-found");
+    }
+
+    private bool TryId(out long id) => long.TryParse(SourceId, NumberStyles.None, CultureInfo.InvariantCulture, out id);
+
+    private void Back(string note) => Navigation.NavigateTo($"sources?{SourceEndpoints.NoteParameter}={note}");
+}

@@ -50,12 +50,12 @@ public sealed class RegionCropTests
     }
 
     [Fact]
-    public void Takes_the_floor_of_the_left_edge_and_the_ceiling_of_the_right_one()
+    public void Takes_the_floor_of_the_left_and_top_edges_and_the_ceiling_of_the_right_and_bottom_ones()
     {
-        // 0.34 of 100 px is 34 (floor), and 0.34 + 0.5 = 0.84 is 84 (ceiling): the region never loses what was drawn.
-        var (x, y, width, height) = RegionCrop.PixelBox(100, 100, [0.34, 0, 0.5, 1]);
+        // 0.345 of 100 px is 34.5: floor 34 (rounding would say 35 or 34); 0.345 + 0.5 = 84.5: ceiling 85, so 51 wide.
+        var (x, y, width, height) = RegionCrop.PixelBox(100, 100, [0.345, 0.345, 0.5, 0.5]);
 
-        Assert.Equal((34, 0, 50u, 100u), (x, y, width, height));
+        Assert.Equal((34, 34, 51u, 51u), (x, y, width, height));
     }
 
     [Fact]
@@ -73,6 +73,16 @@ public sealed class RegionCropTests
         Assert.True(RegionCrop.IsValid([0.5, 0, 0.5 + 1e-10, 1]));
         var (x, _, width, _) = RegionCrop.PixelBox(100, 100, [0.5, 0, 0.5 + 1e-10, 1]);
         Assert.Equal((50, 50u), (x, width));
+    }
+
+    [Theory]
+    [InlineData(1e-6)]
+    [InlineData(1e-8)]
+    public void Refuses_a_box_that_runs_past_the_photo_by_more_than_the_slack(double past)
+    {
+        Assert.False(RegionCrop.IsValid([0.5, 0, 0.5 + past, 1]));
+        Assert.False(RegionCrop.IsValid([0, 0.5, 1, 0.5 + past]));
+        Assert.Throws<ArgumentException>(() => RegionCrop.PixelBox(100, 100, [0.5, 0, 0.5 + past, 1]));
     }
 
     [Fact]

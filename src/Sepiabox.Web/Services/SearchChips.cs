@@ -137,6 +137,16 @@ public static class SearchChips
             Add(text["Chip_Undated"], f with { UndatedOnly = false });
         }
 
+        if (f.Quality is { } quality)
+        {
+            Add(text[quality.Blurry ? "Chip_Blurry" : "Chip_Sharp"], f with { Quality = null });
+        }
+
+        if (f.IncludeHidden)
+        {
+            Add(text["Chip_IncludeHidden"], f with { IncludeHidden = false });
+        }
+
         if (query.Aggregate is null && query.Sort == SearchSort.CapturedAtAsc)
         {
             chips.Add(new SearchChip(text["Chip_OldestFirst"], query with { Sort = SearchSort.CapturedAtDesc }));

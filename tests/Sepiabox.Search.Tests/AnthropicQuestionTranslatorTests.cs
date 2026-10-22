@@ -23,6 +23,13 @@ public sealed class AnthropicQuestionTranslatorTests
         .Build();
 
     [Fact]
+    public void Allows_a_request_ninety_seconds_for_the_first_call_after_a_format_change()
+    {
+        // The API compiles a new output format on its first call, which took 50 to 55 s (issue 85, D-101).
+        Assert.Equal(TimeSpan.FromSeconds(90), new AnthropicQuestionOptions().Timeout);
+    }
+
+    [Fact]
     public async Task Sends_the_model_the_dsl_schema_low_effort_and_text_only()
     {
         var api = new FakeApi(Answer("""{"filters": {"kinds": ["video"]}}"""));
@@ -195,6 +202,43 @@ public sealed class AnthropicQuestionTranslatorTests
         var result = await translator.TranslateAsync("videos", Context());
 
         Assert.Equal(QuestionOutcome.Unavailable, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Stops_a_question_at_the_overall_deadline_though_each_request_may_take_longer()
+    {
+        // 90 s is per request (D-101); the question as a whole, retries included, ends at the deadline.
+        var api = new FakeApi { Delay = TimeSpan.FromSeconds(30) };
+        using var translator = Translator(api, options: new AnthropicQuestionOptions
+        {
+            ApiKey = Key,
+            Timeout = TimeSpan.FromSeconds(60),
+            MaxRetries = 2,
+            Deadline = TimeSpan.FromMilliseconds(300),
+        });
+        var started = DateTime.UtcNow;
+
+        var result = await translator.TranslateAsync("videos", Context());
+
+        Assert.Equal(QuestionOutcome.Unavailable, result.Outcome);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task Gives_a_caller_that_cancels_a_cancellation_not_an_outcome()
+    {
+        var api = new FakeApi { Delay = TimeSpan.FromSeconds(30) };
+        using var translator = Translator(api, options: new AnthropicQuestionOptions { ApiKey = Key, MaxRetries = 0 });
+        using var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => translator.TranslateAsync("videos", Context(), cancelled.Token));
+    }
+
+    [Fact]
+    public void Allows_the_whole_question_200_seconds_below_the_ingress_limit_of_240()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(200), new AnthropicQuestionOptions().Deadline);
+        Assert.Contains("Deadline = 00:03:20", new AnthropicQuestionOptions().ToString(), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -410,7 +454,8 @@ public sealed class AnthropicQuestionTranslatorTests
         var output = JsonNode.Parse(QuestionPrompt.OutputSchemaJson)!;
 
         // similarTo names an asset (S-017, D-086) and eventIds names occasions (S-023, D-092): ids only the pages know.
-        Assert.Equal(["similarTo", "eventIds", "sourceCount", "similarToRegion"], QuestionPrompt.NotFromQuestions);
+        // quality and includeHidden (S-027, D-098) are the organize page's, and the format is at the API's ceiling (D-094).
+        Assert.Equal(["similarTo", "eventIds", "sourceCount", "quality", "includeHidden", "similarToRegion"], QuestionPrompt.NotFromQuestions);
         Assert.All(QuestionPrompt.NotFromQuestions, field =>
         {
             Assert.NotNull(dsl["properties"]!["filters"]!["properties"]![field]);

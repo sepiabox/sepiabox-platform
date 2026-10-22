@@ -1,7 +1,5 @@
-using Azure;
-using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
 using Sepiabox.Pipeline.Manifests;
+using Sepiabox.Storage;
 
 namespace Sepiabox.Pipeline.Storage;
 
@@ -25,12 +23,15 @@ public sealed record FacesErasure(string Id, DateTimeOffset ErasedAt);
 /// nobody changed the blob in between. Every writer uses it, so two drives, two computers or the
 /// worker never overwrite each other.
 /// </summary>
-public sealed class ManifestStore(IManifestValidator validator)
+public sealed class ManifestStore(IManifestValidator validator, IBlobStore store)
 {
     public const int MaxAttempts = 5;
 
-    /// <summary>Merges <paramref name="incoming"/> into its blob in <paramref name="manifests"/>, named after its id.</summary>
-    public async Task<ManifestWriteResult> WriteMergedAsync(BlobContainerClient manifests, Manifest incoming, CancellationToken cancellationToken)
+    /// <summary>
+    /// Merges <paramref name="incoming"/> into its blob in the <paramref name="container"/> of manifests
+    /// (<see cref="BlobLayout.ManifestsContainer"/>), named after its id.
+    /// </summary>
+    public async Task<ManifestWriteResult> WriteMergedAsync(string container, Manifest incoming, CancellationToken cancellationToken)
     {
         // A hand-edited or truncated work-folder manifest (null sources, a width of 0…) must neither
         // throw out of the merge nor reach storage.
@@ -41,7 +42,7 @@ public sealed class ManifestStore(IManifestValidator validator)
 
         // Named here, from the validated id, so no caller can store a manifest under another asset's name.
         return await WriteAsync(
-            manifests,
+            container,
             incoming.Id,
             // Stored faces said to be found after their blob was written are not trusted (D-081): dropped before the
             // merge, so they cannot outlive an erase that has not reached this blob yet.
@@ -56,11 +57,11 @@ public sealed class ManifestStore(IManifestValidator validator)
     /// read, merge and conditional write as any other writer, so an upload at the same moment is merged, not lost. A
     /// manifest not in storage is left alone: there is nothing to erase.
     /// </summary>
-    public Task<ManifestWriteResult> WriteMergedAsync(BlobContainerClient manifests, FacesErasure erasure, CancellationToken cancellationToken)
+    public Task<ManifestWriteResult> WriteMergedAsync(string container, FacesErasure erasure, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(erasure);
         return WriteAsync(
-            manifests,
+            container,
             erasure.Id,
             (stored, written) => stored is null ? null : ManifestMerge.EraseFaces(stored, erasure.ErasedAt, written),
             cancellationToken);
@@ -69,9 +70,9 @@ public sealed class ManifestStore(IManifestValidator validator)
     // merge gets the stored manifest (null when there is none) and when its blob was written, and returns what to store,
     // or null to write nothing.
     private async Task<ManifestWriteResult> WriteAsync(
-        BlobContainerClient manifests, string id, Func<Manifest?, DateTimeOffset?, Manifest?> merge, CancellationToken cancellationToken)
+        string container, string id, Func<Manifest?, DateTimeOffset?, Manifest?> merge, CancellationToken cancellationToken)
     {
-        var blob = manifests.GetBlobClient(BlobLayout.ManifestBlobName(id));
+        var blobName = BlobLayout.ManifestBlobName(id);
 
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
@@ -81,19 +82,10 @@ public sealed class ManifestStore(IManifestValidator validator)
                 await Task.Delay(TimeSpan.FromMilliseconds(Random.Shared.Next(50, 250) * attempt), cancellationToken);
             }
 
-            string? storedJson = null;
-            ETag? storedETag = null;
-            DateTimeOffset? storedAt = null;
-            try
-            {
-                var current = (await blob.DownloadContentAsync(cancellationToken)).Value;
-                storedJson = current.Content.ToString();
-                storedETag = current.Details.ETag;
-                storedAt = current.Details.LastModified;
-            }
-            catch (RequestFailedException ex) when (ex.Status == 404)
-            {
-            }
+            var current = await store.ReadAsync(container, blobName, cancellationToken);
+            var storedJson = current?.Content.ToString();
+            var storedVersion = current?.Version;
+            var storedAt = current?.LastModified;
 
             Manifest? stored = null;
             if (storedJson is not null)
@@ -128,24 +120,19 @@ public sealed class ManifestStore(IManifestValidator validator)
             }
 
             var content = BinaryData.FromString(json);
-            try
+            var written = await store.WriteAsync(
+                container,
+                blobName,
+                content,
+                "application/json",
+                storedVersion is { } version ? BlobWriteCondition.IfVersion(version) : BlobWriteCondition.IfNew,
+                cancellationToken);
+            if (written.Status == BlobWriteStatus.Written)
             {
-                await blob.UploadAsync(
-                    content,
-                    new BlobUploadOptions
-                    {
-                        HttpHeaders = new BlobHttpHeaders { ContentType = "application/json" },
-                        Conditions = storedETag is { } etag
-                            ? new BlobRequestConditions { IfMatch = etag }
-                            : new BlobRequestConditions { IfNoneMatch = ETag.All },
-                    },
-                    cancellationToken);
                 return new ManifestWriteResult(ManifestWriteStatus.Written, content.ToMemory().Length);
             }
-            catch (RequestFailedException ex) when (ex.Status is 409 or 412)
-            {
-                // Someone wrote the manifest between our read and our write: read it again and merge.
-            }
+
+            // Someone wrote the manifest between our read and our write: read it again and merge.
         }
 
         return Problem($"gave up after {MaxAttempts} concurrent changes to the manifest in storage");

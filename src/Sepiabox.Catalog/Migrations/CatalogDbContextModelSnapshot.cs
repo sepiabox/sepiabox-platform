@@ -50,6 +50,11 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("text")
                         .HasColumnName("content_type");
 
+                    b.Property<string>("DHash")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("dhash");
+
                     b.Property<double?>("DurationSeconds")
                         .HasColumnType("double precision")
                         .HasColumnName("duration_seconds");
@@ -61,6 +66,11 @@ namespace Sepiabox.Catalog.Migrations
                     b.Property<int?>("Height")
                         .HasColumnType("integer")
                         .HasColumnName("height");
+
+                    b.Property<bool>("Hidden")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("hidden");
 
                     b.Property<DateTimeOffset>("ImportedAt")
                         .HasColumnType("timestamp with time zone")
@@ -96,6 +106,10 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("place_region");
 
+                    b.Property<double?>("Sharpness")
+                        .HasColumnType("double precision")
+                        .HasColumnName("sharpness");
+
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint")
                         .HasColumnName("size_bytes");
@@ -111,10 +125,18 @@ namespace Sepiabox.Catalog.Migrations
                     b.HasKey("Id")
                         .HasName("pk_assets");
 
+                    b.HasIndex("Hidden")
+                        .HasDatabaseName("ix_assets_hidden")
+                        .HasFilter("hidden");
+
                     b.HasIndex("Location")
                         .HasDatabaseName("ix_assets_location");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Location"), "gist");
+
+                    b.HasIndex("Sharpness")
+                        .HasDatabaseName("ix_assets_sharpness")
+                        .HasFilter("sharpness IS NOT NULL");
 
                     b.HasIndex("CapturedAt", "Id")
                         .IsDescending(true, false)
@@ -201,6 +223,71 @@ namespace Sepiabox.Catalog.Migrations
                         .HasDatabaseName("ix_asset_sources_asset_id_type_name_path");
 
                     b.ToTable("asset_sources", (string)null);
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.ConnectedSource", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AccountEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("account_email");
+
+                    b.Property<DateTimeOffset>("ConnectedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("connected_at");
+
+                    b.Property<DateTimeOffset?>("CountedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("counted_at");
+
+                    b.Property<string>("EncryptedRefreshToken")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_refresh_token");
+
+                    b.Property<DateTimeOffset?>("LastSyncAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_sync_at");
+
+                    b.Property<int?>("PhotoCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("photo_count");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("type");
+
+                    b.Property<int?>("VideoCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("video_count");
+
+                    b.HasKey("Id")
+                        .HasName("pk_connected_sources");
+
+                    b.HasIndex("Type", "AccountEmail")
+                        .IsUnique()
+                        .HasDatabaseName("ix_connected_sources_account");
+
+                    b.ToTable("connected_sources", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_connected_sources_status", "status IN ('connected', 'reconnect')");
+                        });
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.Derivative", b =>

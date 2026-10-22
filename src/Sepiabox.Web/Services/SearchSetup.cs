@@ -5,20 +5,27 @@ namespace Sepiabox.Web.Services;
 public static class SearchSetup
 {
     /// <summary>
+    /// <c>Search:BlurryBelow</c> (S-027, D-098) is the sharpness below which a photo is blurry, 100 unless set.
     /// <c>Search:TimeZone</c>, an IANA or Windows time zone id such as <c>Europe/Lisbon</c>, is where "today" is
     /// taken for "on this day" (D-069); unset, the server's local time zone (UTC in Container Apps).
     /// </summary>
     public static SearchOptions Options(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+        var blurryBelow = configuration.GetValue("Search:BlurryBelow", SearchOptions.DefaultBlurryBelow);
+        if (!(blurryBelow > 0))
+        {
+            throw new InvalidOperationException($"Search:BlurryBelow must be a number above 0, not {blurryBelow}.");
+        }
+
         var id = configuration["Search:TimeZone"];
         if (string.IsNullOrWhiteSpace(id))
         {
-            return new SearchOptions();
+            return new SearchOptions { BlurryBelow = blurryBelow };
         }
 
         return TimeZoneInfo.TryFindSystemTimeZoneById(id, out var zone)
-            ? new SearchOptions { TimeZone = zone }
+            ? new SearchOptions { TimeZone = zone, BlurryBelow = blurryBelow }
             : throw new InvalidOperationException($"Search:TimeZone '{id}' is not a time zone this server knows.");
     }
 

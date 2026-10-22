@@ -1,7 +1,6 @@
-using Sepiabox.Worker.Azure;
-using Sepiabox.Worker.Events;
+using Sepiabox.Storage.Azure;
 
-namespace Sepiabox.Worker.Tests;
+namespace Sepiabox.Storage.Tests;
 
 public sealed class EventGridBlobEventsTests
 {

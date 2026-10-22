@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Catalog;
 using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Sepiabox.Worker.Importing;
 
 namespace Sepiabox.Worker.Tests.People;
@@ -67,7 +67,7 @@ public sealed class PeopleCurationTests(CatalogFixture fixture)
         Assert.Equal(1, (await db.People.AsNoTracking().SingleAsync()).FaceCount);
         // Imported again, as after another computer's upload: same box, slightly different numbers.
         await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face([0.11, 0.20, 0.30, 0.40], SyntheticFaces.Near(face, seed: 3))));
-        await Importer(db).ImportOneAsync(container, BlobLayout.ManifestBlobName(first.Id), CancellationToken.None);
+        await Importer(db, container).ImportOneAsync(container.Name, BlobLayout.ManifestBlobName(first.Id), CancellationToken.None);
 
         var again = await db.Faces.AsNoTracking().SingleAsync(f => f.AssetId == first.Id);
         Assert.Equal((removed.Id, FaceAssignments.Excluded, (long?)person.Id), (again.Id, again.Assignment, again.PersonId));
@@ -91,7 +91,7 @@ public sealed class PeopleCurationTests(CatalogFixture fixture)
 
         Assert.Equal(CurationOutcome.Done, await Curation(db).NotAFaceAsync(person.Id, marked.Id));
         await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face([0.11, 0.20, 0.30, 0.40], SyntheticFaces.Near(face, seed: 3))));
-        await Importer(db).ImportOneAsync(container, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
+        await Importer(db, container).ImportOneAsync(container.Name, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
 
         var again = await db.Faces.AsNoTracking().SingleAsync(f => f.Id == marked.Id);
         Assert.Equal((FaceAssignments.NotFace, (long?)person.Id), (again.Assignment, again.PersonId));
@@ -123,7 +123,7 @@ public sealed class PeopleCurationTests(CatalogFixture fixture)
 
         // A newer run finds the person's real face in photo 1 too.
         await PutAsync(container, FaceImportTests.WithFaces(1, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: 7)), FaceImportTests.Face([0.6, 0.2, 0.3, 0.4], SyntheticFaces.Near(face, seed: 2))));
-        await Importer(db).ImportOneAsync(container, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
+        await Importer(db, container).ImportOneAsync(container.Name, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
 
         var joined = await db.Faces.AsNoTracking().SingleAsync(f => f.AssetId == manifest.Id && f.Box[0] == 0.6);
         Assert.Equal(person.Id, joined.PersonId);
@@ -344,10 +344,10 @@ public sealed class PeopleCurationTests(CatalogFixture fixture)
     }
 
     private static Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container) =>
-        Importer(db).ImportOnceAsync(container, CancellationToken.None);
+        Importer(db, container).ImportOnceAsync(container.Name, CancellationToken.None);
 
-    private static ManifestImporter Importer(CatalogDbContext db) =>
-        new(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance);
+    private static ManifestImporter Importer(CatalogDbContext db, BlobContainerClient container) =>
+        new(db, TestBlobStore.Of(container), new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance);
 
     private static async Task PutAsync(BlobContainerClient container, Manifest manifest) =>
         await container.GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id))

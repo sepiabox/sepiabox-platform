@@ -94,6 +94,29 @@ public sealed partial class QuestionPageTests
         Assert.Contains(Resource("Ask_LimitReached", "en", 0), WebUtility.HtmlDecode(await posted.Content.ReadAsStringAsync()), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task Has_a_thinking_line_in_the_form_for_the_script_to_show_and_loads_the_script(string language)
+    {
+        await using var web = Web(new FakeLibrary(Item) { SearchResults = new SearchPage([Item], false) }, new FakeTranslator { Json = LisbonDecember });
+        using var http = web.CreateSignedInClient();
+        http.DefaultRequestHeaders.Add("Accept-Language", language);
+
+        var page = await http.GetStringAsync(new Uri("/", UriKind.Relative));
+
+        var form = Regex.Match(page, "<form class=\"ask\".*?</form>", RegexOptions.Singleline).Value;
+        var decoded = WebUtility.HtmlDecode(form);
+        Assert.Contains("class=\"ask-status\" role=\"status\"", form, StringComparison.Ordinal);
+        Assert.Contains($"data-thinking=\"{Resource("Ask_Thinking", language)}\"", decoded, StringComparison.Ordinal);
+        Assert.Contains($"data-slow=\"{Resource("Ask_Slow", language)}\"", decoded, StringComparison.Ordinal);
+        Assert.Contains($"data-timeout=\"{Resource("Ask_TimedOut", language)}\"", decoded, StringComparison.Ordinal);
+        Assert.Matches("role=\"status\"[^>]*></p>", form);
+        Assert.Contains("ask.js", page, StringComparison.Ordinal);
+        using var script = await http.GetAsync(new Uri(Regex.Match(page, "src=\"(ask[^\"]*\\.js)\"").Groups[1].Value, UriKind.Relative));
+        Assert.Equal(HttpStatusCode.OK, script.StatusCode);
+    }
+
     [Fact]
     public async Task Says_questions_are_not_set_up_without_a_key_and_the_filters_still_work()
     {

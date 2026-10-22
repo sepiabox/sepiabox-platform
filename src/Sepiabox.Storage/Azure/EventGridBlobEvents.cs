@@ -1,7 +1,6 @@
 using System.Text.Json;
-using Sepiabox.Worker.Events;
 
-namespace Sepiabox.Worker.Azure;
+namespace Sepiabox.Storage.Azure;
 
 /// <summary>
 /// Reads the Event Grid event a Service Bus message carries (Event Grid schema, one event per message):

@@ -13,8 +13,9 @@ using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
 using Sepiabox.Search.Models;
+using Sepiabox.Storage;
+using Sepiabox.Storage.Azure;
 using Sepiabox.Worker;
-using Sepiabox.Worker.Azure;
 using Sepiabox.Worker.Events;
 using Sepiabox.Worker.Faces;
 using Sepiabox.Worker.Importing;
@@ -52,7 +53,7 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
     builder.AddServiceDefaults();
     if (command.Action is WorkerAction.ImportOnce or WorkerAction.ImportFromQueue)
     {
-        builder.AddAzureBlobServiceClient("blobs");
+        AddBlobStore(builder);
         builder.Services.AddSingleton<ManifestValidator>();
         // D-016's same-person similarity unless configured (S-019).
         builder.Services.AddSingleton(FaceAssignerOptions.For(
@@ -62,7 +63,7 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
 
     if (command.Action == WorkerAction.FacesSweep)
     {
-        builder.AddAzureBlobServiceClient("blobs");
+        AddBlobStore(builder);
         builder.Services.AddSingleton<ManifestValidator>();
     }
 
@@ -164,10 +165,11 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
     {
         var sweep = await new ManifestFacesSweep(
                 services.GetRequiredService<CatalogDbContext>(),
-                new ManifestStore(services.GetRequiredService<ManifestValidator>()),
+                services.GetRequiredService<IBlobStore>(),
+                new ManifestStore(services.GetRequiredService<ManifestValidator>(), services.GetRequiredService<IBlobStore>()),
                 services.GetRequiredService<TimeProvider>(),
                 logger)
-            .RunAsync(services.GetRequiredService<BlobServiceClient>().GetBlobContainerClient(BlobLayout.ManifestsContainer), cancellationToken);
+            .RunAsync(BlobLayout.ManifestsContainer, cancellationToken);
         return sweep.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }
 
@@ -175,7 +177,6 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
     {
         // The Azure implementation of the queue (D-051): Event Grid's events, delivered to Service Bus.
         await using var queue = CreateServiceBusQueue(services.GetRequiredService<IConfiguration>());
-        var manifestsContainer = services.GetRequiredService<BlobServiceClient>().GetBlobContainerClient(BlobLayout.ManifestsContainer);
         var importer = services.GetRequiredService<ManifestImporter>();
         var configuration = services.GetRequiredService<IConfiguration>();
         var options = QueueImportOptions.Default with
@@ -184,7 +185,7 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         };
         var fromQueue = await new QueueImport(
                 queue,
-                (blobName, token) => importer.ImportOneAsync(manifestsContainer, blobName, token),
+                (blobName, token) => importer.ImportOneAsync(BlobLayout.ManifestsContainer, blobName, token),
                 options,
                 services.GetRequiredService<ILogger<QueueImport>>())
             .RunAsync(cancellationToken);
@@ -197,10 +198,17 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         return ExitCodes.Success;
     }
 
-    var manifests = services.GetRequiredService<BlobServiceClient>().GetBlobContainerClient(BlobLayout.ManifestsContainer);
-    var result = await services.GetRequiredService<ManifestImporter>().ImportOnceAsync(manifests, cancellationToken);
+    var result = await services.GetRequiredService<ManifestImporter>().ImportOnceAsync(BlobLayout.ManifestsContainer, cancellationToken);
     Log.ImportFinished(logger, result.Imported, result.Unchanged, result.Problems.Count, result.Warnings.Count);
     return result.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
+}
+
+// The Azure implementation of IBlobStore (D-051), on the client Aspire registers.
+static void AddBlobStore(HostApplicationBuilder builder)
+{
+    builder.AddAzureBlobServiceClient("blobs");
+    builder.Services.AddSingleton<IBlobStore>(services =>
+        new AzureBlobStore(services.GetRequiredService<BlobServiceClient>(), services.GetRequiredService<TimeProvider>()));
 }
 
 static ServiceBusBlobEventQueue CreateServiceBusQueue(IConfiguration configuration)

@@ -13,7 +13,7 @@
 
 <h1 class="visually-hidden">@Text["Timeline_Heading"]</h1>
 
-@if (_options is { } options && (_filtered || _invalid || _asked || _page is { Items.Count: > 0 } || _page is { Page: > 1 }))
+@if (_options is { } options && QuestionBoxShown)
 {
     <form class="ask" method="post" action="./" @formname="ask" @onsubmit="AskAsync" role="search" aria-label="@Text["Ask_Label"]">
         <AntiforgeryToken />
@@ -23,6 +23,9 @@
         </label>
         <button type="submit" disabled="@(!Questions.IsConfigured)">@Text["Ask_Submit"]</button>
         <p class="hint muted">@(Questions.IsConfigured ? Text["Ask_Hint"] : Text["Ask_NotConfigured"])</p>
+        @* Always in the page, so a screen reader announces the text ask.js puts in it (D-101): the first question after an
+           update can take about a minute. The texts are the script's, from the resources (D-050). *@
+        <p class="ask-status" role="status" data-thinking="@Text["Ask_Thinking"]" data-slow="@Text["Ask_Slow"]" data-timeout="@Text["Ask_TimedOut"]"></p>
     </form>
     @if (_askMessage is not null)
     {
@@ -229,6 +232,13 @@ else
     [SupplyParameterFromQuery(Name = SearchLinks.SourceGteParameter)]
     public string? SourceGte { get; set; }
 
+    /// <summary>The sharpness filter and including what was set aside (S-027), carried in hidden fields.</summary>
+    [SupplyParameterFromQuery(Name = SearchLinks.BlurryParameter)]
+    public string? Blurry { get; set; }
+
+    [SupplyParameterFromQuery(Name = SearchLinks.HiddenParameter)]
+    public string? IncludeHidden { get; set; }
+
     /// <summary>The question the search came from, shown again in the box (S-025).</summary>
     [SupplyParameterFromQuery(Name = AskedParameter)]
     public string? Asked { get; set; }
@@ -253,6 +263,9 @@ else
     private IReadOnlyList<OccasionGroup> _groups = [];
     private string? _peopleMessage;
     private bool _asked;
+
+    // The question box is on the page: a library with something to show, a search, or a question asked.
+    private bool QuestionBoxShown => _options is not null && (_filtered || _invalid || _asked || _page is { Items.Count: > 0 } || _page is { Page: > 1 });
     private string? _askMessage;
 
     protected override async Task OnParametersSetAsync()
@@ -267,6 +280,11 @@ else
         }
 
         await LoadAsync();
+        if (QuestionBoxShown)
+        {
+            // The question box is on the page: keep the question format warm in the background (D-101); it never waits.
+            Questions.WarmUp();
+        }
     }
 
     private async Task AskAsync()
@@ -299,7 +317,7 @@ else
         {
             // One address per set of filters, so the URL can be copied and opened again.
             Navigation.NavigateTo(SearchLinks.Timeline(
-                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit, EventIds, SourceEq, SourceGte, RegionAsset, RegionBox, RegionLimit)));
+                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit, EventIds, SourceEq, SourceGte, RegionAsset, RegionBox, RegionLimit, Blurry, IncludeHidden)));
             return;
         }
 

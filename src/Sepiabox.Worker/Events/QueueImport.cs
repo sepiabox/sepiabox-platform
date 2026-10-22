@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Sepiabox.Worker.Importing;
 
 namespace Sepiabox.Worker.Events;

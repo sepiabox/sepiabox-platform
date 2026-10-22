@@ -6,7 +6,7 @@ using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Sepiabox.Worker.Importing;
 using static Sepiabox.Tests.Shared.TestManifests;
 
@@ -221,9 +221,9 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
         var other = Photo(Source("HD da Ana", "b.jpg")) with { Id = new string('b', 64) };
         await PutAsync(container, Photo(Source("HD da Ana", "a.jpg")));
         await PutAsync(container, other);
-        var vanishing = new VanishingBlobContainer(fixture.BlobConnectionString, container.Name, BlobLayout.ManifestBlobName(PhotoId));
+        var vanishing = new VanishingBlobStore(TestBlobStore.Of(container), BlobLayout.ManifestBlobName(PhotoId));
 
-        var result = await ImportAsync(db, vanishing);
+        var result = await ImportAsync(db, container, vanishing);
 
         Assert.Equal(1, result.Imported);
         Assert.Empty(result.Problems);
@@ -348,9 +348,9 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
         WHEN (NEW.id = '{{PhotoId}}') EXECUTE FUNCTION drop_connection();
         """;
 
-    private Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container) =>
-        new ManifestImporter(db, new ManifestValidator(), new PostgisPlaceResolver(db), _clock, NullLogger<ManifestImporter>.Instance)
-            .ImportOnceAsync(container, CancellationToken.None);
+    private Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container, IBlobStore? store = null) =>
+        new ManifestImporter(db, store ?? TestBlobStore.Of(container), new ManifestValidator(), new PostgisPlaceResolver(db), _clock, NullLogger<ManifestImporter>.Instance)
+            .ImportOnceAsync(container.Name, CancellationToken.None);
 
     private static Task<Asset> LoadAsync(CatalogDbContext db) =>
         db.Assets.AsNoTracking().Include(a => a.Sources).Include(a => a.Derivatives).SingleAsync();
@@ -366,11 +366,10 @@ public sealed class ManifestImporterTests(CatalogFixture fixture)
         public override DateTimeOffset GetUtcNow() => Now;
     }
 
-    /// <summary>Lists every blob, but one of them is gone by the time it is downloaded.</summary>
-    private sealed class VanishingBlobContainer(string connectionString, string name, string vanishing)
-        : BlobContainerClient(connectionString, name)
+    /// <summary>Lists every blob, but one of them is gone by the time it is read.</summary>
+    private sealed class VanishingBlobStore(IBlobStore inner, string vanishing) : DelegatingBlobStore(inner)
     {
-        public override BlobClient GetBlobClient(string blobName) =>
-            base.GetBlobClient(blobName == vanishing ? blobName + ".deleted" : blobName);
+        public override Task<BlobContent?> ReadAsync(string container, string name, CancellationToken cancellationToken = default) =>
+            name == vanishing ? Task.FromResult<BlobContent?>(null) : base.ReadAsync(container, name, cancellationToken);
     }
 }

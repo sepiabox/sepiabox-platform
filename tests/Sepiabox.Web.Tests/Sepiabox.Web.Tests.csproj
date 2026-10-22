@@ -39,6 +39,7 @@
   <ItemGroup>
     <Compile Include="..\Shared\Catalog\*.cs" LinkBase="Shared\Catalog" />
     <Compile Include="..\Shared\Live\*.cs" LinkBase="Shared\Live" />
+    <Compile Include="..\Shared\DelegatingBlobStore.cs" LinkBase="Shared" />
   </ItemGroup>
 
 </Project>

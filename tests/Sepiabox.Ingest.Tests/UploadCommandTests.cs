@@ -5,7 +5,7 @@ using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Testcontainers.Azurite;
 
 namespace Sepiabox.Ingest.Tests;
@@ -464,7 +464,7 @@ public sealed class UploadCommandTests : IAsyncLifetime, IDisposable
         }
 
         Assert.Empty((await Upload()).Problems);
-        var blob = Service.GetBlobContainerClient(BlobLayout.DerivativesContainer).GetBlobClient(BlobLayout.DerivativeBlobName(manifest.Id, proxy));
+        var blob = Service.GetBlobContainerClient(BlobLayout.DerivativesContainer).GetBlobClient(BlobLayout.DerivativeBlobName(manifest.Id, proxy.Path));
         var silentSize = (await blob.GetPropertiesAsync()).Value.ContentLength;
 
         var redone = ProcessCommand.Run(options);

@@ -189,6 +189,20 @@ public sealed record SearchFilters
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UndatedOnly { get; init; }
 
+    /// <summary>
+    /// Blurry or sharp photos (S-027, D-098), by the sharpness measured from their previews against
+    /// <see cref="SearchOptions.BlurryBelow"/>; assets that were not measured (videos, photos before the measure) never match.
+    /// Questions never produce it.
+    /// </summary>
+    public QualityFilter? Quality { get; init; }
+
+    /// <summary>
+    /// Also the assets the family set aside on the organize page (S-027); without it, hidden ones are left out of every
+    /// search and count. Questions never produce it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IncludeHidden { get; init; }
+
     /// <summary>True when no filter is set: the whole library.</summary>
     [JsonIgnore]
     public bool IsEmpty => this == new SearchFilters();
@@ -207,7 +221,7 @@ public sealed record SearchFilters
         && Same(Kinds, other.Kinds) && DateFrom == other.DateFrom && DateTo == other.DateTo
         && Same(Years, other.Years) && Same(Months, other.Months) && OnThisDay == other.OnThisDay
         && Equals(Places, other.Places) && Same(SavedPlaces, other.SavedPlaces) && DistanceFrom == other.DistanceFrom
-        && Same(Sources, other.Sources) && SourceCount == other.SourceCount && Equals(People, other.People) && Same(EventIds, other.EventIds) && Same(EventTypes, other.EventTypes) && UndatedOnly == other.UndatedOnly
+        && Same(Sources, other.Sources) && SourceCount == other.SourceCount && Equals(People, other.People) && Same(EventIds, other.EventIds) && Same(EventTypes, other.EventTypes) && UndatedOnly == other.UndatedOnly && Quality == other.Quality && IncludeHidden == other.IncludeHidden
         && Visual == other.Visual && SimilarTo == other.SimilarTo && SimilarToRegion == other.SimilarToRegion;
 
     public override int GetHashCode() => HashCode.Combine(DateFrom, DateTo, OnThisDay, Places, UndatedOnly);
@@ -227,6 +241,13 @@ public sealed record SourceCountFilter
     public int? Eq { get; init; }
 
     public int? Gte { get; init; }
+}
+
+/// <summary>Photos by sharpness (S-027, D-098): <see cref="Blurry"/> true for the blurry ones, false for the sharp ones.</summary>
+public sealed record QualityFilter
+{
+    [JsonRequired]
+    public bool Blurry { get; init; }
 }
 
 /// <summary>

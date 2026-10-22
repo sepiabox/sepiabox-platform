@@ -14,6 +14,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sepiabox.Web.Services;
+using Sepiabox.Web.Sources;
 
 namespace Sepiabox.Web.Tests;
 
@@ -45,6 +46,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
 
     /// <summary>Extra configuration, such as OAuth clients (fake ones: no test ever reaches Google or Microsoft).</summary>
     public Dictionary<string, string> Settings { get; init; } = [];
+
+    /// <summary>False for the test of the setting's own default.</summary>
+    public bool WarmUpOffByDefault { get; init; } = true;
 
     /// <summary>
     /// A folder for the data protection keys, so two factories can read each other's cookies like two
@@ -79,6 +83,9 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
     /// <summary>The family's places; unset, the catalog's (or an in-memory one with a fake library).</summary>
     public ISavedPlaces? SavedPlaces { get; init; }
 
+    /// <summary>The connected cloud accounts (S-037); unset, the catalog's, with a Drive that is never reached.</summary>
+    public IConnectedSources? ConnectedSources { get; init; }
+
     /// <summary>Answers the Google handler's server-to-server calls (token and user info) instead of Google.</summary>
     public HttpMessageHandler? GoogleBackchannel { get; init; }
 
@@ -93,10 +100,17 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             .UseSetting("Search:ModelFolder", Path.Combine(Path.GetTempPath(), "sepiabox-tests-no-models"))
             // Never the developer's key from user secrets: a test that needs questions gives a fake translator.
             .UseSetting("Anthropic:ApiKey", string.Empty)
+
             // Nor the developer's Key Vault: Development loads user secrets, which these settings override (a
             // test that needs a key ring URI sets it in Settings).
             .UseSetting($"ConnectionStrings:{AzureSetup.VaultConnectionName}", string.Empty)
             .UseSetting(AzureSetup.KeyUriKey, string.Empty);
+        if (WarmUpOffByDefault)
+        {
+            // No background question when a page is shown, which would show up in a fake translator's calls (D-101).
+            builder.UseSetting("Questions:WarmUp", "false");
+        }
+
         foreach (var (key, value) in Settings)
         {
             builder.UseSetting(key, value);
@@ -166,6 +180,15 @@ internal sealed class WebFactory : WebApplicationFactory<Program>
             else if (_library is not null)
             {
                 services.AddSingleton<ISavedPlaces>(new FakeSavedPlaces());
+            }
+
+            if (ConnectedSources is not null)
+            {
+                services.AddSingleton(ConnectedSources);
+            }
+            else if (_library is not null)
+            {
+                services.AddSingleton<IConnectedSources>(new FakeConnectedSources());
             }
 
             if (QuestionQuota is not null)

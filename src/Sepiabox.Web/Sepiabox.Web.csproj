@@ -22,6 +22,7 @@
     <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="1.5.4" />
     <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="1.6.4" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Google.Apis.Drive.v3" Version="1.77.0.4301" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="10.0.13" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.MicrosoftAccount" Version="10.0.13" />
   </ItemGroup>
@@ -35,6 +36,8 @@
     <!-- CLIP text model and tokenizer (S-016, D-055): ONNX Runtime only, never Sepiabox.Pipeline (D-038). -->
     <ProjectReference Include="..\Sepiabox.Search\Sepiabox.Search.csproj" />
     <ProjectReference Include="..\Sepiabox.ServiceDefaults\Sepiabox.ServiceDefaults.csproj" />
+    <!-- Blob storage behind IBlobStore (S-050): no media libraries, so never Sepiabox.Pipeline (D-038). -->
+    <ProjectReference Include="..\Sepiabox.Storage\Sepiabox.Storage.csproj" />
   </ItemGroup>
 
 </Project>

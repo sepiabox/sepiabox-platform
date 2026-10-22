@@ -4,7 +4,7 @@ using Sepiabox.Catalog;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Sepiabox.Worker.Importing;
 
 namespace Sepiabox.Worker.Tests;
@@ -30,8 +30,8 @@ public sealed class UploadThenImportTests(CatalogFixture fixture)
         await using var db = await fixture.CreateMigratedDatabaseAsync();
 
         // upload writes to the fixed manifests container, which other tests may also use; only this asset matters.
-        var result = await new ManifestImporter(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
-            .ImportOnceAsync(fixture.Blobs.GetBlobContainerClient(BlobLayout.ManifestsContainer), CancellationToken.None);
+        var result = await new ManifestImporter(db, fixture.Store, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
+            .ImportOnceAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
 
         Assert.DoesNotContain(result.Problems, p => p.BlobName == BlobLayout.ManifestBlobName(id));
         var asset = await db.Assets.AsNoTracking().Include(a => a.Sources).Include(a => a.Derivatives).SingleAsync(a => a.Id == id);

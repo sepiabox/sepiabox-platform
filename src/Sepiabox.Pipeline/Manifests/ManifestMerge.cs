@@ -37,6 +37,9 @@ public static class ManifestMerge
             Sources = MergeSources([.. existing.Sources, .. incoming.Sources]),
             Derivatives = MergeDerivatives([.. existing.Derivatives, .. incoming.Derivatives]),
             Embeddings = MergeEmbeddings([.. existing.Embeddings, .. incoming.Embeddings]),
+            // Measured from the previews, which an index-only and a full work folder make in other sizes: the sharper
+            // measure and the larger hash win, so the same two sides give the same blob in either order (S-027, D-098).
+            Quality = ManifestQuality.Stronger(existing.Quality, incoming.Quality),
             // Stored once any side stores it (S-063, D-088), whichever side is the description.
             OriginalStored = MergeOriginalStored(existing, incoming),
             FacesProcessed = faces.FacesProcessed,
