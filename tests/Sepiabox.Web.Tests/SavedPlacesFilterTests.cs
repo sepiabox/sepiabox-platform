@@ -208,9 +208,9 @@ public sealed class SavedPlacesPageTests : LocalizedContext
 
         var bar = Render<FilterBar>(p => p.Add(b => b.Options, options).Add(b => b.Fields, fields));
 
-        Assert.Equal(["Casa", "Casa da praia"], bar.FindAll("select[name=place] option").Select(o => o.GetAttribute("value")));
-        Assert.Equal(["Casa da praia"], bar.FindAll("select[name=place] option[selected]").Select(o => o.GetAttribute("value")));
-        Assert.Empty(Render<FilterBar>(p => p.Add(b => b.Options, new FilterOptions([], [], []))).FindAll("select[name=place]"));
+        Assert.Equal(["Casa", "Casa da praia"], bar.FindAll("input[name=place]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["Casa da praia"], bar.FindAll("input[name=place][checked]").Select(o => o.GetAttribute("value")));
+        Assert.Empty(Render<FilterBar>(p => p.Add(b => b.Options, new FilterOptions([], [], []))).FindAll("input[name=place]"));
     }
 
     private static string Collapse(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));

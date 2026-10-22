@@ -15,24 +15,39 @@
 
 @if (_options is { } options && QuestionBoxShown)
 {
+    <section class="panel finder">
     <form class="ask" method="post" action="./" @formname="ask" @onsubmit="AskAsync" role="search" aria-label="@Text["Ask_Label"]">
         <AntiforgeryToken />
-        <label>
-            <span>@Text["Ask_Label"]</span>
+        @* One pill-shaped field with the Ask button inside (S-067); the label stays for screen readers. *@
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z" /></svg>
+        <label class="ask-field">
+            <span class="visually-hidden">@Text["Ask_Label"]</span>
             <input type="search" name="Question" value="@(Question ?? Asked)" maxlength="@QuestionPrompt.MaxQuestionLength" placeholder="@Text["Ask_Placeholder"]" disabled="@(!Questions.IsConfigured)" />
         </label>
-        <button type="submit" disabled="@(!Questions.IsConfigured)">@Text["Ask_Submit"]</button>
-        <p class="hint muted">@(Questions.IsConfigured ? Text["Ask_Hint"] : Text["Ask_NotConfigured"])</p>
+        <button type="submit" class="button" disabled="@(!Questions.IsConfigured)">@Text["Ask_Submit"]</button>
         @* Always in the page, so a screen reader announces the text ask.js puts in it (D-101): the first question after an
            update can take about a minute. The texts are the script's, from the resources (D-050). *@
         <p class="ask-status" role="status" data-thinking="@Text["Ask_Thinking"]" data-slow="@Text["Ask_Slow"]" data-timeout="@Text["Ask_TimedOut"]"></p>
     </form>
+    @if (Questions.IsConfigured)
+    {
+        @* One line; what leaves the server is behind a disclosure, so the first screen on a phone shows photos (S-067). *@
+        <p class="hint muted">
+            @Text["Ask_HintShort"]
+            <details class="privacy"><summary>@Text["Ask_PrivacyLabel"]</summary><span>@Text["Ask_Hint"]</span></details>
+        </p>
+    }
+    else
+    {
+        <p class="hint muted">@Text["Ask_NotConfigured"]</p>
+    }
     @if (_askMessage is not null)
     {
         <p class="empty" role="alert">@_askMessage</p>
     }
 
-    <FilterBar Options="options" Fields="SearchLinks.ToFields(_query)" Filtered="@(_filtered || _invalid)" OnThisDayActive="@(_query == SearchLinks.OnThisDay)" DescribeAvailable="Describer.IsAvailable" />
+    <FilterBar Options="options" Fields="SearchLinks.ToFields(_query)" Filtered="@(_filtered || _invalid)" OnThisDayActive="@(_query == SearchLinks.OnThisDay)" DescribeAvailable="Describer.IsAvailable" PeopleResetHref="@PeopleResetHref" />
+    </section>
     @if (_filtered && _query is not null)
     {
         <QueryChips Query="_query" />
@@ -260,6 +275,11 @@ else
     private CountResult? _count;
     private FilterOptions? _options;
     private SearchQuery? _query;
+
+    // "Reset" in the people picker: the same search without the names ("with me" stays, it has a pill of its own).
+    private string PeopleResetHref => _query is null
+        ? "./"
+        : SearchLinks.Timeline(_query with { Filters = _query.Filters with { People = _query.Filters.People is { IncludeMe: true } ? new PeopleFilter { IncludeMe = true } : null } });
     private bool _filtered;
     private bool _invalid;
     private bool _describeUnavailable;

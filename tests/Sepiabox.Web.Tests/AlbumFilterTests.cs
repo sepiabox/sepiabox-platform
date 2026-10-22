@@ -64,10 +64,10 @@ public sealed class AlbumFilterTests : LocalizedContext
 
         var bar = Render<FilterBar>(p => p.Add(b => b.Options, options).Add(b => b.Fields, fields));
 
-        Assert.Equal(["", "Summer 2019", "Wedding"], bar.FindAll("select[name=album] option").Select(o => o.GetAttribute("value")));
-        Assert.Equal(["Wedding"], bar.FindAll("select[name=album] option[selected]").Select(o => o.GetAttribute("value")));
-        Assert.Equal("Album", bar.Find("select[name=album]").ParentElement!.QuerySelector("span")!.TextContent);
-        Assert.Empty(Render<FilterBar>(p => p.Add(b => b.Options, new FilterOptions([], [], []))).FindAll("select[name=album]"));
+        Assert.Equal(["", "Summer 2019", "Wedding"], bar.FindAll("input[name=album]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["Wedding"], bar.FindAll("input[name=album][checked]").Select(o => o.GetAttribute("value")));
+        Assert.Equal("Album", bar.Find("input[name=album]").Closest("div.pop")!.GetAttribute("aria-label"));
+        Assert.Empty(Render<FilterBar>(p => p.Add(b => b.Options, new FilterOptions([], [], []))).FindAll("input[name=album]"));
     }
 
     [Fact]
@@ -78,8 +78,8 @@ public sealed class AlbumFilterTests : LocalizedContext
 
         var bar = Render<FilterBar>(p => p.Add(b => b.Options, options).Add(b => b.Fields, fields));
 
-        Assert.Equal(["", "Reunion", "Summer 2019"], bar.FindAll("select[name=album] option").Select(o => o.GetAttribute("value")));
-        Assert.Equal(["Reunion"], bar.FindAll("select[name=album] option[selected]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["", "Reunion", "Summer 2019"], bar.FindAll("input[name=album]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["Reunion"], bar.FindAll("input[name=album][checked]").Select(o => o.GetAttribute("value")));
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class AlbumFilterTests : LocalizedContext
 
         var bar = Render<FilterBar>(p => p.Add(b => b.Options, options));
 
-        Assert.Equal(["", "Álbum", "Summer", "wedding", "Zoo"], bar.FindAll("select[name=album] option").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["", "Álbum", "Summer", "wedding", "Zoo"], bar.FindAll("input[name=album]").Select(o => o.GetAttribute("value")));
     }
 
     [Theory]
@@ -112,7 +112,7 @@ public sealed class AlbumFilterTests : LocalizedContext
 
         var bar = Render<FilterBar>(p => p.Add(b => b.Options, options));
 
-        Assert.Equal("Álbum", bar.Find("select[name=album]").ParentElement!.QuerySelector("span")!.TextContent);
+        Assert.Equal("Álbum", bar.Find("input[name=album]").Closest("div.pop")!.GetAttribute("aria-label"));
     }
 }
 

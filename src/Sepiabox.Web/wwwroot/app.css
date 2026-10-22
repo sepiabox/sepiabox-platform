@@ -522,16 +522,6 @@ main {
     fill: currentColor;
 }
 
-/* The filter bar (S-013): labelled selects in a row that wraps on narrow screens. */
-.filters,
-.ask {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 12px 16px;
-    margin: 8px 0 16px;
-}
-
 /* The status line is always in the page, so a screen reader announces what ask.js puts in it (D-101); it is only clipped away
    while there is nothing to say. */
 .ask-status {
@@ -591,78 +581,509 @@ main {
     cursor: progress;
 }
 
-.filters label,
-.ask label {
-    display: grid;
-    gap: 4px;
-    font-size: 0.85rem;
-}
-
-.filters select,
-.filters button,
-.ask button {
-    min-height: 40px;
-    padding: 4px var(--s-3);
-    font: inherit;
-    border: 1px solid var(--control-border);
-    border-radius: var(--r-sm);
-    background: var(--surface);
-    color: var(--text);
-}
-
-.filters input[type="search"],
-.ask input[type="search"] {
-    min-height: 40px;
-    min-width: 16rem;
-    padding: 4px var(--s-3);
-    font: inherit;
-    border: 1px solid var(--control-border);
-    border-radius: var(--r-sm);
-}
-
-.filters button,
-.ask button {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-contrast);
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.filters button:hover:not(:disabled),
-.ask button:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-}
-
-.filters button:disabled,
-.ask button:disabled,
 .button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.filters .shortcut[aria-current="page"] {
-    font-weight: 600;
+/* The question box and the filters (S-067, D-123): one panel; the question is a pill with its button inside, the filters are dropdown
+   chips (details), toggle pills and one apply button. Everything works without JavaScript. */
+.panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
 }
 
-/* The question box (S-025) shares the filter bar's look; the question gets the width. */
+.finder {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-3);
+    padding: var(--s-4);
+    margin: var(--s-2) 0 var(--s-4);
+}
+
 .ask {
-    margin-bottom: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: 6px 6px 6px var(--s-4);
+    background: var(--surface-2);
+    border: 1px solid var(--control-border);
+    border-radius: var(--r-pill);
 }
 
-.ask label {
-    flex: 1 1 24rem;
+.ask:focus-within {
+    border-color: var(--accent);
+    box-shadow: var(--ring);
+}
+
+.ask .icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    stroke: var(--text-3);
+    fill: none;
+    stroke-width: 2;
+}
+
+.ask .ask-field {
+    flex: 1;
+    min-width: 0;
+    display: block;
 }
 
 .ask input[type="search"] {
     width: 100%;
+    min-width: 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: 400 var(--text-lg) var(--font-body);
+    padding: 8px 0;
+    outline: 0;
 }
 
-.ask .hint {
-    flex-basis: 100%;
+.ask input[type="search"]::placeholder {
+    color: var(--text-3);
+}
+
+.ask .button {
+    border-radius: var(--r-pill);
+    min-height: 40px;
+}
+
+.finder .hint {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
+}
+
+/* While a question is being understood, or failed, the status takes the hint's place under the pill. */
+.ask.busy .ask-status,
+.ask.failed .ask-status {
+    position: absolute;
+    top: calc(100% + var(--s-2));
+    left: var(--s-4);
+    flex-basis: auto;
+}
+
+.ask.busy ~ .hint,
+.ask.failed ~ .hint {
+    visibility: hidden;
+}
+
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+}
+
+.fchip {
+    position: relative;
+}
+
+.fchip > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    max-width: 100%;
+    padding: 0 var(--s-3) 0 var(--s-4);
+    border: 1px solid var(--control-border);
+    border-radius: var(--r-pill);
+    background: var(--surface);
+    color: var(--text);
+    font: 500 var(--text-sm) var(--font-body);
+    cursor: pointer;
+    list-style: none;
+}
+
+.fchip > summary::-webkit-details-marker {
+    display: none;
+}
+
+.fchip > summary:hover {
+    background: var(--surface-2);
+}
+
+.fchip > summary .k {
+    color: var(--text-2);
+    font-weight: 500;
+}
+
+.fchip > summary .v {
+    max-width: 14ch;
+    overflow: hidden;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fchip:not([data-set]) > summary .v {
+    font-weight: 500;
+}
+
+.fchip > summary .caret {
+    width: 14px;
+    height: 14px;
+    stroke: var(--text-2);
+    fill: none;
+    stroke-width: 2;
+}
+
+.fchip[data-set] > summary {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.fchip[data-set] > summary .k {
+    color: var(--accent);
+}
+
+.fchip[open] > summary {
+    border-color: var(--accent);
+    box-shadow: var(--ring);
+}
+
+.pop {
+    position: absolute;
+    z-index: 25;
+    top: calc(100% + 8px);
+    left: 0;
+    min-width: 18rem;
+    max-width: min(22rem, calc(100vw - 32px));
+    max-height: 20rem;
+    overflow: auto;
+    padding: var(--s-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-pop);
+}
+
+.opt {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    min-height: 44px;
+    padding: 0 var(--s-3);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+}
+
+.opt:hover {
+    background: var(--surface-2);
+}
+
+.opt span:not(.count):not(.avatar) {
+    white-space: nowrap;
+}
+
+.opt input {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--accent);
+}
+
+.opt:has(input:checked) {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* No counts yet (a follow-up, D-123): the slot is kept out of the markup. */
+.pop-search {
+    width: 100%;
+    min-height: 40px;
+    margin-bottom: var(--s-2);
+    padding: 0 var(--s-3);
+    font: inherit;
+    border: 1px solid var(--control-border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--text);
+    box-sizing: border-box;
+}
+
+.pop-foot {
+    position: sticky;
+    bottom: calc(var(--s-2) * -1);
+    display: flex;
+    justify-content: space-between;
+    gap: var(--s-2);
+    margin: var(--s-2) calc(var(--s-2) * -1) calc(var(--s-2) * -1);
+    padding: var(--s-2);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    min-height: 40px;
+    padding: 0 var(--s-4);
+    border: 1px solid var(--control-border);
+    border-radius: var(--r-pill);
+    background: var(--surface);
+    color: var(--text);
+    font: 500 var(--text-sm) var(--font-body);
+    cursor: pointer;
+    text-decoration: none;
+    box-sizing: border-box;
+}
+
+.pill:hover {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.pill input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.pill:has(input:checked),
+.pill[aria-current="page"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+}
+
+.pill:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.pill .icon {
+    width: 16px;
+    height: 16px;
+    stroke: currentcolor;
+    fill: none;
+    stroke-width: 2;
+}
+
+.filters .chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+    flex: 1 1 100%;
+}
+
+.filters .spacer {
+    flex: 1;
+}
+
+.privacy {
+    display: inline;
+}
+
+.privacy > summary {
+    display: inline;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.privacy[open] > span {
+    display: block;
+    margin-top: var(--s-1);
+}
+
+.pop-empty {
+    margin: var(--s-2) var(--s-3);
+    color: var(--text-muted, var(--text-secondary));
+    font-size: var(--text-sm);
+}
+
+.sheet-foot,
+button[data-close] {
+    display: none;
+}
+
+.filters-js button[data-close] {
+    display: inline-flex;
+}
+
+.filters .describe {
+    display: inline-flex;
+    align-items: center;
+    order: 0;
+}
+
+.filters .describe > span {
+    margin-right: var(--s-2);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+}
+
+.filters .describe input[type="search"] {
+    min-width: 14rem;
+    min-height: 40px;
+    padding: 0 var(--s-4);
+    font: 500 var(--text-sm) var(--font-body);
+    border: 1px solid var(--control-border);
+    border-radius: var(--r-pill);
+    background: var(--surface);
+    color: var(--text);
+    box-sizing: border-box;
+}
+
+/* People picker avatars (the face crop or the initials, S-067). */
+.avatar {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--brand-soft);
+    color: var(--brand-ink);
+    font: 700 var(--text-sm) var(--font-display);
+    overflow: hidden;
+    position: relative;
+}
+
+.avatar.md {
+    width: 56px;
+    height: 56px;
+    font-size: 1.2rem;
+}
+
+.avatar.lg {
+    width: 72px;
+    height: 72px;
+    font-size: 1.5rem;
+}
+
+.avatar.c2 {
+    background: #dce7f1;
+    color: #1f4c74;
+}
+
+.avatar.c3 {
+    background: #e2ebdc;
+    color: #3c5a2e;
+}
+
+.avatar.c4 {
+    background: #f0dde3;
+    color: #7a2e45;
+}
+
+.avatar.c5 {
+    background: #ede4cf;
+    color: #6b5313;
+}
+
+.avatar .avatar-photo {
+    position: absolute;
+    max-width: none;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .avatar.c2 {
+        background: #22364a;
+        color: #9cc6ea;
+    }
+
+    :root:not([data-theme="light"]) .avatar.c3 {
+        background: #27361f;
+        color: #b5d4a4;
+    }
+
+    :root:not([data-theme="light"]) .avatar.c4 {
+        background: #40222c;
+        color: #efb3c4;
+    }
+
+    :root:not([data-theme="light"]) .avatar.c5 {
+        background: #3a3016;
+        color: #e6d08c;
+    }
+}
+
+:root[data-theme="dark"] .avatar.c2 {
+    background: #22364a;
+    color: #9cc6ea;
+}
+
+:root[data-theme="dark"] .avatar.c3 {
+    background: #27361f;
+    color: #b5d4a4;
+}
+
+:root[data-theme="dark"] .avatar.c4 {
+    background: #40222c;
+    color: #efb3c4;
+}
+
+:root[data-theme="dark"] .avatar.c5 {
+    background: #3a3016;
+    color: #e6d08c;
+}
+
+/* Phones: the popovers are bottom sheets and the filters wrap with no horizontal scroll. */
+@media (max-width: 600px) {
+    .fchip {
+        position: static;
+    }
+
+    .pop {
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        top: auto;
+        max-width: none;
+        max-height: 72vh;
+        padding-bottom: var(--s-4);
+        border-radius: var(--r-lg) var(--r-lg) 0 0;
+    }
+
+    .ask .button {
+        padding: 0 var(--s-3);
+    }
+
+    .ask input[type="search"] {
+        font-size: var(--text-md);
+    }
+
+    .finder {
+        padding: var(--s-3);
+    }
+
+    /* One scrolling row of chips: the popovers are fixed, so the scroll container does not clip them. */
+    .filters .chips {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: var(--s-1);
+        scrollbar-width: thin;
+    }
+
+    .filters .chips > * {
+        flex: none;
+    }
+
+    .filters .describe {
+        flex: 1 1 100%;
+    }
+
+    .filters .describe input[type="search"] {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .sheet-foot {
+        display: flex;
+    }
 }
 
 /* A counting answer (S-026): the number first, large. */

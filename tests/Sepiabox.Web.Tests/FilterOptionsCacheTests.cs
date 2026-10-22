@@ -37,4 +37,27 @@ public sealed class FilterOptionsCacheTests
 
         Assert.Same(Loaded, await cache.GetAsync(() => Task.FromResult(Loaded)));
     }
+
+    [Fact]
+    public async Task Keeps_the_people_picker_s_covers_for_five_minutes_and_not_a_failed_load()
+    {
+        var clock = new MovableTime(new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero));
+        var cache = new FilterOptionsCache(clock);
+        var loads = 0;
+        Task<Dictionary<long, FaceCrop>> Load()
+        {
+            loads++;
+            return Task.FromResult(new Dictionary<long, FaceCrop>());
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => cache.GetCoversAsync(() => Task.FromException<Dictionary<long, FaceCrop>>(new InvalidOperationException())));
+        await cache.GetCoversAsync(Load);
+        clock.Now += FilterOptionsCache.Lifetime - TimeSpan.FromSeconds(1);
+        await cache.GetCoversAsync(Load);
+        Assert.Equal(1, loads);
+
+        clock.Now += TimeSpan.FromSeconds(1);
+        await cache.GetCoversAsync(Load);
+        Assert.Equal(2, loads);
+    }
 }

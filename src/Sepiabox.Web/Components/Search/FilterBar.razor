@@ -55,108 +55,82 @@
         <input type="hidden" name="@SearchLinks.HiddenParameter" value="1" />
     }
 
-    <label>
-        <span>@Text["Filter_Year"]</span>
-        <select name="year">
-            <option value="">@Text["Filter_Any"]</option>
-            @foreach (var year in Years)
-            {
-                <option value="@year.ToString(CultureInfo.InvariantCulture)" selected="@(Fields.Year == year)">@year.ToString(CultureInfo.InvariantCulture)</option>
-            }
-        </select>
-    </label>
+    <div class="chips">
+    @* The filters are dropdown chips (S-067, D-123): the same field names as the selects they replace, so a submit gives the same
+       address; without JavaScript "Apply filters" submits, with it a radio's change does. *@
+    <FilterChip Label="@Text["Filter_Year"]" Set="@(Fields.Year is not null)" Value="@Fields.Year?.ToString(CultureInfo.CurrentCulture)">
+        <FilterRadios Name="year" Selected="@Fields.Year?.ToString(CultureInfo.InvariantCulture)"
+                      Options="@Years.Select(y => (y.ToString(CultureInfo.InvariantCulture), y.ToString(CultureInfo.CurrentCulture)))" />
+    </FilterChip>
 
-    <label>
-        <span>@Text["Filter_Month"]</span>
-        <select name="month">
-            <option value="">@Text["Filter_Any"]</option>
-            @for (var month = 1; month <= 12; month++)
-            {
-                <option value="@month.ToString(CultureInfo.InvariantCulture)" selected="@(Fields.Month == month)">@MonthName(month)</option>
-            }
-        </select>
-    </label>
+    <FilterChip Label="@Text["Filter_Month"]" Set="@(Fields.Month is not null)" Value="@(Fields.Month is { } shown ? MonthName(shown) : null)">
+        <FilterRadios Name="month" Selected="@Fields.Month?.ToString(CultureInfo.InvariantCulture)"
+                      Options="@Enumerable.Range(1, 12).Select(m => (m.ToString(CultureInfo.InvariantCulture), MonthName(m)))" />
+    </FilterChip>
 
-    <label>
-        <span>@Text["Filter_Kind"]</span>
-        <select name="kind">
-            <option value="">@Text["Filter_Any"]</option>
-            <option value="@AssetKinds.Photo" selected="@(Fields.Kind == AssetKinds.Photo)">@Text["Filter_Photos"]</option>
-            <option value="@AssetKinds.Video" selected="@(Fields.Kind == AssetKinds.Video)">@Text["Filter_Videos"]</option>
-        </select>
-    </label>
+    <FilterChip Label="@Text["Filter_Kind"]" Set="@(Kind is not null)" Value="@(Kind == AssetKinds.Video ? Text["Filter_Videos"].Value : Text["Filter_Photos"].Value)">
+        <FilterRadios Name="kind" Selected="@Kind"
+                      Options="@(new[] { (AssetKinds.Photo, Text["Filter_Photos"].Value), (AssetKinds.Video, Text["Filter_Videos"].Value) })" />
+    </FilterChip>
 
-    <label>
-        <span>@Text["Filter_City"]</span>
-        <select name="city">
-            <option value="">@Text["Filter_Any"]</option>
-            @foreach (var city in Cities)
-            {
-                <option value="@city" selected="@(string.Equals(Fields.City, city, StringComparison.OrdinalIgnoreCase))">@city</option>
-            }
-        </select>
-    </label>
+    <FilterChip Label="@Text["Filter_City"]" Set="@(Fields.City is not null)" Value="@Fields.City">
+        <FilterRadios Name="city" Selected="@Fields.City" Options="@Cities.Select(c => (c, c))" />
+    </FilterChip>
 
-    <label>
-        <span>@Text["Filter_Source"]</span>
-        <select name="source">
-            <option value="">@Text["Filter_Any"]</option>
-            @foreach (var source in Sources)
-            {
-                <option value="@source" selected="@(string.Equals(Fields.Source, source, StringComparison.OrdinalIgnoreCase))">@source</option>
-            }
-        </select>
-    </label>
+    <FilterChip Label="@Text["Filter_Source"]" Set="@(Fields.Source is not null)" Value="@Fields.Source">
+        <FilterRadios Name="source" Selected="@Fields.Source" Options="@Sources.Select(c => (c, c))" />
+    </FilterChip>
 
     @if (Albums.Any())
     {
         @* The albums exports put photos in (S-052): shown only when the catalog has some. *@
-        <label>
-            <span>@Text["Filter_Album"]</span>
-            <select name="album">
-                <option value="">@Text["Filter_Any"]</option>
-                @foreach (var album in Albums)
-                {
-                    <option value="@album" selected="@(string.Equals(Fields.Album, album, StringComparison.OrdinalIgnoreCase))">@album</option>
-                }
-            </select>
-        </label>
+        <FilterChip Label="@Text["Filter_Album"]" Set="@(Fields.Album is not null)" Value="@Fields.Album">
+            <FilterRadios Name="album" Selected="@Fields.Album" Options="@Albums.Select(c => (c, c))" />
+        </FilterChip>
     }
 
     @if (SavedPlaces.Any())
     {
         @* The family's places (S-014): taken in any of them. *@
-        <label class="saved-places-filter">
-            <span>@Text["Filter_SavedPlaces"]</span>
-            <select name="place" multiple size="@Math.Min(4, Math.Max(2, SavedPlaces.Count()))">
-                @foreach (var place in SavedPlaces)
-                {
-                    <option value="@place" selected="@(Fields.SavedPlaces.Contains(place, StringComparer.OrdinalIgnoreCase))">@place</option>
-                }
-            </select>
-        </label>
+        <FilterChip Label="@Text["Filter_SavedPlaces"]" Set="@(Fields.SavedPlaces.Count > 0)" Value="@Summary(Fields.SavedPlaces)">
+            <FilterChecks Name="place" Options="@SavedPlaces" Selected="@Fields.SavedPlaces" />
+        </FilterChip>
     }
 
     @if (People.Any() || Options.MeLinked || Fields.Me)
     {
-        @* Several people: a photo with all of them (S-021); a plain multiple select, no script needed. *@
-        <label class="people-filter">
-            <span>@Text["Filter_People"]</span>
-            <select name="person" multiple size="@Math.Min(4, Math.Max(2, People.Count()))">
-                @foreach (var person in People)
-                {
-                    <option value="@person" selected="@(Fields.People.Contains(person, StringComparer.OrdinalIgnoreCase))">@person</option>
-                }
-            </select>
-        </label>
+        @if (People.Any())
+        {
+            @* Several people: a photo with all of them (S-021). A search box, an avatar per person and a footer that submits. *@
+            <FilterChip Label="@Text["Filter_People"]" Set="@(Fields.People.Count > 0)" Value="@Summary(Fields.People)">
+                <ChildContent>
+                <FilterChecks Name="person" Options="@People" Selected="@Fields.People" Searchable="true" SearchPlaceholder="@Text["Filter_PeopleSearch"]">
+                    <Avatar Context="name">
+                        <PersonAvatar Name="@name" PersonId="@Pick(name).Id" Crop="@Pick(name).Crop" />
+                    </Avatar>
+                </FilterChecks>
+                </ChildContent>
+                <Footer>
+                    <a class="button secondary" href="@PeopleResetHref" data-enhance-nav="false">@Text["Filter_Reset"]</a>
+                    <button type="submit" class="button">@Text["Filter_ShowResults"]</button>
+                </Footer>
+            </FilterChip>
+        }
+
         @if (Options.MeLinked || Fields.Me)
         {
-            <label class="me">
+            <label class="pill me">
                 <input type="checkbox" name="me" value="1" checked="@Fields.Me" />
                 <span>@Text["Filter_Me"]</span>
             </label>
         }
     }
+
+    <a class="pill shortcut" href="@SearchLinks.Timeline(SearchLinks.OnThisDay)" aria-current="@(OnThisDayActive ? "page" : null)">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>
+        <span>@Text["Filter_OnThisDay"]</span>
+    </a>
+    </div>
 
     @if (DescribeAvailable)
     {
@@ -166,8 +140,8 @@
         </label>
     }
 
-    <button type="submit">@Text["Filter_Apply"]</button>
-    <a class="shortcut" href="@SearchLinks.Timeline(SearchLinks.OnThisDay)" aria-current="@(OnThisDayActive ? "page" : null)">@Text["Filter_OnThisDay"]</a>
+    <span class="spacer"></span>
+    <button type="submit" class="button">@Text["Filter_Apply"]</button>
     @if (Filtered)
     {
         <a class="clear" href="./">@Text["Filter_Clear"]</a>
@@ -191,20 +165,34 @@
     [Parameter]
     public bool OnThisDayActive { get; set; }
 
+    /// <summary>Where "Reset" in the people picker goes: the search without the people (S-067).</summary>
+    [Parameter]
+    public string PeopleResetHref { get; set; } = "./";
+
     // A year, city or source the URL names but the catalog lacks stays selectable, so the bar shows what is applied.
     private IEnumerable<int> Years => Fields.Year is { } year && !Options.Years.Contains(year)
         ? Options.Years.Append(year).OrderDescending()
         : Options.Years;
 
+    private IEnumerable<string> Albums => With(Options.Albums, Fields.Album).Order(StringComparer.CurrentCultureIgnoreCase);
+
     private IEnumerable<string> Cities => With(Options.Cities, Fields.City);
 
     private IEnumerable<string> Sources => With(Options.Sources, Fields.Source);
 
-    private IEnumerable<string> Albums => With(Options.Albums, Fields.Album).Order(StringComparer.CurrentCultureIgnoreCase);
 
     private IEnumerable<string> People => Fields.People.Aggregate((IEnumerable<string>)Options.People, (all, name) => With([.. all], name));
 
     private IEnumerable<string> SavedPlaces => Fields.SavedPlaces.Aggregate((IEnumerable<string>)Options.SavedPlaces, (all, name) => With([.. all], name));
+
+    // What the summary says for a many-valued filter: the name when there is one, else how many.
+    private string? Summary(IReadOnlyList<string> chosen) =>
+        chosen.Count switch { 0 => null, 1 => chosen[0], _ => Text["Filter_Selected", chosen.Count.ToString(CultureInfo.CurrentCulture)].Value };
+
+    // A kind the bar does not offer (a hand-made address) is no kind: the chip says "Any", not "Photos".
+    private string? Kind => new[] { AssetKinds.Photo, AssetKinds.Video }.FirstOrDefault(k => string.Equals(k, Fields.Kind, StringComparison.OrdinalIgnoreCase));
+
+    private PersonPick Pick(string name) => Options.PersonPicks.GetValueOrDefault(name) ?? new PersonPick(0, null);
 
     private static IEnumerable<string> With(IReadOnlyList<string> values, string? value) =>
         value is null || values.Contains(value, StringComparer.OrdinalIgnoreCase) ? values : values.Append(value);
