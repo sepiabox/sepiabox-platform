@@ -794,3 +794,53 @@ main {
     font-family: var(--font-display);
     font-weight: 600;
 }
+
+/* The storage page (S-028): a table like a count's ranking, and the assets under it in the timeline's grid. */
+.storage-totals table {
+    border-collapse: collapse;
+}
+
+.storage-totals th,
+.storage-totals td {
+    padding: 4px 16px 4px 0;
+    text-align: left;
+}
+
+.storage-totals thead th:not(:first-child) {
+    text-align: right;
+}
+
+.storage-totals td {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.storage-totals tfoot th,
+.storage-totals tfoot td {
+    border-top: 1px solid var(--mat);
+    font-weight: 700;
+}
+
+.storage-assets {
+    margin: 0 0 8px;
+    padding: 0;
+    list-style: none;
+}
+
+/* A drive's name can be long and unbroken: wrap it anywhere and keep three lines (the full list is the title). */
+.storage-assets p {
+    margin: 4px 0 0;
+    overflow-wrap: anywhere;
+}
+
+.storage-assets .clamp {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+}
+
+.storage-assets .size {
+    font-variant-numeric: tabular-nums;
+}

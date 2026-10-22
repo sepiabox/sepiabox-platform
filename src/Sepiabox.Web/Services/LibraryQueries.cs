@@ -10,6 +10,30 @@ public sealed record TimelineItem(string Id, string Kind, DateTime? CapturedAt, 
 /// <summary>A page of the timeline; <see cref="HasMore"/> says whether an older page exists.</summary>
 public sealed record TimelinePage(int Page, IReadOnlyList<TimelineItem> Items, bool HasMore);
 
+/// <summary>The assets of one kind taken in one year (null: no date), how many and how much they take up (S-028).</summary>
+public sealed record StorageRow(string Kind, int? Year, int Count, long Bytes);
+
+/// <summary>An asset on the storage page: its size and the names of the sources it was found in.</summary>
+public sealed record StorageAsset(
+    string Id, string Kind, DateTime? CapturedAt, double? DurationSeconds, long Bytes, bool HasThumbnail, IReadOnlyList<string> Sources)
+{
+    public TimelineItem Item => new(Id, Kind, CapturedAt, HasThumbnail, DurationSeconds);
+}
+
+/// <summary>
+/// What the storage page shows (S-028): totals by kind and year, the assets found in only one source and in several
+/// (<see cref="InSeveralSources"/> is the first <see cref="LibraryQueries.StorageListLength"/> of <see cref="SeveralSources"/>),
+/// and the largest videos.
+/// </summary>
+public sealed record StorageReport(
+    IReadOnlyList<StorageRow> Rows,
+    int OneSource,
+    long OneSourceBytes,
+    int SeveralSources,
+    long SeveralSourcesBytes,
+    IReadOnlyList<StorageAsset> InSeveralSources,
+    IReadOnlyList<StorageAsset> LargestVideos);
+
 /// <param name="Type">The source's kind: <c>local</c>, an export kind (<c>google-takeout</c>, ...) or a cloud kind (D-023, D-053).</param>
 /// <param name="Name">The drive's or export's label.</param>
 /// <param name="Path">The file's path inside it.</param>
@@ -177,6 +201,9 @@ public interface ILibraryQueries
     Task<CountResult?> CountAsync(SearchQuery query, CancellationToken cancellationToken = default);
 
     Task<FilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>The storage page's numbers (S-028), counted with the search DSL's aggregation (S-026).</summary>
+    Task<StorageReport> GetStorageAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class LibraryQueries(
@@ -188,6 +215,11 @@ public sealed class LibraryQueries(
     ICurrentUser? user = null) : ILibraryQueries
 {
     public const int PageSize = 200;
+
+    /// <summary>The assets in several sources the storage page lists, and the largest videos it lists (S-028).</summary>
+    public const int StorageListLength = 50;
+
+    public const int LargestVideosLength = 20;
 
     /// <summary>Occasions to a page: each is a card with three thumbnails.</summary>
     public const int OccasionsPageSize = 24;
@@ -402,6 +434,60 @@ public sealed class LibraryQueries(
         ArgumentNullException.ThrowIfNull(query);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         return await Search(db).CountAsync(query, cancellationToken);
+    }
+
+    public async Task<StorageReport> GetStorageAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var search = Search(db);
+
+        // Totals by kind and year: one count per kind, grouped by year, with sizes (S-026's aggregation).
+        var rows = new List<StorageRow>();
+        foreach (var kind in new[] { AssetKinds.Photo, AssetKinds.Video })
+        {
+            var counted = await search.CountAsync(
+                new SearchQuery
+                {
+                    Filters = new SearchFilters { Kinds = [kind] },
+                    Aggregate = new SearchAggregate { GroupBy = SearchGroupBy.Year, Sum = SearchSum.Bytes },
+                },
+                cancellationToken);
+            rows.AddRange(counted!.Groups.Select(g => new StorageRow(
+                kind, int.TryParse(g.Key, out var year) ? year : null, g.Count, g.Bytes ?? 0)));
+        }
+
+        var one = SourcesQuery(new SourceCountFilter { Eq = 1 });
+        var several = SourcesQuery(new SourceCountFilter { Gte = 2 });
+        var oneCount = await search.CountAsync(one, cancellationToken);
+        var severalCount = await search.CountAsync(several, cancellationToken);
+
+        var inSeveral = await Described(search.Query(several).Take(StorageListLength));
+        var largest = await Described(
+            db.Assets.AsNoTracking().Where(a => a.Kind == AssetKinds.Video)
+                .OrderByDescending(a => a.SizeBytes).ThenBy(a => a.Id).Take(LargestVideosLength));
+        return new StorageReport(
+            rows, oneCount!.Total, oneCount.Bytes ?? 0, severalCount!.Total, severalCount.Bytes ?? 0, inSeveral, largest);
+
+        static SearchQuery SourcesQuery(SourceCountFilter count) => new()
+        {
+            Filters = new SearchFilters { SourceCount = count },
+            Aggregate = new SearchAggregate { Sum = SearchSum.Bytes },
+        };
+
+        async Task<List<StorageAsset>> Described(IQueryable<Asset> assets)
+        {
+            var found = await assets.Select(a => new
+            {
+                a.Id,
+                a.Kind,
+                a.CapturedAt,
+                a.DurationSeconds,
+                a.SizeBytes,
+                HasThumbnail = a.Derivatives.Any(d => d.Name == DerivativeNames.Thumbnail),
+                Sources = a.Sources.Select(s => s.Name).Distinct().OrderBy(n => n).ToList(),
+            }).ToListAsync(cancellationToken);
+            return [.. found.Select(a => new StorageAsset(a.Id, a.Kind, a.CapturedAt, a.DurationSeconds, a.SizeBytes, a.HasThumbnail, a.Sources))];
+        }
     }
 
     public async Task<SearchPage> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
