@@ -1184,6 +1184,9 @@
     <value>Sepiabox keeps no copy of this original: it stays at its source.</value>
     <comment>Answer to a download of an index-only asset.</comment>
   </data>
+  <data name="Ask_Thinking" xml:space="preserve">
+    <value>Thinking about your question…</value>
+  </data>
   <data name="Layout_Organize" xml:space="preserve">
     <value>Organize</value>
   </data>
@@ -1375,5 +1378,11 @@
   </data>
   <data name="Sources_ReconnectAria" xml:space="preserve">
     <value>Reconnect {0}</value>
+  </data>
+  <data name="Ask_Slow" xml:space="preserve">
+    <value>This is taking longer than usual: the first question after the site was updated can take up to a minute.</value>
+  </data>
+  <data name="Ask_TimedOut" xml:space="preserve">
+    <value>Still waiting. You can keep waiting or try again.</value>
   </data>
 </root>

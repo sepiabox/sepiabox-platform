@@ -60,6 +60,11 @@ builder.Services.AddScoped<IConnectedSources, ConnectedSources>();
 builder.Services.AddSingleton<IQuestionTranslator, ConfiguredQuestionTranslator>();
 builder.Services.AddSingleton<IQuestionQuota, CatalogQuestionQuota>();
 builder.Services.AddSingleton(QuestionLimits.From(builder.Configuration));
+builder.Services.AddSingleton(services => new QuestionWarmUp(
+    services.GetRequiredService<IQuestionTranslator>(), services.GetRequiredService<TimeProvider>(), services.GetRequiredService<ILogger<QuestionWarmUp>>())
+{
+    Enabled = builder.Configuration.GetValue("Questions:WarmUp", true),
+});
 builder.Services.AddScoped<QuestionService>();
 
 builder.AddSepiaboxAuth();
