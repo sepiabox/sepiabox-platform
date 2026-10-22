@@ -26,6 +26,7 @@ With the account connected, Drive photos appear alongside the HD ones, without d
 - [ ] Given a synced Drive photo whose original is not stored, when its detail page renders, then the S-064 source list shows "Open original" for the Drive source, and it downloads through the server.
 
 ### Technical notes
+- **Detail page (S-064, D-095).** Extend `SourceLinks` (`src/Sepiabox.Web/Services/SourceLinks.cs`) with an internal-link kind, an `Href` plus a text key, for "Open original" through the server; its `s_cloudTypes` set is the hook where a cloud source gets no line today. Check the cloud type names against that set when this story lands: `google-drive` and OneDrive's name (S-039) must match too.
 - Container Apps Job cron in the AppHost.
 - Portability (D-051): write to `incoming` through `IBlobStore` (S-050), never the Blob SDK directly.
 - Sources are add-only (D-036): a file deleted or moved in Drive keeps its old source until a removal mechanism exists. If sync needs it, add a `removedAt` tombstone to `ManifestSource`, merged like `modifiedAt` (newer wins), and have the import mark the source as removed instead of deleting it.

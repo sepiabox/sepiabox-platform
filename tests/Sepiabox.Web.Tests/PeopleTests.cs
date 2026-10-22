@@ -95,7 +95,11 @@ public sealed class PeoplePageTests
 
         var html = await http.GetStringAsync(new Uri("/people", UriKind.Relative));
 
-        Assert.True(html.IndexOf("Unnamed", StringComparison.Ordinal) < html.IndexOf("Ana", StringComparison.Ordinal));
+        // Only the page's own markup: the header's sign-out and language forms carry a fresh antiforgery token (base64url,
+        // about 150 characters) on every request, and a short name such as "Ana" turns up in one about once in a thousand.
+        var main = html[html.IndexOf("<main", StringComparison.Ordinal)..];
+        var (unnamed, ana) = (main.IndexOf("Unnamed", StringComparison.Ordinal), main.IndexOf(">Ana<", StringComparison.Ordinal));
+        Assert.True(unnamed >= 0 && ana > unnamed, $"Unnamed at {unnamed}, Ana at {ana}.");
         Assert.Contains("3 faces", html, StringComparison.Ordinal);
         Assert.Contains("href=\"people\"", html, StringComparison.Ordinal);
     }

@@ -34,7 +34,14 @@ public sealed record StorageReport(
     IReadOnlyList<StorageAsset> InSeveralSources,
     IReadOnlyList<StorageAsset> LargestVideos);
 
-public sealed record AssetSourceDetail(string Type, string Name, string Path);
+/// <param name="Type">The source's kind: <c>local</c>, an export kind (<c>google-takeout</c>, ...) or a cloud kind (D-023, D-053).</param>
+/// <param name="Name">The drive's or export's label.</param>
+/// <param name="Path">The file's path inside it.</param>
+/// <param name="Url">
+/// The original's address at its source, as the manifest gave it (S-063). Untrusted text: show it only through
+/// <see cref="SourceLinks.SafeUrl"/>.
+/// </param>
+public sealed record AssetSourceDetail(string Type, string Name, string Path, string? Url = null);
 
 /// <summary>
 /// One asset for the detail page. <c>PreviewName</c> is the derivative shown large: the photo preview, or the
@@ -63,6 +70,15 @@ public sealed record AssetDetail(
 
     /// <summary>Whether it has a CLIP embedding, so "Similar" can find photos like it (S-017).</summary>
     public bool HasEmbedding { get; init; }
+
+    /// <summary>
+    /// Whether Sepiabox keeps the original (S-063, D-088). False for an index-only asset: there is nothing to download,
+    /// and its sources say where the original is.
+    /// </summary>
+    public bool OriginalStored { get; init; } = true;
+
+    /// <summary>The playable version the player uses: <c>proxy-1080p</c> if the asset has it, else <c>proxy-720p</c>; null without either.</summary>
+    public string? ProxyName { get; init; }
 }
 
 /// <summary>A person in a photo; <see cref="Name"/> is null while they are unnamed.</summary>
@@ -92,7 +108,10 @@ public sealed record FilterOptions(
 }
 
 /// <summary>What a download of the original needs: a name for the file and its content type.</summary>
-public sealed record OriginalFile(string FileName, string ContentType);
+/// <param name="FileName">The name a download gets.</param>
+/// <param name="ContentType">The original's content type.</param>
+/// <param name="Stored">False when the original stayed at its source (S-063): there is no blob to sign a link to.</param>
+public sealed record OriginalFile(string FileName, string ContentType, bool Stored = true);
 
 /// <summary>
 /// One person on the people page (S-019): <see cref="Name"/> is null while unnamed, <see cref="Cover"/> the face shown
@@ -353,8 +372,12 @@ public sealed class LibraryQueries(
             .Distinct()
             .ToListAsync(cancellationToken);
         var hasEmbedding = await db.AssetEmbeddings.AnyAsync(e => e.AssetId == id && e.Model == PgvectorSimilarity.ModelKey, cancellationToken);
-        string[] previewOrder = [DerivativeNames.Preview, DerivativeNames.Poster];
+        // The largest the asset has (S-064): an index-only photo has the 2048 px preview and no 1280 px one, a video the
+        // 1080p version and no 720p one; a work folder processed in both modes has both.
+        string[] previewOrder = [DerivativeNames.LargePreview, DerivativeNames.Preview, DerivativeNames.Poster];
         var preview = previewOrder.FirstOrDefault(name => asset.Derivatives.Any(d => d.Name == name));
+        string[] proxyOrder = [DerivativeNames.LargeProxy, DerivativeNames.Proxy];
+        var proxy = proxyOrder.FirstOrDefault(name => asset.Derivatives.Any(d => d.Name == name));
 
         return new AssetDetail(
             asset.Id,
@@ -365,14 +388,16 @@ public sealed class LibraryQueries(
             asset.Width,
             asset.Height,
             preview,
-            [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path))],
+            [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path, s.Url))],
             asset.DurationSeconds,
-            asset.Derivatives.Any(d => d.Name == DerivativeNames.Proxy),
+            proxy is not null,
             PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry))
         {
             People = [.. people.OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
             Location = asset.Location is { } point ? (point.Y, point.X) : null,
             HasEmbedding = hasEmbedding,
+            OriginalStored = asset.OriginalStored,
+            ProxyName = proxy,
         };
     }
 
@@ -401,7 +426,7 @@ public sealed class LibraryQueries(
 
         // The first source in the order the detail page lists them names the download.
         var path = OrderSources(asset.Sources).FirstOrDefault()?.Path;
-        return new OriginalFile(DownloadName(path, asset.Id, asset.ContentType), asset.ContentType);
+        return new OriginalFile(DownloadName(path, asset.Id, asset.ContentType), asset.ContentType, asset.OriginalStored);
     }
 
     public async Task<CountResult?> CountAsync(SearchQuery query, CancellationToken cancellationToken = default)
