@@ -186,6 +186,9 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
 
     if (command.Action == WorkerAction.FacesSweep)
     {
+        // The job's replica timeout is 30 minutes (AzureInfrastructure.FacesTimeoutSeconds), and the sweep may use 25 of them: the strip
+        // stops starting new assets at minute 28 of the job, so it is never killed half way with nothing recorded.
+        var jobDeadline = services.GetRequiredService<TimeProvider>().GetUtcNow() + TimeSpan.FromMinutes(28);
         var sweep = await new ManifestFacesSweep(
                 services.GetRequiredService<CatalogDbContext>(),
                 services.GetRequiredService<IBlobStore>(),
@@ -193,7 +196,24 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
                 services.GetRequiredService<TimeProvider>(),
                 logger)
             .RunAsync(BlobLayout.ManifestsContainer, cancellationToken);
-        return sweep.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
+        // The faces the family deleted one by one (#111), whether or not recognition was ever turned off.
+        var strip = await new IgnoredFacesStrip(
+                services.GetRequiredService<CatalogDbContext>(),
+                new ManifestStore(services.GetRequiredService<ManifestValidator>(), services.GetRequiredService<IBlobStore>()),
+                services.GetRequiredService<TimeProvider>(),
+                logger)
+            .RunAsync(BlobLayout.ManifestsContainer, jobDeadline, cancellationToken);
+        if (sweep.Problems.Count > 0)
+        {
+            Log.FacesJobHalfFailed(logger, "sweep (the erase of all faces)", sweep.Problems.Count);
+        }
+
+        if (strip.Problems.Count > 0)
+        {
+            Log.FacesJobHalfFailed(logger, "strip (the faces deleted one by one)", strip.Problems.Count);
+        }
+
+        return sweep.Problems.Count == 0 && strip.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }
 
     if (command.Action == WorkerAction.Export)

@@ -19,6 +19,13 @@ public sealed record ManifestWriteResult(ManifestWriteStatus Status, long Bytes 
 public sealed record FacesErasure(string Id, DateTimeOffset ErasedAt);
 
 /// <summary>
+/// The removal of some faces from asset <paramref name="Id"/>'s stored manifest (#111, D-121): those <paramref name="Remove"/> says yes to,
+/// by their box (the caller compares it with the boxes the family deleted). The rest of the manifest, and the faces that are not removed,
+/// stay as they are.
+/// </summary>
+public sealed record FacesStripping(string Id, Func<ManifestFace, bool> Remove);
+
+/// <summary>
 /// The only way to write a manifest blob (D-036): reads what is stored, merges, and writes back only if
 /// nobody changed the blob in between. Every writer uses it, so two drives, two computers or the
 /// worker never overwrite each other.
@@ -64,6 +71,21 @@ public sealed class ManifestStore(IManifestValidator validator, IBlobStore store
             container,
             erasure.Id,
             (stored, written) => stored is null ? null : ManifestMerge.EraseFaces(stored, erasure.ErasedAt, written),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Removes faces from an asset's stored manifest (#111, D-121) with the same read and conditional write as any other writer, so an
+    /// upload at the same moment is merged, not lost. Nothing is written when the manifest is not in storage, has no such face, or
+    /// did not look for faces: running it again is <see cref="ManifestWriteStatus.Unchanged"/>.
+    /// </summary>
+    public Task<ManifestWriteResult> WriteMergedAsync(string container, FacesStripping stripping, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(stripping);
+        return WriteAsync(
+            container,
+            stripping.Id,
+            (stored, _) => stored is null ? null : ManifestMerge.StripFaces(stored, stripping.Remove),
             cancellationToken);
     }
 

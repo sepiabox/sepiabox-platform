@@ -114,6 +114,24 @@ public static class ManifestMerge
         });
     }
 
+    /// <summary>
+    /// <paramref name="stored"/> without the faces <paramref name="remove"/> says yes to (#111, D-121); null when there is nothing to
+    /// remove. This is not a merge: a merge keeps the side with more faces, which would bring the removed ones back. Everything else,
+    /// the version and the time the faces were found included, is the stored manifest's own, so the faces that stay are exactly the ones
+    /// that were there.
+    /// </summary>
+    public static Manifest? StripFaces(Manifest stored, Func<ManifestFace, bool> remove)
+    {
+        ArgumentNullException.ThrowIfNull(stored);
+        ArgumentNullException.ThrowIfNull(remove);
+        if (!stored.FacesProcessed || !stored.Faces.Any(remove))
+        {
+            return null;
+        }
+
+        return stored with { Faces = [.. stored.Faces.Where(face => !remove(face))] };
+    }
+
     private static DateTimeOffset? Later(DateTimeOffset? a, DateTimeOffset? b) =>
         a is null ? b : b is null ? a : (a > b ? a : b);
 
