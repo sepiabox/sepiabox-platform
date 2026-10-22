@@ -187,7 +187,13 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
                 services.GetRequiredService<TimeProvider>(),
                 logger)
             .RunAsync(BlobLayout.ManifestsContainer, cancellationToken);
-        return sweep.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
+        // The faces the family deleted one by one (#111), whether or not recognition was ever turned off.
+        var strip = await new IgnoredFacesStrip(
+                services.GetRequiredService<CatalogDbContext>(),
+                new ManifestStore(services.GetRequiredService<ManifestValidator>(), services.GetRequiredService<IBlobStore>()),
+                logger)
+            .RunAsync(BlobLayout.ManifestsContainer, cancellationToken);
+        return sweep.Problems.Count == 0 && strip.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }
 
     if (command.Action == WorkerAction.ImportFromQueue)

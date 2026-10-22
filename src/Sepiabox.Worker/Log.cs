@@ -76,6 +76,12 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not erase the faces of manifest {BlobName}: {Reason}")]
     public static partial void SweepProblem(ILogger logger, string blobName, string reason);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not strip the deleted faces from the manifest of asset {AssetId}: {Reason}")]
+    public static partial void StripProblem(ILogger logger, string assetId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Stripped the faces the family deleted from the manifests: {Assets} asset(s) with such faces, {Stripped} manifest(s) written, {Unchanged} already without them, {Problems} with problems.")]
+    public static partial void IgnoredFacesStripped(ILogger logger, int assets, int stripped, int unchanged, int problems);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Swept the face erase of {ErasedAt:O} into the manifests (pass finished: {Finished}, recorded: {Recorded}): {Erased} erased, {Unchanged} already erased, {Problems} with problems.")]
     public static partial void FacesSwept(ILogger logger, DateTimeOffset erasedAt, bool finished, bool recorded, int erased, int unchanged, int problems);
 
