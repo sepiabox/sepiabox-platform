@@ -86,7 +86,9 @@ else
     protected override async Task OnParametersSetAsync()
     {
         _type = TypeQuery is not null && OccasionTypes.IsKnown(TypeQuery) ? TypeQuery : null;
-        _types = (await Library.GetFilterOptionsAsync()).EventTypes;
+        // The type in the address stays selectable though no occasion has it (yet).
+        var present = (await Library.GetFilterOptionsAsync()).EventTypes;
+        _types = _type is not null && !present.Contains(_type) ? [.. OccasionTypes.All.Where(t => t == _type || present.Contains(t))] : present;
         _page = await Library.GetOccasionsPageAsync(LibraryQueries.ParsePage(PageQuery), _type);
     }
 

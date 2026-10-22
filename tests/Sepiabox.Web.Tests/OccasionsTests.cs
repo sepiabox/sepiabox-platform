@@ -193,6 +193,19 @@ public sealed class OccasionsPageTests : LocalizedContext
     }
 
     [Fact]
+    public void Offers_the_type_in_the_address_even_when_no_occasion_has_it()
+    {
+        var library = new FakeLibrary { Options = new FilterOptions([], [], []) { EventTypes = ["wedding"] } };
+        Services.AddSingleton<ILibraryQueries>(library);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/occasions?type=party");
+
+        var page = Render<Occasions>();
+
+        Assert.Equal(["", "wedding", "party"], page.FindAll("form.occasion-filter option").Select(o => o.GetAttribute("value")));
+        Assert.Equal("party", page.Find("form.occasion-filter option[selected]").GetAttribute("value"));
+    }
+
+    [Fact]
     public void A_page_that_is_not_a_number_is_the_first()
     {
         _library.Occasions.Add(new OccasionSummary(1, new DateTime(2024, 1, 1), new DateTime(2024, 1, 1), null, 1, []));
@@ -541,6 +554,21 @@ public sealed class OccasionTypeDslTests
         };
 
         Assert.Equal(expected, CountAnswers.Sentence(query, 2, Cultures.Text()));
+    }
+
+    [Fact]
+    public void Tells_the_translator_all_the_occasion_types_before_any_occasion_is_typed_and_only_the_ones_there_are_after()
+    {
+        var today = new DateOnly(2026, 10, 22);
+        var untyped = new FilterOptions([], [], []);
+        var typed = new FilterOptions([], [], []) { EventTypes = ["wedding", "trip"] };
+
+        Assert.Equal(
+            [.. OccasionTypes.All.Order(StringComparer.Ordinal)],
+            QuestionService.Context(untyped, today, "Europe/Lisbon").Lists.Single(l => l.DslField == "filters.eventTypes").Values);
+        Assert.Equal(
+            ["trip", "wedding"],
+            QuestionService.Context(typed, today, "Europe/Lisbon").Lists.Single(l => l.DslField == "filters.eventTypes").Values);
     }
 
     [Fact]

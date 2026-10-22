@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
+using Npgsql;
 using Pgvector;
 using Sepiabox.Catalog;
 using Sepiabox.Catalog.Events;
@@ -82,6 +83,28 @@ public sealed class OccasionClassifierTests
         Assert.Equal(0, OccasionClassifier.Classify([vague, vague, vague], Labels()[..^1]));
         // A photo on the neutral prompt alone is of no type.
         Assert.Null(OccasionClassifier.Classify([neutral, neutral, neutral], Labels(), distractors: 1));
+    }
+
+    [Fact]
+    public void A_photo_counts_for_a_type_from_a_probability_of_0_35_and_not_at_0_30()
+    {
+        // Two labels, a type and the neutral prompt: the type's probability is 1 / (1 + e^(100 * (neutral - type))).
+        float[] labels0 = Axis(0), labels1 = Axis(1);
+        float[] Photo(double probability)
+        {
+            var photo = new float[512];
+            photo[0] = 0.5f;
+            photo[1] = 0.5f + (float)(Math.Log(1 / probability - 1) / 100);
+            return photo;
+        }
+
+        Assert.Equal(0, OccasionClassifier.Classify([Photo(0.40)], [labels0, labels1], distractors: 1));
+        Assert.Equal(0, OccasionClassifier.Classify([Photo(0.36)], [labels0, labels1], distractors: 1));
+        Assert.Null(OccasionClassifier.Classify([Photo(0.34)], [labels0, labels1], distractors: 1));
+        Assert.Null(OccasionClassifier.Classify([Photo(0.30)], [labels0, labels1], distractors: 1));
+        // Of ten photos, three at 0.40 and seven at 0.30: only the first three count, and three of ten is enough.
+        Assert.Equal(0, OccasionClassifier.Classify([.. Enumerable.Repeat(Photo(0.40), 3), .. Enumerable.Repeat(Photo(0.30), 7)], [labels0, labels1], distractors: 1));
+        Assert.Null(OccasionClassifier.Classify([.. Enumerable.Repeat(Photo(0.40), 2), .. Enumerable.Repeat(Photo(0.30), 8)], [labels0, labels1], distractors: 1));
     }
 
     [Fact]
@@ -255,6 +278,44 @@ public sealed class OccasionClassifyTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Photos_that_only_the_neutral_prompt_describes_leave_the_occasion_untyped()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        // The neutral prompt's axis is the one after the seven types': were it counted as a type, there is none to name it.
+        var id = await OccasionAsync(db, 1, "street", 0, 5, otherAxis: OccasionTypes.Clip.Count);
+
+        var result = await new OccasionClassifier(db, new TypeAxisEmbedder()).RunAsync(CancellationToken.None);
+
+        Assert.Equal(new OccasionClassification(1, 0, 0, 1), result);
+        Assert.Null((await db.Occasions.AsNoTracking().SingleAsync(o => o.Id == id)).Type);
+    }
+
+    [Fact]
+    public async Task Classifying_waits_for_a_rebuild_that_holds_the_lock_and_goes_on_when_it_is_done()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var id = await OccasionAsync(db, 1, "wedding", 4, 0);
+        await using var holder = new NpgsqlConnection(fixture.ConnectionStringFor(db));
+        await holder.OpenAsync();
+        await using var transaction = await holder.BeginTransactionAsync();
+        await using (var take = new NpgsqlCommand($"SELECT pg_advisory_xact_lock({OccasionRebuild.AdvisoryLockKey})", holder, transaction))
+        {
+            await take.ExecuteNonQueryAsync();
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var classify = Task.Run(() => new OccasionClassifier(db, new TypeAxisEmbedder()).RunAsync(timeout.Token), timeout.Token);
+
+        // Long enough for it to have finished had it not waited.
+        Assert.False(await Task.WhenAny(classify, Task.Delay(TimeSpan.FromSeconds(2))) == classify, "classify did not wait for the lock.");
+        await transaction.CommitAsync();
+        var result = await classify;
+
+        Assert.Equal(new OccasionClassification(1, 1, 0, 0), result);
+        Assert.Equal("wedding", (await db.Occasions.AsNoTracking().SingleAsync(o => o.Id == id)).Type);
+    }
+
+    [Fact]
     public async Task A_text_model_that_is_missing_fails_the_run_before_any_occasion_is_touched()
     {
         await using var db = await fixture.CreateMigratedDatabaseAsync();
@@ -269,7 +330,8 @@ public sealed class OccasionClassifyTests(CatalogFixture fixture)
     // An occasion of assets numbered from `first`, each an hour after the last: the first `wedding` of them with an embedding
     // on the wedding axis, the next `other` on an axis that is none of the types'.
     private static async Task<long> OccasionAsync(
-        CatalogDbContext db, int first, string label, int wedding, int other, string? type = null, double days = 0, double? latitude = null)
+        CatalogDbContext db, int first, string label, int wedding, int other, string? type = null, double days = 0, double? latitude = null,
+        int otherAxis = 100)
     {
         var count = wedding + other;
         var assets = Enumerable.Range(first, Math.Max(count, 1)).ToList();
@@ -285,7 +347,7 @@ public sealed class OccasionClassifyTests(CatalogFixture fixture)
             {
                 AssetId = Id(n),
                 Model = PgvectorSimilarity.ModelKey,
-                Embedding = new Vector(OccasionClassifierTests.Axis(i < wedding ? 0 : 100)),
+                Embedding = new Vector(OccasionClassifierTests.Axis(i < wedding ? 0 : otherAxis)),
             });
         }
 

@@ -159,6 +159,23 @@ public sealed class OccasionsCatalogTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Groups_by_type_only_the_occasions_the_filters_match()
+    {
+        await using var db = await CatalogWithOccasionsAsync();
+
+        var count = await new SearchService(db, s_clock).CountAsync(new SearchQuery
+        {
+            Filters = new SearchFilters { EventTypes = ["wedding"] },
+            Aggregate = new SearchAggregate { Count = SearchCount.Events, GroupBy = SearchGroupBy.EventType },
+        });
+
+        // The trip is an occasion too, but no asset of it matches a filter for weddings.
+        Assert.Equal(1, count!.Total);
+        Assert.Equal([("wedding", 1)], count.Groups.Select(g => (g.Key, g.Count)));
+        Assert.Equal(1, count.AllGroups);
+    }
+
+    [Fact]
     public async Task Four_wedding_occasions_in_2026_count_as_four_whatever_the_number_of_photos()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();
