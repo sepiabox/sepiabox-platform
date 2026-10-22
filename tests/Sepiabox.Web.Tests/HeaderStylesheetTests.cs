@@ -11,17 +11,18 @@ public sealed partial class HeaderStylesheetTests
     private static string Css { get; } = File.ReadAllText(Path.Combine(SourceTree.WebProject, "wwwroot", "app.css"));
 
     [Fact]
-    public void The_header_is_sticky_only_inside_a_media_query_for_wide_screens_and_static_everywhere_else()
+    public void The_header_is_sticky_only_inside_a_media_query_for_wide_screens_and_stacked_above_the_page_everywhere_else()
     {
         var topRules = TopRule().Matches(Css).Select(m => (m.Index, Body: m.Groups[1].Value)).ToList();
         var wide = WideBlock().Match(Css);
         Assert.True(wide.Success, "no (min-width: 1024px) block that sets .top");
 
-        // The rule that sticks is inside the wide block; the plain .top rule says static.
+        // The rule that sticks is inside the wide block; the plain .top rule is relative with a z-index, so the "More" popover paints
+        // above positioned page content where the header is not sticky.
         var sticky = topRules.Where(r => r.Body.Contains("position: sticky", StringComparison.Ordinal)).ToList();
         Assert.Single(sticky);
         Assert.InRange(sticky[0].Index, wide.Index, wide.Index + wide.Length);
-        Assert.Contains(topRules, r => r.Body.Contains("position: static", StringComparison.Ordinal) && !(r.Index >= wide.Index && r.Index <= wide.Index + wide.Length));
+        Assert.Contains(topRules, r => r.Body.Contains("position: relative", StringComparison.Ordinal) && r.Body.Contains("z-index", StringComparison.Ordinal) && !(r.Index >= wide.Index && r.Index <= wide.Index + wide.Length));
     }
 
     [Fact]
