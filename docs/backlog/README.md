@@ -11,7 +11,7 @@ Backlog meant to be executed by autonomous agents. Each story is a small vertica
 
 Statuses: `todo` · `doing` · `blocked` · `done`.
 
-**Sprints** ([D-054](../decisions.md)): a sprint is finished completely before the next one starts, and stories are taken in the order below, within the current sprint; there are no order overrides. A `todo` story whose dependency is `blocked` becomes `blocked` ("depends on S-XXX"). A story whose only open items are manual owner checks is `done` once its automated criteria pass; the manual checks go to [`operations.md`](../operations.md) as owner acceptance. Sprints 3–12 fit in about 4 hours of agent work including the Atlas + Spock reviews (2 stories M + M, or up to 3 when some are S). From Sprint 13 the team is two implementers working in parallel ([D-090](../decisions.md)): each sprint is twice that size, as two independent **tracks** (A and B) of 2–3 stories, about 4 hours each, one implementer per track; the sprint is finished when both tracks are. Within a track, stories are taken in the order listed. Sprints 1–2 were re-cut from the work already done.
+**Sprints** ([D-054](../decisions.md)): a sprint is finished completely before the next one starts, and stories are taken in the order below, within the current sprint; there are no order overrides, except the owner's visual redesign of Sprint 17, taken ahead of the remaining stories ([D-119](../decisions.md)). A `todo` story whose dependency is `blocked` becomes `blocked` ("depends on S-XXX"). A story whose only open items are manual owner checks is `done` once its automated criteria pass; the manual checks go to [`operations.md`](../operations.md) as owner acceptance. Sprints 3–12 fit in about 4 hours of agent work including the Atlas + Spock reviews (2 stories M + M, or up to 3 when some are S). From Sprint 13 the team is two implementers working in parallel ([D-090](../decisions.md)): each sprint is twice that size, as two independent **tracks** (A and B) of 2–3 stories, about 4 hours each, one implementer per track; the sprint is finished when both tracks are. Within a track, stories are taken in the order listed. Sprints 1–2 were re-cut from the work already done.
 
 **MVP** ([D-053](../decisions.md)): Sprints 1–9. Take the data from the external drive to the cloud, ask questions about the imported photos and videos, and get correct answers. The only source in the MVP is the external drive (local folders and drives). Sprints 10–16 come after the MVP and do not start while an MVP story is `blocked`.
 
@@ -186,8 +186,8 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 | Story | Title | Epic | Depends on | Priority | Size | Status | Track |
 |---|---|---|---|---|---|---|---|
-| S-036 | [Process files that arrive in the cloud without a manifest](S-036-process-files-that-arrive-in-the-cloud.md) | Cloud sources | S-033, S-006, S-015, S-050 | Medium | M | `doing` | A |
-| S-057 | [Delete a source's assets from the library](S-057-delete-a-source-s-assets-from-the.md) | Cloud catalog | S-008, S-050, S-058 | Medium | M | `todo` | A |
+| S-036 | [Process files that arrive in the cloud without a manifest](S-036-process-files-that-arrive-in-the-cloud.md) | Cloud sources | S-033, S-006, S-015, S-050 | Medium | M | `done` | A |
+| S-057 | [Delete a source's assets from the library](S-057-delete-a-source-s-assets-from-the.md) | Cloud catalog | S-008, S-050, S-058 | Medium | M | `done` | A |
 | S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010, S-051, S-063 | Medium | S | `todo` | A |
 | S-045 | [Read metadata from photo exports during process](S-045-read-metadata-from-photo-exports-during-process.md) | Import exports | S-004, S-043 | Medium | M | `done` | B |
 | S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `done` | B |
@@ -208,6 +208,20 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
 | S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `todo` | B |
 
+### Sprint 17 — Visual redesign
+
+**Demonstrable increment:** The app has a modern, consistent look in light and dark: new base controls and header, filter chips and a people picker on the timeline, a photo detail with face thumbnails, and every page on the shared components.
+
+**Priority** ([D-119](../decisions.md)): the owner asked for this ahead of the remaining stories, so S-066 and S-067 are taken as soon as an implementer is free, even while Sprint 16 is still open. **Order:** one track, S-066 first, since everything builds on its tokens; once S-066 is merged, S-067 and S-068 may be taken by the two implementers at the same time (they touch different pages), and S-069 and S-070 come last. Each waits for the stories it depends on to merge, so a page is never redesigned while another story is still changing it.
+
+| Story | Title | Epic | Depends on | Priority | Size | Status | Track |
+|---|---|---|---|---|---|---|---|
+| S-066 | [Design tokens, base controls and the header](S-066-design-tokens-and-base-controls.md) | Visual design | S-013 | High | M | `todo` | A |
+| S-067 | [Timeline filters and the question box, redesigned](S-067-timeline-filters-and-search.md) | Visual design | S-066, S-052 | High | M | `todo` | A |
+| S-068 | [Photo grid and photo detail, redesigned](S-068-photo-grid-and-detail.md) | Visual design | S-066, S-041, S-052, S-064 | Medium | M | `todo` | A |
+| S-069 | [Remaining pages on the shared components](S-069-remaining-pages-on-shared-components.md) | Visual design | S-066, S-067, S-068, S-037, S-039, S-040 | Medium | M | `todo` | A |
+| S-070 | [Empty states, notes and a theme switch](S-070-empty-states-and-theme-switch.md) | Visual design | S-069 | Low | S | `todo` | A |
+
 ## Epics
 
 | Epic | Stories |
@@ -226,12 +240,13 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Privacy | S-040 |
 | Site | S-042 |
 | Import exports | S-045, S-046, S-047, S-048, S-049, S-052 |
+| Visual design | S-066, S-067, S-068, S-069, S-070 |
 
 ## Validation
 
 - **Dependencies:** all point to stories listed above them, in the same or an earlier sprint (S-044 and S-050–S-062 were added with D-050, D-051, D-053 and the reviews of D-054, and S-063–S-064 with D-088; the sprints were re-cut by D-054, D-088 put index-only mode right after Sprint 12 at the owner's choice, and D-090 regrouped Sprints 13–16 into two parallel tracks); there are no cycles and no forward dependencies: a story's dependencies sit in an earlier sprint or earlier in the same track, and no story depends on the other track of its sprint (checked by script when this index is generated).
-- **Size:** 22 stories S, 42 M, none L.
-- **Sprints:** 16 sprints. Sprints 3–12 hold 2 or 3 stories each (M + M, or up to 3 when some are S, D-054); Sprints 13–16 hold two tracks of 2–3 stories each, 5 or 6 stories per sprint (D-090); Sprints 1 (11 stories) and 2 (7) gather the work done before D-054.
+- **Size:** 24 stories S, 46 M, none L.
+- **Sprints:** 17 sprints. Sprints 3–12 hold 2 or 3 stories each (M + M, or up to 3 when some are S, D-054); Sprints 13–16 hold two tracks of 2–3 stories each, 5 or 6 stories per sprint (D-090); Sprint 17, the owner's visual redesign, holds 5 stories on one track (D-119); Sprints 1 (11 stories) and 2 (7) gather the work done before D-054.
 - **Decisions covered:** D-001 to D-024 in [`decisions.md`](../decisions.md) are applied: each is cited in the technical notes of at least one story, except D-021, which this backlog itself applies.
 - Story status is kept up to date by each story's PR (see [How to use](#how-to-use)).
 
@@ -253,8 +268,8 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 ## Summary
 
-- **Epics:** 14
-- **Sprints:** 16 (Sprints 13–16 with two parallel tracks, D-090)
-- **Stories:** 64
-- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (36 stories), with the external drive as the only source; Sprints 10–16 (28 stories) come after it. The MVP is done (all 36 stories); its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
+- **Epics:** 15
+- **Sprints:** 17 (Sprints 13–16 with two parallel tracks, D-090; Sprint 17 the visual redesign, D-119)
+- **Stories:** 70
+- **MVP** ([D-053](../decisions.md)): Sprints 1–9 (36 stories), with the external drive as the only source; Sprints 10–17 (34 stories) come after it. The MVP is done (all 36 stories); its longest chain is 12 stories (S-001 → … → S-010 → S-011 → S-044 → S-025 → S-026 → S-054).
 - **Critical path (13 stories):** S-001 → S-002 → S-004 → S-007 → S-008 → S-009 → S-010 → S-032 → S-058 → S-033 → S-050 → S-036 → S-038, and others as long: the same chain ending in S-036 → S-039, or in S-050 → S-051 → S-040. Index-only mode (S-063, S-064) depends only on done stories, so it adds nothing to it (D-088). With the parallel tracks of D-090 the chain runs through Sprints 14 (S-050), 15 (S-036) and 16 (S-038 or S-039), so Sprints 14–16 are the shortest possible plan.

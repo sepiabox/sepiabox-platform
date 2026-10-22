@@ -51,6 +51,8 @@ internal sealed class GoldenQuestions
             a["people"] is JsonArray people ? [.. people.Select(p => p!.GetValue<string>())] : [])
         {
             Location = a["location"] is JsonArray location ? (location[0]!.GetValue<double>(), location[1]!.GetValue<double>()) : null,
+            SizeBytes = a["size"]?.GetValue<long>() ?? 1000,
+            AlsoIn = a["alsoIn"] is JsonArray also ? [.. also.Select(s => s!.GetValue<string>())] : [],
         })];
         Occasions = [.. (root["occasions"]?.AsArray() ?? []).Select(o => new GoldenOccasion(
             o!["type"]?.GetValue<string>(), [.. o["assets"]!.AsArray().Select(n => n!.GetValue<int>())]))];
@@ -114,14 +116,18 @@ internal sealed class GoldenQuestions
                 Id = Ids.Of(asset.N),
                 Kind = asset.Kind,
                 ContentType = asset.Kind == "video" ? "video/mp4" : "image/jpeg",
-                SizeBytes = 1000,
+                SizeBytes = asset.SizeBytes,
                 CapturedAt = asset.Date?.ToDateTime(new TimeOnly(12, 0)),
                 PlaceCity = asset.City,
                 Location = asset.Location is var (latitude, longitude) ? new Point(longitude, latitude) { SRID = 4326 } : null,
                 PlaceCountry = asset.Country,
                 ImportedAt = DateTimeOffset.UnixEpoch,
                 UpdatedAt = DateTimeOffset.UnixEpoch,
-                Sources = [new AssetSource { AssetId = Ids.Of(asset.N), Type = "local", Name = asset.Source, Path = $"{asset.N}.jpg" }],
+                Sources =
+                [
+                    new AssetSource { AssetId = Ids.Of(asset.N), Type = "local", Name = asset.Source, Path = $"{asset.N}.jpg" },
+                    .. asset.AlsoIn.Select(name => new AssetSource { AssetId = Ids.Of(asset.N), Type = "local", Name = name, Path = $"copy/{asset.N}.jpg" }),
+                ],
             });
             // Photos have CLIP embeddings: along their concepts, or along an axis of their own, which no description matches.
             if (asset.Kind == "photo")
@@ -213,7 +219,13 @@ internal sealed class GoldenQuestions
         // A count is compared by its numbers: the total, the undated it leaves out, and the groups in order (S-026).
         if (query.Aggregate is not null && await search.CountAsync(query) is { } count)
         {
-            return ["count", $"total={count.Total}", $"undated={count.Undated}", .. count.Groups.Select(g => $"{g.Key ?? "(none)"}={g.Count}")];
+            // And their size, for a count that sums it (S-028).
+            return
+            [
+                "count", $"total={count.Total}", $"undated={count.Undated}", .. count.Groups.Select(g => $"{g.Key ?? "(none)"}={g.Count}"),
+                .. count.Bytes is { } bytes ? [$"bytes={bytes}"] : Array.Empty<string>(),
+                .. count.Groups.Where(g => g.Bytes is not null).Select(g => $"{g.Key ?? "(none)"}.bytes={g.Bytes}"),
+            ];
         }
 
         var result = await search.ExecuteAsync(query, SimilarityMode.Exact);
@@ -245,6 +257,12 @@ internal sealed class GoldenQuestions
     {
         /// <summary>Where it was taken (S-014), made up; null for most assets.</summary>
         public (double Latitude, double Longitude)? Location { get; init; }
+
+        /// <summary>The size of the original, in bytes (S-028); 1000 for most assets.</summary>
+        public long SizeBytes { get; init; } = 1000;
+
+        /// <summary>Other sources the same file was found in, besides <see cref="Source"/> (S-028).</summary>
+        public IReadOnlyList<string> AlsoIn { get; init; } = [];
     }
 
     public sealed record GoldenOccasion(string? Type, IReadOnlyList<int> Assets);

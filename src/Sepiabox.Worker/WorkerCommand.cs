@@ -18,6 +18,7 @@ public enum WorkerAction
     SyncGoogleDrive,
     SyncOneDrive,
     SyncAll,
+    AssetsDelete,
 }
 
 /// <summary>The three GeoNames dump files that <c>geonames load</c> reads (S-012).</summary>
@@ -29,7 +30,12 @@ public sealed record GeoNamesSource(string Cities, string Admin1, string Countri
 /// <param name="Folder">Where <see cref="WorkerAction.GeoNamesDownload"/> writes the files.</param>
 /// <param name="Rescan">The connected account (its address) whose sync state is forgotten first, for <see cref="WorkerAction.SyncGoogleDrive"/> or <see cref="WorkerAction.SyncOneDrive"/> only (S-038, S-039).</param>
 /// <param name="AllPlaces">Name every asset's place again, for <see cref="WorkerAction.PlacesRefresh"/> only.</param>
-public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNamesSource? GeoNames = null, bool AllPlaces = false, string? Folder = null, string? Rescan = null)
+/// <param name="Source">The source whose assets <see cref="WorkerAction.AssetsDelete"/> deletes.</param>
+/// <param name="Yes">Really delete (<c>--yes</c>); without it <c>assets delete</c> is a dry run.</param>
+/// <param name="Expect">How many assets must match for <c>--yes</c> to delete (<c>--expect</c>).</param>
+public sealed record WorkerCommand(
+    WorkerAction Action, bool MigrateFirst, GeoNamesSource? GeoNames = null, bool AllPlaces = false, string? Folder = null,
+    string? Source = null, bool Yes = false, int? Expect = null, string? Rescan = null)
 {
     public const string Usage = """
         Usage: sepiabox-worker <command>
@@ -80,6 +86,13 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                                      of its photos and, for a trip, its distance from the home place. Needs
                                      the CLIP text model: sepiabox-ingest models download (or Search:ModelFolder).
                                      Safe to run again. Run it after events rebuild.
+          assets delete --source <name> [--yes --expect <n>]
+                                     Remove the assets that came only from the source <name> (S-057): without
+                                     --yes a dry run that lists every matched asset with its source paths and
+                                     blobs and the totals; with --yes --expect <n> it deletes, and refuses to
+                                     start unless exactly n assets match. An asset any other source also holds
+                                     is kept. Exit 0 done, 1 some assets kept or failed (listed), 2 usage.
+                                     What the manual sepiabox-admin job runs.
         """;
 
     public static bool TryParse(string[] args, [NotNullWhen(true)] out WorkerCommand? command, out string error)
@@ -145,6 +158,8 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
             case ["events", "classify"]:
                 command = new WorkerCommand(WorkerAction.EventsClassify, false);
                 return true;
+            case ["assets", "delete", .. var options]:
+                return TryParseAssetsDelete(options, out command, out error);
             case [_, ..]:
                 error = $"Unknown command or option in '{string.Join(' ', args)}'.";
                 return false;
@@ -190,6 +205,56 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
         }
 
         command = new WorkerCommand(WorkerAction.GeoNamesLoad, false, new GeoNamesSource(cities, admin1, countries));
+        return true;
+    }
+
+    private static bool TryParseAssetsDelete(string[] options, [NotNullWhen(true)] out WorkerCommand? command, out string error)
+    {
+        command = null;
+        error = string.Empty;
+        string? source = null;
+        var yes = false;
+        int? expect = null;
+        for (var i = 0; i < options.Length; i++)
+        {
+            switch (options[i])
+            {
+                case "--source" when source is null && i + 1 < options.Length && !options[i + 1].StartsWith("--", StringComparison.Ordinal):
+                    source = options[++i];
+                    break;
+                case "--source":
+                    error = "--source needs the name of one source, once.";
+                    return false;
+                case "--yes":
+                    yes = true;
+                    break;
+                case "--expect" when expect is null && i + 1 < options.Length
+                    && int.TryParse(options[i + 1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var count):
+                    expect = count;
+                    i++;
+                    break;
+                case "--expect":
+                    error = "--expect needs a whole number, once.";
+                    return false;
+                default:
+                    error = $"Unknown option '{options[i]}' for assets delete.";
+                    return false;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            error = "assets delete needs --source <name>.";
+            return false;
+        }
+
+        if (yes != (expect is not null))
+        {
+            error = "--yes and --expect <n> go together: without them assets delete only lists what it would delete.";
+            return false;
+        }
+
+        command = new WorkerCommand(WorkerAction.AssetsDelete, false, Source: source.Trim(), Yes: yes, Expect: expect);
         return true;
     }
 }
