@@ -65,35 +65,172 @@
     font-display: swap;
     src: url("fonts/ibm-plex-mono/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
 }
-/* The brand's colours by their names (docs/architecture.md): sepia is the brand, cyanotype the actions,
-   developer (the darkest brown, as in photographic developer) the text, silver paper the background, mat the lines.
-   The rest are the brand board's supporting tones: surfaces, secondary text and the filter chips. */
+/* The design tokens (D-119, D-120; the reference is docs/design/redesign/css/tokens.css). The brand's colours keep their names in the
+   comments: sepia is the brand, cyanotype the actions, developer (the darkest brown) the text, silver paper the background, mat the lines.
+   Every text pair is at least 4.5:1 and every control border at least 3:1, in both themes (TokenContrastTests checks the values). The dark
+   theme follows the system setting; [data-theme] is for a switch a later story may add. */
 :root {
-    --sepia: #9a5a2c;
-    --cyanotype: #1f4c74;
-    --cyanotype-hover: #163a59;
-    --developer: #231a14;
-    --silver-paper: #eeece7;
-    --mat: #d8d1c6;
-    --surface: #f8f7f4;
-    --text-secondary: #5c5048;
-    --chip: #e6ebf0;
-    --white: #ffffff;
+    color-scheme: light dark;
+
+    /* type */
     --font-display: "Bricolage Grotesque", system-ui, sans-serif;
     --font-body: "Figtree", system-ui, sans-serif;
     --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-md: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.375rem;
+    --text-2xl: 1.75rem;
+    --text-3xl: 2.25rem;
+
+    /* space, on a 4-point scale */
+    --s-1: 4px;
+    --s-2: 8px;
+    --s-3: 12px;
+    --s-4: 16px;
+    --s-5: 24px;
+    --s-6: 32px;
+    --s-7: 48px;
+    --s-8: 64px;
+
+    /* shape */
+    --r-sm: 6px;
+    --r-md: 10px;
+    --r-lg: 16px;
+    --r-pill: 999px;
+    --ring: 0 0 0 3px var(--focus);
+
+    /* the sticky header's height, for anchored targets (#106) */
+    --header-h: 64px;
+
+    /* light */
+    --bg: #eeece7; /* silver paper */
+    --surface: #ffffff;
+    --surface-2: #f7f5f1;
+    --border: #ddd6cb; /* mat, lightened for hairlines */
+    --control-border: #8c8174;
+    --text: #231a14; /* developer */
+    --text-2: #5c5048;
+    --text-3: #6f6358;
+    --accent: #1f4c74; /* cyanotype: actions */
+    --accent-hover: #163a59;
+    --accent-contrast: #ffffff;
+    --accent-soft: #e3eaf1;
+    --brand: #9a5a2c; /* sepia */
+    --brand-soft: #f2e6da;
+    --brand-ink: #7a4520;
+    --danger: #a1301f;
+    --focus: #1f4c7466;
+    --stage: #16110d; /* the dark stage a photo is shown on, in both themes */
+    --shadow-sm: 0 1px 2px rgb(35 26 20 / 0.08);
+    --shadow-md: 0 4px 14px rgb(35 26 20 / 0.12);
+    --shadow-pop: 0 12px 32px rgb(35 26 20 / 0.18), 0 2px 6px rgb(35 26 20 / 0.1);
+
+    /* The names the pages already use, on the new tokens, so every page follows the theme with no markup change. */
+    --sepia: var(--brand);
+    --cyanotype: var(--accent);
+    --cyanotype-hover: var(--accent-hover);
+    --developer: var(--text);
+    --silver-paper: var(--bg);
+    --mat: var(--border);
+    --text-secondary: var(--text-2);
+    --chip: var(--accent-soft);
+    --white: var(--surface);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #15110e;
+        --surface: #1e1813;
+        --surface-2: #261f19;
+        --border: #352c24;
+        --control-border: #7c7062;
+        --text: #f2ede5;
+        --text-2: #b9ada0;
+        --text-3: #a09486;
+        --accent: #8fbce3;
+        --accent-hover: #b3d3ef;
+        --accent-contrast: #0e2236;
+        --accent-soft: #22364a;
+        --brand: #e0a36b;
+        --brand-soft: #33261b;
+        --brand-ink: #e8b887;
+        --danger: #f0907f;
+        --focus: #8fbce399;
+        --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+        --shadow-md: 0 4px 14px rgb(0 0 0 / 0.45);
+        --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.6), 0 0 0 1px #352c24;
+    }
+}
+
+:root[data-theme="dark"] {
+    --bg: #15110e;
+    --surface: #1e1813;
+    --surface-2: #261f19;
+    --border: #352c24;
+    --control-border: #7c7062;
+    --text: #f2ede5;
+    --text-2: #b9ada0;
+    --text-3: #a09486;
+    --accent: #8fbce3;
+    --accent-hover: #b3d3ef;
+    --accent-contrast: #0e2236;
+    --accent-soft: #22364a;
+    --brand: #e0a36b;
+    --brand-soft: #33261b;
+    --brand-ink: #e8b887;
+    --danger: #f0907f;
+    --focus: #8fbce399;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 14px rgb(0 0 0 / 0.45);
+    --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.6), 0 0 0 1px #352c24;
+}
+
+@media (max-width: 600px) {
+    :root {
+        --header-h: 112px;
+    }
 }
 
 *, *::before, *::after {
     box-sizing: border-box;
 }
 
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
 body {
     margin: 0;
-    background: var(--silver-paper);
-    color: var(--developer);
+    background: var(--bg);
+    color: var(--text);
     font-family: var(--font-body);
-    line-height: 1.5;
+    font-size: var(--text-md);
+    line-height: 1.55;
+}
+
+/* Anchored targets and the elements a script scrolls to are not hidden under the sticky header (#106). */
+:target,
+[id] {
+    scroll-margin-top: calc(var(--header-h) + var(--s-3));
+}
+
+/* Every interactive element shows where the keyboard is. */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 a {
@@ -104,10 +241,80 @@ a:hover {
     color: var(--cyanotype-hover);
 }
 
-h1, h2 {
+h1, h2, h3 {
     font-family: var(--font-display);
     font-weight: 700;
     line-height: 1.2;
+    letter-spacing: -0.01em;
+}
+
+/* Base controls (S-066): one height, one radius, borders that reach 3:1. Rules for a class below this block win. */
+input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"], [type="submit"], [type="button"]),
+select,
+textarea {
+    min-height: 40px;
+    padding: 0 var(--s-3);
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--control-border);
+    border-radius: var(--r-sm);
+    font: inherit;
+}
+
+textarea {
+    padding: var(--s-2) var(--s-3);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--text-3);
+}
+
+input:not([type="checkbox"], [type="radio"]):focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: var(--ring);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--accent);
+}
+
+button {
+    min-height: 40px;
+    padding: 0 var(--s-4);
+    background: var(--surface);
+    color: var(--accent);
+    border: 1px solid var(--control-border);
+    border-radius: var(--r-md);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+button:hover:not(:disabled) {
+    background: var(--accent-soft);
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* The card: a surface with a hairline and a soft shadow. */
+.card {
+    padding: var(--s-5);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
 }
 
 h1:focus {
@@ -143,22 +350,27 @@ h1:focus {
     font-size: 0.875rem;
 }
 
+/* The header (S-066): sticky, one row where it fits, pill links with the current page marked. */
 .top {
+    position: sticky;
+    top: 0;
+    z-index: 30;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 24px;
-    padding: 12px 24px;
-    background: var(--white);
-    border-bottom: 1px solid var(--mat);
+    gap: var(--s-2) var(--s-4);
+    padding: var(--s-3) var(--s-5);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: saturate(1.4) blur(8px);
+    border-bottom: 1px solid var(--border);
 }
 
 .brand {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-right: 16px;
-    color: var(--developer);
+    margin-right: var(--s-2);
+    color: var(--text);
     text-decoration: none;
 }
 
@@ -249,8 +461,8 @@ main {
     right: 6px;
     bottom: 6px;
     padding: 1px 6px;
-    background: var(--developer);
-    color: var(--white);
+    background: var(--stage);
+    color: #fff;
     font-family: var(--font-mono);
     font-size: 0.7rem;
     border-radius: 2px;
@@ -267,8 +479,7 @@ main {
     margin: -20px 0 0 -20px;
     /* The same brown, for browsers without color-mix. */
     background: rgb(35 26 20 / 0.7);
-    background: color-mix(in srgb, var(--developer) 70%, transparent);
-    color: var(--white);
+    color: #fff;
     border-radius: 50%;
     pointer-events: none;
 }
@@ -356,37 +567,38 @@ main {
 .filters select,
 .filters button,
 .ask button {
-    min-height: 36px;
-    padding: 4px 8px;
+    min-height: 40px;
+    padding: 4px var(--s-3);
     font: inherit;
-    border: 1px solid var(--mat);
-    border-radius: 2px;
-    background: var(--white);
-    color: var(--developer);
+    border: 1px solid var(--control-border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--text);
 }
 
 .filters input[type="search"],
 .ask input[type="search"] {
-    min-height: 36px;
+    min-height: 40px;
     min-width: 16rem;
-    padding: 4px 8px;
+    padding: 4px var(--s-3);
     font: inherit;
-    border: 1px solid var(--mat);
-    border-radius: 2px;
+    border: 1px solid var(--control-border);
+    border-radius: var(--r-sm);
 }
 
 .filters button,
 .ask button {
-    background: var(--cyanotype);
-    border-color: var(--cyanotype);
-    color: var(--white);
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: 600;
     cursor: pointer;
 }
 
 .filters button:hover:not(:disabled),
 .ask button:hover:not(:disabled) {
-    background: var(--cyanotype-hover);
-    border-color: var(--cyanotype-hover);
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
 }
 
 .filters button:disabled,
@@ -660,20 +872,25 @@ main {
 }
 
 .button {
-    display: inline-block;
-    padding: 8px 16px;
-    background: var(--cyanotype);
-    color: var(--white);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-2);
+    min-height: 40px;
+    padding: 0 var(--s-4);
+    background: var(--accent);
+    color: var(--accent-contrast);
     text-decoration: none;
-    border: 0;
-    border-radius: 4px;
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
     font: inherit;
+    font-weight: 600;
     cursor: pointer;
 }
 
 .button:hover:not(:disabled) {
-    background: var(--cyanotype-hover);
-    color: var(--white);
+    background: var(--accent-hover);
+    color: var(--accent-contrast);
 }
 
 .top-end {
@@ -684,7 +901,14 @@ main {
     margin-left: auto;
 }
 
+@media (max-width: 1100px) and (min-width: 601px) {
+    .user {
+        display: none;
+    }
+}
+
 .user {
+    color: var(--text-2);
     font-family: var(--font-mono);
     font-size: 0.875rem;
     overflow: hidden;
@@ -697,36 +921,51 @@ main {
     margin: 0;
 }
 
+/* The language switch is a segmented control; it is a form post, so it works without JavaScript. */
 .language {
     display: flex;
-    gap: 4px;
+    gap: 0;
     margin: 0;
+    padding: 2px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
 }
 
 .language button {
-    padding: 4px 8px;
+    min-height: 32px;
+    padding: 0 var(--s-3);
     background: none;
-    color: var(--cyanotype);
-    border: 1px solid transparent;
-    border-radius: 4px;
+    color: var(--text-2);
+    border: 0;
+    border-radius: var(--r-pill);
     font: inherit;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
+    font-weight: 500;
     cursor: pointer;
 }
 
+.language button:hover:not([aria-pressed="true"]) {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
 .language button[aria-pressed="true"] {
-    color: var(--developer);
-    border-color: var(--mat);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
     cursor: default;
 }
 
 .sign-out button {
-    padding: 4px 12px;
+    min-height: 40px;
+    padding: 0 var(--s-3);
     background: none;
-    color: var(--cyanotype);
-    border: 1px solid var(--mat);
-    border-radius: 4px;
+    color: var(--text);
+    border: 0;
+    border-radius: var(--r-pill);
     font: inherit;
+    font-weight: 500;
     cursor: pointer;
 }
 
@@ -778,23 +1017,28 @@ main {
 }
 
 .error {
-    padding: 8px 12px;
-    color: var(--sepia);
-    border: 1px solid var(--sepia);
-    border-radius: 4px;
+    padding: var(--s-3) var(--s-4);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    border-radius: var(--r-md);
 }
 
 .nav-link {
-    color: var(--developer);
-    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 var(--s-3);
+    border-radius: var(--r-pill);
+    color: var(--text);
+    font-weight: 500;
     text-decoration: none;
 }
 
 .nav-link[aria-current="page"],
 .nav-more-active {
-    color: var(--cyanotype);
-    text-decoration: underline;
-    text-underline-offset: 4px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
 }
 
 /* The pages used now and then, behind a disclosure that needs no JavaScript (D-102); not .more, which the "Show more" line of a search uses. */
@@ -826,20 +1070,21 @@ main {
     z-index: 20;
     display: grid;
     gap: 2px;
-    min-width: 11rem;
+    min-width: 12rem;
     max-width: calc(100vw - 32px);
-    padding: 8px;
-    background: var(--white);
-    border: 1px solid var(--mat);
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    padding: var(--s-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-pop);
 }
 
 .nav-more-list .nav-link {
     display: flex;
     align-items: center;
     min-height: 44px;
-    padding: 0 12px;
+    padding: 0 var(--s-3);
+    border-radius: var(--r-sm);
 }
 
 /* On a phone the list opens in the flow of the header, not over the page, so it cannot run off the screen. */
@@ -858,8 +1103,14 @@ main {
 
 .nav-link:hover,
 .nav-link:focus-visible {
-    color: var(--cyanotype);
-    text-decoration: underline;
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.nav-link[aria-current="page"]:hover,
+.nav-more-active:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
 }
 
 /* The people page (S-019): one card per person, the face cropped from its thumbnail by an inline style. */
@@ -942,10 +1193,14 @@ main {
     cursor: pointer;
 }
 
+/* A note is a small card, like a toast: what just happened, in the flow of the page. */
 .note {
-    padding: 8px 12px;
-    border-left: 3px solid var(--cyanotype);
-    background: var(--white);
+    padding: var(--s-3) var(--s-4);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
 }
 
 /* The occasions page (S-023): a card per occasion, three thumbnails over its title. */
@@ -1170,12 +1425,23 @@ main {
 }
 
 .button.secondary {
-    background: transparent;
-    color: var(--cyanotype);
-    border: 1px solid var(--cyanotype);
+    background: var(--surface);
+    color: var(--accent);
+    border-color: var(--control-border);
 }
 
 .button.secondary:hover:not(:disabled) {
-    background: var(--chip);
-    color: var(--cyanotype-hover);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.button.ghost {
+    background: none;
+    color: var(--accent);
+    border-color: transparent;
+}
+
+.button.ghost:hover:not(:disabled) {
+    background: var(--accent-soft);
+    color: var(--accent);
 }
