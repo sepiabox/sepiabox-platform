@@ -102,6 +102,39 @@ public sealed class QuestionWarmUpTests
         Assert.Equal(2, translator.Questions.Count);
     }
 
+    [Theory]
+    [InlineData(QuestionOutcome.NotUnderstood)]
+    [InlineData(QuestionOutcome.Failed)]
+    public async Task An_answer_that_cost_tokens_means_the_format_is_warm_whatever_the_outcome(QuestionOutcome outcome)
+    {
+        var translator = new SlowTranslator { Outcome = outcome, Usage = new TokenUsage(120, 4, 0, 0) };
+        var warmUp = WarmUp(translator);
+        warmUp.TryStart();
+        var running = warmUp.Running!;
+        translator.Release();
+        await running;
+
+        _clock.Now = s_start + TimeSpan.FromHours(1);
+
+        Assert.False(warmUp.TryStart());
+        Assert.Single(translator.Questions);
+    }
+
+    [Fact]
+    public async Task An_unavailable_provider_that_cost_nothing_is_tried_again_after_ten_minutes()
+    {
+        var translator = new SlowTranslator { Outcome = QuestionOutcome.Unavailable, Usage = TokenUsage.None };
+        var warmUp = WarmUp(translator);
+        warmUp.TryStart();
+        var running = warmUp.Running!;
+        translator.Release();
+        await running;
+
+        _clock.Now = s_start + QuestionWarmUp.RetryAfter;
+
+        Assert.True(warmUp.TryStart());
+    }
+
     [Fact]
     public async Task A_translator_that_throws_is_a_failure_not_an_error()
     {
@@ -180,6 +213,11 @@ public sealed class QuestionWarmUpTests
 
         public bool Fails { get; init; }
 
+        /// <summary>The outcome and usage of an answer, unless <see cref="Fails"/> or <see cref="Throws"/>; by default a translated question.</summary>
+        public QuestionOutcome Outcome { get; init; } = QuestionOutcome.Translated;
+
+        public TokenUsage Usage { get; init; } = new(10, 5, 0, 0);
+
         public bool Throws { get; init; }
 
         public List<string> Questions { get; } = [];
@@ -198,7 +236,7 @@ public sealed class QuestionWarmUpTests
                 ? throw new InvalidOperationException("The provider broke.")
                 : Fails
                     ? QuestionTranslation.Of(QuestionOutcome.Unavailable, TokenUsage.None, 0)
-                    : new QuestionTranslation(QuestionOutcome.Translated, """{"filters": {}}""", new TokenUsage(10, 5, 0, 0), 1);
+                    : new QuestionTranslation(Outcome, Outcome == QuestionOutcome.Translated ? """{"filters": {}}""" : null, Usage, 1);
         }
     }
 }

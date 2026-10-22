@@ -5,7 +5,9 @@ namespace Sepiabox.Web.Services;
 /// <summary>
 /// Keeps the API's compiled output format warm (issue 85, D-101). The API caches a compiled grammar for 24 hours from its
 /// last use and the first call after that takes 50 to 55 s, so when the page with the question box is shown and no question
-/// has been translated for <see cref="Quiet"/>, one tiny question is sent in the background with the real format. It is not
+/// has been translated for <see cref="Quiet"/>, one tiny question is sent in the background with the real format. What it
+/// remembers is per running instance (in memory), so a cold start may warm up once though the API's cache is hot: harmless.
+/// It is not
 /// counted against anyone's daily limit, never blocks or fails the page, runs at most once at a time, and is not repeated
 /// for <see cref="RetryAfter"/> after a failure. Only an outcome and token counts are logged, never a question.
 /// </summary>
@@ -80,7 +82,9 @@ public sealed partial class QuestionWarmUp(IQuestionTranslator translator, TimeP
             var translation = await translator.TranslateAsync(Question, QuestionContext.For(today, "UTC").Build());
             lock (_lock)
             {
-                if (translation.Outcome == QuestionOutcome.Translated)
+                // Whenever the API answered (tokens were spent, even for a refusal or an answer the validator rejects) the
+                // grammar was compiled, so the format is warm. Only a call that cost nothing is tried again soon.
+                if (translation.Outcome == QuestionOutcome.Translated || translation.Usage != TokenUsage.None)
                 {
                     _lastSuccess = clock.GetUtcNow();
                 }
