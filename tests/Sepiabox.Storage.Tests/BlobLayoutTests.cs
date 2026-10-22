@@ -1,7 +1,4 @@
-using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Storage;
-
-namespace Sepiabox.Pipeline.Tests;
+namespace Sepiabox.Storage.Tests;
 
 public sealed class BlobLayoutTests
 {
@@ -13,14 +10,19 @@ public sealed class BlobLayoutTests
     [InlineData("thumb-256.webp")]
     public void Derivative_blob_name_is_the_file_name_under_the_asset_id_on_every_platform(string path)
     {
-        var derivative = new ManifestDerivative("thumb-256", path, 256, 192, "image/webp");
-
-        Assert.Equal($"{Id}/thumb-256.webp", BlobLayout.DerivativeBlobName(Id, derivative));
+        Assert.Equal($"{Id}/thumb-256.webp", BlobLayout.DerivativeBlobName(Id, path));
     }
 
     [Fact]
     public void Manifest_blob_name_is_the_asset_id_with_json()
     {
         Assert.Equal($"{Id}.json", BlobLayout.ManifestBlobName(Id));
+    }
+
+    [Fact]
+    public void The_containers_are_the_ones_upload_writes_and_the_deploy_creates()
+    {
+        // Named in the AppHost and in operations.md too: a change here is a change to the deployed storage.
+        Assert.Equal(["originals", "derivatives", "manifests"], [BlobLayout.OriginalsContainer, BlobLayout.DerivativesContainer, BlobLayout.ManifestsContainer]);
     }
 }

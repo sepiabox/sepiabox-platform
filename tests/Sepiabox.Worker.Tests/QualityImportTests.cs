@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Sepiabox.Worker.Importing;
 using static Sepiabox.Tests.Shared.TestManifests;
 
@@ -64,8 +64,8 @@ public sealed class QualityImportTests(CatalogFixture fixture)
     private static Manifest Manifest() => Photo(Source("HD da Ana", "2019/praia.jpg"));
 
     private static Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container) =>
-        new ManifestImporter(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
-            .ImportOnceAsync(container, CancellationToken.None);
+        new ManifestImporter(db, TestBlobStore.Of(container), new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
+            .ImportOnceAsync(container.Name, CancellationToken.None);
 
     private static async Task PutAsync(BlobContainerClient container, Manifest manifest) =>
         await container.GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id))

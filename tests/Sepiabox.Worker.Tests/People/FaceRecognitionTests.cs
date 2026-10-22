@@ -5,6 +5,7 @@ using Sepiabox.Catalog;
 using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Sepiabox.Worker.Faces;
 using Sepiabox.Worker.Importing;
 
@@ -189,6 +190,52 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
         Assert.Equal(3, second.Erased + second.Unchanged);
     }
 
+    // The sweep skips a blob only if it was written before the previous pass: LastModified < since, so a blob written at
+    // that very moment is swept (a boundary that, wrong, leaves a person's face in storage after they asked for its erase).
+    [Fact]
+    public async Task Visits_the_blobs_written_at_and_after_the_previous_pass_and_skips_those_before()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var clock = new SettableClock(DateTimeOffset.UtcNow);
+        var memory = new InMemoryBlobStore(clock);
+        memory.CreateContainer(BlobLayout.ManifestsContainer);
+        await Recognition(db).TurnOffAsync(Ana);
+        var blobs = new ManifestFacesSweep(db, memory, new ManifestStore(new ManifestValidator(), memory), clock, NullLogger.Instance);
+        var first = await blobs.RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+        Assert.True(first.Recorded);
+        var since = (await FaceRecognition.ReadAsync(db)).SweptThrough!.Value;
+
+        var times = new Dictionary<int, DateTimeOffset>
+        {
+            [1] = since - TimeSpan.FromSeconds(1),
+            [2] = since,
+            [3] = since + TimeSpan.FromSeconds(1),
+        };
+        foreach (var (n, time) in times)
+        {
+            clock.Now = time;
+            var manifest = FaceImportTests.WithFaces(n, FaceImportTests.Face(s_box, SyntheticFaces.Unit(seed: n)));
+            await memory.WriteAsync(
+                BlobLayout.ManifestsContainer, BlobLayout.ManifestBlobName(manifest.Id), BinaryData.FromString(ManifestJson.Serialize(manifest)),
+                "application/json", BlobWriteCondition.Always);
+        }
+
+        clock.Now = since + TimeSpan.FromMinutes(30);
+        var second = await blobs.RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+
+        Assert.Equal(2, second.Erased);
+        Assert.NotEmpty(await StoredFacesAsync(memory, 1));
+        Assert.Empty(await StoredFacesAsync(memory, 2));
+        Assert.Empty(await StoredFacesAsync(memory, 3));
+    }
+
+    private static async Task<IReadOnlyList<ManifestFace>> StoredFacesAsync(InMemoryBlobStore store, int n)
+    {
+        var id = FaceImportTests.WithFaces(n).Id;
+        var blob = await store.ReadAsync(BlobLayout.ManifestsContainer, BlobLayout.ManifestBlobName(id));
+        return ManifestJson.Deserialize(blob!.Content.ToString()).Faces;
+    }
+
     [Fact]
     public async Task Turning_recognition_off_again_with_nothing_left_changes_and_records_nothing()
     {
@@ -358,14 +405,14 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
         await Recognition(db).TurnOffAsync(Ana);
         var later = (await FaceRecognition.ReadAsync(db)).ErasedAt!.Value.AddMinutes(5);
         // Another erase lands while the first page is being swept.
-        var interfering = new InterferingContainer(fixture.BlobConnectionString, container.Name, async () =>
+        var interfering = new InterferingStore(TestBlobStore.Of(container), async () =>
         {
             await using var other = Context(fixture.ConnectionStringFor(db));
             await other.Settings.Where(x => x.Key == FaceRecognition.ErasedAtKey)
                 .ExecuteUpdateAsync(set => set.SetProperty(x => x.Value, later.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));
         });
 
-        var result = await SweepAsync(db, interfering, new SweepOptions(Concurrency: 4, PageSize: 2, Budget: TimeSpan.FromHours(1)));
+        var result = await SweepAsync(db, container, new SweepOptions(Concurrency: 4, PageSize: 2, Budget: TimeSpan.FromHours(1)), store: interfering);
 
         Assert.False(result.Finished);
         Assert.Equal(2, result.Erased);
@@ -456,9 +503,11 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
     private static FaceRecognition Recognition(CatalogDbContext db) => new(db, TimeProvider.System);
 
     private static Task<SweepResult> SweepAsync(
-        CatalogDbContext db, BlobContainerClient container, SweepOptions? options = null, TimeProvider? clock = null) =>
-        new ManifestFacesSweep(db, new ManifestStore(new ManifestValidator()), clock ?? TimeProvider.System, NullLogger.Instance, options)
-            .RunAsync(container, CancellationToken.None);
+        CatalogDbContext db, BlobContainerClient container, SweepOptions? options = null, TimeProvider? clock = null, IBlobStore? store = null) =>
+        new ManifestFacesSweep(
+                db, TestBlobStore.Of(container), new ManifestStore(new ManifestValidator(), store ?? TestBlobStore.Of(container)),
+                clock ?? TimeProvider.System, NullLogger.Instance, options)
+            .RunAsync(container.Name, CancellationToken.None);
 
     // Runs a stopping sweep until its pass finishes, at most ten times.
     private static async Task<List<SweepResult>> SweepUntilFinishedAsync(
@@ -484,19 +533,19 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
         }
     }
 
-    /// <summary>The manifests container, which runs <paramref name="interfere"/> once, the first time a blob is opened.</summary>
-    private sealed class InterferingContainer(string connectionString, string name, Func<Task> interfere) : BlobContainerClient(connectionString, name)
+    /// <summary>The blob store the manifest writer uses, which runs <paramref name="interfere"/> once, the first time a blob is read.</summary>
+    private sealed class InterferingStore(IBlobStore inner, Func<Task> interfere) : DelegatingBlobStore(inner)
     {
         private int _done;
 
-        public override BlobClient GetBlobClient(string blobName)
+        public override async Task<BlobContent?> ReadAsync(string container, string name, CancellationToken cancellationToken = default)
         {
             if (Interlocked.Exchange(ref _done, 1) == 0)
             {
-                interfere().GetAwaiter().GetResult();
+                await interfere();
             }
 
-            return base.GetBlobClient(blobName);
+            return await base.ReadAsync(container, name, cancellationToken);
         }
     }
 
@@ -518,8 +567,8 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
     }
 
     private static Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container) =>
-        new ManifestImporter(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
-            .ImportOnceAsync(container, CancellationToken.None);
+        new ManifestImporter(db, TestBlobStore.Of(container), new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
+            .ImportOnceAsync(container.Name, CancellationToken.None);
 
     private static async Task PutAsync(BlobContainerClient container, Manifest manifest) =>
         await container.GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id))

@@ -1,5 +1,3 @@
-using Azure;
-using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
@@ -11,7 +9,7 @@ using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Faces;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 
 namespace Sepiabox.Worker.Importing;
 
@@ -31,6 +29,7 @@ public sealed record ImportResult(int Imported, int Unchanged, IReadOnlyList<Imp
 /// </summary>
 public sealed class ManifestImporter(
     CatalogDbContext db,
+    IBlobStore store,
     ManifestValidator validator,
     IPlaceResolver places,
     TimeProvider clock,
@@ -41,11 +40,13 @@ public sealed class ManifestImporter(
 
     private static readonly GeometryFactory s_wgs84 = new(new PrecisionModel(), 4326);
 
-    public async Task<ImportResult> ImportOnceAsync(BlobContainerClient manifests, CancellationToken cancellationToken)
+    /// <param name="container">The container of manifests, <see cref="BlobLayout.ManifestsContainer"/>.</param>
+    /// <param name="cancellationToken">Stops the import.</param>
+    public async Task<ImportResult> ImportOnceAsync(string container, CancellationToken cancellationToken)
     {
-        if (!await manifests.ExistsAsync(cancellationToken))
+        if (!await store.ContainerExistsAsync(container, cancellationToken))
         {
-            Log.NoManifestContainer(logger, manifests.Name);
+            Log.NoManifestContainer(logger, container);
             return new ImportResult(0, 0, [], []);
         }
 
@@ -55,16 +56,16 @@ public sealed class ManifestImporter(
         var warnings = new List<ImportProblem>();
         int done = 0, unchanged = 0;
 
-        await foreach (var blob in manifests.GetBlobsAsync(cancellationToken: cancellationToken))
+        await foreach (var blob in store.ListAsync(container, cancellationToken: cancellationToken))
         {
-            var etag = Normalize(blob.Properties.ETag);
-            if (etag is not null && imported.TryGetValue(blob.Name, out var known) && known == etag)
+            var etag = blob.Version;
+            if (imported.TryGetValue(blob.Name, out var known) && known == etag)
             {
                 unchanged++;
                 continue;
             }
 
-            var (wasImported, problem) = await ImportBlobAsync(manifests, blob.Name, transientFailuresThrow: false, cancellationToken);
+            var (wasImported, problem) = await ImportBlobAsync(container, blob.Name, transientFailuresThrow: false, cancellationToken);
             if (Record(blob.Name, wasImported, problem, problems, warnings))
             {
                 done++;
@@ -80,12 +81,12 @@ public sealed class ManifestImporter(
     /// it, and a unique violation from another import saving the same new asset at the same time, are thrown,
     /// not reported, so the event is delivered again instead of being dropped.
     /// </summary>
-    public async Task<ImportResult> ImportOneAsync(BlobContainerClient manifests, string blobName, CancellationToken cancellationToken)
+    public async Task<ImportResult> ImportOneAsync(string container, string blobName, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(manifests);
+        ArgumentNullException.ThrowIfNull(container);
         var problems = new List<ImportProblem>();
         var warnings = new List<ImportProblem>();
-        var (wasImported, problem) = await ImportBlobAsync(manifests, blobName, transientFailuresThrow: true, cancellationToken);
+        var (wasImported, problem) = await ImportBlobAsync(container, blobName, transientFailuresThrow: true, cancellationToken);
         var done = Record(blobName, wasImported, problem, problems, warnings) ? 1 : 0;
         return new ImportResult(done, 0, problems, warnings);
     }
@@ -120,23 +121,24 @@ public sealed class ManifestImporter(
     /// means an embedding was left out.
     /// </summary>
     private async Task<(bool Imported, string? Problem)> ImportBlobAsync(
-        BlobContainerClient manifests, string blobName, bool transientFailuresThrow, CancellationToken cancellationToken)
+        string container, string blobName, bool transientFailuresThrow, CancellationToken cancellationToken)
     {
         string json, etag;
         DateTimeOffset writtenAt;
         try
         {
-            var download = (await manifests.GetBlobClient(blobName).DownloadContentAsync(cancellationToken)).Value;
+            var download = await store.ReadAsync(container, blobName, cancellationToken);
+            if (download is null)
+            {
+                // Deleted between the listing and the download: nothing left to import.
+                return (false, null);
+            }
+
             json = download.Content.ToString();
-            etag = Normalize(download.Details.ETag)!;
-            writtenAt = download.Details.LastModified;
+            etag = download.Version;
+            writtenAt = download.LastModified;
         }
-        catch (RequestFailedException ex) when (ex.Status == 404)
-        {
-            // Deleted between the listing and the download: nothing left to import.
-            return (false, null);
-        }
-        catch (RequestFailedException ex) when (!transientFailuresThrow)
+        catch (Exception ex) when (!transientFailuresThrow && store.IsStoreFailure(ex))
         {
             return (false, $"could not be downloaded: {ex.Message}");
         }
@@ -314,7 +316,7 @@ public sealed class ManifestImporter(
         asset.Derivatives.RemoveAll(d => manifest.Derivatives.All(m => m.Name != d.Name));
         foreach (var derivative in manifest.Derivatives)
         {
-            var blobPath = BlobLayout.DerivativeBlobName(asset.Id, derivative);
+            var blobPath = BlobLayout.DerivativeBlobName(asset.Id, derivative.Path);
             var row = asset.Derivatives.FirstOrDefault(d => d.Name == derivative.Name);
             if (row is null)
             {
@@ -496,7 +498,4 @@ public sealed class ManifestImporter(
     private static bool IsDataSqlState(PostgresException ex) => ex.SqlState[..2] is "22" or "23" or "54" or "P0";
 
     private static string Describe(Exception ex) => ex is PostgresException postgres ? postgres.MessageText : ex.Message;
-
-    // Listings return the ETag bare and downloads return it quoted, as in the HTTP header.
-    private static string? Normalize(ETag? etag) => etag?.ToString().Trim('"');
 }

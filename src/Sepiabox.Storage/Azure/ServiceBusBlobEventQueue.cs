@@ -1,8 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Azure.Messaging.ServiceBus;
-using Sepiabox.Worker.Events;
 
-namespace Sepiabox.Worker.Azure;
+namespace Sepiabox.Storage.Azure;
 
 /// <summary>
 /// The Azure implementation of <see cref="IBlobEventQueue"/> (S-033, D-051): Event Grid sends the storage

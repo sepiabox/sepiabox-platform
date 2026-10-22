@@ -21,6 +21,7 @@
     <!-- Only for CLIP's text model, which events classify embeds the occasion types' prompts with (S-024). -->
     <ProjectReference Include="..\Sepiabox.Search\Sepiabox.Search.csproj" />
     <ProjectReference Include="..\Sepiabox.ServiceDefaults\Sepiabox.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\Sepiabox.Storage\Sepiabox.Storage.csproj" />
   </ItemGroup>
 
   <ItemGroup>

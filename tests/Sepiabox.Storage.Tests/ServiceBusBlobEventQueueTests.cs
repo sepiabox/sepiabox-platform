@@ -1,9 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using Azure.Messaging.ServiceBus;
-using Sepiabox.Worker.Azure;
-using Sepiabox.Worker.Events;
+using Sepiabox.Storage.Azure;
 
-namespace Sepiabox.Worker.Tests;
+namespace Sepiabox.Storage.Tests;
 
 /// <summary>The Azure implementation's mapping, on the SDK's own test doubles (no Service Bus).</summary>
 public sealed class ServiceBusBlobEventQueueTests

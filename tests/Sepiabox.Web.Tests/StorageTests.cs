@@ -4,7 +4,6 @@ using Json.Schema;
 using Microsoft.Extensions.DependencyInjection;
 using Sepiabox.Catalog;
 using Sepiabox.Catalog.Search;
-using Sepiabox.Web.Components.Pages;
 using Sepiabox.Web.Components.Search;
 using Sepiabox.Web.Services;
 
@@ -328,10 +327,10 @@ public sealed class StoragePageTests : LocalizedContext
         Assert.Equal("Sem data", page.Find(".storage-totals tbody tr:last-child th").TextContent.Trim());
     }
 
-    private IRenderedComponent<Storage> RenderPage(StorageReport report)
+    private IRenderedComponent<Web.Components.Pages.Storage> RenderPage(StorageReport report)
     {
         Services.AddSingleton<ILibraryQueries>(new FakeLibrary { Storage = report });
-        return Render<Storage>();
+        return Render<Web.Components.Pages.Storage>();
     }
 }
 

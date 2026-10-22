@@ -13,9 +13,9 @@ using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Reporting;
 using Sepiabox.Ingest.Uploading;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Storage;
 using Sepiabox.Pipeline.Video;
 using Sepiabox.Search.Questions;
+using Sepiabox.Storage;
 using Sepiabox.Web;
 using Sepiabox.Web.Services;
 using Sepiabox.Worker.Importing;
@@ -78,8 +78,8 @@ public sealed class MvpWorld : IAsyncLifetime, IDisposable
         var sample = GeoNamesSample.Write(geonames);
         await new GeoNamesLoader(db).LoadAsync(
             GeoNamesFiles.ReadCities(sample.Cities), GeoNamesFiles.ReadAdmin1(sample.Admin1), GeoNamesFiles.ReadCountries(sample.Countries), CancellationToken.None);
-        Import = await new ManifestImporter(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
-            .ImportOnceAsync(_catalog.Blobs.GetBlobContainerClient(BlobLayout.ManifestsContainer), CancellationToken.None);
+        Import = await new ManifestImporter(db, _catalog.Store, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
+            .ImportOnceAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
 
         _web = new AcceptanceWeb(_catalog.ConnectionStringFor(db), _catalog.BlobConnectionString, _translator);
         // Builds the web's host (its Program.cs), as a request would, without sending one.

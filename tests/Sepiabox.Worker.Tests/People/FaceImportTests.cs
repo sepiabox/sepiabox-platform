@@ -7,7 +7,7 @@ using Sepiabox.Catalog;
 using Sepiabox.Catalog.People;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Sepiabox.Worker.Importing;
 using static Sepiabox.Tests.Shared.TestManifests;
 
@@ -155,7 +155,7 @@ public sealed class FaceImportTests(CatalogFixture fixture)
             await using var other = Context(connection);
             foreach (var manifest in manifests.Where((_, i) => i % 2 == half))
             {
-                var result = await Importer(other).ImportOneAsync(container, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
+                var result = await Importer(other, container).ImportOneAsync(container.Name, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
                 Assert.Empty(result.Problems);
             }
         })));
@@ -434,10 +434,10 @@ public sealed class FaceImportTests(CatalogFixture fixture)
         new(name, $"derivatives/{id}/{name}.webp", width, height, "image/webp");
 
     private static Task<ImportResult> ImportAsync(CatalogDbContext db, BlobContainerClient container, FaceAssignerOptions? options = null) =>
-        Importer(db, options).ImportOnceAsync(container, CancellationToken.None);
+        Importer(db, container, options).ImportOnceAsync(container.Name, CancellationToken.None);
 
     private static Task<ImportResult> ImportOneAsync(CatalogDbContext db, BlobContainerClient container, Manifest manifest) =>
-        Importer(db).ImportOneAsync(container, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
+        Importer(db, container).ImportOneAsync(container.Name, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
 
     private static CatalogDbContext Context(string connectionString)
     {
@@ -446,8 +446,8 @@ public sealed class FaceImportTests(CatalogFixture fixture)
         return new CatalogDbContext(options.Options);
     }
 
-    private static ManifestImporter Importer(CatalogDbContext db, FaceAssignerOptions? options = null) =>
-        new(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance, options);
+    private static ManifestImporter Importer(CatalogDbContext db, BlobContainerClient container, FaceAssignerOptions? options = null) =>
+        new(db, TestBlobStore.Of(container), new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance, options);
 
     private static async Task PutAsync(BlobContainerClient container, Manifest manifest) =>
         await container.GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id))

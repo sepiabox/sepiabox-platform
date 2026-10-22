@@ -1,7 +1,10 @@
+using Azure.Storage.Blobs;
 using Npgsql;
 using Sepiabox.Catalog;
 using Sepiabox.Catalog.Search;
 using Sepiabox.Search.Questions;
+using Sepiabox.Storage;
+using Sepiabox.Storage.Azure;
 using Sepiabox.Web;
 using Sepiabox.Web.Auth;
 using Sepiabox.Web.Components;
@@ -19,6 +22,9 @@ builder.AddSepiaboxSecrets();
 // EF uses this same data source, so the app and its health check share one pool.
 builder.AddNpgsqlDataSource("catalog", configureDataSourceBuilder: dataSource => CatalogDbContext.ConfigureDataSource(dataSource));
 builder.AddAzureBlobServiceClient("blobs");
+// The Azure implementation of IBlobStore (D-051), on the client Aspire registers.
+builder.Services.AddSingleton<IBlobStore>(services =>
+    new AzureBlobStore(services.GetRequiredService<BlobServiceClient>(), services.GetRequiredService<TimeProvider>()));
 
 // Pages render on the server per request, so each query gets its own short-lived context.
 builder.Services.AddDbContextFactory<CatalogDbContext>((services, options) =>

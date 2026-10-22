@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Storage;
+using Sepiabox.Storage;
 using Sepiabox.Worker.Events;
 using Sepiabox.Worker.Importing;
 using static Sepiabox.Tests.Shared.TestManifests;
@@ -120,17 +120,17 @@ public sealed class QueueImportIntegrationTests(CatalogFixture fixture)
 
         Assert.Empty(queue.Completed);
         // import --once reports the same failure as a problem of the manifest and goes on.
-        var once = await Importer(db).ImportOnceAsync(container, CancellationToken.None);
+        var once = await Importer(db, container).ImportOnceAsync(container.Name, CancellationToken.None);
         Assert.Equal(s_manifest, Assert.Single(once.Problems).BlobName);
     }
 
-    private static ManifestImporter Importer(CatalogDbContext db) =>
-        new(db, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance);
+    private static ManifestImporter Importer(CatalogDbContext db, BlobContainerClient container) =>
+        new(db, TestBlobStore.Of(container), new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance);
 
     private static QueueImport Import(IBlobEventQueue queue, CatalogDbContext db, BlobContainerClient container) =>
         new(
             queue,
-            (blobName, token) => Importer(db).ImportOneAsync(container, blobName, token),
+            (blobName, token) => Importer(db, container).ImportOneAsync(container.Name, blobName, token),
             QueueImportOptions.Default with { IdleWait = TimeSpan.Zero },
             NullLogger<QueueImport>.Instance);
 }
