@@ -949,7 +949,7 @@ main {
 }
 
 /* After a correction on a person's page (#106) the page jumps to the next face, which would leave the note off screen: it
-   stays in view while the page is scrolled, and a face card lands a little below the top. */
+   stays in view while the page is scrolled, and a face card lands below the note. */
 .person-note {
     position: sticky;
     top: 8px;
@@ -958,7 +958,7 @@ main {
 }
 
 .person-faces .person {
-    scroll-margin-top: 16px;
+    scroll-margin-top: 96px;
 }
 
 /* The occasions page (S-023): a card per occasion, three thumbnails over its title. */
