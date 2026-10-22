@@ -1,3 +1,4 @@
+using System.Text;
 using Sepiabox.Pipeline.Media;
 
 namespace Sepiabox.Pipeline.Exports;
@@ -34,10 +35,10 @@ public static class ExportFacts
             ? point
             : null;
 
-    /// <summary>The caption trimmed and cut to <see cref="MaxCaptionLength"/> characters; null when nothing is left.</summary>
+    /// <summary>The caption in Unicode normalization form C (a Mac names things in D, a phone in C), trimmed and cut to <see cref="MaxCaptionLength"/> characters; null when nothing is left.</summary>
     public static string? Caption(ExportMetadata? export)
     {
-        var text = export?.Caption?.Trim();
+        var text = export?.Caption?.Normalize(NormalizationForm.FormC).Trim();
         if (string.IsNullOrEmpty(text))
         {
             return null;
@@ -53,9 +54,9 @@ public static class ExportFacts
         return text[..length].TrimEnd();
     }
 
-    /// <summary>The albums trimmed, without empty names or repeats, in ordinal order; null when there are none.</summary>
+    /// <summary>The albums in Unicode normalization form C (so one name is one album), trimmed, without empty names or repeats, in ordinal order; null when there are none.</summary>
     public static IReadOnlyList<string>? Albums(ExportMetadata? export) =>
-        export is null ? null : Clean(export.Albums);
+        export is null ? null : Clean(export.Albums.Select(a => a?.Normalize(NormalizationForm.FormC)!));
 
     /// <summary>A list of album names as a manifest keeps it: trimmed, distinct, ordinal order; null for none.</summary>
     public static IReadOnlyList<string>? Clean(IEnumerable<string>? names)

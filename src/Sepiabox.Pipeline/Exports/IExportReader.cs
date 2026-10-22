@@ -66,7 +66,8 @@ public sealed class ExportScan
     /// <summary>Whether the file at <paramref name="relativePath"/> is export bookkeeping, to be left out.</summary>
     public bool IsLeftOut(string relativePath) => _leftOut.Contains(Normalize(relativePath));
 
-    private static string Normalize(string path) => path.Replace('\\', '/').TrimStart('/');
+    // Also in normalization form C: a Mac writes file names in form D, and a sidecar names them in form C.
+    private static string Normalize(string path) => path.Normalize(System.Text.NormalizationForm.FormC).Replace('\\', '/').TrimStart('/');
 }
 
 /// <summary>The export could not be read as the kind asked for; <c>process</c> stops before reading any file.</summary>
