@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Sepiabox.Pipeline.Exports;
 using Sepiabox.Pipeline.Video;
 
 namespace Sepiabox.Ingest.Processing;
@@ -18,6 +19,13 @@ namespace Sepiabox.Ingest.Processing;
 /// The originals stay where they are and are never uploaded (S-063, D-088); previews are larger. Belongs to the work
 /// folder: the first run records it, and a later run asking for the other mode is refused.
 /// </param>
+/// <param name="ExportKind">
+/// The kind of official export the folder holds (<c>--export</c>, S-045): a registered <see cref="IExportReader"/>'s
+/// <see cref="IExportReader.Kind"/>. Null reads the folder as it always has.
+/// </param>
+/// <param name="TimeZone">
+/// The zone an export's UTC times are converted to wall-clock time in (<c>--time-zone</c>); null for the computer's.
+/// </param>
 public sealed record ProcessOptions(
     string Root,
     string OutputPath,
@@ -30,7 +38,9 @@ public sealed record ProcessOptions(
     bool Faces = false,
     int? Jobs = null,
     int? VideoJobs = null,
-    bool IndexOnly = false)
+    bool IndexOnly = false,
+    string? ExportKind = null,
+    TimeZoneInfo? TimeZone = null)
 {
     /// <summary>The mode this run asks for.</summary>
     public WorkFolderMode Mode => IndexOnly ? WorkFolderMode.IndexOnly : WorkFolderMode.KeepsOriginals;
@@ -51,10 +61,15 @@ public sealed record ProcessOptions(
     /// </summary>
     public int EffectiveVideoJobs => Math.Min(VideoJobs ?? 1, EffectiveJobs);
 
+    /// <param name="args">What follows <c>process</c> on the command line.</param>
+    /// <param name="options">The options, when the arguments are valid.</param>
+    /// <param name="error">Why they are not.</param>
+    /// <param name="readers">The export readers <c>--export</c> may name; <see cref="ExportReaderRegistry.Default"/> when null.</param>
     public static bool TryParse(
         IReadOnlyList<string> args,
         [NotNullWhen(true)] out ProcessOptions? options,
-        [NotNullWhen(false)] out string? error)
+        [NotNullWhen(false)] out string? error,
+        ExportReaderRegistry? readers = null)
     {
         options = null;
         string? root = null;
@@ -69,12 +84,14 @@ public sealed record ProcessOptions(
         int? jobs = null;
         int? videoJobs = null;
         var indexOnly = false;
+        string? exportKind = null;
+        string? timeZoneId = null;
 
         for (var i = 0; i < args.Count; i++)
         {
             switch (args[i])
             {
-                case "--out" or "--source-name" or "--ffmpeg" or "--hw" or "--models" or "--jobs" or "--video-jobs" when i + 1 >= args.Count:
+                case "--out" or "--source-name" or "--ffmpeg" or "--hw" or "--models" or "--jobs" or "--video-jobs" or "--export" or "--time-zone" when i + 1 >= args.Count:
                     error = $"{args[i]} needs a value.";
                     return false;
 
@@ -88,6 +105,14 @@ public sealed record ProcessOptions(
 
                 case "--ffmpeg":
                     ffmpegFolder = args[++i];
+                    break;
+
+                case "--export":
+                    exportKind = args[++i];
+                    break;
+
+                case "--time-zone":
+                    timeZoneId = args[++i];
                     break;
 
                 case "--models":
@@ -165,9 +190,39 @@ public sealed record ProcessOptions(
             return false;
         }
 
+        TimeZoneInfo? timeZone = null;
+        if (exportKind is not null)
+        {
+            var known = (readers ?? ExportReaderRegistry.Default).Kinds;
+            if (!known.Contains(exportKind, StringComparer.Ordinal))
+            {
+                error = $"Unknown export kind '{exportKind}'. Known kinds: {(known.Count == 0 ? "none yet" : string.Join(", ", known))}.";
+                return false;
+            }
+        }
+
+        if (timeZoneId is not null)
+        {
+            if (exportKind is null)
+            {
+                error = "--time-zone is for the times an export gives, so it needs --export.";
+                return false;
+            }
+
+            try
+            {
+                timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            }
+            catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+            {
+                error = $"Unknown time zone '{timeZoneId}'. Give an IANA id such as Europe/Lisbon.";
+                return false;
+            }
+        }
+
         options = new ProcessOptions(
             root, outputPath, string.IsNullOrWhiteSpace(sourceName) ? null : sourceName.Trim(), ffmpegFolder, encoder, modelFolder,
-            retryLeftOut, listLeftOut, faces, jobs, videoJobs, indexOnly);
+            retryLeftOut, listLeftOut, faces, jobs, videoJobs, indexOnly, exportKind, timeZone);
         error = null;
         return true;
     }

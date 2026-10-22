@@ -33,8 +33,8 @@
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$"
     },
     "capturedAtSource": {
-      "description": "Where capturedAt came from (D-046): the file's own metadata, its file name, or its parent folder's name. Optional: omitted when capturedAt is null, and absent from manifests written before S-043, whose dates all came from metadata.",
-      "enum": ["metadata", "fileName", "folder"]
+      "description": "Where capturedAt came from (D-046): the file's own metadata, what an export of the photos says about it (S-045), its file name, or its parent folder's name. Optional: omitted when capturedAt is null, and absent from manifests written before S-043, whose dates all came from metadata.",
+      "enum": ["metadata", "export", "fileName", "folder"]
     },
     "location": {
       "type": ["object", "null"],
@@ -115,6 +115,18 @@
           "maxLength": 2732
         }
       }
+    },
+    "caption": {
+      "description": "Optional (S-045, D-104): what the owner or the export's maker wrote about the photo. A merge keeps the longer caption, then the ordinally greater.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "albums": {
+      "description": "Optional (S-045, D-104): the albums an export puts the photo in. Distinct and non-empty, in ordinal order; a merge takes the union.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
     },
     "quality": {
       "description": "Optional (S-027, D-098): how sharp a photo is and its perceptual hash, measured from its preview. sharpness is the variance of the Laplacian of the grayscale image at 512 px (higher is sharper); dhash is the 64-bit difference hash as 16 lower-case hex characters. Absent for a video and for a photo not measured yet.",

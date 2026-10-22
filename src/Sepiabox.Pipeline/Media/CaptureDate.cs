@@ -12,6 +12,9 @@ public enum CaptureDateSource
     /// <summary>A date and time in the file name, or a time in the file name on the day its folder is named after.</summary>
     FileName,
 
+    /// <summary>What an export of the photos says about the file (S-045, D-053): a Takeout sidecar, an Instagram post list.</summary>
+    Export,
+
     /// <summary>The file's own metadata (EXIF, QuickTime).</summary>
     Metadata,
 }
@@ -36,13 +39,22 @@ public sealed record CaptureDate(DateTime Value, CaptureDateSource Source)
     /// <param name="fromMetadata">What the file's metadata says, as written (<see cref="MediaMetadata.RawCapturedAt"/>).</param>
     /// <param name="path">The file's path, with either separator; only its name and parent folder are read.</param>
     /// <param name="clock">Gives "now" for the plausibility window.</param>
-    public static CaptureDate? Resolve(DateTime? fromMetadata, string path, TimeProvider clock)
+    /// <param name="fromExport">
+    /// What an export says, as wall-clock time (S-045): between the file's metadata and its name, since an export knows more
+    /// than a name does and less than the camera.
+    /// </param>
+    public static CaptureDate? Resolve(DateTime? fromMetadata, string path, TimeProvider clock, DateTime? fromExport = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
 
         if (fromMetadata is { } metadata && IsPlausible(metadata, EarliestPlausible, clock))
         {
             return new CaptureDate(metadata, CaptureDateSource.Metadata);
+        }
+
+        if (fromExport is { } exported && IsPlausible(exported, EarliestPlausible, clock))
+        {
+            return new CaptureDate(exported, CaptureDateSource.Export);
         }
 
         return PathDate.Candidates(path)
@@ -63,7 +75,7 @@ public sealed record CaptureDate(DateTime Value, CaptureDateSource Source)
 
     /// <summary>
     /// The date to keep when two descriptions of the same bytes disagree (D-046): the stronger source wins (metadata,
-    /// then file name, then folder, then no date at all). Between two path dates of the same source, the earlier
+    /// then export, then file name, then folder, then no date at all). Between two path dates of the same source, the earlier
     /// date, so the result does not depend on which copy was seen first. Between two metadata dates, which only
     /// differ when the description itself is replaced, <paramref name="preferred"/>.
     /// </summary>
@@ -87,12 +99,13 @@ public sealed record CaptureDate(DateTime Value, CaptureDateSource Source)
         return other.Value < preferred.Value ? other : preferred;
     }
 
-    /// <summary>Metadata is written by the device at capture; a time in a file name says more than a folder's day.</summary>
+    /// <summary>Metadata is written by the device at capture; an export knows the date better than a file name does; a time in a file name says more than a folder's day.</summary>
     public static int Rank(CaptureDateSource source) => source switch
     {
         CaptureDateSource.Folder => 1,
         CaptureDateSource.FileName => 2,
-        CaptureDateSource.Metadata => 3,
+        CaptureDateSource.Export => 3,
+        CaptureDateSource.Metadata => 4,
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Unknown capture date source."),
     };
 }

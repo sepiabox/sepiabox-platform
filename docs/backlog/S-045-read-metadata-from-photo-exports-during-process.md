@@ -22,14 +22,14 @@ Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from t
 - Near-duplicates: a photo re-encoded by Instagram or Facebook has other bytes, so it is a separate asset (bursts and similar photos are S-027 and S-017).
 
 ### Acceptance criteria
-- [ ] Given a fake reader that dates an undated file `2015-06-01T10:00:00Z` and `--time-zone Europe/Lisbon`, when `process` runs, then `capturedAt` is `2015-06-01T11:00:00` and `capturedAtSource` is `export`.
-- [ ] Given a file with an EXIF date and a different export date, then the EXIF date is kept with `capturedAtSource: metadata`.
-- [ ] Given a file without metadata date in a `YYYY-MM-DD` folder and an export date, then the export date wins over the folder.
-- [ ] Given a file without GPS and an export location, then `location` is the export's; given a file with GPS, then its own GPS is kept.
-- [ ] Given a caption and two albums from the reader, then the manifest has `caption` and `albums`, and the schema validates it; a manifest without them still validates and imports.
-- [ ] Given two manifests of the same asset with different albums and captions, when merged in either order, then the stored JSON is the same.
-- [ ] Given `--export` with an unknown kind, then `process` exits with the usage code and lists the known kinds.
-- [ ] Given the export folder, when `process` runs, then no file in it is modified (modification times and sizes unchanged).
+- [x] Given a fake reader that dates an undated file `2015-06-01T10:00:00Z` and `--time-zone Europe/Lisbon`, when `process` runs, then `capturedAt` is `2015-06-01T11:00:00` and `capturedAtSource` is `export`.
+- [x] Given a file with an EXIF date and a different export date, then the EXIF date is kept with `capturedAtSource: metadata`.
+- [x] Given a file without metadata date in a `YYYY-MM-DD` folder and an export date, then the export date wins over the folder.
+- [x] Given a file without GPS and an export location, then `location` is the export's; given a file with GPS, then its own GPS is kept.
+- [x] Given a caption and two albums from the reader, then the manifest has `caption` and `albums`, and the schema validates it; a manifest without them still validates and imports.
+- [x] Given two manifests of the same asset with different albums and captions, when merged in either order, then the stored JSON is the same.
+- [x] Given `--export` with an unknown kind, then `process` exits with the usage code and lists the known kinds.
+- [x] Given the export folder, when `process` runs, then no file in it is modified (modification times and sizes unchanged).
 
 ### Technical notes
 - Keep `CaptureDate.Resolve` the one place that decides the date (D-046); the export date is one more candidate.
@@ -41,3 +41,6 @@ Google Photos, Apple Photos / iCloud, Instagram and Facebook are imported from t
 ### Expected tests
 - Unit: precedence with the export candidate, time-zone conversion, location fill, merge symmetry, schema with and without the new fields.
 - Integration: `process --export` with a test reader over a generated folder writes the expected manifests and leaves the folder unchanged.
+
+### Status
+- `doing` (2026-10-22): implemented (D-104). An unchanged file of an older work folder is not read against an export again; use a new `--out`.
