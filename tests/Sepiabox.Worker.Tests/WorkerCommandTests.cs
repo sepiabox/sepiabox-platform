@@ -74,6 +74,37 @@ public sealed class WorkerCommandTests
     }
 
     [Fact]
+    public void Parses_assets_delete_as_a_dry_run_or_with_yes_and_the_count_expected()
+    {
+        Assert.True(WorkerCommand.TryParse(["assets", "delete", "--source", "wrong-drive"], out var dry, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.AssetsDelete, false, Source: "wrong-drive"), dry);
+        Assert.True(WorkerCommand.TryParse(["assets", "delete", "--source", "HD da Ana", "--yes", "--expect", "3"], out var real, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.AssetsDelete, false, Source: "HD da Ana", Yes: true, Expect: 3), real);
+        Assert.True(WorkerCommand.TryParse(["assets", "delete", "--expect", "0", "--source", "x", "--yes"], out var zero, out _));
+        Assert.Equal(0, zero.Expect);
+    }
+
+    [Theory]
+    [InlineData("assets", "delete")]
+    [InlineData("assets", "delete", "--source")]
+    [InlineData("assets", "delete", "--source", "--yes")]
+    [InlineData("assets", "delete", "--source", " ")]
+    [InlineData("assets", "delete", "--source", "x", "--yes")]
+    [InlineData("assets", "delete", "--source", "x", "--expect", "2")]
+    [InlineData("assets", "delete", "--source", "x", "--yes", "--expect")]
+    [InlineData("assets", "delete", "--source", "x", "--yes", "--expect", "-1")]
+    [InlineData("assets", "delete", "--source", "x", "--yes", "--expect", "two")]
+    [InlineData("assets", "delete", "--source", "x", "--source", "y")]
+    [InlineData("assets", "delete", "--source", "x", "--all")]
+    [InlineData("assets")]
+    [InlineData("assets", "list")]
+    public void Refuses_assets_delete_without_a_source_or_with_only_one_of_yes_and_expect(params string[] args)
+    {
+        Assert.False(WorkerCommand.TryParse(args, out _, out var error));
+        Assert.False(string.IsNullOrEmpty(error));
+    }
+
+    [Fact]
     public void Parses_places_refresh()
     {
         Assert.True(WorkerCommand.TryParse(["places", "refresh"], out var command, out _));

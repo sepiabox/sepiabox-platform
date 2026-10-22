@@ -101,6 +101,10 @@ else
     var processIdentity = builder.AddAzureUserAssignedIdentity("process-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
 
+    // The admin job (S-057, D-108) deletes blobs, which no other identity may: its own, with the write role on storage.
+    var adminIdentity = builder.AddAzureUserAssignedIdentity("admin-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+
     // The application role's connection, for the web and the import jobs: they read and write rows, never
     // the schema. The server's fixed host name rather than a reference to it: a reference would also grant
     // them the database vault, which holds the administrator's password.
@@ -201,6 +205,20 @@ else
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureProcessJob(processIdentity.Resource.Id));
 
+    // Administrative commands, started by hand (S-057, D-108): `assets delete --source <name>`. The arguments here only
+    // make a run without any fail with a usage message; the real ones are given when the job is started. It connects as the
+    // application role, which may delete rows but never change the schema. Its identity writes only the manifests, derivatives
+    // and originals containers (access.bicep); an account-wide write role would also reach the web's key ring (D-062) and
+    // the incoming container.
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.AdminResourceName)
+        .WithArgs("assets", "delete")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(blobs)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithAzureUserAssignedIdentity(adminIdentity)
+        .WithRoleAssignments(storage, [])
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureAdminJob);
+
     // The web's custom domain (S-035, D-065), empty for none. Set after the DNS records exist, first with the
     // binding Disabled (the host name is added), then SniEnabled (domain.bicep creates the managed certificate
     // and the web binds it); docs/operations.md has the steps. No published default: azd would then read only
@@ -223,6 +241,7 @@ else
         .WithParameter("webPrincipalId", webIdentity.Resource.PrincipalId)
         .WithParameter("facesPrincipalId", facesIdentity.Resource.PrincipalId)
         .WithParameter("processPrincipalId", processIdentity.Resource.PrincipalId)
+        .WithParameter("adminPrincipalId", adminIdentity.Resource.PrincipalId)
         .WithParameter("uploaderPrincipalIds", uploaders);
 
     web.WithReference(insights)

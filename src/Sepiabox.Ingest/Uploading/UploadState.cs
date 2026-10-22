@@ -109,6 +109,26 @@ public sealed class UploadState : IDisposable
         }
     }
 
+    /// <summary>
+    /// Forgets that the asset's original, derivatives and manifest were uploaded (S-057), so the next upload sends them
+    /// again; returns how many records went.
+    /// </summary>
+    public int Forget(string assetId)
+    {
+        lock (_lock)
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = """
+                DELETE FROM uploads
+                WHERE (container = 'originals' AND blob = $id)
+                   OR (container = 'derivatives' AND substr(blob, 1, 65) = $id || '/')
+                   OR (container = 'manifests' AND blob = $id || '.json')
+                """;
+            command.Parameters.AddWithValue("$id", assetId);
+            return command.ExecuteNonQuery();
+        }
+    }
+
     public IReadOnlyList<UploadRecord> All()
     {
         lock (_lock)

@@ -1,7 +1,7 @@
 // Access Aspire's role helpers cannot scope (S-058, D-062): the web's write access to the data protection
 // container only, its use of the data protection key only, the faces job's write access to the manifests container
-// only (S-022), the process job's write access to the four containers it touches (S-036), and the uploaders' write access
-// to storage.
+// only (S-022), the process job's write access to the four containers it touches (S-036), the admin job's write
+// access to the three containers it deletes from (S-057), and the uploaders' write access to storage.
 // The account-wide roles (the web's and the worker's Storage Blob Data Reader, the web's Key Vault Secrets
 // User) come from the AppHost's WithRoleAssignments.
 
@@ -20,6 +20,9 @@ param facesPrincipalId string
 
 @description('The process job\'s managed identity, which processes the files in incoming (S-036).')
 param processPrincipalId string
+
+@description('The admin job\'s managed identity, which deletes a source\'s assets (S-057, D-108).')
+param adminPrincipalId string
 
 @description('Comma-separated Entra object ids of the people who run `sepiabox-ingest upload --destination azure`. User object ids only (`az ad signed-in-user show --query id -o tsv`), not groups or service principals.')
 param uploaderPrincipalIds string = ''
@@ -155,6 +158,40 @@ resource processManifestsWriter 'Microsoft.Authorization/roleAssignments@2022-04
   scope: manifestsContainer
   properties: {
     principalId: processPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Deletes manifests, derivatives and originals, and nothing else in storage: not the web's key ring, not `incoming` (S-057).
+resource adminManifestsWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(manifestsContainer.id, adminPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: manifestsContainer
+  properties: {
+    principalId: adminPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource adminDerivativesWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(derivativesContainer.id, adminPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: derivativesContainer
+  properties: {
+    principalId: adminPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource adminOriginalsWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(originalsContainer.id, adminPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: originalsContainer
+  properties: {
+    principalId: adminPrincipalId
     // Storage Blob Data Contributor
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
     principalType: 'ServicePrincipal'

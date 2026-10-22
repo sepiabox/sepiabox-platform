@@ -69,6 +69,15 @@ public static class AzureInfrastructure
     /// </summary>
     public const string FacesSchedule = "17 * * * *";
 
+    /// <summary>
+    /// The manual job that runs the worker's administrative commands (S-057, D-108): <c>assets delete --source</c>. Started
+    /// by hand with the arguments of the command; its own identity is the only one that may delete blobs.
+    /// </summary>
+    public const string AdminJobName = "sepiabox-admin";
+
+    /// <summary>The AppHost resource behind <see cref="AdminJobName"/>.</summary>
+    public const string AdminResourceName = "admin";
+
     /// <summary>The Service Bus namespace; the shutdown runbook disables its queue (S-030).</summary>
     public const string ServiceBusName = "sepiabox-bus";
 
@@ -197,6 +206,9 @@ public static class AzureInfrastructure
 
     // Every manifest of a family library read and, the first time after an erase, written once: well within half an hour.
     private const int FacesTimeoutSeconds = 1800;
+
+    /// <summary>Two hours: a deletion looks at each asset, its blobs and its rows one after the other (S-057).</summary>
+    private const int AdminTimeoutSeconds = 7200;
 
     // PostgreSQL 17 needs an API version newer than the 2024-08-01 the provisioning library defaults to.
     private const string PostgresApiVersion = "2025-08-01";
@@ -588,6 +600,28 @@ public static class AzureInfrastructure
         // Reading and merging small JSON blobs one at a time.
         var container = job.Template.Containers.Single().Value
             ?? throw new InvalidOperationException("The faces job has no container.");
+        container.Resources = new AppContainerResources { Cpu = 0.5, Memory = "1Gi" };
+    }
+
+    /// <summary>The administrative job (S-057, D-108): started by hand, never retried, with the arguments of one command.</summary>
+    public static void ConfigureAdminJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        job.Name = AdminJobName;
+        job.Location = Region;
+
+        var configuration = job.Configuration;
+        configuration.TriggerType = ContainerAppJobTriggerType.Manual;
+        configuration.ManualTriggerConfig = new JobConfigurationManualTriggerConfig
+        {
+            Parallelism = 1,
+            ReplicaCompletionCount = 1,
+        };
+        configuration.ReplicaTimeout = AdminTimeoutSeconds;
+        // A deletion that stopped is finished by the person running it again, after reading what it printed.
+        configuration.ReplicaRetryLimit = 0;
+        var container = job.Template.Containers.Single().Value
+            ?? throw new InvalidOperationException("The admin job has no container.");
         container.Resources = new AppContainerResources { Cpu = 0.5, Memory = "1Gi" };
     }
 

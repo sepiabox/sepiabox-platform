@@ -410,6 +410,32 @@ public abstract class BlobStoreContract
     }
 
     [Fact]
+    public async Task Deletes_a_blob_only_while_it_still_has_the_version_read()
+    {
+        var first = await Write("a.json", "first");
+        var second = await Write("a.json", "second");
+
+        var lost = await Store.DeleteIfVersionAsync(Container, "a.json", first.Version!);
+        var kept = await Store.ReadAsync(Container, "a.json");
+        var deleted = await Store.DeleteIfVersionAsync(Container, "a.json", second.Version!);
+
+        Assert.Equal(BlobDeleteStatus.ConditionNotMet, lost);
+        Assert.Equal("second", kept!.Content.ToString());
+        Assert.Equal(BlobDeleteStatus.Deleted, deleted);
+        Assert.Null(await Store.ReadAsync(Container, "a.json"));
+    }
+
+    [Fact]
+    public async Task A_conditional_delete_of_a_blob_that_is_gone_says_so_and_is_not_an_error()
+    {
+        var written = await Write("a.json", "first");
+        await Store.DeleteAsync(Container, "a.json");
+
+        Assert.Equal(BlobDeleteStatus.NotFound, await Store.DeleteIfVersionAsync(Container, "a.json", written.Version!));
+        Assert.Equal(BlobDeleteStatus.NotFound, await Store.DeleteIfVersionAsync(Container, "never-there.json", "v1"));
+    }
+
+    [Fact]
     public async Task Knows_which_containers_exist()
     {
         Assert.True(await Store.ContainerExistsAsync(Container));

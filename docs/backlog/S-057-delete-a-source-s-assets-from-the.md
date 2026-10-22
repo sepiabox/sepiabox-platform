@@ -17,7 +17,7 @@ Undoing a wrong upload (the wrong folder, a test run, a drive that should not be
   4. Delete the catalog rows (asset, sources, derivatives, embeddings, place, faces and people links when those tables exist, manifest import records) in one transaction.
 - After deleting the derivatives and the original, read the manifest again: if one has reappeared (an `upload` ran meanwhile), list the asset as "re-upload needed" with its source paths and exit 1, since its blobs are gone.
 - A rerun finishes an interrupted deletion (an asset whose manifest is gone but whose rows or blobs remain).
-- Runs in Azure as a manual Container Apps job `sepiabox-admin` (worker image) with its own managed identity: *Storage Blob Data Contributor* on the storage account and *Key Vault Secrets User* for the catalog connection. The import identity keeps read-only access (S-058).
+- Runs in Azure as a manual Container Apps job `sepiabox-admin` (worker image) with its own managed identity: *Storage Blob Data Contributor* on the `manifests`, `derivatives` and `originals` containers only (D-108; not account-wide, which would reach the key ring and `incoming`); it connects to the catalog as the application role, so it needs no Key Vault role. The import identity keeps read-only access (S-058).
 - `docs/operations.md`: how to run it (dry run, then `--yes --expect`), that the local `upload` state is not changed, so re-uploading the same work folder needs its upload state reset for those assets (document how, adding an `upload` option if there is none), and that early deletion of Cold-tier originals is charged (90 days minimum), and that `upload` must not run while `assets delete --yes` runs.
 
 ### Out of scope
@@ -25,14 +25,14 @@ Undoing a wrong upload (the wrong folder, a test run, a drive that should not be
 - A web page for it.
 
 ### Acceptance criteria
-- [ ] Given assets whose only source is `wrong-drive` and other assets, when `assets delete --source wrong-drive` runs without `--yes`, then it lists exactly the first group with their paths and blobs, and nothing changes.
-- [ ] Given `--yes --expect 3` when 4 assets match, then nothing is deleted and it exits with the usage code.
-- [ ] Given `--yes --expect <n>` with the right count, then the matched assets' catalog rows, manifests, derivatives and originals are gone (Azurite + PostgreSQL), other assets are unchanged, and catalog counts drop by exactly `n`.
-- [ ] Given an asset whose catalog sources are all `wrong-drive` but whose stored manifest also lists `HD da Ana`, then it is kept and listed.
-- [ ] Given a manifest changed between the read and the delete (a test that writes it in between), then the delete loses its condition, the asset is kept with all its blobs and rows, and a rerun handles it.
-- [ ] Given an asset with two sources both named `wrong-drive` (two paths), then it is deleted.
-- [ ] Given a manifest written again after the derivatives and original were deleted (a test that writes it at that moment), then the asset is listed as "re-upload needed" with its source paths and the exit code is 1.
-- [ ] Given the generated Bicep, then `sepiabox-admin` has a manual trigger and its own identity with *Storage Blob Data Contributor*, and the import jobs' identity has no write role.
+- [x] Given assets whose only source is `wrong-drive` and other assets, when `assets delete --source wrong-drive` runs without `--yes`, then it lists exactly the first group with their paths and blobs, and nothing changes.
+- [x] Given `--yes --expect 3` when 4 assets match, then nothing is deleted and it exits with the usage code.
+- [x] Given `--yes --expect <n>` with the right count, then the matched assets' catalog rows, manifests, derivatives and originals are gone (Azurite + PostgreSQL), other assets are unchanged, and catalog counts drop by exactly `n`.
+- [x] Given an asset whose catalog sources are all `wrong-drive` but whose stored manifest also lists `HD da Ana`, then it is kept and listed.
+- [x] Given a manifest changed between the read and the delete (a test that writes it in between), then the delete loses its condition, the asset is kept with all its blobs and rows, and a rerun handles it.
+- [x] Given an asset with two sources both named `wrong-drive` (two paths), then it is deleted.
+- [x] Given a manifest written again after the derivatives and original were deleted (a test that writes it at that moment), then the asset is listed as "re-upload needed" with its source paths and the exit code is 1.
+- [x] Given the generated Bicep, then `sepiabox-admin` has a manual trigger and its own identity with *Storage Blob Data Contributor* on those three containers and nowhere else, and the import jobs' identity has no write role.
 
 ### Technical notes
 - Deleting a manifest blob raises no import (Event Grid only forwards `BlobCreated`, S-033).
@@ -41,3 +41,6 @@ Undoing a wrong upload (the wrong folder, a test run, a drive that should not be
 
 ### Expected tests
 - Integration (Azurite + PostgreSQL): dry run, expect mismatch, delete, catalog/blob disagreement, lost ETag condition, duplicate sources, rerun after interruption. Bicep test for the admin job identity.
+
+### Status
+- `doing` (2026-10-22): implemented (D-108). The admin job connects as the application role, not with a Key Vault role (D-108 (6)); the upload option is `--resend-source`. Not run against Azure: the owner check is the first real deletion with a dry run.

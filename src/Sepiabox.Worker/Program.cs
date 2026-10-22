@@ -19,6 +19,7 @@ using Sepiabox.Search.Models;
 using Sepiabox.Storage;
 using Sepiabox.Storage.Azure;
 using Sepiabox.Worker;
+using Sepiabox.Worker.Assets;
 using Sepiabox.Worker.Cloud;
 using Sepiabox.Worker.Events;
 using Sepiabox.Worker.Faces;
@@ -65,7 +66,7 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
         builder.Services.AddScoped<ManifestImporter>();
     }
 
-    if (command.Action is WorkerAction.FacesSweep or WorkerAction.ProcessFromQueue)
+    if (command.Action is WorkerAction.FacesSweep or WorkerAction.ProcessFromQueue or WorkerAction.AssetsDelete)
     {
         AddBlobStore(builder);
         builder.Services.AddSingleton<ManifestValidator>();
@@ -163,6 +164,18 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         var classified = await new OccasionClassifier(services.GetRequiredService<CatalogDbContext>(), embedder).RunAsync(cancellationToken);
         Log.OccasionsClassified(logger, classified.Considered, classified.ByPhotos, classified.Trips, classified.Untyped);
         return ExitCodes.Success;
+    }
+
+    if (command is { Action: WorkerAction.AssetsDelete, Source: { } deleteSource })
+    {
+        var deletion = new AssetDeletion(
+            services.GetRequiredService<CatalogDbContext>(),
+            services.GetRequiredService<IBlobStore>(),
+            services.GetRequiredService<ManifestValidator>(),
+            logger);
+        var exit = await AssetsDeleteCommand.RunAsync(deletion, deleteSource, command.Yes, command.Expect, Console.Out, Console.Error, cancellationToken);
+        Log.AssetsDeleteFinished(logger, deleteSource, exit);
+        return exit;
     }
 
     if (command.Action == WorkerAction.FacesSweep)
