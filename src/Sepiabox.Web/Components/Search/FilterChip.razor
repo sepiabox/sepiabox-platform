@@ -10,6 +10,19 @@
     </summary>
     <div class="pop" role="group" aria-label="@Label">
         @ChildContent
+        @if (Footer is not null)
+        {
+            <div class="pop-foot">@Footer</div>
+        }
+        else
+        {
+            @* On a phone the popover is a sheet that covers the bar, so it brings its own way to submit and to close (a radio
+               picks, and "Show results" applies); the footer is hidden from 601 px up, where "Filter" is in view. *@
+            <div class="pop-foot sheet-foot">
+                <button type="button" class="button secondary" data-close>@Text["Filter_Close"]</button>
+                <button type="submit" class="button">@Text["Filter_ShowResults"]</button>
+            </div>
+        }
     </div>
 </details>
 
@@ -27,4 +40,8 @@
 
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Replaces the sheet's footer (the people picker's "Reset" and "Show results", always shown).</summary>
+    [Parameter]
+    public RenderFragment? Footer { get; set; }
 }

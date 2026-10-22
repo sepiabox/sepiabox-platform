@@ -124,7 +124,7 @@ public sealed class TimelineFilterTests : LocalizedContext
         var page = Render<Timeline>();
 
         Assert.Equal("Neste dia", page.Find("a.shortcut").TextContent.Trim());
-        Assert.Equal("Filtrar", page.Find("form.filters button").TextContent);
+        Assert.Equal("Filtrar", page.Find("form.filters > button.button").TextContent);
         Assert.Equal("Dezembro", page.FindAll("input[name=month]")[12].ParentElement!.TextContent.Trim());
     }
 

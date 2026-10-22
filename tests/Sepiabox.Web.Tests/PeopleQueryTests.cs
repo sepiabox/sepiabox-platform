@@ -70,9 +70,10 @@ public sealed class PeopleQueryTests(CatalogFixture catalog)
         var options = await new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db))).GetFilterOptionsAsync();
 
         Assert.Equal(["Ana", "Bruno"], options.People);
-        var cover = Assert.Single(options.PersonCovers);
-        Assert.Equal("Ana", cover.Key);
-        Assert.Equal([0.3, 0.3, 0.2, 0.2], cover.Value.Box);
+        Assert.Equal(ana.Id, options.PersonPicks["Ana"].Id);
+        Assert.Equal([0.3, 0.3, 0.2, 0.2], options.PersonPicks["Ana"].Crop!.Box);
+        Assert.Equal(bruno.Id, options.PersonPicks["Bruno"].Id);
+        Assert.Null(options.PersonPicks["Bruno"].Crop);
     }
 
     [Fact]

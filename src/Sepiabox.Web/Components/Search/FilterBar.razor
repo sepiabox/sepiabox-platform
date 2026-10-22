@@ -55,6 +55,7 @@
         <input type="hidden" name="@SearchLinks.HiddenParameter" value="1" />
     }
 
+    <div class="chips">
     @* The filters are dropdown chips (S-067, D-123): the same field names as the selects they replace, so a submit gives the same
        address; without JavaScript "Apply filters" submits, with it a radio's change does. *@
     <FilterChip Label="@Text["Filter_Year"]" Set="@(Fields.Year is not null)" Value="@Fields.Year?.ToString(CultureInfo.CurrentCulture)">
@@ -67,8 +68,8 @@
                       Options="@Enumerable.Range(1, 12).Select(m => (m.ToString(CultureInfo.InvariantCulture), MonthName(m)))" />
     </FilterChip>
 
-    <FilterChip Label="@Text["Filter_Kind"]" Set="@(Fields.Kind is not null)" Value="@(Fields.Kind == AssetKinds.Video ? Text["Filter_Videos"].Value : Text["Filter_Photos"].Value)">
-        <FilterRadios Name="kind" Selected="@Fields.Kind"
+    <FilterChip Label="@Text["Filter_Kind"]" Set="@(Kind is not null)" Value="@(Kind == AssetKinds.Video ? Text["Filter_Videos"].Value : Text["Filter_Photos"].Value)">
+        <FilterRadios Name="kind" Selected="@Kind"
                       Options="@(new[] { (AssetKinds.Photo, Text["Filter_Photos"].Value), (AssetKinds.Video, Text["Filter_Videos"].Value) })" />
     </FilterChip>
 
@@ -102,15 +103,17 @@
         {
             @* Several people: a photo with all of them (S-021). A search box, an avatar per person and a footer that submits. *@
             <FilterChip Label="@Text["Filter_People"]" Set="@(Fields.People.Count > 0)" Value="@Summary(Fields.People)">
+                <ChildContent>
                 <FilterChecks Name="person" Options="@People" Selected="@Fields.People" Searchable="true" SearchPlaceholder="@Text["Filter_PeopleSearch"]">
                     <Avatar Context="name">
-                        <PersonAvatar Name="@name" PersonId="@PersonKey(name)" Crop="@Cover(name)" />
+                        <PersonAvatar Name="@name" PersonId="@Pick(name).Id" Crop="@Pick(name).Crop" />
                     </Avatar>
-                    <Footer>
-                        <a class="button secondary" href="@PeopleResetHref" data-enhance-nav="false">@Text["Filter_Reset"]</a>
-                        <button type="submit" class="button">@Text["Filter_ShowResults"]</button>
-                    </Footer>
                 </FilterChecks>
+                </ChildContent>
+                <Footer>
+                    <a class="button secondary" href="@PeopleResetHref" data-enhance-nav="false">@Text["Filter_Reset"]</a>
+                    <button type="submit" class="button">@Text["Filter_ShowResults"]</button>
+                </Footer>
             </FilterChip>
         }
 
@@ -127,6 +130,7 @@
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>
         <span>@Text["Filter_OnThisDay"]</span>
     </a>
+    </div>
 
     @if (DescribeAvailable)
     {
@@ -185,10 +189,10 @@
     private string? Summary(IReadOnlyList<string> chosen) =>
         chosen.Count switch { 0 => null, 1 => chosen[0], _ => Text["Filter_Selected", chosen.Count.ToString(CultureInfo.CurrentCulture)].Value };
 
-    // An avatar's colour follows a stable number per name; the picker has names, not ids.
-    private static long PersonKey(string name) => name.Aggregate(0L, (hash, c) => (hash * 31) + c) & 0x7fffffff;
+    // A kind the bar does not offer (a hand-made address) is no kind: the chip says "Any", not "Photos".
+    private string? Kind => new[] { AssetKinds.Photo, AssetKinds.Video }.FirstOrDefault(k => string.Equals(k, Fields.Kind, StringComparison.OrdinalIgnoreCase));
 
-    private FaceCrop? Cover(string name) => Options.PersonCovers.GetValueOrDefault(name);
+    private PersonPick Pick(string name) => Options.PersonPicks.GetValueOrDefault(name) ?? new PersonPick(0, null);
 
     private static IEnumerable<string> With(IReadOnlyList<string> values, string? value) =>
         value is null || values.Contains(value, StringComparer.OrdinalIgnoreCase) ? values : values.Append(value);

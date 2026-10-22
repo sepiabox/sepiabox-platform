@@ -302,7 +302,7 @@
     <value>Videos from Lisbon in December 2019</value>
   </data>
   <data name="Ask_Hint" xml:space="preserve">
-    <value>In English or Portuguese. The question and the names in your library (people, places, sources, cities) are sent to Anthropic's Claude; never your photos, e-mail addresses or coordinates.</value>
+    <value>The question and the names in your library (people, places, sources, cities) are sent to Anthropic's Claude; never your photos, e-mail addresses or coordinates.</value>
   </data>
   <data name="Ask_Submit" xml:space="preserve">
     <value>Ask</value>
@@ -1543,5 +1543,17 @@
   </data>
   <data name="Filter_ShowResults" xml:space="preserve">
     <value>Show results</value>
+  </data>
+  <data name="Ask_HintShort" xml:space="preserve">
+    <value>In English or Portuguese.</value>
+  </data>
+  <data name="Ask_PrivacyLabel" xml:space="preserve">
+    <value>What is sent?</value>
+  </data>
+  <data name="Filter_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Filter_NoMatch" xml:space="preserve">
+    <value>No one matches</value>
   </data>
 </root>

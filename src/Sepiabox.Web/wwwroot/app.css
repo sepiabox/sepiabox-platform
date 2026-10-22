@@ -869,21 +869,59 @@ main {
     stroke-width: 2;
 }
 
+.filters .chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+    flex: 1 1 100%;
+}
+
 .filters .spacer {
     flex: 1;
+}
+
+.privacy {
+    display: inline;
+}
+
+.privacy > summary {
+    display: inline;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.privacy[open] > span {
+    display: block;
+    margin-top: var(--s-1);
+}
+
+.pop-empty {
+    margin: var(--s-2) var(--s-3);
+    color: var(--text-muted, var(--text-secondary));
+    font-size: var(--text-sm);
+}
+
+.sheet-foot,
+button[data-close] {
+    display: none;
+}
+
+.filters-js button[data-close] {
+    display: inline-flex;
 }
 
 .filters .describe {
     display: inline-flex;
     align-items: center;
+    order: 0;
 }
 
 .filters .describe > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
+    margin-right: var(--s-2);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    white-space: nowrap;
 }
 
 .filters .describe input[type="search"] {
@@ -1020,6 +1058,31 @@ main {
 
     .finder {
         padding: var(--s-3);
+    }
+
+    /* One scrolling row of chips: the popovers are fixed, so the scroll container does not clip them. */
+    .filters .chips {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: var(--s-1);
+        scrollbar-width: thin;
+    }
+
+    .filters .chips > * {
+        flex: none;
+    }
+
+    .filters .describe {
+        flex: 1 1 100%;
+    }
+
+    .filters .describe input[type="search"] {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .sheet-foot {
+        display: flex;
     }
 }
 

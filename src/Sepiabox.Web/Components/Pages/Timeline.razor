@@ -29,7 +29,18 @@
            update can take about a minute. The texts are the script's, from the resources (D-050). *@
         <p class="ask-status" role="status" data-thinking="@Text["Ask_Thinking"]" data-slow="@Text["Ask_Slow"]" data-timeout="@Text["Ask_TimedOut"]"></p>
     </form>
-    <p class="hint muted">@(Questions.IsConfigured ? Text["Ask_Hint"] : Text["Ask_NotConfigured"])</p>
+    @if (Questions.IsConfigured)
+    {
+        @* One line; what leaves the server is behind a disclosure, so the first screen on a phone shows photos (S-067). *@
+        <p class="hint muted">
+            @Text["Ask_HintShort"]
+            <details class="privacy"><summary>@Text["Ask_PrivacyLabel"]</summary><span>@Text["Ask_Hint"]</span></details>
+        </p>
+    }
+    else
+    {
+        <p class="hint muted">@Text["Ask_NotConfigured"]</p>
+    }
     @if (_askMessage is not null)
     {
         <p class="empty" role="alert">@_askMessage</p>

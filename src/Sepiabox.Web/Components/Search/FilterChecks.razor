@@ -19,9 +19,9 @@
         </label>
     }
 </div>
-@if (Footer is not null)
+@if (Searchable)
 {
-    <div class="pop-foot">@Footer</div>
+    <p class="pop-empty" data-filter-empty hidden>@Text["Filter_NoMatch"]</p>
 }
 
 @code {
@@ -43,9 +43,6 @@
     /// <summary>What goes before a choice's name: a person's avatar.</summary>
     [Parameter]
     public RenderFragment<string>? Avatar { get; set; }
-
-    [Parameter]
-    public RenderFragment? Footer { get; set; }
 
     private bool IsSelected(string value) => Selected.Contains(value, StringComparer.OrdinalIgnoreCase);
 }

@@ -46,9 +46,9 @@ public sealed class FilterChipTests : LocalizedContext
         Assert.All(bar.FindAll("input[name=person]"), i => Assert.Equal("checkbox", i.GetAttribute("type")));
         Assert.NotNull(bar.Find("input[data-filter-search]"));
         Assert.Equal("./?filter=1", bar.Find(".pop-foot a").GetAttribute("href"));
-        Assert.Equal("submit", bar.Find(".pop-foot button").GetAttribute("type"));
+        Assert.Equal("submit", bar.Find("details.fchip:has(input[name=person]) .pop-foot button").GetAttribute("type"));
         Assert.Equal(["AC", "P"], bar.FindAll("label.opt .avatar").Select(a => a.TextContent.Trim()));
-        Assert.Equal("Filter", bar.Find("button.button[type=submit]:not(.pop-foot button)").TextContent.Trim());
+        Assert.Equal("Filter", bar.Find("form.filters > button.button[type=submit]").TextContent.Trim());
     }
 
     [Fact]
@@ -79,5 +79,40 @@ public sealed class FilterChipTests : LocalizedContext
 
         Assert.Equal("avatar lg c3", named.ClassName);
         Assert.Equal("avatar c2 unnamed", unnamed.ClassName);
+    }
+
+    [Fact]
+    public void Colours_the_picker_s_avatars_by_the_person_id_of_the_options()
+    {
+        var options = Catalog with { PersonPicks = new Dictionary<string, PersonPick> { ["Ana Costa"] = new(7, null), ["Pedro"] = new(8, null) } };
+
+        var bar = Render<FilterBar>(p => p.Add(b => b.Options, options));
+
+        Assert.Equal(["avatar c5", "avatar c2"], bar.FindAll("label.opt .avatar").Select(a => a.ClassName));
+    }
+
+    [Fact]
+    public void Shows_no_kind_for_a_kind_the_bar_does_not_offer()
+    {
+        var fields = new FilterFields(null, null, "document", null, null);
+
+        var bar = Render<FilterBar>(p => p.Add(b => b.Options, Catalog).Add(b => b.Fields, fields));
+        var chip = bar.FindAll("details.fchip").Single(c => c.QuerySelector("summary .k")!.TextContent.StartsWith("Type", StringComparison.Ordinal));
+
+        Assert.False(chip.HasAttribute("data-set"));
+        Assert.Equal("Any", chip.QuerySelector("summary .v")!.TextContent);
+    }
+
+    [Fact]
+    public void Gives_every_other_sheet_a_footer_to_show_results_and_close_and_the_people_search_a_no_match_line()
+    {
+        var bar = Render<FilterBar>(p => p.Add(b => b.Options, Catalog));
+
+        var year = bar.Find("details.fchip");
+
+        Assert.Equal("submit", year.QuerySelector(".pop-foot.sheet-foot button[type=submit]")!.GetAttribute("type"));
+        Assert.NotNull(year.QuerySelector(".pop-foot button[data-close][type=button]"));
+        Assert.Equal("No one matches", bar.Find("[data-filter-empty]").TextContent);
+        Assert.True(bar.Find("[data-filter-empty]").HasAttribute("hidden"));
     }
 }
