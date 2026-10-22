@@ -40,6 +40,36 @@ public sealed class UploadToStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Sends_the_assets_of_a_source_again_only_when_asked_to_resend_it_after_they_were_deleted_from_storage()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        _drive.Write("b.jpg", TestPhotos.Porto("green"));
+        var manifests = Process();
+        var id = manifests.Single(m => m.Sources[0].Path == "a.jpg").Id;
+        await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local), _store);
+        // What `sepiabox-worker assets delete` leaves: nothing of that asset in storage, while upload's own record says it is there.
+        await _store.DeleteAsync(BlobLayout.OriginalsContainer, id);
+        await _store.DeleteAsync(BlobLayout.ManifestsContainer, BlobLayout.ManifestBlobName(id));
+        foreach (var derivative in await ToListAsync(_store.ListAsync(BlobLayout.DerivativesContainer, id + "/")))
+        {
+            await _store.DeleteAsync(BlobLayout.DerivativesContainer, derivative.Name);
+        }
+
+        var plain = await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local), _store);
+        var other = await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local, ResendSource: "no-such-source"), _store);
+        var goneBefore = await _store.ReadAsync(BlobLayout.OriginalsContainer, id);
+        var resend = await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local, ResendSource: "HD da Ana"), _store);
+
+        Assert.Equal((0, 0, 0), (plain.Uploaded, other.AssetsResent, other.Uploaded));
+        Assert.Empty(plain.Problems);
+        Assert.Null(goneBefore);
+        Assert.Equal(2, resend.AssetsResent);
+        Assert.NotNull(await _store.ReadAsync(BlobLayout.OriginalsContainer, id));
+        Assert.NotNull(await _store.ReadAsync(BlobLayout.ManifestsContainer, BlobLayout.ManifestBlobName(id)));
+        Assert.NotEmpty(await ToListAsync(_store.ListAsync(BlobLayout.DerivativesContainer, id + "/")));
+    }
+
+    [Fact]
     public async Task Asks_for_the_cold_class_for_originals_only_when_the_destination_is_azure()
     {
         _drive.Write("a.jpg", TestPhotos.Porto("red"));
