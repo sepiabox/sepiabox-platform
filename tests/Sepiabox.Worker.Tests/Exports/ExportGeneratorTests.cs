@@ -13,7 +13,7 @@ using Sepiabox.Worker.Exports;
 namespace Sepiabox.Worker.Tests.Exports;
 
 /// <summary>
-/// <c>export</c> on PostgreSQL and Azurite (S-040, D-109): the zip's contents, the faces only when asked, the links' expiry,
+/// <c>export</c> on PostgreSQL and Azurite (S-040, D-110): the zip's contents, the faces only when asked, the links' expiry,
 /// and what becomes of a request that fails.
 /// </summary>
 [Collection(CatalogGroup.Name)]

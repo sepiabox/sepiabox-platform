@@ -17,7 +17,7 @@ namespace Sepiabox.Storage.Azure;
 /// <param name="time">The clock.</param>
 /// <param name="maxReadUrlLifetime">
 /// The longest a link may last; <see cref="MaxReadUrlLifetime"/> (4 hours) unless given. The export's originals list asks
-/// for 24 hours (S-040, D-109): its store is made with that, and the delegation key then lasts that long and two hours more.
+/// for 24 hours (S-040, D-110): its store is made with that, and the delegation key then lasts that long and two hours more.
 /// </param>
 public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time = null, TimeSpan? maxReadUrlLifetime = null) : IBlobStore, IDisposable
 {

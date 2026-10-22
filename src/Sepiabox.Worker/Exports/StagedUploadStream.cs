@@ -3,7 +3,7 @@ using Sepiabox.Storage;
 namespace Sepiabox.Worker.Exports;
 
 /// <summary>
-/// A write-only stream onto a staged upload (S-040, D-109): what <see cref="System.IO.Compression.ZipArchive"/> writes
+/// A write-only stream onto a staged upload (S-040, D-110): what <see cref="System.IO.Compression.ZipArchive"/> writes
 /// goes to the blob in blocks of <see cref="BlockSize"/>, so a zip of any size is never held whole in memory or on disk.
 /// The archive writes synchronously, so a full block is appended synchronously too (the job has no synchronization
 /// context to deadlock). <see cref="FinishAsync"/> appends the last, partial block; the caller commits.

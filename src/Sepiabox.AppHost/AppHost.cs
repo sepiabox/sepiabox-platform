@@ -182,7 +182,7 @@ else
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureFacesJob);
 
-    // Writes the exports people ask for (S-040, D-109), every 15 minutes. It connects as the application role. Its
+    // Writes the exports people ask for (S-040, D-110), every 15 minutes. It connects as the application role. Its
     // account-wide Storage Blob Data Reader lets it sign the 24 h links to the originals (a user delegation key); its
     // only write role, on the exports container, is in access.bicep.
     builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.ExportResourceName)

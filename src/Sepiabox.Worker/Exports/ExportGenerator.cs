@@ -9,7 +9,7 @@ using Sepiabox.Storage;
 namespace Sepiabox.Worker.Exports;
 
 /// <summary>
-/// <c>export</c> (S-040, D-109): writes the zip each pending <see cref="ExportRequest"/> asks for. The job runs on a schedule
+/// <c>export</c> (S-040, D-110): writes the zip each pending <see cref="ExportRequest"/> asks for. The job runs on a schedule
 /// and does nothing, in one query, while no one has asked. A zip holds <c>catalog.json</c> (assets, their sources with
 /// their addresses, people with names, occasions and personal places), <c>originals.txt</c> (one line for each original
 /// Sepiabox stores, with a link that works for 24 hours) and <c>README.txt</c>; the faces (boxes and embeddings, which are

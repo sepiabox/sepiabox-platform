@@ -3,7 +3,7 @@ using Sepiabox.Catalog;
 
 namespace Sepiabox.Web.Services;
 
-/// <summary>Asking for an export of all the library's data and getting it back (S-040, D-109).</summary>
+/// <summary>Asking for an export of all the library's data and getting it back (S-040, D-110).</summary>
 public interface IExportRequests
 {
     /// <summary>The last requests, newest first.</summary>

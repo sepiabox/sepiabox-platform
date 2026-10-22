@@ -181,7 +181,7 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
 
     if (command.Action == WorkerAction.Export)
     {
-        // The originals' links last 24 hours, longer than the 4 of the default store (S-040, D-109): its own store, on the same client.
+        // The originals' links last 24 hours, longer than the 4 of the default store (S-040, D-110): its own store, on the same client.
         using var linkStore = new AzureBlobStore(
             services.GetRequiredService<BlobServiceClient>(), services.GetRequiredService<TimeProvider>(), ExportGenerator.OriginalLinkLifetime);
         var written = await new ExportGenerator(

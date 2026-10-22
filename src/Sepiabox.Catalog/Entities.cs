@@ -430,7 +430,7 @@ public static class ConnectedSourceStatuses
 }
 
 /// <summary>
-/// A request to export all the library's data (S-040, D-109): made on the settings page, picked up by the export job, which
+/// A request to export all the library's data (S-040, D-110): made on the settings page, picked up by the export job, which
 /// writes <c>exports/&lt;date&gt;-&lt;id&gt;.zip</c> and says so here. The page lists the last ones and gives a one-hour link
 /// to each finished zip.
 /// </summary>
