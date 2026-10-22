@@ -231,6 +231,9 @@ azd deploy faces --no-prompt
 azd deploy process --no-prompt
 # Scheduled (S-038): the same rule as faces. After the process job, so what it stages finds a job that can process it.
 azd deploy sync --no-prompt
+
+# Scheduled (S-040): the same rule.
+azd deploy export --no-prompt
 # Manual (S-059): started by hand only, but never with an image older than the schema. After the import
 # jobs, so that if this deploy fails the queue still receives again with the new import image.
 azd deploy geonames --no-prompt

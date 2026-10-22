@@ -24,6 +24,7 @@ using Sepiabox.Worker;
 using Sepiabox.Worker.Assets;
 using Sepiabox.Worker.Cloud;
 using Sepiabox.Worker.Events;
+using Sepiabox.Worker.Exports;
 using Sepiabox.Worker.Faces;
 using Sepiabox.Worker.Importing;
 using Sepiabox.Worker.Occasions;
@@ -79,6 +80,11 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
     {
         AddBlobStore(builder);
         AddDriveSyncServices(builder);
+    }
+
+    if (command.Action == WorkerAction.Export)
+    {
+        AddBlobStore(builder);
     }
 
     if (command.Action is WorkerAction.ImportOnce or WorkerAction.ImportFromQueue or WorkerAction.PlacesRefresh or WorkerAction.GeoNamesUpdate)
@@ -202,6 +208,18 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
     if (command.Action is WorkerAction.SyncGoogleDrive or WorkerAction.SyncOneDrive or WorkerAction.SyncAll)
     {
         return await RunSyncAsync(command, services, logger, cancellationToken);
+    }
+
+    if (command.Action == WorkerAction.Export)
+    {
+        // The originals' links last 24 hours, longer than the 4 of the default store (S-040, D-110): its own store, on the same client.
+        using var linkStore = new AzureBlobStore(
+            services.GetRequiredService<BlobServiceClient>(), services.GetRequiredService<TimeProvider>(), ExportGenerator.OriginalLinkLifetime);
+        var written = await new ExportGenerator(
+                services.GetRequiredService<CatalogDbContext>(), linkStore, services.GetRequiredService<TimeProvider>(), logger)
+            .RunPendingAsync(cancellationToken);
+        Log.ExportsDone(logger, written);
+        return ExitCodes.Success;
     }
 
     if (command.Action == WorkerAction.ImportFromQueue)

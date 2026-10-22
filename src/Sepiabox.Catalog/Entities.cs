@@ -502,3 +502,56 @@ public static class ConnectedSourceStatuses
     /// </summary>
     public const string Reconnect = "reconnect";
 }
+
+/// <summary>
+/// A request to export all the library's data (S-040, D-110): made on the settings page, picked up by the export job, which
+/// writes <c>exports/&lt;date&gt;-&lt;id&gt;.zip</c> and says so here. The page lists the last ones and gives a one-hour link
+/// to each finished zip.
+/// </summary>
+public sealed class ExportRequest
+{
+    /// <summary>
+    /// Days a zip is kept in <c>exports</c> (D-110): a lifecycle rule deletes it then, and the page stops offering it. A zip with
+    /// face data (biometric data) must not outlive an erase for long, and nobody deletes the others by hand.
+    /// </summary>
+    public const int RetentionDays = 7;
+
+    public long Id { get; set; }
+
+    public DateTimeOffset RequestedAt { get; set; }
+
+    /// <summary>The signed-in user who asked, lower-cased.</summary>
+    public required string RequestedBy { get; set; }
+
+    /// <summary>Whether the zip carries the faces: their boxes and embeddings (biometric data), which the default leaves out.</summary>
+    public bool IncludeFaceData { get; set; }
+
+    /// <summary>One of <see cref="ExportStatuses"/>.</summary>
+    public required string Status { get; set; }
+
+    public DateTimeOffset? StartedAt { get; set; }
+
+    public DateTimeOffset? FinishedAt { get; set; }
+
+    /// <summary>
+    /// The zip's blob in the <c>exports</c> container, once it is written; null again once the export job deleted it because
+    /// face recognition was turned off and the zip had face data (D-110).
+    /// </summary>
+    public string? BlobName { get; set; }
+
+    public int? Assets { get; set; }
+
+    public long? SizeBytes { get; set; }
+
+    /// <summary>Why it failed, for the owner to read: no stack, no path.</summary>
+    public string? Error { get; set; }
+}
+
+/// <summary>The states of an <see cref="ExportRequest"/>.</summary>
+public static class ExportStatuses
+{
+    public const string Requested = "requested";
+    public const string Running = "running";
+    public const string Done = "done";
+    public const string Failed = "failed";
+}
