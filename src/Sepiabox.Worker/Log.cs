@@ -79,8 +79,11 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not strip the deleted faces from the manifest of asset {AssetId}: {Reason}")]
     public static partial void StripProblem(ILogger logger, string assetId, string reason);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Stripped the faces the family deleted from the manifests: {Assets} asset(s) with such faces, {Stripped} manifest(s) written, {Unchanged} already without them, {Problems} with problems.")]
-    public static partial void IgnoredFacesStripped(ILogger logger, int assets, int stripped, int unchanged, int problems);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Stripped the faces the family deleted from the manifests (full pass: {Full}): {Assets} asset(s) visited, {Stripped} manifest(s) written, {Unchanged} already without them, {Problems} with problems.")]
+    public static partial void IgnoredFacesStripped(ILogger logger, int assets, bool full, int stripped, int unchanged, int problems);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "The faces job ended Failed in its {Half} half: {Problems} manifest(s) with problems.")]
+    public static partial void FacesJobHalfFailed(ILogger logger, string half, int problems);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Swept the face erase of {ErasedAt:O} into the manifests (pass finished: {Finished}, recorded: {Recorded}): {Erased} erased, {Unchanged} already erased, {Problems} with problems.")]
     public static partial void FacesSwept(ILogger logger, DateTimeOffset erasedAt, bool finished, bool recorded, int erased, int unchanged, int problems);

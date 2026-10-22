@@ -191,8 +191,19 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         var strip = await new IgnoredFacesStrip(
                 services.GetRequiredService<CatalogDbContext>(),
                 new ManifestStore(services.GetRequiredService<ManifestValidator>(), services.GetRequiredService<IBlobStore>()),
+                services.GetRequiredService<TimeProvider>(),
                 logger)
             .RunAsync(BlobLayout.ManifestsContainer, cancellationToken);
+        if (sweep.Problems.Count > 0)
+        {
+            Log.FacesJobHalfFailed(logger, "sweep (the erase of all faces)", sweep.Problems.Count);
+        }
+
+        if (strip.Problems.Count > 0)
+        {
+            Log.FacesJobHalfFailed(logger, "strip (the faces deleted one by one)", strip.Problems.Count);
+        }
+
         return sweep.Problems.Count == 0 && strip.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }
 

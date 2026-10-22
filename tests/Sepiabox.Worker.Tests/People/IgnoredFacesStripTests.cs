@@ -172,6 +172,125 @@ public sealed class IgnoredFacesStripTests(CatalogFixture fixture)
         Assert.Empty((await StoredAsync(store, good.Id)).Faces);
     }
 
+    [Fact]
+    public async Task A_later_run_visits_only_the_assets_whose_boxes_were_remembered_since_the_last_complete_run_and_the_first_visits_all()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var store = Store();
+        var clock = new SettableClock(new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero));
+        var a = await PutAsync(store, 20, (s_sameFace, 1), (s_elsewhere, 2));
+        await ForgetAsync(db, a.Id, s_deleted, clock.Now - TimeSpan.FromHours(1));
+        var first = await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+        Assert.Equal((true, 1, 1), (first.Full, first.Assets, first.Stripped));
+        Assert.Equal(clock.Now.UtcDateTime.ToString("O"), await SettingAsync(db, IgnoredFacesStrip.CheckpointKey));
+        Assert.Equal(clock.Now.UtcDateTime.ToString("O"), await SettingAsync(db, IgnoredFacesStrip.FullPassKey));
+
+        // Two hours later another person's face is deleted; an upload has put A's face back in the meantime.
+        clock.Now += TimeSpan.FromHours(2);
+        var b = await PutAsync(store, 21, (s_sameFace, 3), (s_elsewhere, 4));
+        await ForgetAsync(db, b.Id, s_deleted, clock.Now);
+        await new ManifestStore(new ManifestValidator(), store).WriteMergedAsync(BlobLayout.ManifestsContainer, a, CancellationToken.None);
+        var second = await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+
+        Assert.Equal((false, 1, 1), (second.Full, second.Assets, second.Stripped));
+        Assert.Single((await StoredAsync(store, b.Id)).Faces);
+        // A was not visited: its restored face waits for the daily full pass.
+        Assert.Equal(2, (await StoredAsync(store, a.Id)).Faces.Count);
+    }
+
+    [Fact]
+    public async Task Once_a_day_a_run_visits_every_asset_with_boxes_and_heals_a_manifest_another_writer_put_the_faces_back_in()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var store = Store();
+        var clock = new SettableClock(new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero));
+        var a = await PutAsync(store, 22, (s_sameFace, 1), (s_elsewhere, 2));
+        await ForgetAsync(db, a.Id, s_deleted, clock.Now - TimeSpan.FromHours(1));
+        await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+        await new ManifestStore(new ManifestValidator(), store).WriteMergedAsync(BlobLayout.ManifestsContainer, a, CancellationToken.None);
+
+        clock.Now += TimeSpan.FromHours(23);
+        var notYet = await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+        clock.Now += TimeSpan.FromHours(2);
+        var daily = await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+
+        Assert.Equal((false, 0), (notYet.Full, notYet.Assets));
+        Assert.Equal((true, 1, 1), (daily.Full, daily.Assets, daily.Stripped));
+        Assert.Equal([s_elsewhere], (await StoredAsync(store, a.Id)).Faces.Select(f => f.Box.ToArray()));
+        Assert.Equal(clock.Now.UtcDateTime.ToString("O"), await SettingAsync(db, IgnoredFacesStrip.FullPassKey));
+    }
+
+    [Fact]
+    public async Task Boxes_remembered_within_the_clock_margin_before_the_checkpoint_are_visited_and_older_ones_are_not()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var store = Store();
+        var clock = new SettableClock(new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero));
+        await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+        clock.Now += TimeSpan.FromHours(1);
+        var checkpoint = clock.Now;
+        await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+        var near = await PutAsync(store, 23, (s_sameFace, 1));
+        var old = await PutAsync(store, 24, (s_sameFace, 2));
+        await ForgetAsync(db, near.Id, s_deleted, checkpoint - TimeSpan.FromMinutes(5));
+        await ForgetAsync(db, old.Id, s_deleted, checkpoint - TimeSpan.FromMinutes(11));
+        clock.Now += TimeSpan.FromMinutes(30);
+
+        var result = await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+
+        Assert.Equal((false, 1, 1), (result.Full, result.Assets, result.Stripped));
+        Assert.Empty((await StoredAsync(store, near.Id)).Faces);
+        Assert.Single((await StoredAsync(store, old.Id)).Faces);
+    }
+
+    [Fact]
+    public async Task A_run_with_a_problem_leaves_the_checkpoint_where_it_was_so_the_next_run_visits_the_same_assets_again()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var store = Store();
+        var clock = new SettableClock(new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero));
+        await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+        var checkpoint = await SettingAsync(db, IgnoredFacesStrip.CheckpointKey);
+        clock.Now += TimeSpan.FromHours(1);
+        var badId = FaceImportTests.WithFaces(25).Id;
+        await store.WriteAsync(BlobLayout.ManifestsContainer, BlobLayout.ManifestBlobName(badId), BinaryData.FromString("{ \"id\": 42 }"), "application/json", BlobWriteCondition.Always);
+        await ForgetAsync(db, badId, s_deleted, clock.Now);
+
+        var failed = await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+        clock.Now += TimeSpan.FromHours(3);
+        var again = await Strip(db, store, clock).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+
+        Assert.Equal([badId], failed.Problems);
+        Assert.Equal(checkpoint, await SettingAsync(db, IgnoredFacesStrip.CheckpointKey));
+        Assert.Equal([badId], again.Problems);
+        Assert.Equal((false, 1), (again.Full, again.Assets));
+    }
+
+    [Fact]
+    public async Task Strips_many_manifests_at_once_and_every_one_goes()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var store = Store();
+        var ids = new List<string>();
+        for (var n = 100; n < 140; n++)
+        {
+            var manifest = await PutAsync(store, n, (s_sameFace, n), (s_elsewhere, n + 1000));
+            await ForgetAsync(db, manifest.Id, s_deleted);
+            ids.Add(manifest.Id);
+        }
+
+        var result = await Strip(db, store).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
+
+        Assert.Equal((40, 40, 0), (result.Assets, result.Stripped, result.Problems.Count));
+        foreach (var id in ids)
+        {
+            Assert.Single((await StoredAsync(store, id)).Faces);
+        }
+    }
+
+    private static Task<string?> SettingAsync(CatalogDbContext db, string key) =>
+        db.Settings.AsNoTracking().Where(s => s.Key == key).Select(s => (string?)s.Value).SingleOrDefaultAsync();
+
     private static InMemoryBlobStore Store()
     {
         var store = new InMemoryBlobStore();
@@ -179,8 +298,15 @@ public sealed class IgnoredFacesStripTests(CatalogFixture fixture)
         return store;
     }
 
-    private static IgnoredFacesStrip Strip(CatalogDbContext db, InMemoryBlobStore store) =>
-        new(db, new ManifestStore(new ManifestValidator(), store), NullLogger.Instance);
+    private static IgnoredFacesStrip Strip(CatalogDbContext db, InMemoryBlobStore store, TimeProvider? clock = null) =>
+        new(db, new ManifestStore(new ManifestValidator(), store), clock ?? TimeProvider.System, NullLogger.Instance);
+
+    private sealed class SettableClock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
 
     private static async Task<Manifest> PutAsync(InMemoryBlobStore store, int n, params (double[] Box, int Seed)[] faces)
     {
@@ -193,7 +319,7 @@ public sealed class IgnoredFacesStripTests(CatalogFixture fixture)
         ManifestJson.Deserialize((await store.ReadAsync(BlobLayout.ManifestsContainer, BlobLayout.ManifestBlobName(id)))!.Content.ToString());
 
     // What deleting a person's face data leaves in the catalog: the box, never the embedding.
-    private static async Task ForgetAsync(CatalogDbContext db, string assetId, double[] box)
+    private static async Task ForgetAsync(CatalogDbContext db, string assetId, double[] box, DateTimeOffset? at = null)
     {
         // erased_faces points at the asset, so the asset is in the catalog (the manifest need not be in storage).
         if (!await db.Assets.AnyAsync(a => a.Id == assetId))
@@ -201,7 +327,7 @@ public sealed class IgnoredFacesStripTests(CatalogFixture fixture)
             db.Assets.Add(new Asset { Id = assetId, Kind = "photo", ContentType = "image/jpeg", SizeBytes = 1, ImportedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
         }
 
-        db.ErasedFaces.Add(new ErasedFace { AssetId = assetId, Box = box, ErasedAt = DateTimeOffset.UtcNow });
+        db.ErasedFaces.Add(new ErasedFace { AssetId = assetId, Box = box, ErasedAt = at ?? DateTimeOffset.UtcNow });
         await db.SaveChangesAsync();
     }
 }
