@@ -1,7 +1,7 @@
 // Access Aspire's role helpers cannot scope (S-058, D-062): the web's write access to the data protection
 // container only, its use of the data protection key only, the faces job's write access to the manifests container
-// only (S-022), the admin job's write access to the three containers it deletes from (S-057), and the uploaders' write
-// access to storage.
+// only (S-022), the process job's write access to the four containers it touches (S-036), the admin job's write
+// access to the three containers it deletes from (S-057), and the uploaders' write access to storage.
 // The account-wide roles (the web's and the worker's Storage Blob Data Reader, the web's Key Vault Secrets
 // User) come from the AppHost's WithRoleAssignments.
 
@@ -17,6 +17,9 @@ param webPrincipalId string
 
 @description('The faces job\'s managed identity, which erases faces from the stored manifests (S-022).')
 param facesPrincipalId string
+
+@description('The process job\'s managed identity, which processes the files in incoming (S-036).')
+param processPrincipalId string
 
 @description('The admin job\'s managed identity, which deletes a source\'s assets (S-057, D-108).')
 param adminPrincipalId string
@@ -47,14 +50,21 @@ resource manifestsContainer 'Microsoft.Storage/storageAccounts/blobServices/cont
   name: 'manifests'
 }
 
-resource derivativesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
+// The process job reads and deletes the files in incoming, copies originals, writes derivatives and writes manifests
+// through ManifestStore (S-036): these four containers and nothing else.
+resource incomingContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
   parent: blobService
-  name: 'derivatives'
+  name: 'incoming'
 }
 
 resource originalsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
   parent: blobService
   name: 'originals'
+}
+
+resource derivativesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' existing = {
+  parent: blobService
+  name: 'derivatives'
 }
 
 resource vault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
@@ -103,6 +113,51 @@ resource facesManifestsWriter 'Microsoft.Authorization/roleAssignments@2022-04-0
   scope: manifestsContainer
   properties: {
     principalId: facesPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// The process job (S-036): the four containers it touches, each its own assignment.
+resource processIncomingWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(incomingContainer.id, processPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: incomingContainer
+  properties: {
+    principalId: processPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource processOriginalsWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(originalsContainer.id, processPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: originalsContainer
+  properties: {
+    principalId: processPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource processDerivativesWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(derivativesContainer.id, processPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: derivativesContainer
+  properties: {
+    principalId: processPrincipalId
+    // Storage Blob Data Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource processManifestsWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(manifestsContainer.id, processPrincipalId, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: manifestsContainer
+  properties: {
+    principalId: processPrincipalId
     // Storage Blob Data Contributor
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
     principalType: 'ServicePrincipal'

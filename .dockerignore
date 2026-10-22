@@ -1,0 +1,10 @@
+# The worker image is built from the repository root (infra/worker/Dockerfile): none of this belongs in its context.
+**/bin/
+**/obj/
+.git/
+.claude/
+**/.vs/
+tests/
+# The schemas are embedded resources of Sepiabox.Search and Sepiabox.Pipeline, so they are the one part of docs/ the build reads.
+docs/*
+!docs/schemas/
