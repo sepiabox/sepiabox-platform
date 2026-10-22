@@ -389,6 +389,243 @@ public sealed class DriveSyncTests(CatalogFixture fixture)
         Assert.Empty(await store.ListAsync("originals").ToListAsync());
     }
 
+    [Fact]
+    public async Task A_changes_cursor_stays_when_a_download_fails_mid_page_and_the_next_run_asks_from_the_same_token()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 3);
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+        drive.ChangePages[drive.StartToken] = new DriveChangesPage(
+            [new DriveChange("id-0", false, drive.Files[0] with { ModifiedTime = s_modified.AddDays(1) }), new DriveChange("id-1", false, drive.Files[1] with { ModifiedTime = s_modified.AddDays(1) })],
+            null, "start-2");
+        drive.FailDownloadOf = "id-1";
+
+        var failed = await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal(1, failed.Failed);
+        Assert.Equal(drive.StartToken, (await db.ConnectedSources.AsNoTracking().SingleAsync()).SyncChangesToken);
+        drive.FailDownloadOf = null;
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+        Assert.Equal([drive.StartToken, drive.StartToken], drive.ChangeTokensAsked.TakeLast(2));
+        Assert.Equal("start-2", (await db.ConnectedSources.AsNoTracking().SingleAsync()).SyncChangesToken);
+    }
+
+    [Fact]
+    public async Task A_changes_page_moves_the_cursor_to_the_next_page_and_a_last_page_with_only_a_new_start_token_moves_it_to_that()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 1);
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+        drive.ChangePages[drive.StartToken] = new DriveChangesPage([], "page-2", null);
+        drive.ChangePages["page-2"] = new DriveChangesPage([], null, "start-9");
+
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal([drive.StartToken, "page-2"], drive.ChangeTokensAsked);
+        Assert.Equal("start-9", (await db.ConnectedSources.AsNoTracking().SingleAsync()).SyncChangesToken);
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+        Assert.Equal("start-9", drive.ChangeTokensAsked[^1]);
+    }
+
+    [Fact]
+    public async Task Stages_a_file_again_when_its_checksum_or_its_path_is_not_the_one_it_was_staged_with()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 2);
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+        drive.Changes.Add(new DriveChange("id-0", false, drive.Files[0] with { Md5 = "another-md5" }));
+        Assert.Equal(1, (await Sync(db, store, drive).RunAsync(CancellationToken.None)).Staged);
+
+        drive.Changes.Add(new DriveChange("id-1", false, drive.Files[1] with { Parents = ["folder-2"] }));
+        Assert.Equal(1, (await Sync(db, store, drive).RunAsync(CancellationToken.None)).Staged);
+        Assert.Equal(4, (await store.ListAsync("incoming").ToListAsync()).Count);
+    }
+
+    [Fact]
+    public async Task A_file_that_has_not_changed_clears_the_removed_mark_on_its_source_without_staging_it()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 1);
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+        await SeedSourceAsync(db, "Fotos/photo-0.jpg", ContentLength("id-0"));
+        await db.AssetSources.ExecuteUpdateAsync(set => set.SetProperty(x => x.RemovedAt, DateTimeOffset.UtcNow));
+        drive.Changes.Add(new DriveChange("id-0", false, drive.Files[0]));
+
+        var result = await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal(0, result.Staged);
+        Assert.Null((await db.AssetSources.AsNoTracking().SingleAsync()).RemovedAt);
+        Assert.Single(await store.ListAsync("incoming").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Makes_the_path_from_the_folders_top_down_with_a_dash_for_a_slash_or_a_backslash_in_any_name()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 0);
+        drive.Folders["inner"] = new DriveFolder("a/b", "outer");
+        drive.Folders["outer"] = new DriveFolder("c\\d", "root-child");
+        drive.AddFile("id-deep", "x/y\\z.jpg", "image/jpeg", parent: "inner");
+
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal("c-d/a-b/x-y-z.jpg", (await IncomingFilesAsync(store)).Single().Path);
+    }
+
+    [Fact]
+    public async Task Stops_at_fifty_folders_when_the_folders_are_a_cycle_and_asks_each_folder_once()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 0);
+        drive.Folders["loop-a"] = new DriveFolder("A", "loop-b");
+        drive.Folders["loop-b"] = new DriveFolder("B", "loop-a");
+        drive.AddFile("id-loop", "x.jpg", "image/jpeg", parent: "loop-a");
+
+        var result = await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.Staged);
+        var parts = (await IncomingFilesAsync(store)).Single().Path.Split('/');
+        Assert.Equal(51, parts.Length);
+        Assert.Equal("x.jpg", parts[^1]);
+        Assert.Equal(["loop-a", "loop-b"], drive.FoldersAsked);
+    }
+
+    [Fact]
+    public async Task Asks_for_a_folder_once_however_many_files_are_in_it()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 5);
+
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal(["folder-1", "root-child"], drive.FoldersAsked);
+    }
+
+    [Fact]
+    public async Task Takes_a_file_of_exactly_three_gib_and_a_path_whose_metadata_is_exactly_eight_kib_and_leaves_out_one_byte_more()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 0);
+        drive.AddFile("id-edge", "edge.mp4", "video/mp4", size: CloudFileProcessor.MaxFileBytes);
+        drive.AddFile("id-over", "over.mp4", "video/mp4", size: CloudFileProcessor.MaxFileBytes + 1);
+        var exact = NameForMetadataBytes("id-fit", DriveSync.MaxMetadataBytes);
+        drive.AddFile("id-fit", exact, "image/jpeg", parent: "folder-1");
+        drive.AddFile("id-toolong", NameForMetadataBytes("id-toolong", DriveSync.MaxMetadataBytes + 1), "image/jpeg", parent: "folder-1");
+
+        var result = await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal((2, 2), (result.Staged, result.Skipped));
+        var staged = (await IncomingFilesAsync(store)).Select(f => f.ExternalId).Order().ToList();
+        Assert.Equal(["id-edge", "id-fit"], staged);
+        Assert.Equal(DriveSync.MaxMetadataBytes, MetadataBytes(new IncomingFile("google-drive", SourceName, (await IncomingFilesAsync(store)).Single(f => f.ExternalId == "id-fit").Path, IncomingMode.Reference, s_modified, "id-fit")));
+    }
+
+    [Theory]
+    [InlineData(ManifestSource.MaxUrlLength, true)]
+    [InlineData(ManifestSource.MaxUrlLength + 1, false)]
+    public async Task Keeps_an_address_of_exactly_the_manifests_limit_and_drops_one_character_more(int length, bool kept)
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 0);
+        var url = "https://drive.google.com/" + new string('u', length - "https://drive.google.com/".Length);
+        drive.AddFile("id-url", "a.jpg", "image/jpeg", webViewLink: url);
+
+        await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal(kept ? url : null, (await IncomingFilesAsync(store)).Single().Url);
+    }
+
+    [Fact]
+    public async Task A_storage_failure_while_committing_stops_that_account_only_and_the_next_account_still_runs()
+    {
+        var (db, inner, drive, _) = await SetUpAsync(files: 2);
+        db.ConnectedSources.Add(new ConnectedSource
+        {
+            Type = ConnectedSourceTypes.GoogleDrive,
+            AccountEmail = "bia@example.com",
+            EncryptedRefreshToken = s_keys.CreateProtector(ConnectedSource.RefreshTokenPurpose).Protect(Token),
+            Status = ConnectedSourceStatuses.Connected,
+            ConnectedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var store = new CommitFailingStore(inner, failures: 1);
+
+        var result = await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal((2, 1, 0, 2), (result.Accounts, result.Failed, result.Reconnect, result.Staged));
+        Assert.Equal(2, (await inner.ListAsync("incoming").ToListAsync()).Count);
+        Assert.All(await db.ConnectedSources.AsNoTracking().ToListAsync(), s => Assert.Equal(ConnectedSourceStatuses.Connected, s.Status));
+        Assert.Equal(0, await db.DriveFiles.CountAsync(f => f.ConnectedSourceId == db.ConnectedSources.Single(a => a.AccountEmail == Account).Id));
+    }
+
+    [Fact]
+    public async Task Leaves_an_account_of_another_service_alone()
+    {
+        var (db, store, drive, _) = await SetUpAsync(files: 1);
+        db.ConnectedSources.Add(new ConnectedSource
+        {
+            Type = "onedrive",
+            AccountEmail = "carlos@example.com",
+            EncryptedRefreshToken = s_keys.CreateProtector(ConnectedSource.RefreshTokenPurpose).Protect(Token),
+            Status = ConnectedSourceStatuses.Connected,
+            ConnectedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await Sync(db, store, drive).RunAsync(CancellationToken.None);
+
+        Assert.Equal((1, 1), (result.Accounts, result.Staged));
+        var other = await db.ConnectedSources.AsNoTracking().SingleAsync(s => s.Type == "onedrive");
+        Assert.Equal((ConnectedSourceStatuses.Connected, null, null), (other.Status, other.SyncChangesToken, other.LastSyncAt));
+        Assert.Equal(0, await db.DriveFiles.CountAsync(f => f.ConnectedSourceId == other.Id));
+    }
+
+    private static async Task<List<IncomingFile>> IncomingFilesAsync(InMemoryBlobStore store)
+    {
+        var files = new List<IncomingFile>();
+        await foreach (var blob in store.ListAsync("incoming"))
+        {
+            Assert.True(IncomingFile.TryRead((await store.ReadAsync("incoming", blob.Name))!.Metadata, out var file, out var problem), problem);
+            files.Add(file);
+        }
+
+        return files;
+    }
+
+    private static int MetadataBytes(IncomingFile file) =>
+        file.ToMetadata().Sum(p => System.Text.Encoding.UTF8.GetByteCount(p.Key) + System.Text.Encoding.UTF8.GetByteCount(p.Value));
+
+    // A name, in the test Drive's "Fotos" folder, that makes the file's metadata exactly this many bytes.
+    private static string NameForMetadataBytes(string externalId, int bytes)
+    {
+        for (var length = 1; ; length++)
+        {
+            var name = new string('n', length) + ".jpg";
+            var size = MetadataBytes(new IncomingFile("google-drive", SourceName, "Fotos/" + name, IncomingMode.Reference, s_modified, externalId));
+            if (size >= bytes)
+            {
+                Assert.Equal(bytes, size);
+                return name;
+            }
+        }
+    }
+
+    // A store whose first commits fail the way storage does.
+    private sealed class CommitFailingStore(IBlobStore inner, int failures) : DelegatingBlobStore(inner)
+    {
+        private int _failures = failures;
+
+        public override bool IsStoreFailure(Exception exception) => exception is IOException { Message: "the storage is down" } || base.IsStoreFailure(exception);
+
+        public override IStagedUpload BeginUpload(string container, string name) => new Upload(base.BeginUpload(container, name), this);
+
+        private sealed class Upload(IStagedUpload inner, CommitFailingStore owner) : IStagedUpload
+        {
+            public Task AppendAsync(ReadOnlyMemory<byte> block, CancellationToken cancellationToken = default) => inner.AppendAsync(block, cancellationToken);
+
+            public Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default) =>
+                inner.CommitAsync(contentType, storageClass, cancellationToken);
+
+            public Task CommitAsync(string contentType, BlobStorageClass storageClass, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
+                Interlocked.Decrement(ref owner._failures) >= 0
+                    ? throw new IOException("the storage is down")
+                    : inner.CommitAsync(contentType, storageClass, metadata, cancellationToken);
+
+            public ValueTask DisposeAsync() => inner.DisposeAsync();
+        }
+    }
+
     private static DriveSync Sync(CatalogDbContext db, IBlobStore store, IDriveSyncClient drive, int maxFilesPerRun = DriveSync.DefaultMaxFilesPerRun) =>
         new(db, store, drive, s_keys, TimeProvider.System, NullLogger.Instance, maxFilesPerRun);
 
@@ -493,6 +730,13 @@ internal sealed class FakeDriveSync : IDriveSyncClient
 
     public Func<Exception?>? Failure { get; set; }
 
+    /// <summary>Pages of changes by the token they are asked from; a token with none gets <see cref="Changes"/> as one last page.</summary>
+    public Dictionary<string, DriveChangesPage> ChangePages { get; } = [];
+
+    public List<string> ChangeTokensAsked { get; } = [];
+
+    public List<string> FoldersAsked { get; } = [];
+
     public void AddFile(
         string id, string name, string mimeType, long? size = null, string? webViewLink = null, string? parent = null, byte[]? content = null)
     {
@@ -520,6 +764,12 @@ internal sealed class FakeDriveSync : IDriveSyncClient
     public Task<DriveChangesPage> ListChangesAsync(string refreshToken, string pageToken, CancellationToken cancellationToken = default)
     {
         Use(refreshToken);
+        ChangeTokensAsked.Add(pageToken);
+        if (ChangePages.TryGetValue(pageToken, out var scripted))
+        {
+            return Task.FromResult(scripted);
+        }
+
         var changes = Changes.ToList();
         Changes.Clear();
         return Task.FromResult(new DriveChangesPage(changes, null, "start-2"));
@@ -528,6 +778,7 @@ internal sealed class FakeDriveSync : IDriveSyncClient
     public Task<DriveFolder?> GetFolderAsync(string refreshToken, string folderId, CancellationToken cancellationToken = default)
     {
         Use(refreshToken);
+        FoldersAsked.Add(folderId);
         return Task.FromResult(Folders.GetValueOrDefault(folderId));
     }
 

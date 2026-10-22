@@ -174,16 +174,24 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
     public async Task Finds_nothing_for_another_asset_a_removed_source_a_source_of_another_kind_or_a_file_the_drive_lost()
     {
         await using var db = await SeedAsync();
+        // Drive still has every file, so each "not found" below comes from the guard it names, not from Drive.
         var drive = new FakeDrive();
+        drive.Files["file-1"] = [1];
+        drive.Files["file-gone"] = [2];
         var originals = Originals(db, drive);
         var local = await SourceIdAsync(db, "2019/praia.jpg");
         var gone = await SourceIdAsync(db, "Fotos/Gone.jpg");
         var missing = await SourceIdAsync(db, "Fotos/Praia 2019.jpg");
 
+        // A source of asset 1 asked for through asset 2's address.
         Assert.Equal(DriveOriginalOutcome.NotFound, (await originals.OpenAsync(Ids.Of(2), missing)).Outcome);
+        // A source of another kind.
         Assert.Equal(DriveOriginalOutcome.NotFound, (await originals.OpenAsync(Ids.Of(1), local)).Outcome);
+        // A source the sync marked as removed, although its file row and the file are still there.
         Assert.Equal(DriveOriginalOutcome.NotFound, (await originals.OpenAsync(Ids.Of(1), gone)).Outcome);
+        Assert.Empty(drive.TokensUsed);
         // The sync recorded the file, but Drive no longer has it.
+        drive.Files.Clear();
         Assert.Equal(DriveOriginalOutcome.NotFound, (await originals.OpenAsync(Ids.Of(1), missing)).Outcome);
         Assert.Equal(DriveOriginalOutcome.NotFound, (await originals.OpenAsync(Ids.Of(1), 999_999)).Outcome);
     }
