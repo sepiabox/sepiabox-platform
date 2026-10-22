@@ -16,6 +16,13 @@ namespace Sepiabox.Catalog.Migrations
                 type: "text",
                 nullable: true);
 
+            migrationBuilder.AddColumn<string>(
+                name: "captured_at_source",
+                table: "assets",
+                type: "character varying(16)",
+                maxLength: 16,
+                nullable: true);
+
             migrationBuilder.CreateTable(
                 name: "asset_albums",
                 columns: table => new
@@ -48,6 +55,10 @@ namespace Sepiabox.Catalog.Migrations
 
             migrationBuilder.DropColumn(
                 name: "caption",
+                table: "assets");
+
+            migrationBuilder.DropColumn(
+                name: "captured_at_source",
                 table: "assets");
         }
     }

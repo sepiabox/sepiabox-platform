@@ -65,6 +65,9 @@ public sealed record AssetDetail(
     /// <summary>The people in it (S-021): those with a counted face, named ones first, by name.</summary>
     public IReadOnlyList<AssetPerson> People { get; init; } = [];
 
+    /// <summary>Where its date came from (S-052): <c>metadata</c>, <c>export</c>, <c>fileName</c> or <c>folder</c>; null without a date.</summary>
+    public string? CapturedAtSource { get; init; }
+
     /// <summary>What an export's maker wrote about it (S-052), as written; null when nothing.</summary>
     public string? Caption { get; init; }
 
@@ -455,8 +458,11 @@ public sealed class LibraryQueries(
             PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry))
         {
             People = [.. people.OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
-            Caption = asset.Caption,
-            Albums = [.. asset.Albums.Select(a => a.Name).Order(StringComparer.CurrentCultureIgnoreCase).ThenBy(n => n, StringComparer.Ordinal)],
+            CapturedAtSource = asset.CapturedAtSource,
+            Caption = TextSafety.WithoutBidiControls(asset.Caption),
+            // Names that differ only in case are one album to the search, so they are listed once (the first in ordinal order).
+            Albums = [.. asset.Albums.Select(a => TextSafety.WithoutBidiControls(a.Name)!).OrderBy(n => n, StringComparer.Ordinal)
+                .DistinctBy(n => n, StringComparer.OrdinalIgnoreCase).Order(StringComparer.CurrentCultureIgnoreCase)],
             Location = asset.Location is { } point ? (point.Y, point.X) : null,
             HasEmbedding = hasEmbedding,
             OriginalStored = asset.OriginalStored,

@@ -71,6 +71,26 @@ public sealed class AlbumFilterTests : LocalizedContext
     }
 
     [Fact]
+    public void Lists_the_albums_alphabetically_ignoring_case_after_any()
+    {
+        var options = new FilterOptions([], [], []) { Albums = ["wedding", "Zoo", "Álbum", "Summer"] };
+
+        var bar = Render<FilterBar>(p => p.Add(b => b.Options, options));
+
+        Assert.Equal(["", "Álbum", "Summer", "wedding", "Zoo"], bar.FindAll("select[name=album] option").Select(o => o.GetAttribute("value")));
+    }
+
+    [Theory]
+    [InlineData("Praia\u202E 2019", "Praia 2019")]
+    [InlineData("a\u2066b\u2069c\u200Ed\u200Fe\u061Cf", "abcdef")]
+    [InlineData("Férias na praia", "Férias na praia")]
+    [InlineData(null, null)]
+    public void Takes_direction_controls_out_of_the_text_it_shows(string? text, string? expected)
+    {
+        Assert.Equal(expected, TextSafety.WithoutBidiControls(text));
+    }
+
+    [Fact]
     public void Names_the_album_selector_in_brazilian_portuguese()
     {
         using var language = Cultures.Use(Cultures.BrazilianPortuguese);
@@ -127,6 +147,22 @@ public sealed class AlbumsCatalogTests(CatalogFixture catalog)
         Assert.Equal("Praia", detail!.Caption);
         Assert.Equal(["Summer 2019", "Wedding"], detail.Albums);
         Assert.Empty((await queries.GetAssetAsync(Ids.Of(4)))!.Albums);
+    }
+
+    [Fact]
+    public async Task Lists_names_that_differ_only_in_case_once_and_leaves_out_direction_controls()
+    {
+        await using var db = await CatalogWithAlbumsAsync();
+        db.AssetAlbums.AddRange(
+            new AssetAlbum { AssetId = Ids.Of(4), Name = "Verão" },
+            new AssetAlbum { AssetId = Ids.Of(4), Name = "verão" },
+            new AssetAlbum { AssetId = Ids.Of(4), Name = "Praia\u202E" });
+        await db.SaveChangesAsync();
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var detail = await queries.GetAssetAsync(Ids.Of(4));
+
+        Assert.Equal(["Praia", "Verão"], detail!.Albums);
     }
 
     // Assets 1 (a photo) and 3 (a video) in "Summer 2019", asset 2 in "Wedding", and asset 1 in both; asset 4 in none.

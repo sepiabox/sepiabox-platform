@@ -200,7 +200,7 @@
 
     private IEnumerable<string> Sources => With(Options.Sources, Fields.Source);
 
-    private IEnumerable<string> Albums => With(Options.Albums, Fields.Album);
+    private IEnumerable<string> Albums => With(Options.Albums, Fields.Album).Order(StringComparer.CurrentCultureIgnoreCase);
 
     private IEnumerable<string> People => Fields.People.Aggregate((IEnumerable<string>)Options.People, (all, name) => With([.. all], name));
 

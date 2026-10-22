@@ -76,6 +76,7 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             asset.ToTable("assets");
             asset.Property(a => a.Id).HasMaxLength(64);
             asset.Property(a => a.Kind).HasMaxLength(16);
+            asset.Property(a => a.CapturedAtSource).HasMaxLength(16);
             // True for every asset before index-only mode (S-063). Never generated, as belt and braces: a column with a
             // default and a CLR default of false is the case where EF may leave the value out of the insert.
             asset.Property(a => a.OriginalStored).HasDefaultValue(true).ValueGeneratedNever();

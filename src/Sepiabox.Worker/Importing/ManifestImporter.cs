@@ -271,6 +271,7 @@ public sealed class ManifestImporter(
         asset.ContentType = manifest.ContentType;
         // Wall-clock time from the camera (the schema refuses offsets): stored exactly as written.
         asset.CapturedAt = manifest.CapturedAt is { } captured ? DateTime.SpecifyKind(captured, DateTimeKind.Unspecified) : null;
+        asset.CapturedAtSource = manifest.CapturedAtSource is { } dateSource ? System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(dateSource.ToString()) : null;
         var location = manifest.Location is { } at ? s_wgs84.CreatePoint(new Coordinate(at.Longitude, at.Latitude)) : null;
         await NamePlaceAsync(asset, location, cancellationToken);
         asset.Location = location;
@@ -287,7 +288,7 @@ public sealed class ManifestImporter(
 
         // A manifest without a caption leaves a stored one as it is (S-052, D-114), as one without albums leaves the albums.
         asset.Caption = manifest.Caption ?? asset.Caption;
-        foreach (var album in manifest.Albums ?? [])
+        foreach (var album in (manifest.Albums ?? []).Select(AlbumName).OfType<string>())
         {
             if (asset.Albums.All(a => a.Name != album))
             {
@@ -482,6 +483,23 @@ public sealed class ManifestImporter(
     }
 
     // The schema only allows photo and video; anything else is reported before saving.
+    /// <summary>
+    /// An album's name as the catalog keeps it (S-052, D-114): cut to the 200 characters the search takes (a longer name could not be filtered
+    /// on, and the key's index refuses a row over about 2.7 KB, which would fail the whole manifest), not in the middle of a character, and
+    /// without control characters; null when nothing is left.
+    /// </summary>
+    internal static string? AlbumName(string name)
+    {
+        const int Max = Sepiabox.Catalog.Search.SearchQueryJson.MaxNameLength;
+        var clean = new string([.. name.Where(c => !char.IsControl(c))]).Trim();
+        if (clean.Length > Max)
+        {
+            clean = clean[..(char.IsHighSurrogate(clean[Max - 1]) ? Max - 1 : Max)].TrimEnd();
+        }
+
+        return clean.Length == 0 ? null : clean;
+    }
+
     private static string? KindName(MediaKind kind) => kind switch
     {
         MediaKind.Photo => "photo",

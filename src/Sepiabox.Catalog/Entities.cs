@@ -21,6 +21,13 @@ public sealed class Asset
     /// <summary>Wall-clock time on the camera, without time zone.</summary>
     public DateTime? CapturedAt { get; set; }
 
+    /// <summary>
+    /// Where <see cref="CapturedAt"/> came from, as the manifest says (S-052, D-114): <c>metadata</c>, <c>export</c>, <c>fileName</c> or
+    /// <c>folder</c>; null when the asset has no date. <c>export</c> does not tell an exact date from a posting date, so the page says only
+    /// that it is from the export.
+    /// </summary>
+    public string? CapturedAtSource { get; set; }
+
     /// <summary>WGS 84 point (SRID 4326): X is longitude, Y is latitude.</summary>
     public Point? Location { get; set; }
 

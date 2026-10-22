@@ -254,6 +254,53 @@ public sealed class PhotoDetailTests : LocalizedContext
     }
 
     [Fact]
+    public void Shows_the_first_five_albums_and_folds_the_rest_away()
+    {
+        var albums = Enumerable.Range(1, 12).Select(n => $"Album {n:00}").ToList();
+
+        var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Albums = albums });
+
+        Assert.Equal(albums.Take(5), page.FindAll("section.facts > ul.photo-albums a").Select(a => a.TextContent));
+        Assert.Equal("7 more albums", page.Find("details.more-albums summary").TextContent);
+        Assert.Equal(albums.Skip(5), page.FindAll("details.more-albums a").Select(a => a.TextContent));
+    }
+
+    [Fact]
+    public void Folds_nothing_away_for_five_albums()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(2)) with { Albums = [.. Enumerable.Range(1, 5).Select(n => $"Album {n}")] });
+
+        Assert.Equal(5, page.FindAll("ul.photo-albums a").Count);
+        Assert.Empty(page.FindAll("details.more-albums"));
+    }
+
+    [Fact]
+    public void Says_the_date_is_from_the_export_for_an_export_date()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(1), new DateTime(2019, 7, 14)) with { CapturedAtSource = "export" });
+
+        Assert.Equal("From the export", page.FindAll("dl dt").Single(d => d.TextContent == "Date").NextElementSibling!.TextContent);
+    }
+
+    [Fact]
+    public void Says_nothing_about_the_date_s_source_when_it_is_the_cameras()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(2), new DateTime(2019, 7, 14)) with { CapturedAtSource = "metadata" });
+
+        Assert.DoesNotContain(page.FindAll("dl dt"), d => d.TextContent == "Date");
+    }
+
+    [Fact]
+    public void Says_the_date_is_from_the_export_in_brazilian_portuguese()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var page = RenderDetail(Details.Photo(Ids.Of(3), new DateTime(2019, 7, 14)) with { CapturedAtSource = "export" });
+
+        Assert.Equal("Da exportação", page.FindAll("dl dt").Single(d => d.TextContent == "Data").NextElementSibling!.TextContent);
+    }
+
+    [Fact]
     public void Shows_no_caption_and_no_albums_for_a_photo_without_them()
     {
         var page = RenderDetail(Details.Photo(Ids.Of(1)));

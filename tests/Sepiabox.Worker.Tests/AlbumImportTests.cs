@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Manifests;
+using Sepiabox.Pipeline.Media;
 using Sepiabox.Storage;
 using Sepiabox.Worker.Importing;
 using static Sepiabox.Tests.Shared.TestManifests;
@@ -49,6 +50,56 @@ public sealed class AlbumImportTests(CatalogFixture fixture)
         Assert.Equal(["Ferias", "Verão 2019", "Viagem"], asset.Albums.Select(a => a.Name).Order(StringComparer.Ordinal));
         // A manifest with no caption leaves the stored one.
         Assert.Equal("Praia", asset.Caption);
+    }
+
+    [Fact]
+    public async Task Cuts_a_very_long_album_name_to_the_length_the_search_takes_instead_of_failing_the_manifest()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var longName = new string('a', 5000);
+        await PutAsync(container, Photo(Source("Instagram", "media/a.jpg")) with { Albums = [longName, "Ferias"] });
+
+        await ImportAsync(db, container);
+
+        var names = (await db.AssetAlbums.AsNoTracking().Select(a => a.Name).ToListAsync()).Order(StringComparer.Ordinal).ToList();
+        Assert.Equal(["Ferias", new string('a', 200)], names);
+    }
+
+    [Theory]
+    [InlineData("  Ferias  ", "Ferias")]
+    [InlineData("Fe\u0000rias", "Ferias")]
+    [InlineData("   ", null)]
+    public void Keeps_an_album_name_trimmed_and_without_control_characters(string name, string? expected)
+    {
+        Assert.Equal(expected, ManifestImporter.AlbumName(name));
+    }
+
+    [Fact]
+    public void Does_not_cut_an_album_name_in_the_middle_of_a_character()
+    {
+        var name = new string('a', 199) + "\U0001F600" + "tail";
+
+        var cut = ManifestImporter.AlbumName(name)!;
+
+        Assert.Equal(new string('a', 199), cut);
+        Assert.True(char.IsLetter(cut[^1]));
+    }
+
+    [Fact]
+    public async Task Stores_where_the_date_came_from_so_the_page_can_say_it_is_the_exports()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var container = await fixture.CreateContainerAsync();
+        var manifest = Photo(Source("Instagram", "media/a.jpg")) with
+        {
+            Captured = new CaptureDate(new DateTime(2015, 6, 1, 11, 0, 0), CaptureDateSource.Export),
+        };
+        await PutAsync(container, manifest);
+
+        await ImportAsync(db, container);
+
+        Assert.Equal("export", (await db.Assets.AsNoTracking().SingleAsync()).CapturedAtSource);
     }
 
     [Fact]

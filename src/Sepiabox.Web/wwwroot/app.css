@@ -645,6 +645,11 @@ main {
 }
 
 /* A caption is the family's own text: its line breaks stay, and a long word or address breaks rather than widening the page (S-052). */
+.facts dt.caption-label,
+.facts dd.caption {
+    grid-column: 1 / -1;
+}
+
 .facts dd.caption {
     white-space: pre-line;
     overflow-wrap: anywhere;
@@ -1189,4 +1194,22 @@ main {
 .button.secondary:hover:not(:disabled) {
     background: var(--chip);
     color: var(--cyanotype-hover);
+}
+
+/* A long album name must not widen the bar or the page (S-052): the select shrinks to its cell and shows an ellipsis. */
+.filters label {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.filters select {
+    min-width: 0;
+    max-width: min(100%, 20rem);
+}
+
+.more-albums summary {
+    cursor: pointer;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
 }

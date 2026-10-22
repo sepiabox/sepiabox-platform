@@ -14,7 +14,7 @@ using Sepiabox.Catalog;
 namespace Sepiabox.Catalog.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
-    [Migration("20261022100837_AssetAlbums")]
+    [Migration("20261022113138_AssetAlbums")]
     partial class AssetAlbums
     {
         /// <inheritdoc />
@@ -51,6 +51,11 @@ namespace Sepiabox.Catalog.Migrations
                     b.Property<DateTime?>("CapturedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("captured_at");
+
+                    b.Property<string>("CapturedAtSource")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("captured_at_source");
 
                     b.Property<string>("ContentType")
                         .IsRequired()

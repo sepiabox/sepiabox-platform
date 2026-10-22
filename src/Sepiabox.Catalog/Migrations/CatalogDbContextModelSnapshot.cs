@@ -49,6 +49,11 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("captured_at");
 
+                    b.Property<string>("CapturedAtSource")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("captured_at_source");
+
                     b.Property<string>("ContentType")
                         .IsRequired()
                         .HasColumnType("text")

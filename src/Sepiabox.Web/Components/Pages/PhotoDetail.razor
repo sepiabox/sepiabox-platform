@@ -77,10 +77,16 @@
                 }
                 <dt>@Text["Detail_Type"]</dt>
                 <dd>@Text.KindLabel(_asset.Kind)</dd>
+                @if (_asset.CapturedAtSource == "export")
+                {
+                    @* An export's date is not the camera's (S-045): say so, without saying more than the manifest does. *@
+                    <dt>@Text["Detail_DateSource"]</dt>
+                    <dd>@Text["Detail_DateFromExport"]</dd>
+                }
                 @if (_asset.Caption is { } caption)
                 {
-                    @* As the family or the export wrote it (S-052): text, never markup, with its line breaks kept. *@
-                    <dt>@Text["Detail_Caption"]</dt>
+                    @* As the family or the export wrote it (S-052): text, never markup, with its line breaks kept, across the whole width. *@
+                    <dt class="caption-label">@Text["Detail_Caption"]</dt>
                     <dd class="caption">@caption</dd>
                 }
             </dl>
@@ -127,11 +133,24 @@
                 @* Each album links to the photos in it (S-052). *@
                 <h2>@Text["Detail_Albums"]</h2>
                 <ul class="photo-albums">
-                    @foreach (var album in _asset.Albums)
+                    @foreach (var album in _asset.Albums.Take(VisibleAlbums))
                     {
                         <li><a href="@SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { Albums = [album] } })">@album</a></li>
                     }
                 </ul>
+                @if (_asset.Albums.Count > VisibleAlbums)
+                {
+                    @* Thirty albums would push the rest of the page far down: the first few, then the others folded away. *@
+                    <details class="more-albums">
+                        <summary>@Text["Detail_MoreAlbums", _asset.Albums.Count - VisibleAlbums]</summary>
+                        <ul class="photo-albums">
+                            @foreach (var album in _asset.Albums.Skip(VisibleAlbums))
+                            {
+                                <li><a href="@SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { Albums = [album] } })">@album</a></li>
+                            }
+                        </ul>
+                    </details>
+                }
             }
 
             <h2>@Text["Detail_Sources"]</h2>
@@ -181,6 +200,8 @@
     /// <summary>The timeline page the visitor came from, so "back" returns there.</summary>
     [SupplyParameterFromQuery(Name = "page")]
     public string? PageQuery { get; set; }
+
+    private const int VisibleAlbums = 5;
 
     private AssetDetail? _asset;
 

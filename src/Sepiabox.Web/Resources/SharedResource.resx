@@ -1445,4 +1445,13 @@
   <data name="Chip_Albums" xml:space="preserve">
     <value>Album: {0}</value>
   </data>
+  <data name="Detail_DateSource" xml:space="preserve">
+    <value>Date</value>
+  </data>
+  <data name="Detail_DateFromExport" xml:space="preserve">
+    <value>From the export</value>
+  </data>
+  <data name="Detail_MoreAlbums" xml:space="preserve">
+    <value>{0} more albums</value>
+  </data>
 </root>

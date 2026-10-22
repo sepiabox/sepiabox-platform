@@ -1375,4 +1375,13 @@
   <data name="Chip_Albums" xml:space="preserve">
     <value>Álbum: {0}</value>
   </data>
+  <data name="Detail_DateSource" xml:space="preserve">
+    <value>Data</value>
+  </data>
+  <data name="Detail_DateFromExport" xml:space="preserve">
+    <value>Da exportação</value>
+  </data>
+  <data name="Detail_MoreAlbums" xml:space="preserve">
+    <value>Mais {0} álbuns</value>
+  </data>
 </root>
