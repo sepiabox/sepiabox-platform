@@ -20,12 +20,12 @@ iCloud Photos has no public API, so Apple photos come from exports (D-053). Ther
 - Hidden and favourite flags (a later story may use them).
 
 ### Acceptance criteria
-- [ ] Given a synthetic Photos app export with `IMG_0001.HEIC`-like JPEG and an `.xmp` sidecar with a description and a date, when processed, then the manifest has the caption, and the date when the file has none.
-- [ ] Given a synthetic privacy.apple.com layout with a `Photo Details.csv` row for an undated file, then `capturedAt` comes from `originalCreationDate` with `capturedAtSource: export`.
-- [ ] Given an `Albums/Holidays.csv` listing two files, then both manifests have `albums: ["Holidays"]`.
-- [ ] Given a row with `deleted` set, then that file is left out and listed as such.
-- [ ] Given `.AAE` files, then they produce no manifest and no problem.
-- [ ] Given `process --export apple-photos --index-only`, then each manifest says `originalStored: false`, its source has no `url`, and `upload` sends no original.
+- [x] Given a synthetic Photos app export with `IMG_0001.HEIC`-like JPEG and an `.xmp` sidecar with a description and a date, when processed, then the manifest has the caption, and the date when the file has none.
+- [x] Given a synthetic privacy.apple.com layout with a `Photo Details.csv` row for an undated file, then `capturedAt` comes from `originalCreationDate` with `capturedAtSource: export`.
+- [x] Given an `Albums/Holidays.csv` listing two files, then both manifests have `albums: ["Holidays"]`.
+- [x] Given a row with `deleted` set, then that file is left out and listed as such.
+- [x] Given `.AAE` files, then they produce no manifest and no problem.
+- [x] Given `process --export apple-photos --index-only`, then each manifest says `originalStored: false`, its source has no `url`, and `upload` sends no original.
 
 ### Technical notes
 - **Format confirmation first:** Apple does not document these files. Before writing the reader, confirm the CSV columns, the date format of `originalCreationDate` and the album layout against a small real export the owner provides, and record what was found in the PR; adjust the reader and the fixtures to it. Fixtures stay synthetic (tests write the CSV, XMP and tiny images), never real personal data.
@@ -36,3 +36,6 @@ iCloud Photos has no public API, so Apple photos come from exports (D-053). Ther
 ### Expected tests
 - Unit: CSV parsing (quoted fields, the date format confirmed), XMP parsing, album lists.
 - Integration: `process --export apple-photos` over each generated layout.
+
+### Status
+- `doing` (2026-10-22): implemented against the Apple formats as believed (D-109), with synthetic fixtures. **The real-export confirmation the story asks for first has not been done** (no export was available): it is the owner check in `docs/operations.md`, and the story is not `done` until it passes or the owner waives it (D-054).
