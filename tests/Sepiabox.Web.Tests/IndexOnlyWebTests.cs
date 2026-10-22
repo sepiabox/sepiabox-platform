@@ -52,6 +52,42 @@ public sealed class IndexOnlyWebTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task A_video_with_only_the_720p_version_plays_it()
+    {
+        // Every video processed in full mode (S-006).
+        await using var web = await WebWithAsync(CatalogData.Video(Ids.Of(5), new DateTime(2020, 8, 9)));
+        using var http = web.CreateSignedInClient(followRedirects: false);
+
+        var html = await http.GetStringAsync(new Uri($"/photos/{Ids.Of(5)}", UriKind.Relative));
+
+        Assert.Contains($"src=\"photos/{Ids.Of(5)}/proxy-720p\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("proxy-1080p", html, StringComparison.Ordinal);
+        Assert.Contains("data-player", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_video_with_both_versions_plays_the_1080p_one()
+    {
+        var video = CatalogData.Video(Ids.Of(6), new DateTime(2020, 8, 9));
+        video.Derivatives.Add(new Derivative
+        {
+            AssetId = video.Id,
+            Name = "proxy-1080p",
+            BlobPath = $"{video.Id}/proxy-1080p.mp4",
+            Width = 1920,
+            Height = 1080,
+            ContentType = "video/mp4",
+        });
+        await using var web = await WebWithAsync(video);
+        using var http = web.CreateSignedInClient(followRedirects: false);
+
+        var html = await http.GetStringAsync(new Uri($"/photos/{Ids.Of(6)}", UriKind.Relative));
+
+        Assert.Contains($"src=\"photos/{Ids.Of(6)}/proxy-1080p\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain($"photos/{Ids.Of(6)}/proxy-720p", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task An_asset_with_a_stored_original_keeps_its_download_and_shows_the_larger_preview_when_it_has_both()
     {
         var photo = CatalogData.Photo(Ids.Of(3), new DateTime(2019, 7, 14, 10, 32, 0));

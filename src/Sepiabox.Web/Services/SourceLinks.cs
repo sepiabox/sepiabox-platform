@@ -34,8 +34,10 @@ public static class SourceLinks
     /// The address to link to, or null: only an absolute <c>https://</c> address without a user name or password is ever a link (a hand-edited catalog row
     /// could hold <c>javascript:</c> or anything else), and it is never followed by the server.
     /// </summary>
+    // No test for an empty host is needed: Uri.TryCreate refuses an https address without one ("https://", "https:///x",
+    // both pinned in the tests).
     public static string? SafeUrl(string? url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && !string.IsNullOrEmpty(uri.Host)
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
         && uri.UserInfo.Length == 0
             ? uri.AbsoluteUri
             : null;
