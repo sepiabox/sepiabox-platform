@@ -129,6 +129,9 @@ public sealed class PreviewSourceTests(CatalogFixture catalog)
 
         public Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<Uri> ForExportAsync(string blobName, string fileName, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class Clients(HttpMessageHandler handler) : IHttpClientFactory

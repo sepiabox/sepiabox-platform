@@ -94,6 +94,9 @@ else
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
     var importIdentity = builder.AddAzureUserAssignedIdentity("import-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    // The export job writes the exports container (S-040) and signs links to the originals.
+    var exportIdentity = builder.AddAzureUserAssignedIdentity("export-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
     // The faces job writes manifests (S-022): its own identity, so the import jobs stay readers.
     var facesIdentity = builder.AddAzureUserAssignedIdentity("faces-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
@@ -189,6 +192,18 @@ else
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureFacesJob);
 
+    // Writes the exports people ask for (S-040, D-110), every 15 minutes. It connects as the application role. Its account-wide
+    // Storage Blob Delegator lets it ask for a user delegation key, with which it signs the 24 h links to the originals; its
+    // Data Reader role on the originals container and its Contributor role on the exports container are in access.bicep.
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.ExportResourceName)
+        .WithArgs("export")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(blobs)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithAzureUserAssignedIdentity(exportIdentity)
+        .WithRoleAssignments(storage, StorageBuiltInRole.StorageBlobDelegator)
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureExportJob);
+
     // Files that arrive in `incoming` from a cloud source (S-036, D-107): processed by the worker from the Dockerfile that
     // gives it FFmpeg and the models, an event-driven job like the import. Its storage roles are on the four containers
     // it touches, in access.bicep; it connects to the catalog as the application role (it only reads the face setting).
@@ -240,6 +255,7 @@ else
         .WithParameter("vaultName", vault.GetOutput("name"))
         .WithParameter("webPrincipalId", webIdentity.Resource.PrincipalId)
         .WithParameter("facesPrincipalId", facesIdentity.Resource.PrincipalId)
+        .WithParameter("exportPrincipalId", exportIdentity.Resource.PrincipalId)
         .WithParameter("processPrincipalId", processIdentity.Resource.PrincipalId)
         .WithParameter("adminPrincipalId", adminIdentity.Resource.PrincipalId)
         .WithParameter("uploaderPrincipalIds", uploaders);
