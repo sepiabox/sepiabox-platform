@@ -106,6 +106,7 @@ public sealed partial class AppleExportReader : IExportReader
         var ambiguous = 0;
         var ambiguousDeleted = 0;
         var unreadableXmp = 0;
+        var conflicts = 0;
         var withoutRow = 0;
         foreach (var path in media)
         {
@@ -145,7 +146,7 @@ public sealed partial class AppleExportReader : IExportReader
                 continue;
             }
 
-            var xmp = ReadXmp(root, path, xmps, ref unreadableXmp);
+            var xmp = ReadXmp(root, path, xmps, ref unreadableXmp, ref conflicts);
             var named = unique && albums.TryGetValue(key, out var set) ? set.Order(StringComparer.Ordinal).ToList() : [];
             files.Add(new KeyValuePair<string, ExportMetadata>(path, new ExportMetadata
             {
@@ -186,6 +187,11 @@ public sealed partial class AppleExportReader : IExportReader
         if (withoutRow > 0)
         {
             warnings.Add($"{withoutRow:N0} photos and videos have no row in Photo Details and were read from their own metadata only.");
+        }
+
+        if (conflicts > 0)
+        {
+            warnings.Add($"{conflicts:N0} photos have a latitude or longitude whose sign and letter disagree and were not given a location.");
         }
 
         if (unreadableXmp > 0)
@@ -326,7 +332,7 @@ public sealed partial class AppleExportReader : IExportReader
 
     // The sidecar of a media file in the same folder: "IMG_0001.HEIC.xmp", else "IMG_0001.xmp" (which a Live Photo's still
     // and video share); null when there is none or it cannot be read.
-    private static ExportMetadata? ReadXmp(string root, string path, Dictionary<string, string> xmps, ref int unreadable)
+    private static ExportMetadata? ReadXmp(string root, string path, Dictionary<string, string> xmps, ref int unreadable, ref int conflicts)
     {
         var directory = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? string.Empty;
         var name = Path.GetFileName(path);
@@ -349,8 +355,13 @@ public sealed partial class AppleExportReader : IExportReader
                     return null;
                 }
 
-                if (AppleXmp.Parse(File.ReadAllText(actual)) is { } facts)
+                if (AppleXmp.Parse(File.ReadAllText(actual), out var conflict) is { } facts)
                 {
+                    if (conflict)
+                    {
+                        conflicts++;
+                    }
+
                     return facts;
                 }
 

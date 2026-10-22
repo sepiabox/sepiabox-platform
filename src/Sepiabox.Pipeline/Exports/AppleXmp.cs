@@ -27,8 +27,15 @@ public static partial class AppleXmp
     private static partial Regex Coordinate();
 
     /// <summary>What the sidecar says; null when the text is not XML. The text is never fetched from anywhere: DTDs are refused.</summary>
-    public static ExportMetadata? Parse(string xml)
+    public static ExportMetadata? Parse(string xml) => Parse(xml, out _);
+
+    /// <summary>
+    /// As <see cref="Parse(string)"/>; <paramref name="coordinateConflict"/> says the sidecar has a coordinate whose sign and
+    /// letter disagree, which is refused (no location) rather than guessed.
+    /// </summary>
+    public static ExportMetadata? Parse(string xml, out bool coordinateConflict)
     {
+        coordinateConflict = false;
         ArgumentNullException.ThrowIfNull(xml);
         XDocument document;
         try
@@ -51,8 +58,13 @@ public static partial class AppleXmp
 
         var caption = LanguageText(root, s_dc + "description") ?? LanguageText(root, s_dc + "title");
         var date = Date(Value(root, s_photoshop + "DateCreated")) ?? Date(Value(root, s_exif + "DateTimeOriginal"));
-        var latitude = Degrees(Value(root, s_exif + "GPSLatitude"), Value(root, s_exif + "GPSLatitudeRef"), "NS", 90);
-        var longitude = Degrees(Value(root, s_exif + "GPSLongitude"), Value(root, s_exif + "GPSLongitudeRef"), "EW", 180);
+        var latitudeText = Value(root, s_exif + "GPSLatitude");
+        var longitudeText = Value(root, s_exif + "GPSLongitude");
+        var latitudeRef = Value(root, s_exif + "GPSLatitudeRef");
+        var longitudeRef = Value(root, s_exif + "GPSLongitudeRef");
+        coordinateConflict = Conflicts(latitudeText, latitudeRef, "NS") || Conflicts(longitudeText, longitudeRef, "EW");
+        var latitude = Degrees(latitudeText, latitudeRef, "NS", 90);
+        var longitude = Degrees(longitudeText, longitudeRef, "EW", 180);
         return new ExportMetadata
         {
             Caption = caption,
@@ -82,6 +94,29 @@ public static partial class AppleXmp
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Whether a coordinate's minus sign and hemisphere letter, or the letter in its value and the reference, disagree: a
+    /// value that says both "west" and "north" is corrupt, and <see cref="Degrees"/> refuses it.
+    /// </summary>
+    public static bool Conflicts(string? value, string? reference, string hemispheres)
+    {
+        if (string.IsNullOrWhiteSpace(value) || Coordinate().Match(value) is not { Success: true } m)
+        {
+            return false;
+        }
+
+        var signed = m.Groups[1].Value.StartsWith('-');
+        var inValue = m.Groups[4].Success ? char.ToUpperInvariant(m.Groups[4].Value[0]) : (char?)null;
+        var asReference = !string.IsNullOrWhiteSpace(reference) ? char.ToUpperInvariant(reference.Trim()[0]) : (char?)null;
+        if ((inValue is { } v && !hemispheres.Contains(v, StringComparison.Ordinal)) || (asReference is { } r && !hemispheres.Contains(r, StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        var letter = inValue ?? asReference;
+        return (inValue is { } x && asReference is { } y && x != y) || (signed && letter is { } l && l != hemispheres[1]);
     }
 
     /// <summary>A coordinate in the forms XMP uses to a signed decimal number, or null when it is not one or is out of range.</summary>
