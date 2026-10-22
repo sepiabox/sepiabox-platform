@@ -207,10 +207,11 @@ public static class QuestionPrompt
           the items; "sum" adds to the count and never replaces it, and a size is only for assets, never for occasions
           ("events") and never per person. "Per year", "por ano", "per drive", "por origem" adds "groupBy" as for a count.
         - Sources, how many: "in more than one source", "in several sources", "on two drives", "em mais de uma origem",
-          "em várias origens", "duplicado" is "sourceCount": {"gte": 2}; "only in one source", "em uma única origem",
+          "em várias origens", "entre origens" is "sourceCount": {"gte": 2}; "only in one source", "em uma única origem",
           "só num HD" is {"eq": 1}; "in exactly 3 sources" is {"eq": 3} and "in at least 3" {"gte": 3}. It counts the
           different sources an item was found in, not which ones: a source named in the question ("on HD da Ana") is
           still "sources", and both can be set together. Exactly one of "eq" and "gte".
+          "Duplicate" or "duplicada" alone (the same photo twice, often on one drive) is not a source count and is no filter.
 
         Examples, all with today = 2025-06-15, time zone Europe/Lisbon, Ana and Pedro in the context's people list, and
         "Sítio da avó" and "Apartamento Graça" in its saved places list, "Apartamento Graça" being the home place:
