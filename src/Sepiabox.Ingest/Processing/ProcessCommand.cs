@@ -772,12 +772,16 @@ public static class ProcessCommand
             var modifiedTicks = file.ModifiedAt.UtcTicks;
             try
             {
-                // The export's kind when the folder is an export (S-045), so the web can say where the original is.
+                // The export's kind when the folder is an export (S-045), so the web can say where the original is, and the
+                // export's link to the file at the service when it gives one (S-046).
+                var relativePath = ManifestSource.NormalizePath(Path.GetRelativePath(root, file.Path));
+                var exported = export?.Find(relativePath);
                 var source = new ManifestSource(
                     options.ExportKind ?? LocalSourceType,
                     sourceName,
-                    ManifestSource.NormalizePath(Path.GetRelativePath(root, file.Path)),
-                    file.ModifiedAt);
+                    relativePath,
+                    file.ModifiedAt,
+                    ExportFacts.SourceUrl(exported));
 
                 if (previous?.Sha256 is { } oldSha256 && oldSha256 != sha256)
                 {
@@ -785,7 +789,7 @@ public static class ProcessCommand
                 }
 
                 var described = Describe(
-                    manifestFolder, sha256, kind, file, source, clock, content, indexOnly, export?.Find(source.Path), exportZone);
+                    manifestFolder, sha256, kind, file, source, clock, content, indexOnly, exported, exportZone);
                 var (manifest, status, derivativeProblem, noVideo, withoutSound, sound) =
                     AddDerivatives(output, file, described, content, video, redoProxy, indexOnly, stop.Token);
                 if (withoutSound is not null)
@@ -885,6 +889,7 @@ public static class ProcessCommand
         var withoutManifest = outcomes.SelectMany(o => o.WithoutManifest).ToHashSet(StringComparer.Ordinal);
 
         var warnings = new List<string>();
+        warnings.AddRange(export?.Warnings ?? []);
         if (pending > 0)
         {
             warnings.Add(
