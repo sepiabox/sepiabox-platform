@@ -175,7 +175,7 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
 
         var deletion = await Recognition(db).IgnoreFacesAsync(photo1.Id, brunoFace.Id, Ana);
 
-        Assert.Equal((FaceDataDeletionScopes.Person, 1, 1), (deletion!.Scope, deletion.Faces, deletion.People));
+        Assert.Equal((FaceDataDeletionScopes.Ignore, 1, 1), (deletion!.Scope, deletion.Faces, deletion.People));
         // Bruno was unnamed with that one face: gone. Ana's person keeps both faces.
         var people = await db.People.AsNoTracking().ToListAsync();
         Assert.Equal(2, Assert.Single(people).FaceCount);
@@ -240,7 +240,7 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
 
         var deletion = await Recognition(db).IgnorePersonAsync(person.Id, Ana);
 
-        Assert.Equal((2, 1), (deletion!.Faces, deletion.People));
+        Assert.Equal((FaceDataDeletionScopes.Ignore, 2, 1), (deletion!.Scope, deletion.Faces, deletion.People));
         Assert.Equal(0, await db.Faces.CountAsync());
         Assert.Equal(2, await db.ErasedFaces.CountAsync());
         Assert.Equal(2, await db.Assets.CountAsync());
@@ -292,7 +292,7 @@ public sealed class FaceRecognitionTests(CatalogFixture fixture)
         Assert.Equal(3, await db.ErasedFaces.CountAsync());
         Assert.Equal(3, await db.Assets.CountAsync());
         var recorded = await db.FaceDataDeletions.AsNoTracking().SingleAsync();
-        Assert.Equal((FaceDataDeletionScopes.Person, 3, 2, Ana), (recorded.Scope, recorded.Faces, recorded.People, recorded.DeletedBy));
+        Assert.Equal((FaceDataDeletionScopes.Ignore, 3, 2, Ana), (recorded.Scope, recorded.Faces, recorded.People, recorded.DeletedBy));
         Assert.True((await Recognition(db).IgnoreUnnamedPeopleAsync(FaceRecognition.FewFaces, 0, Ana)).Refused);
     }
 

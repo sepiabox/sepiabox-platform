@@ -107,6 +107,7 @@
                 <ul class="photo-people">
                     @foreach (var person in _asset.People)
                     {
+                        var unnamedNumber = person.Name is null ? _asset.People.Where(p => p.Name is null).ToList().IndexOf(person) + 1 : 0;
                         <li>
                             @if (person.Name is { } name)
                             {
@@ -118,7 +119,7 @@
                                 @if (person.FaceId != 0)
                                 {
                                     @* Opens a confirmation; a stranger's face (a poster, a crowd) is deleted for good there (#107). *@
-                                    <a href="photos/@_asset.Id/ignore-faces?face=@person.FaceId" class="small ignore-face">@Text["Detail_IgnoreFace"]</a>
+                                    <a href="photos/@_asset.Id/ignore-faces?face=@person.FaceId" class="small ignore-face" aria-label="@Text["Detail_IgnoreFace_Named", unnamedNumber]">@Text["Detail_IgnoreFace"]</a>
                                 }
                             }
                         </li>

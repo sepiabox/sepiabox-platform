@@ -83,6 +83,32 @@ public sealed class FaceSettingsPageTests : LocalizedContext
             page.FindAll(".face-deletions li").Select(li => li.TextContent));
     }
 
+    [Fact]
+    public void Words_ignored_faces_apart_from_one_persons_deleted_face_data()
+    {
+        _faces.History.Add(Deletion(FaceDataDeletionScopes.Ignore, 14, 6, new DateTimeOffset(2026, 10, 22, 9, 0, 0, TimeSpan.Zero)));
+        _faces.History.Add(Deletion(FaceDataDeletionScopes.Person, 3, 1, new DateTimeOffset(2026, 10, 21, 10, 5, 0, TimeSpan.Zero)));
+
+        var page = Render<Settings>();
+
+        var lines = page.FindAll(".face-deletions li").Select(li => li.TextContent).ToList();
+
+        // The time's own format varies with the runtime's culture data; the words are what is asserted.
+        Assert.EndsWith(", by ana@example.com: faces ignored: 14; people removed: 6.", lines[0], StringComparison.Ordinal);
+        Assert.EndsWith(", by ana@example.com: one person's face data deleted; faces: 3.", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Words_ignored_faces_in_brazilian_portuguese()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+        _faces.History.Add(Deletion(FaceDataDeletionScopes.Ignore, 14, 6, new DateTimeOffset(2026, 10, 22, 9, 0, 0, TimeSpan.Zero)));
+
+        Assert.Equal(
+            "22/10/2026 09:00, por ana@example.com: rostos ignorados: 14; pessoas removidas: 6.",
+            Assert.Single(Render<Settings>().FindAll(".face-deletions li")).TextContent);
+    }
+
     [Theory]
     [InlineData("faces-off", "Face recognition is off and the face data was deleted.")]
     [InlineData("faces-pending", "Not yet: the faces are still being erased from the copies in the cloud.")]
@@ -265,6 +291,40 @@ public sealed class FaceSettingsCatalogTests(CatalogFixture catalog)
             }));
         Assert.Equal(["Ana"], unknown.Missing);
         Assert.True(unknown.MeMissing);
+    }
+
+    [Fact]
+    public async Task Crops_the_faces_a_photo_would_lose_and_previews_the_people_the_bulk_action_would_delete()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.Add(CatalogData.Photo(Ids.Of(1), new DateTime(2019, 7, 14)));
+        db.Assets.Add(CatalogData.Photo(Ids.Of(2), new DateTime(2019, 7, 15)));
+        var named = new Catalog.Person { Name = "Ana", FaceCount = 1 };
+        var strangerOne = new Catalog.Person { FaceCount = 1 };
+        var strangerTwo = new Catalog.Person { FaceCount = 1 };
+        db.Faces.Add(Face(named));
+        var one = Face(strangerOne);
+        one.Box = [0.5, 0.5, 0.2, 0.2];
+        db.Faces.Add(one);
+        var two = Face(strangerTwo);
+        two.AssetId = Ids.Of(2);
+        db.Faces.Add(two);
+        await db.SaveChangesAsync();
+        var contexts = new TestContexts(catalog.ConnectionStringFor(db));
+        var library = new LibraryQueries(contexts, TimeProvider.System, user: new SignedIn(Ana));
+
+        var detail = await library.GetAssetAsync(Ids.Of(1));
+        var preview = await new FaceSettings(contexts, TimeProvider.System).PreviewUnnamedWithFewFacesAsync(12);
+
+        var unnamed = Assert.Single(detail!.People, p => p.Name is null);
+        Assert.Equal((Ids.Of(1), 256, 192), (unnamed.Crop!.AssetId, unnamed.Crop.ThumbnailWidth, unnamed.Crop.ThumbnailHeight));
+        Assert.Equal([0.5, 0.5, 0.2, 0.2], unnamed.Crop.Box);
+        Assert.Equal(one.Id, unnamed.FaceId);
+        Assert.Equal(2, preview.People);
+        Assert.Equal([Ids.Of(1), Ids.Of(2)], preview.Crops.Select(c => c.AssetId));
+        // Only the first asked for are cropped, and the count is of all.
+        var one1 = await new FaceSettings(contexts, TimeProvider.System).PreviewUnnamedWithFewFacesAsync(1);
+        Assert.Equal((2, 1), (one1.People, one1.Crops.Count));
     }
 
     private static Face Face(Catalog.Person person)

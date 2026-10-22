@@ -385,6 +385,12 @@ internal sealed class FakeFaceSettings : IFaceSettings
 
     public Task<int> CountUnnamedWithFewFacesAsync(CancellationToken cancellationToken = default) => Task.FromResult(FewFaces);
 
+    /// <summary>The crops the bulk confirmation shows (the first <c>take</c>).</summary>
+    public List<FaceCrop> FewFaceCrops { get; } = [];
+
+    public Task<FewFacesPreview> PreviewUnnamedWithFewFacesAsync(int take, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new FewFacesPreview(FewFaces, [.. FewFaceCrops.Take(take)]));
+
     public Task<Sepiabox.Catalog.People.IgnoreResult> IgnoreUnnamedPeopleAsync(int expected, string email, CancellationToken cancellationToken = default)
     {
         Calls.Add($"ignore-many {expected} {email}");

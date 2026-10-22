@@ -22,12 +22,12 @@ else if (Note == "ignored")
 }
 else if (_people is { Count: > 0 } people)
 {
-    <PeopleGrid People="people" />
     @if (_fewFaces > 0)
     {
         @* Opens a confirmation; strangers (posters, crowds) seen once or twice are deleted for good there (#107). *@
-        <p class="ignore-many"><a href="people/ignore">@(_fewFaces == 1 ? Text["People_IgnoreMany_One"] : Text["People_IgnoreMany_Other", _fewFaces])</a></p>
+        <p class="ignore-many"><a href="people/ignore" class="button secondary">@(_fewFaces == 1 ? Text["People_IgnoreMany_One"] : Text["People_IgnoreMany_Other", _fewFaces])</a></p>
     }
+    <PeopleGrid People="people" />
 }
 else
 {

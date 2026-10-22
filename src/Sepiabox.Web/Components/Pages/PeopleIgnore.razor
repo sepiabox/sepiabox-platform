@@ -19,13 +19,35 @@
 }
 else
 {
-    <p class="note">@(_count == 1 ? Text["IgnoreMany_One"] : Text["IgnoreMany_Other", _count])</p>
-    <p class="note">@Text["Ignore_Explain"]</p>
+    <p class="ignore-warning"><strong>@Text["Ignore_Irreversible"]</strong></p>
+    <p>@(_count == 1 ? Text["IgnoreMany_One"] : Text["IgnoreMany_Other", _count])</p>
+    @* A strip of the faces that will be deleted, up to 24, then how many more. *@
+    <ul class="people ignore-crops">
+        @foreach (var crop in _crops)
+        {
+            <li class="person">
+                <span class="face"><img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" /></span>
+            </li>
+        }
+    </ul>
+    @if (_count > _crops.Count)
+    {
+        <p class="muted ignore-more">@Text["IgnoreMany_More", _count - _crops.Count]</p>
+    }
+    <p class="ignore-warning"><strong>@Text["Ignore_Irreversible"]</strong></p>
+    <ul class="ignore-effects">
+        <li>@Text["Ignore_Effect_Gone"]</li>
+        <li>@Text["Ignore_Effect_Named"]</li>
+    </ul>
+    <details class="ignore-cloud">
+        <summary>@Text["Ignore_Cloud_Summary"]</summary>
+        <p>@Text["Ignore_Cloud"]</p>
+    </details>
     <form method="post" @formname="ignore-many" @onsubmit="ConfirmAsync" class="confirm">
         <AntiforgeryToken />
         <input type="hidden" name="Expected" value="@_count" />
-        <button type="submit">@Text["Ignore_Confirm"]</button>
-        <a href="people">@Text["Merge_Cancel"]</a>
+        <a href="people" class="button secondary" autofocus>@Text["Merge_Cancel"]</a>
+        <button type="submit" class="button danger">@Text["Ignore_Confirm"]</button>
     </form>
 }
 
@@ -39,9 +61,17 @@ else
     [CascadingParameter]
     public HttpContext? HttpContext { get; set; }
 
-    private int _count;
+    private const int ShownCrops = 24;
 
-    protected override async Task OnParametersSetAsync() => _count = await Faces.CountUnnamedWithFewFacesAsync();
+    private int _count;
+    private IReadOnlyList<FaceCrop> _crops = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var preview = await Faces.PreviewUnnamedWithFewFacesAsync(ShownCrops);
+        _count = preview.People;
+        _crops = preview.Crops;
+    }
 
     private async Task ConfirmAsync()
     {

@@ -39,6 +39,8 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
             [$"photos/{asset.Id}/ignore-faces?face=20", $"photos/{asset.Id}/ignore-faces?face=30"],
             page.FindAll("a.ignore-face").Select(a => a.GetAttribute("href")));
         Assert.Equal("Ignore this face", page.Find("a.ignore-face").TextContent);
+        // Each link has a name of its own, visible text first.
+        Assert.Equal(["Ignore this face, unnamed 1", "Ignore this face, unnamed 2"], page.FindAll("a.ignore-face").Select(a => a.GetAttribute("aria-label")));
         Assert.Equal($"photos/{asset.Id}/ignore-faces", page.Find("p.ignore-faces a").GetAttribute("href"));
         Assert.Equal("Ignore the unnamed faces in this photo", page.Find("p.ignore-faces a").TextContent);
     }
@@ -69,15 +71,28 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
     [Fact]
     public void Asks_before_ignoring_one_face_and_says_what_it_does_not_reach()
     {
-        var asset = PhotoWith(new AssetPerson(1, "Ana", 10), new AssetPerson(2, null, 20), new AssetPerson(3, null, 30));
+        var crop = new FaceCrop(Ids.Of(1), [0.1, 0.1, 0.2, 0.2], 256, 192);
+        var asset = PhotoWith(new AssetPerson(1, "Ana", 10), new AssetPerson(2, null, 20, crop), new AssetPerson(3, null, 30, crop));
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}/ignore-faces?face=20");
 
         var page = Render<PhotoIgnoreFaces>(p => p.Add(d => d.Id, asset.Id));
 
-        Assert.Equal("1 unnamed face in this photo will be ignored.", page.Find("p.note").TextContent);
-        Assert.Contains("deleted for good", page.Markup, StringComparison.Ordinal);
-        Assert.Contains("people with a name are never touched", page.Markup, StringComparison.Ordinal);
-        Assert.Equal("Ignore for good", page.Find("form.confirm button").TextContent);
+        Assert.Equal("Ignore and delete faces", page.Find("h1").TextContent);
+        Assert.Equal("This cannot be undone. The photos stay.", page.Find("p.ignore-warning strong").TextContent);
+        Assert.Contains("1 unnamed face in this photo will be ignored.", page.Markup, StringComparison.Ordinal);
+        Assert.Contains("deleted for good", page.Find("ul.ignore-effects").TextContent, StringComparison.Ordinal);
+        Assert.Contains("People with a name are never touched", page.Find("ul.ignore-effects").TextContent, StringComparison.Ordinal);
+        Assert.Equal("What about the cloud copies?", page.Find("details.ignore-cloud summary").TextContent);
+        // The face that goes is shown cropped, not the whole photo.
+        Assert.Single(page.FindAll("ul.ignore-crops li"));
+        Assert.Empty(page.FindAll("figure.preview"));
+        // The way out comes first (and has the focus); the destructive button is the filled one.
+        var actions = page.FindAll("form.confirm > a, form.confirm > button");
+        Assert.Equal(["a", "button"], actions.Select(a => a.LocalName));
+        Assert.True(actions[0].HasAttribute("autofocus"));
+        Assert.Contains("secondary", actions[0].ClassName, StringComparison.Ordinal);
+        Assert.Equal("Delete for good", actions[1].TextContent);
+        Assert.Contains("danger", actions[1].ClassName, StringComparison.Ordinal);
         Assert.Empty(_faces.Calls);
     }
 
@@ -90,8 +105,11 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
 
         var page = Render<PhotoIgnoreFaces>(p => p.Add(d => d.Id, asset.Id));
 
-        Assert.Equal("2 rostos sem nome desta foto serão ignorados.", page.Find("p.note").TextContent);
-        Assert.Equal("Ignorar de vez", page.Find("form.confirm button").TextContent);
+        Assert.Equal("Ignorar e apagar rostos", page.Find("h1").TextContent);
+        Assert.Equal("Isso não pode ser desfeito. As fotos ficam.", page.Find("p.ignore-warning strong").TextContent);
+        Assert.Contains("2 rostos sem nome desta foto serão ignorados.", page.Markup, StringComparison.Ordinal);
+        Assert.Equal("Apagar de vez", page.Find("form.confirm button").TextContent);
+        Assert.Equal("E as cópias na nuvem?", page.Find("details.ignore-cloud summary").TextContent);
     }
 
     [Fact]
@@ -117,6 +135,9 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
 
         Assert.Equal("people/7/ignore", unnamed.Find("p.ignore-person a").GetAttribute("href"));
         Assert.Equal("Ignore this person", unnamed.Find("p.ignore-person a").TextContent);
+        // Each of the two deletions says what it is for.
+        Assert.Contains("strangers", unnamed.Find("p.ignore-person .muted").TextContent, StringComparison.Ordinal);
+        Assert.Contains("someone you know", unnamed.Find("p.delete-face-data .muted").TextContent, StringComparison.Ordinal);
         Assert.Empty(named.FindAll("p.ignore-person"));
     }
 
@@ -129,7 +150,8 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         var unnamed = Render<PersonIgnore>(p => p.Add(x => x.Id, 7L));
         var named = Render<PersonIgnore>(p => p.Add(x => x.Id, 8L));
 
-        Assert.Equal("Ignore for good", unnamed.Find("form.confirm button").TextContent);
+        Assert.Equal("Delete for good", unnamed.Find("form.confirm button").TextContent);
+        Assert.True(unnamed.Find("form.confirm > a").HasAttribute("autofocus"));
         Assert.Empty(named.FindAll("form.confirm"));
         Assert.Contains("Only an unnamed person can be ignored", named.Markup, StringComparison.Ordinal);
     }
@@ -159,13 +181,17 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
     [Fact]
     public void Asks_before_the_bulk_action_with_the_number_it_will_check_and_says_so_when_the_people_changed()
     {
-        _faces.FewFaces = 5;
+        _faces.FewFaces = 30;
+        _faces.FewFaceCrops.AddRange(Enumerable.Range(1, 30).Select(n => new FaceCrop(Ids.Of(n), [0.1, 0.1, 0.2, 0.2], 256, 192)));
         Services.GetRequiredService<NavigationManager>().NavigateTo("/people/ignore?note=IgnoreChanged");
 
         var page = Render<PeopleIgnore>();
 
-        Assert.Equal("5 unnamed people with one or two faces will be ignored.", page.FindAll("p.note")[1].TextContent);
-        Assert.Equal("5", page.Find("form.confirm input[name=Expected]").GetAttribute("value"));
+        Assert.Contains("30 unnamed people with one or two faces will be ignored.", page.Markup, StringComparison.Ordinal);
+        // A strip of at most 24 faces, then how many more.
+        Assert.Equal(24, page.FindAll("ul.ignore-crops li").Count);
+        Assert.Equal("and 6 more", page.Find("p.ignore-more").TextContent);
+        Assert.Equal("30", page.Find("form.confirm input[name=Expected]").GetAttribute("value"));
         Assert.Contains("changed since you opened this page", page.Find("p[role=status]").TextContent, StringComparison.Ordinal);
     }
 }

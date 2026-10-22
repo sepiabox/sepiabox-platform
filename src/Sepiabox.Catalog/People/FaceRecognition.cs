@@ -161,7 +161,7 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
             {
                 DeletedAt = now,
                 DeletedBy = by,
-                Scope = FaceDataDeletionScopes.Person,
+                Scope = ignoring ? FaceDataDeletionScopes.Ignore : FaceDataDeletionScopes.Person,
                 Faces = faces.Count,
                 People = 1,
             };
@@ -215,7 +215,7 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
             {
                 DeletedAt = now,
                 DeletedBy = by,
-                Scope = FaceDataDeletionScopes.Person,
+                Scope = FaceDataDeletionScopes.Ignore,
                 Faces = faces.Count,
                 People = removed,
             };
@@ -252,7 +252,7 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
             {
                 DeletedAt = now,
                 DeletedBy = by,
-                Scope = FaceDataDeletionScopes.Person,
+                Scope = FaceDataDeletionScopes.Ignore,
                 Faces = faces.Count,
                 People = people.Count,
             });

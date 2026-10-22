@@ -449,7 +449,7 @@ namespace Sepiabox.Catalog.Migrations
 
                     b.ToTable("face_data_deletions", null, t =>
                         {
-                            t.HasCheckConstraint("ck_face_data_deletions_scope", "scope IN ('library', 'person')");
+                            t.HasCheckConstraint("ck_face_data_deletions_scope", "scope IN ('library', 'person', 'ignore')");
                         });
                 });
 
