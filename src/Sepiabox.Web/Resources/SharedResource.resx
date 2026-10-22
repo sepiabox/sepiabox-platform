@@ -1532,4 +1532,13 @@
   <data name="Detail_MoreAlbums_Other" xml:space="preserve">
     <value>{0} more albums</value>
   </data>
+  <data name="Merge_Result" xml:space="preserve">
+    <value>After merging: {2} ({3} faces) keeps the faces of {0} ({1} faces), and {0} no longer exists.</value>
+  </data>
+  <data name="Merge_LeavingKnown" xml:space="preserve">
+    <value>{0} has a name (or is you) and will be deleted. Go on only if that is what you want; otherwise use Swap.</value>
+  </data>
+  <data name="Merge_Swap" xml:space="preserve">
+    <value>Swap: keep the other person instead</value>
+  </data>
 </root>
