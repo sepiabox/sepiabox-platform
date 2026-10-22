@@ -32,6 +32,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<FaceDataDeletion> FaceDataDeletions => Set<FaceDataDeletion>();
 
+    public DbSet<ExportRequest> ExportRequests => Set<ExportRequest>();
+
     public DbSet<SavedPlace> SavedPlaces => Set<SavedPlace>();
 
     public DbSet<Occasion> Occasions => Set<Occasion>();
@@ -266,6 +268,18 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             deletion.Property(d => d.DeletedBy).HasMaxLength(320);
             deletion.Property(d => d.Scope).HasMaxLength(16);
             deletion.ToTable(t => t.HasCheckConstraint("ck_face_data_deletions_scope", "scope IN ('library', 'person')"));
+        });
+
+        modelBuilder.Entity<ExportRequest>(export =>
+        {
+            export.ToTable("export_requests");
+            export.Property(e => e.RequestedBy).HasMaxLength(320);
+            export.Property(e => e.Status).HasMaxLength(16);
+            export.Property(e => e.BlobName).HasMaxLength(200);
+            export.Property(e => e.Error).HasMaxLength(500);
+            export.ToTable(t => t.HasCheckConstraint("ck_export_requests_status", "status IN ('requested', 'running', 'done', 'failed')"));
+            // At most one request waiting and one running (D-110): two clicks, or two computers, make only one request.
+            export.HasIndex(e => e.Status).IsUnique().HasFilter("status IN ('requested', 'running')").HasDatabaseName("ux_export_requests_active");
         });
 
         modelBuilder.Entity<QuestionUsage>(usage =>

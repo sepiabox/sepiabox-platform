@@ -7,6 +7,7 @@ public enum WorkerAction
     Migrate,
     ImportOnce,
     ImportFromQueue,
+    Export,
     ProcessFromQueue,
     GeoNamesLoad,
     GeoNamesDownload,
@@ -45,6 +46,10 @@ public sealed record WorkerCommand(
           import --from-queue        Import the manifests named by the storage events waiting in the
                                      queue (ServiceBus:Namespace, ServiceBus:Queue), then exit when
                                      it is empty. Never migrates (D-063).
+          export                     Write the zip of each pending export request (S-040): catalog.json,
+                                     originals.txt with 24-hour links, and README.txt, to the exports
+                                     container; face data only when the request asked. Does nothing when no
+                                     one has asked. What the sepiabox-export job runs, every few minutes.
           process --from-queue       Process the files that arrived in the incoming container from a cloud
                                      source (S-036): hash, metadata, thumbnails or video versions, CLIP and,
                                      when face recognition is on, faces; write the derivatives and the
@@ -101,6 +106,9 @@ public sealed record WorkerCommand(
         {
             case ["migrate"]:
                 command = new WorkerCommand(WorkerAction.Migrate, false);
+                return true;
+            case ["export"]:
+                command = new WorkerCommand(WorkerAction.Export, false);
                 return true;
             case ["import", "--from-queue"]:
                 command = new WorkerCommand(WorkerAction.ImportFromQueue, false);

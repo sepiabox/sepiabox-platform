@@ -216,7 +216,7 @@ public sealed class ProcessTakeoutTests : IDisposable
         Assert.True(ProcessOptions.TryParse(["/in", "--out", "/out", "--export", "google-takeout", "--time-zone", "Europe/Lisbon"], out var options, out var error), error);
         Assert.Equal("google-takeout", options.ExportKind);
         Assert.False(ProcessOptions.TryParse(["/in", "--out", "/out", "--export", "takeout"], out _, out var unknown));
-        Assert.Equal("Unknown export kind 'takeout'. Known kinds: google-takeout.", unknown);
+        Assert.Equal("Unknown export kind 'takeout'. Known kinds: apple-photos, google-takeout, instagram.", unknown);
     }
 
     private const string TakeoutSidecarsSupplemental = ".supplemental-metadata";
