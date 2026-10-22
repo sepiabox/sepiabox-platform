@@ -78,7 +78,7 @@ else
         <ul class="people person-faces">
             @foreach (var face in _person.Faces)
             {
-                <li class="person">
+                <li class="person" id="@PersonLinks.FaceAnchor(face.Id)">
                     <a href="photos/@face.AssetId" class="face">
                         @if (face.Crop is { } crop)
                         {
@@ -99,7 +99,7 @@ else
             <ul class="people person-faces excluded-faces">
                 @foreach (var face in _person.ExcludedFaces)
                 {
-                    <li class="person">
+                    <li class="person" id="@PersonLinks.FaceAnchor(face.Id)">
                         <a href="photos/@face.AssetId" class="face">
                             @if (face.Crop is { } crop)
                             {
@@ -204,15 +204,17 @@ else
             return AnswerAsync(Task.FromResult(CurationOutcome.NotFound), string.Empty);
         }
 
+        // The card to land on afterwards, taken before the correction takes this one out of its list.
+        var anchor = PersonLinks.AnchorAfter(_person, faceId);
         return action switch
         {
-            NotThisPerson => AnswerAsync(Editor.NotThisPersonAsync(Id, faceId), "removed"),
-            NotAFace => AnswerAsync(Editor.NotAFaceAsync(Id, faceId), "not-a-face"),
-            GiveBack => AnswerAsync(Editor.ReturnFaceAsync(Id, faceId), "given-back"),
+            NotThisPerson => AnswerAsync(Editor.NotThisPersonAsync(Id, faceId), "removed", anchor),
+            NotAFace => AnswerAsync(Editor.NotAFaceAsync(Id, faceId), "not-a-face", anchor),
+            GiveBack => AnswerAsync(Editor.ReturnFaceAsync(Id, faceId), "given-back", anchor),
             _ => AnswerAsync(Task.FromResult(CurationOutcome.NotFound), string.Empty),
         };
     }
 
-    private async Task AnswerAsync(Task<CurationOutcome> change, string done) =>
-        Navigation.NavigateTo(await PersonLinks.AfterAsync(Library, Id, await change, done));
+    private async Task AnswerAsync(Task<CurationOutcome> change, string done, string? anchor = null) =>
+        Navigation.NavigateTo(await PersonLinks.AfterAsync(Library, Id, await change, done, anchor));
 }

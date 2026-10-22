@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Sepiabox.Catalog.People;
 using Sepiabox.Web.Components.Pages;
+using Sepiabox.Web.Components.People;
 using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
@@ -40,6 +41,32 @@ public sealed class PersonPageFormTests : LocalizedContext
         Assert.Equal("Excluded faces", page.FindAll("h2")[1].TextContent);
         // Only the face marked "Not a face" says so.
         Assert.Equal("(not a face)", Assert.Single(page.FindAll(".excluded-faces .not-a-face")).TextContent);
+    }
+
+    [Fact]
+    public void Gives_every_face_card_an_id_to_come_back_to()
+    {
+        var page = Render<Person>(p => p.Add(x => x.Id, 7L));
+
+        Assert.Equal(["face-70", "face-71", "face-72", "face-73"], page.FindAll(".person-faces li").Select(li => li.GetAttribute("id")));
+    }
+
+    [Theory]
+    [InlineData(70L, "face-71")]
+    [InlineData(71L, "face-70")]
+    [InlineData(72L, "face-73")]
+    [InlineData(73L, "face-72")]
+    [InlineData(999L, null)]
+    public void Lands_on_the_next_card_of_the_list_else_the_one_before(long faceId, string? expected) =>
+        Assert.Equal(expected, PersonLinks.AnchorAfter(PersonPages.Person(7, "Ana", null), faceId));
+
+    [Fact]
+    public void Lands_nowhere_in_particular_after_the_only_face_of_a_list_and_for_no_person()
+    {
+        var alone = PersonPages.Person(7, "Ana", null) with { Faces = [new PersonFace(70, Ids.Of(1), null)], ExcludedFaces = [] };
+
+        Assert.Null(PersonLinks.AnchorAfter(alone, 70));
+        Assert.Null(PersonLinks.AnchorAfter(null, 70));
     }
 
     [Fact]
@@ -140,6 +167,23 @@ public sealed partial class PersonPagePostTests
         Assert.Equal(["rename 7 Ana"], editor.Calls);
     }
 
+    [Theory]
+    [InlineData("not-this-person:70", "#face-71")]
+    [InlineData("not-a-face:71", "#face-70")]
+    [InlineData("give-back:72", "#face-73")]
+    [InlineData("give-back:73", "#face-72")]
+    public async Task Sends_the_person_back_to_the_next_face_so_the_page_keeps_its_place(string value, string fragment)
+    {
+        var (web, _) = Web();
+        await using var _ = web;
+        using var http = web.CreateSignedInClient(Ana, followRedirects: false);
+
+        using var response = await PostAsync(http, "faces", new() { ["Face"] = value });
+
+        Assert.Equal(fragment, response.Headers.Location?.Fragment);
+        Assert.StartsWith("/people/7?note=", response.Headers.Location?.PathAndQuery, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Says_this_is_me_for_the_signed_in_user_and_shows_a_rejection()
     {
@@ -197,6 +241,7 @@ public sealed partial class PersonPagePostTests
         using var response = await PostAsync(http, "/people/7/faces/70/move", "move", new() { ["Target"] = target });
 
         Assert.Equal("/people/7?note=PhotoTaken", response.Headers.Location?.PathAndQuery);
+        Assert.Equal("#face-71", response.Headers.Location?.Fragment);
         Assert.Equal([call], editor.Calls);
     }
 
