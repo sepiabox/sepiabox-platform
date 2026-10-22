@@ -14,7 +14,11 @@ public enum UploadDestination
 /// <param name="WorkFolder">Work folder written by <c>process</c>.</param>
 /// <param name="Destination">Where the blobs go.</param>
 /// <param name="Account">Storage account name; required for <see cref="UploadDestination.Azure"/>.</param>
-public sealed record UploadOptions(string WorkFolder, UploadDestination Destination, string? Account = null)
+/// <param name="ResendSource">
+/// <c>--resend-source &lt;name&gt;</c> (S-057): forget that the assets of this source were uploaded, so they are sent again
+/// (after <c>sepiabox-worker assets delete --source</c> removed them from the library).
+/// </param>
+public sealed record UploadOptions(string WorkFolder, UploadDestination Destination, string? Account = null, string? ResendSource = null)
 {
     public static bool TryParse(
         IReadOnlyList<string> args,
@@ -25,12 +29,13 @@ public sealed record UploadOptions(string WorkFolder, UploadDestination Destinat
         string? workFolder = null;
         UploadDestination? destination = null;
         string? account = null;
+        string? resendSource = null;
 
         for (var i = 0; i < args.Count; i++)
         {
             switch (args[i])
             {
-                case "--destination" or "--account" when i + 1 >= args.Count:
+                case "--destination" or "--account" or "--resend-source" when i + 1 >= args.Count:
                     error = $"{args[i]} needs a value.";
                     return false;
 
@@ -51,6 +56,16 @@ public sealed record UploadOptions(string WorkFolder, UploadDestination Destinat
 
                 case "--account":
                     account = args[++i];
+                    break;
+
+                case "--resend-source":
+                    resendSource = args[++i];
+                    if (string.IsNullOrWhiteSpace(resendSource))
+                    {
+                        error = "--resend-source needs the name of a source.";
+                        return false;
+                    }
+
                     break;
 
                 case var arg when arg.StartsWith('-'):
@@ -85,7 +100,7 @@ public sealed record UploadOptions(string WorkFolder, UploadDestination Destinat
             return false;
         }
 
-        options = new UploadOptions(workFolder, destination.Value, account?.Trim());
+        options = new UploadOptions(workFolder, destination.Value, account?.Trim(), resendSource?.Trim());
         error = null;
         return true;
     }
