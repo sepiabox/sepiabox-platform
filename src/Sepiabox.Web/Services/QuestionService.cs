@@ -170,7 +170,7 @@ public sealed class QuestionService(
 
         var options = await library.GetFilterOptionsAsync(cancellationToken);
         // People's names, never an e-mail address or who said "This is me" (D-080); the family's places by name, and
-        // which one is home, never where they are (D-083); a later story adds occasion types here (S-024).
+        // which one is home, never where they are (D-083); the types the occasions have, which are a fixed list of English keys (S-024, D-094).
         var context = QuestionContext.For(today, zone.Id)
             .Add("sources", "filters.sources", options.Sources)
             .Add("cities", "filters.places.cities", options.Cities)
@@ -178,6 +178,7 @@ public sealed class QuestionService(
             .Add("saved places", "filters.savedPlaces", options.SavedPlaces)
             .Add("home place", "filters.savedPlaces", options.HomePlace is { } home ? [home] : [])
             .Add("people", "filters.people.all", options.People)
+            .Add("occasion types", "filters.eventTypes", options.EventTypes)
             .Build();
 
         var translation = await translator.TranslateAsync(cleaned, context, cancellationToken);

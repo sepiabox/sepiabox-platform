@@ -278,7 +278,7 @@ public sealed class AnthropicQuestionTranslatorTests
         Assert.False(filters["additionalProperties"]!.GetValue<bool>());
         Assert.Equal("date", filters["properties"]!["dateFrom"]!["format"]!.GetValue<string>());
         Assert.Equal(
-            ["dateFrom", "dateTo", "distanceFrom", "kinds", "months", "onThisDay", "people", "places", "savedPlaces", "sources", "undatedOnly", "visual", "years"],
+            ["dateFrom", "dateTo", "distanceFrom", "eventTypes", "kinds", "months", "onThisDay", "people", "places", "savedPlaces", "sources", "undatedOnly", "visual", "years"],
             filters["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
         // minScore is required but nullable in the output format only (D-085).
         Assert.Equal(["text", "minScore"], filters["properties"]!["visual"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
@@ -307,8 +307,8 @@ public sealed class AnthropicQuestionTranslatorTests
         // The root, filters and aggregate keep their optional fields.
         Assert.Null(filters["required"]);
         Assert.Equal(["count"], schema["properties"]!["aggregate"]!["required"]!.AsArray().Select(n => n!.GetValue<string>()));
-        // The root's 4, filters' 13 and aggregate's 2; the 10 made nullable are union-typed.
-        Assert.Equal(19, OptionalProperties(schema));
+        // The root's 4, filters' 14 (eventTypes, S-024, is the 14th) and aggregate's 2; the 10 made nullable are union-typed.
+        Assert.Equal(20, OptionalProperties(schema));
         Assert.Equal(10, UnionTypeProperties(schema));
     }
 
@@ -345,8 +345,8 @@ public sealed class AnthropicQuestionTranslatorTests
     {
         using var stream = typeof(QuestionPrompt).Assembly.GetManifestResourceStream("search.v1.json")!;
         var schema = JsonNode.Parse(stream)!;
-        // The schema the API saw then, before S-017 added the filters a question cannot express.
-        foreach (var field in QuestionPrompt.NotFromQuestions)
+        // The schema the API saw then, before S-017 added the filters a question cannot express, and S-024 the types.
+        foreach (var field in QuestionPrompt.NotFromQuestions.Append("eventTypes"))
         {
             schema["properties"]!["filters"]!["properties"]!.AsObject().Remove(field);
         }

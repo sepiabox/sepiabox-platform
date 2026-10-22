@@ -1,0 +1,33 @@
+{
+  "description": "The occasion types CLIP can tell by zero-shot (S-024, D-019, D-094): the key the DSL and the resources use, and the English prompt its text embedding is made from. No religion or health categories. trip is not here: it is decided by distance and duration, not by the photos.",
+  "types": [
+    {
+      "key": "wedding",
+      "prompt": "a photo of a wedding"
+    },
+    {
+      "key": "birthday",
+      "prompt": "a photo of a birthday party"
+    },
+    {
+      "key": "beach",
+      "prompt": "a photo at the beach"
+    },
+    {
+      "key": "christmas",
+      "prompt": "a photo of a Christmas celebration"
+    },
+    {
+      "key": "graduation",
+      "prompt": "a photo of a graduation ceremony"
+    },
+    {
+      "key": "snow",
+      "prompt": "a photo in the snow"
+    },
+    {
+      "key": "party",
+      "prompt": "a photo of a party"
+    }
+  ]
+}

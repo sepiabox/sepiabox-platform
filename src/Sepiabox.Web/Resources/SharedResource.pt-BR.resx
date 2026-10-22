@@ -918,4 +918,61 @@
   <data name="Occasions_NoThumbnail" xml:space="preserve">
     <value>Sem miniaturas</value>
   </data>
+  <data name="EventType_wedding" xml:space="preserve">
+    <value>Casamento</value>
+  </data>
+  <data name="EventType_birthday" xml:space="preserve">
+    <value>Aniversário</value>
+  </data>
+  <data name="EventType_beach" xml:space="preserve">
+    <value>Praia</value>
+  </data>
+  <data name="EventType_christmas" xml:space="preserve">
+    <value>Natal</value>
+  </data>
+  <data name="EventType_graduation" xml:space="preserve">
+    <value>Formatura</value>
+  </data>
+  <data name="EventType_snow" xml:space="preserve">
+    <value>Neve</value>
+  </data>
+  <data name="EventType_party" xml:space="preserve">
+    <value>Festa</value>
+  </data>
+  <data name="EventType_trip" xml:space="preserve">
+    <value>Viagem</value>
+  </data>
+  <data name="Count_Events_One" xml:space="preserve">
+    <value>{0} ocasião</value>
+  </data>
+  <data name="Count_Events_Other" xml:space="preserve">
+    <value>{0} ocasiões</value>
+  </data>
+  <data name="Count_OfType" xml:space="preserve">
+    <value> do tipo {0}</value>
+  </data>
+  <data name="Count_ByEventType" xml:space="preserve">
+    <value>Ocasiões por tipo</value>
+  </data>
+  <data name="Count_NoType" xml:space="preserve">
+    <value>Sem tipo</value>
+  </data>
+  <data name="Group_EventType" xml:space="preserve">
+    <value>tipo de ocasião</value>
+  </data>
+  <data name="Chip_EventTypes" xml:space="preserve">
+    <value>Tipo de ocasião: {0}</value>
+  </data>
+  <data name="Chip_CountEvents" xml:space="preserve">
+    <value>Contar ocasiões</value>
+  </data>
+  <data name="Occasions_FilterLabel" xml:space="preserve">
+    <value>Filtrar as ocasiões</value>
+  </data>
+  <data name="Occasions_FilterType" xml:space="preserve">
+    <value>Tipo</value>
+  </data>
+  <data name="Occasions_NoneOfType" xml:space="preserve">
+    <value>Não há ocasiões deste tipo.</value>
+  </data>
 </root>

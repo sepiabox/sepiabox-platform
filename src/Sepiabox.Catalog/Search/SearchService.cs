@@ -321,8 +321,13 @@ public sealed class SearchService(
         var named = await ResolvePeopleAsync(query.Filters, cancellationToken);
         var places = await ResolvePlacesAsync(query.Filters, cancellationToken);
         var assets = Filtered(query, places);
-        var total = await assets.CountAsync(cancellationToken);
         var aggregate = query.Aggregate ?? new SearchAggregate();
+        if (aggregate.Count == SearchCount.Events)
+        {
+            return await CountEventsAsync(assets, aggregate, cancellationToken);
+        }
+
+        var total = await assets.CountAsync(cancellationToken);
         var groups = aggregate.GroupBy switch
         {
             null => [],
@@ -360,6 +365,24 @@ public sealed class SearchService(
             ? InKeyOrder(groups).Take(SearchAggregate.MaxTop)
             : Largest(groups).Take(aggregate.EffectiveTop);
         return new CountResult(total, [.. ordered], undated, groups.Count);
+    }
+
+    // The occasions with at least one matching asset, each once (S-024, D-094). Undated assets are in no occasion, so
+    // a time filter leaves nothing out that could be counted.
+    private async Task<CountResult> CountEventsAsync(IQueryable<Asset> assets, SearchAggregate aggregate, CancellationToken cancellationToken)
+    {
+        var matching = assets.Select(a => a.Id);
+        var events = db.Occasions.AsNoTracking()
+            .Where(o => db.OccasionAssets.Any(l => l.EventId == o.Id && matching.Contains(l.AssetId)));
+        var total = await events.CountAsync(cancellationToken);
+        if (aggregate.GroupBy is null)
+        {
+            return new CountResult(total, [], null);
+        }
+
+        var groups = (await events.GroupBy(o => o.Type).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+            .Select(g => new CountGroup(g.Key, g.Count)).ToList();
+        return new CountResult(total, [.. Largest(groups).Take(aggregate.EffectiveTop)], null, groups.Count);
     }
 
     // Years and months in order, photos before videos, "no date" last.
@@ -456,6 +479,12 @@ public sealed class SearchService(
         if (filters.People is { } people)
         {
             assets = WithPeople(assets, people);
+        }
+
+        if (filters.EventTypes is { } eventTypes)
+        {
+            assets = assets.Where(a => db.OccasionAssets.Any(l => l.AssetId == a.Id
+                && db.Occasions.Any(o => o.Id == l.EventId && o.Type != null && eventTypes.Contains(o.Type))));
         }
 
         if (filters.EventIds is { } eventIds)

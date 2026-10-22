@@ -12,7 +12,7 @@
         }
     </span>
     <span class="occasion-title">@Text.OccasionTitle(Occasion.PlaceLabel, Occasion.StartsAt, Occasion.EndsAt)</span>
-    <span class="count muted small">@Items</span>
+    <span class="count muted small">@(Occasion.Type is { } type ? Text.EventTypeLabel(type) + " · " : "")@Items</span>
 </a>
 
 @code {

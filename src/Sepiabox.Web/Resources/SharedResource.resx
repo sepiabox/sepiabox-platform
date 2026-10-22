@@ -977,4 +977,63 @@
     <value>No thumbnails</value>
     <comment>Shown on an occasion's card when none of its photos has a thumbnail.</comment>
   </data>
+  <data name="EventType_wedding" xml:space="preserve">
+    <value>Wedding</value>
+  </data>
+  <data name="EventType_birthday" xml:space="preserve">
+    <value>Birthday</value>
+  </data>
+  <data name="EventType_beach" xml:space="preserve">
+    <value>Beach</value>
+  </data>
+  <data name="EventType_christmas" xml:space="preserve">
+    <value>Christmas</value>
+  </data>
+  <data name="EventType_graduation" xml:space="preserve">
+    <value>Graduation</value>
+  </data>
+  <data name="EventType_snow" xml:space="preserve">
+    <value>Snow</value>
+  </data>
+  <data name="EventType_party" xml:space="preserve">
+    <value>Party</value>
+  </data>
+  <data name="EventType_trip" xml:space="preserve">
+    <value>Trip</value>
+  </data>
+  <data name="Count_Events_One" xml:space="preserve">
+    <value>{0} occasion</value>
+  </data>
+  <data name="Count_Events_Other" xml:space="preserve">
+    <value>{0} occasions</value>
+  </data>
+  <data name="Count_OfType" xml:space="preserve">
+    <value> of type {0}</value>
+    <comment>Appended to a count of occasions: " of type Wedding".</comment>
+  </data>
+  <data name="Count_ByEventType" xml:space="preserve">
+    <value>Occasions by type</value>
+  </data>
+  <data name="Count_NoType" xml:space="preserve">
+    <value>No type</value>
+    <comment>The occasions that have no type, in a ranking by type.</comment>
+  </data>
+  <data name="Group_EventType" xml:space="preserve">
+    <value>occasion type</value>
+  </data>
+  <data name="Chip_EventTypes" xml:space="preserve">
+    <value>Occasion type: {0}</value>
+  </data>
+  <data name="Chip_CountEvents" xml:space="preserve">
+    <value>Count occasions</value>
+  </data>
+  <data name="Occasions_FilterLabel" xml:space="preserve">
+    <value>Filter the occasions</value>
+  </data>
+  <data name="Occasions_FilterType" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="Occasions_NoneOfType" xml:space="preserve">
+    <value>There are no occasions of this type.</value>
+  </data>
 </root>

@@ -20,8 +20,12 @@ public static class CountAnswers
     {
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(text);
-        var noun = Noun(query.Filters) + (count == 1 ? "_One" : "_Other");
-        return text[noun, count.ToString("N0", CultureInfo.CurrentCulture)] + About(query.Filters, text);
+        var events = query.Aggregate?.Count == SearchCount.Events;
+        var noun = (events ? "Count_Events" : Noun(query.Filters)) + (count == 1 ? "_One" : "_Other");
+        var ofType = events && query.Filters.EventTypes is { } types
+            ? text["Count_OfType", string.Join(", ", types.Select(t => text.EventTypeLabel(t)))].Value
+            : string.Empty;
+        return text[noun, count.ToString("N0", CultureInfo.CurrentCulture)] + ofType + About(query.Filters, text);
     }
 
     /// <summary>The heading of a ranking: "Photos by year in Lisbon".</summary>
@@ -29,6 +33,11 @@ public static class CountAnswers
     {
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(text);
+        if (query.Aggregate?.GroupBy == SearchGroupBy.EventType)
+        {
+            return text["Count_ByEventType"] + About(query.Filters, text);
+        }
+
         var noun = Noun(query.Filters) switch
         {
             "Count_Photos" => text["Filter_Photos"].Value,
@@ -59,6 +68,10 @@ public static class CountAnswers
         {
             SearchGroupBy.Year when Number(g.Key) is { } year => new CountRow(g.Key!, g.Count, list with { Filters = f with { Years = [year] } }),
             SearchGroupBy.Month when Number(g.Key) is { } month => new CountRow(MonthName(month), g.Count, list with { Filters = f with { Months = [month] } }),
+            // Each type's photos; the occasions without a type have no filter to say so.
+            SearchGroupBy.EventType when g.Key is not null => new CountRow(
+                text.EventTypeLabel(g.Key), g.Count, list with { Filters = f with { EventTypes = [g.Key] } }),
+            SearchGroupBy.EventType => new CountRow(text["Count_NoType"], g.Count, null),
             SearchGroupBy.Year or SearchGroupBy.Month => new CountRow(text["NoDate"], g.Count, f.HasTimeFilter ? null : list with { Filters = f.UndatedInstead }),
             SearchGroupBy.Kind => new CountRow(
                 AssetKinds.IsVideo(g.Key ?? string.Empty) ? text["Filter_Videos"] : text["Filter_Photos"], g.Count, list with { Filters = f with { Kinds = [g.Key!] } }),

@@ -23,6 +23,13 @@ public static class UiText
     public static string DateOrNoDate(this IStringLocalizer<SharedResource> text, DateTime? value) =>
         value is { } at ? text.DateAndTime(at) : text["NoDate"];
 
+    /// <summary>An occasion type's name in the current culture (S-024): "Wedding", "Casamento"; the key itself when no text names it.</summary>
+    public static string EventTypeLabel(this IStringLocalizer<SharedResource> text, string type)
+    {
+        var label = text["EventType_" + type];
+        return label.ResourceNotFound ? type : label.Value;
+    }
+
     /// <summary>"Photo" or "Video".</summary>
     public static string KindLabel(this IStringLocalizer<SharedResource> text, string kind) =>
         AssetKinds.IsVideo(kind) ? text["Kind_Video"] : text["Kind_Photo"];

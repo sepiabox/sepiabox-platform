@@ -65,10 +65,14 @@ public static class EventBuilder
     public static bool TooFar(double kilometres) => kilometres > MaxDistanceKm;
 
     /// <summary>The great-circle distance between two geotagged assets, in kilometres (haversine).</summary>
-    public static double DistanceKm(EventAsset a, EventAsset b)
+    public static double DistanceKm(EventAsset a, EventAsset b) =>
+        DistanceKm(a.Latitude!.Value, a.Longitude!.Value, b.Latitude!.Value, b.Longitude!.Value);
+
+    /// <summary>The great-circle distance between two points in degrees, in kilometres (haversine).</summary>
+    public static double DistanceKm(double latitude1, double longitude1, double latitude2, double longitude2)
     {
-        var (lat1, lon1) = (ToRadians(a.Latitude!.Value), ToRadians(a.Longitude!.Value));
-        var (lat2, lon2) = (ToRadians(b.Latitude!.Value), ToRadians(b.Longitude!.Value));
+        var (lat1, lon1) = (ToRadians(latitude1), ToRadians(longitude1));
+        var (lat2, lon2) = (ToRadians(latitude2), ToRadians(longitude2));
         var h = Math.Pow(Math.Sin((lat2 - lat1) / 2), 2) + Math.Cos(lat1) * Math.Cos(lat2) * Math.Pow(Math.Sin((lon2 - lon1) / 2), 2);
         return 2 * EarthRadiusKm * Math.Asin(Math.Min(1, Math.Sqrt(h)));
     }

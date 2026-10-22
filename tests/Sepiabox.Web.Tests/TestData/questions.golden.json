@@ -1,5 +1,5 @@
 {
-  "description": "S-025 golden questions. Each question, in English and in Brazilian Portuguese, with the search DSL it means on the fixed day below. Results are compared on the fixture catalog in this file, not as JSON text. Visual concepts stand for CLIP embeddings: the tests' embedder maps English descriptions to them by keyword. People (S-021) are faces of named people in the assets; \"me\" is the signed-in user, linked to one of them (\"This is me\"). Saved places (S-014) are the family's own places, with made-up coordinates; an asset's location is its latitude and longitude.",
+  "description": "S-025 golden questions. Each question, in English and in Brazilian Portuguese, with the search DSL it means on the fixed day below. Results are compared on the fixture catalog in this file, not as JSON text. Visual concepts stand for CLIP embeddings: the tests' embedder maps English descriptions to them by keyword. People (S-021) are faces of named people in the assets; \"me\" is the signed-in user, linked to one of them (\"This is me\"). Saved places (S-014) are the family's own places, with made-up coordinates; an asset's location is its latitude and longitude. Occasions (S-024) are sets of the catalog's assets, by their numbers, with the type they were given or none; they are in the fixture as the worker's rebuild and classify would leave them.",
   "today": "2026-10-20",
   "timeZone": "Europe/Lisbon",
   "me": {
@@ -676,6 +676,94 @@
       ]
     }
   ],
+  "occasions": [
+    {
+      "type": "wedding",
+      "assets": [
+        8
+      ]
+    },
+    {
+      "type": "wedding",
+      "assets": [
+        9
+      ]
+    },
+    {
+      "type": "wedding",
+      "assets": [
+        10
+      ]
+    },
+    {
+      "type": "wedding",
+      "assets": [
+        11
+      ]
+    },
+    {
+      "type": "wedding",
+      "assets": [
+        30
+      ]
+    },
+    {
+      "type": "birthday",
+      "assets": [
+        44
+      ]
+    },
+    {
+      "type": "party",
+      "assets": [
+        37
+      ]
+    },
+    {
+      "type": "trip",
+      "assets": [
+        17,
+        18
+      ]
+    },
+    {
+      "type": "trip",
+      "assets": [
+        43
+      ]
+    },
+    {
+      "type": "trip",
+      "assets": [
+        13
+      ]
+    },
+    {
+      "type": "trip",
+      "assets": [
+        14
+      ]
+    },
+    {
+      "type": "trip",
+      "assets": [
+        16
+      ]
+    },
+    {
+      "type": null,
+      "assets": [
+        38,
+        39
+      ]
+    },
+    {
+      "type": null,
+      "assets": [
+        12
+      ]
+    }
+  ],
   "questions": [
     {
       "id": "lisbon-december-2019-videos",
@@ -1299,7 +1387,7 @@
       "covers": [
         "places",
         "people",
-        "unsupported filters"
+        "occasions"
       ],
       "en": "show me Ana's birthday in Sintra",
       "pt": "mostre o aniversário da Ana em Sintra",
@@ -1314,7 +1402,10 @@
             "all": [
               "Ana"
             ]
-          }
+          },
+          "eventTypes": [
+            "birthday"
+          ]
         }
       }
     },
@@ -1819,6 +1910,85 @@
         },
         "aggregate": {
           "count": "assets"
+        }
+      }
+    },
+    {
+      "id": "events-weddings-2026",
+      "covers": [
+        "occasions",
+        "counting",
+        "events"
+      ],
+      "en": "how many weddings did we go to in 2026?",
+      "pt": "quantos casamentos fomos em 2026?",
+      "expected": {
+        "filters": {
+          "years": [
+            2026
+          ],
+          "eventTypes": [
+            "wedding"
+          ]
+        },
+        "aggregate": {
+          "count": "events"
+        }
+      }
+    },
+    {
+      "id": "events-wedding-photos",
+      "covers": [
+        "occasions"
+      ],
+      "en": "photos from the weddings",
+      "pt": "fotos dos casamentos",
+      "expected": {
+        "filters": {
+          "kinds": [
+            "photo"
+          ],
+          "eventTypes": [
+            "wedding"
+          ]
+        }
+      }
+    },
+    {
+      "id": "events-per-type",
+      "covers": [
+        "occasions",
+        "counting",
+        "events",
+        "by event type"
+      ],
+      "en": "how many occasions of each type do we have?",
+      "pt": "quantas ocasiões temos de cada tipo?",
+      "expected": {
+        "filters": {},
+        "aggregate": {
+          "count": "events",
+          "groupBy": "eventType"
+        }
+      }
+    },
+    {
+      "id": "events-trips",
+      "covers": [
+        "occasions",
+        "counting",
+        "events"
+      ],
+      "en": "how many trips did we take?",
+      "pt": "quantas viagens fizemos?",
+      "expected": {
+        "filters": {
+          "eventTypes": [
+            "trip"
+          ]
+        },
+        "aggregate": {
+          "count": "events"
         }
       }
     }

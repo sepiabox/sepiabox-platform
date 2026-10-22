@@ -17,7 +17,7 @@ else
 {
     <h1 class="page-heading">@Title</h1>
     <p class="muted">
-        @Items(_occasion.AssetCount)
+        @(_occasion.Type is { } type ? Text.EventTypeLabel(type) + " · " : "")@Items(_occasion.AssetCount)
         @if (_occasion.AssetCount <= SearchQuery.DefaultLimit)
         {
             @* The timeline shows 200 at a time: past that, the link would show fewer than this page does. *@

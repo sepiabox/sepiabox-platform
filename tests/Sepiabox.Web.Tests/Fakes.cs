@@ -52,11 +52,14 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
 
     public int? RequestedOccasionsPage { get; private set; }
 
-    public Task<OccasionsPage> GetOccasionsPageAsync(int page, CancellationToken cancellationToken = default)
+    public string? RequestedOccasionType { get; private set; }
+
+    public Task<OccasionsPage> GetOccasionsPageAsync(int page, string? type = null, CancellationToken cancellationToken = default)
     {
-        RequestedOccasionsPage = page;
-        var slice = Occasions.Skip((page - 1) * OccasionPageSize).Take(OccasionPageSize).ToList();
-        return Task.FromResult(new OccasionsPage(page, slice, Occasions.Count > page * OccasionPageSize));
+        (RequestedOccasionsPage, RequestedOccasionType) = (page, type);
+        var matching = Occasions.Where(o => type is null || o.Type == type).ToList();
+        var slice = matching.Skip((page - 1) * OccasionPageSize).Take(OccasionPageSize).ToList();
+        return Task.FromResult(new OccasionsPage(page, slice, matching.Count > page * OccasionPageSize));
     }
 
     public Task<OccasionSummary?> GetOccasionAsync(long id, CancellationToken cancellationToken = default) =>

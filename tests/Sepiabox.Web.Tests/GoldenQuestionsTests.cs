@@ -29,7 +29,7 @@ public sealed class GoldenQuestionsTests
         Assert.Equal(Golden.Questions.Count, Golden.Questions.Select(q => q.Id).Distinct().Count());
         var covered = Golden.Questions.SelectMany(q => q.Covers).ToHashSet();
         Assert.Superset(
-            new HashSet<string> { "dates", "range", "on this day", "places", "Lisboa", "countries", "kinds", "sources", "descriptions", "undated", "people", "me", "saved places", "distance", "home" },
+            new HashSet<string> { "dates", "range", "on this day", "places", "Lisboa", "countries", "kinds", "sources", "descriptions", "undated", "people", "me", "saved places", "distance", "home", "occasions" },
             covered);
         // At least 10 counting questions (S-026), by year, kind, place, source and "on this day".
         var counting = Golden.Questions.Where(q => q.Expected.Contains("\"aggregate\"", StringComparison.Ordinal)).ToList();
@@ -82,6 +82,8 @@ public sealed class GoldenQuestionsTests
         Assert.DoesNotContain(context.Lists.SelectMany(l => l.Values), v => v.Contains('@', StringComparison.Ordinal));
         // The family's places by name, and which is home; never where they are (D-083).
         Assert.Equal(["Apartamento Lapa", "Casa da praia"], context.Lists.Single(l => l.Name == "saved places").Values);
+        // The occasion types the fixture's occasions have (S-024), as the DSL names them.
+        Assert.Equal(["birthday", "party", "trip", "wedding"], context.Lists.Single(l => l.Name == "occasion types").Values);
         Assert.Equal(["Apartamento Lapa"], context.Lists.Single(l => l.Name == "home place").Values);
         Assert.DoesNotContain(context.Lists.SelectMany(l => l.Values), v => v.Contains("38.", StringComparison.Ordinal));
     }

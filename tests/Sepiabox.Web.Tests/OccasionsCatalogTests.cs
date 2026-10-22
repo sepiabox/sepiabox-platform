@@ -116,6 +116,106 @@ public sealed class OccasionsCatalogTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task The_event_types_filter_finds_the_assets_in_occasions_of_any_of_the_types()
+    {
+        await using var db = await CatalogWithOccasionsAsync();
+
+        Assert.Equal([2, 1], await IdsAsync(db, new SearchFilters { EventTypes = ["wedding"] }));
+        Assert.Equal([3, 2, 1], await IdsAsync(db, new SearchFilters { EventTypes = ["wedding", "trip"] }));
+        Assert.Empty(await IdsAsync(db, new SearchFilters { EventTypes = ["party"] }));
+        // The occasion without a type, and assets in none, never match a type.
+        Assert.Equal([3], await IdsAsync(db, new SearchFilters { EventTypes = ["trip"] }));
+    }
+
+    [Fact]
+    public async Task Counts_the_occasions_of_a_type_each_once_and_groups_them_by_type()
+    {
+        await using var db = await CatalogWithOccasionsAsync();
+        var search = new SearchService(db, s_clock);
+        // A third occasion, without a type yet.
+        db.Assets.Add(CatalogData.Photo(Ids.Of(5), new DateTime(2023, 1, 1)));
+        await db.SaveChangesAsync();
+        var untyped = new Occasion { Id = 3, StartsAt = new DateTime(2023, 1, 1), EndsAt = new DateTime(2023, 1, 1), AssetCount = 1 };
+        db.Occasions.Add(untyped);
+        await db.SaveChangesAsync();
+        db.OccasionAssets.Add(new OccasionAsset { EventId = untyped.Id, AssetId = Ids.Of(5) });
+        await db.SaveChangesAsync();
+
+        // Two assets of occasion 1 match, and it counts once.
+        var weddings = await search.CountAsync(new SearchQuery
+        {
+            Filters = new SearchFilters { EventTypes = ["wedding"], Years = [2024] },
+            Aggregate = new SearchAggregate { Count = SearchCount.Events },
+        });
+        var byType = await search.CountAsync(new SearchQuery
+        {
+            Aggregate = new SearchAggregate { Count = SearchCount.Events, GroupBy = SearchGroupBy.EventType },
+        });
+
+        Assert.Equal((1, null), (weddings!.Total, weddings.Undated));
+        Assert.Equal(3, byType!.Total);
+        Assert.Equal([("trip", 1), ("wedding", 1), (null, 1)], byType.Groups.Select(g => (g.Key, g.Count)));
+        Assert.Equal(3, byType.AllGroups);
+    }
+
+    [Fact]
+    public async Task Four_wedding_occasions_in_2026_count_as_four_whatever_the_number_of_photos()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        for (var n = 1; n <= 5; n++)
+        {
+            db.Assets.Add(CatalogData.Photo(Ids.Of(n), new DateTime(2026, n, 1)));
+            db.Assets.Add(CatalogData.Photo(Ids.Of(n + 10), new DateTime(2026, n, 1, 20, 0, 0)));
+        }
+
+        db.Assets.Add(CatalogData.Photo(Ids.Of(30), new DateTime(2025, 6, 1)));
+        await db.SaveChangesAsync();
+        // Occasions 1 to 4 are weddings in 2026 with two photos each, 5 a party, and a wedding in 2025.
+        for (var n = 1; n <= 5; n++)
+        {
+            db.Occasions.Add(new Occasion { StartsAt = new DateTime(2026, n, 1), EndsAt = new DateTime(2026, n, 1, 20, 0, 0), AssetCount = 2, Type = n <= 4 ? "wedding" : "party" });
+        }
+
+        db.Occasions.Add(new Occasion { StartsAt = new DateTime(2025, 6, 1), EndsAt = new DateTime(2025, 6, 1), AssetCount = 1, Type = "wedding" });
+        await db.SaveChangesAsync();
+        var ids = await db.Occasions.OrderBy(o => o.StartsAt).Select(o => o.Id).ToListAsync();
+        for (var n = 1; n <= 5; n++)
+        {
+            db.OccasionAssets.AddRange(
+                new OccasionAsset { EventId = ids[n], AssetId = Ids.Of(n) },
+                new OccasionAsset { EventId = ids[n], AssetId = Ids.Of(n + 10) });
+        }
+
+        db.OccasionAssets.Add(new OccasionAsset { EventId = ids[0], AssetId = Ids.Of(30) });
+        await db.SaveChangesAsync();
+
+        var count = await new SearchService(db, s_clock).CountAsync(new SearchQuery
+        {
+            Filters = new SearchFilters { EventTypes = ["wedding"], Years = [2026] },
+            Aggregate = new SearchAggregate { Count = SearchCount.Events },
+        });
+
+        Assert.Equal(4, count!.Total);
+    }
+
+    [Fact]
+    public async Task Lists_only_the_occasions_of_a_type_and_offers_the_types_the_catalog_has()
+    {
+        await using var db = await CatalogWithOccasionsAsync();
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var trips = await queries.GetOccasionsPageAsync(1, "trip");
+        var all = await queries.GetOccasionsPageAsync(1, "not a type");
+
+        Assert.Equal([2L], trips.Items.Select(o => o.Id));
+        Assert.Equal("trip", trips.Items[0].Type);
+        Assert.Equal(2, all.Items.Count);
+        // Trip and wedding, in the order of the types; the occasion without a type adds none.
+        Assert.Equal(["wedding", "trip"], (await queries.GetFilterOptionsAsync()).EventTypes);
+        Assert.Equal("wedding", (await queries.GetOccasionAsync(1))!.Type);
+    }
+
+    [Fact]
     public async Task Deleting_an_asset_takes_it_out_of_its_occasion()
     {
         await using var db = await CatalogWithOccasionsAsync();
@@ -135,8 +235,8 @@ public sealed class OccasionsCatalogTests(CatalogFixture catalog)
             CatalogData.Photo(Ids.Of(3), new DateTime(2025, 3, 2, 12, 0, 0)),
             CatalogData.Photo(Ids.Of(4), null));
         db.Occasions.AddRange(
-            new Occasion { Id = 1, StartsAt = new DateTime(2024, 12, 14, 9, 0, 0), EndsAt = new DateTime(2024, 12, 14, 10, 0, 0), PlaceLabel = "Lisbon", AssetCount = 2 },
-            new Occasion { Id = 2, StartsAt = new DateTime(2025, 3, 2, 12, 0, 0), EndsAt = new DateTime(2025, 3, 2, 12, 0, 0), AssetCount = 1 });
+            new Occasion { Id = 1, StartsAt = new DateTime(2024, 12, 14, 9, 0, 0), EndsAt = new DateTime(2024, 12, 14, 10, 0, 0), PlaceLabel = "Lisbon", AssetCount = 2, Type = "wedding" },
+            new Occasion { Id = 2, StartsAt = new DateTime(2025, 3, 2, 12, 0, 0), EndsAt = new DateTime(2025, 3, 2, 12, 0, 0), AssetCount = 1, Type = "trip" });
         await db.SaveChangesAsync();
         db.OccasionAssets.AddRange(
             new OccasionAsset { EventId = 1, AssetId = Ids.Of(1) },
