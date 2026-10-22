@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Components.Forms;
 using Sepiabox.Catalog;
 using Sepiabox.Web.Auth;
 using Sepiabox.Web.Components.Pages;
@@ -182,6 +183,7 @@ public sealed class MicrosoftOneDriveHttpTests
 }
 
 /// <summary>OneDrive connections on the catalog (S-039): the rolled refresh token is the one kept.</summary>
+[Collection(CatalogGroup.Name)]
 public sealed class OneDriveConnectionTests(CatalogFixture catalog)
 {
     private const string Redirect = "https://app.example.com/sources/onedrive/callback";
@@ -291,6 +293,7 @@ public sealed class OneDriveConnectionTests(CatalogFixture catalog)
 }
 
 /// <summary>"Open original" for a OneDrive source (S-039): the rolled token is kept, a refused one asks to reconnect.</summary>
+[Collection(CatalogGroup.Name)]
 public sealed class OneDriveOriginalTests(CatalogFixture catalog)
 {
     private const string Account = "ana@outlook.com";
@@ -408,10 +411,11 @@ public sealed class OneDriveEndpointTests
         var state = await StartAsync(http);
 
         var denied = await http.GetAsync(new Uri($"{SourceEndpoints.OneDriveCallbackPath}?error=access_denied&state={Uri.EscapeDataString(state)}", UriKind.Relative));
+        // The callback deleted the state cookie, so a second connection starts again.
+        state = await StartAsync(http);
         var failed = await http.GetAsync(new Uri($"{SourceEndpoints.OneDriveCallbackPath}?code=c&state={Uri.EscapeDataString(state)}", UriKind.Relative));
 
         Assert.Equal("/sources?note=onedrive-denied", denied.Headers.Location!.OriginalString);
-        // The first callback deleted the cookie in the response, but this client keeps it: the state is still this browser's.
         Assert.Equal("/sources?note=onedrive-failed", failed.Headers.Location!.OriginalString);
     }
 
@@ -450,7 +454,7 @@ public sealed class OneDriveSourcesPageTests : LocalizedContext
     public OneDriveSourcesPageTests()
     {
         Services.AddSingleton<IConnectedSources>(_sources);
-        Services.AddSingleton<Microsoft.AspNetCore.Components.Forms.AntiforgeryStateProvider>(new FixedAntiforgery());
+        Services.AddSingleton<AntiforgeryStateProvider>(new FixedAntiforgery());
     }
 
     [Fact]
@@ -500,5 +504,10 @@ public sealed class OneDriveSourcesPageTests : LocalizedContext
         Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo($"/sources?note={note}");
 
         Assert.Equal(text, Render<ConnectedAccounts>().Find("p.note").TextContent);
+    }
+
+    private sealed class FixedAntiforgery : AntiforgeryStateProvider
+    {
+        public override AntiforgeryRequestToken GetAntiforgeryToken() => new("test-token", "__RequestVerificationToken");
     }
 }

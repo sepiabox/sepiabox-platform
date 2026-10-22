@@ -1,3 +1,4 @@
+using Sepiabox.Catalog;
 using Azure;
 using Microsoft.Extensions.Logging;
 using Sepiabox.Web.Services;

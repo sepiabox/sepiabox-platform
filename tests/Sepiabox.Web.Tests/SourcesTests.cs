@@ -780,7 +780,7 @@ public sealed class SourcesPageWithoutGoogleTests : LocalizedContext
 {
     public SourcesPageWithoutGoogleTests()
     {
-        Services.AddSingleton<IConnectedSources>(new FakeConnectedSources { CanConnectGoogleDrive = false });
+        Services.AddSingleton<IConnectedSources>(new FakeConnectedSources { CanConnectGoogleDrive = false, CanConnectOneDrive = false });
         Services.AddSingleton<AntiforgeryStateProvider>(new FixedAntiforgery());
     }
 
