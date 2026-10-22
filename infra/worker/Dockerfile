@@ -10,7 +10,8 @@ RUN dotnet publish src/Sepiabox.Worker/Sepiabox.Worker.csproj --configuration Re
 RUN dotnet run --project src/Sepiabox.Ingest --configuration Release -- models download --models /models \
     --only clip-vit-b32-vision,yunet-2023mar,sface-2021dec
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0
+# ASP.NET Core, not the plain runtime: ServiceDefaults (health checks, OpenTelemetry) references Microsoft.AspNetCore.App.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 # ffprobe comes with the ffmpeg package.
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ffmpeg \

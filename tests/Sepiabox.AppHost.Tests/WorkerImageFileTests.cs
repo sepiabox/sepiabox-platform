@@ -11,7 +11,9 @@ public sealed class WorkerImageFileTests
     [Fact]
     public void Installs_ffmpeg_in_the_runtime_stage_and_runs_the_worker_as_the_app_user()
     {
-        var runtime = s_dockerfile[s_dockerfile.LastIndexOf("FROM mcr.microsoft.com/dotnet/runtime", StringComparison.Ordinal)..];
+        // The plain runtime image fails at start: ServiceDefaults references Microsoft.AspNetCore.App.
+        Assert.DoesNotContain("FROM mcr.microsoft.com/dotnet/runtime", s_dockerfile, StringComparison.Ordinal);
+        var runtime = s_dockerfile[s_dockerfile.LastIndexOf("FROM mcr.microsoft.com/dotnet/aspnet:10.0", StringComparison.Ordinal)..];
 
         Assert.Contains("apt-get install --yes --no-install-recommends ffmpeg", runtime, StringComparison.Ordinal);
         Assert.Contains("USER app", runtime, StringComparison.Ordinal);
@@ -39,5 +41,7 @@ public sealed class WorkerImageFileTests
         Assert.Contains("entrypoint ffmpeg", workflow, StringComparison.Ordinal);
         Assert.Contains("**/bin/", ignore, StringComparison.Ordinal);
         Assert.Contains(".git/", ignore, StringComparison.Ordinal);
+        // Sepiabox.Search and Sepiabox.Pipeline embed docs/schemas/*.json, so the context must keep that folder.
+        Assert.Contains("!docs/schemas/", ignore, StringComparison.Ordinal);
     }
 }
