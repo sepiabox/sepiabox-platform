@@ -220,6 +220,7 @@ public static class ProcessCommand
         // next run tries again from the work folder.
         const string EmbeddingFailed = "Could not compute the embedding";
         const string FacesFailed = "Could not detect faces";
+        const string QualityFailed = "Could not measure its sharpness";
         const string UpdateFailed = "Could not update its manifest";
 
         // For a new file: Added is counted by the caller once the manifest is written.
@@ -235,9 +236,10 @@ public static class ProcessCommand
             var path = ManifestPath(manifestFolder, assetId);
             // Neither step in particular failed when this throws, so the message names the manifest, not a step.
             var outcome = Try(
-                sourcePath, embedder is not null ? o.EmbeddingProblems : o.FaceProblems, UpdateFailed,
-                () => WorkFolderManifest.TryAdd(path, output, embedder, faces, clock));
+                sourcePath, embedder is not null || faces is null ? o.EmbeddingProblems : o.FaceProblems, UpdateFailed,
+                () => WorkFolderManifest.TryAdd(path, output, embedder, faces, clock, quality: true));
             Record(o, sourcePath, assetId, outcome?.Embedding, o.EmbeddingProblems, o.WithoutPreviewForEmbedding);
+            Record(o, sourcePath, assetId, outcome?.Quality, o.EmbeddingProblems, o.WithoutPreviewForEmbedding);
             o.Embedded += outcome?.Embedding?.Status == EmbeddingStatus.Added ? 1 : 0;
             CountFaces(o, Record(o, sourcePath, assetId, outcome?.Faces, o.FaceProblems, o.WithoutPreviewForFaces));
         }
@@ -468,8 +470,9 @@ public static class ProcessCommand
                 }
 
                 // The model may have been downloaded, or --faces given, after this file was processed: both come
-                // from the thumbnails in the work folder, so the drive is not read again.
-                return embedder is not null || faces is not null
+                // from the thumbnails in the work folder, so the drive is not read again. So does a photo's sharpness
+                // (S-027, D-098), which every photo gets.
+                return embedder is not null || faces is not null || kind == MediaKind.Photo
                     ? new Plan(file, kind, done, null, null, doneSha256)
                     : null;
             }
@@ -685,7 +688,7 @@ public static class ProcessCommand
                         RefreshMetadata(o, file, doneSha256, plan.Previous!);
                     }
 
-                    if (embedder is not null || faces is not null)
+                    if (embedder is not null || faces is not null || plan.Kind == MediaKind.Photo)
                     {
                         AddToUnchanged(o, file.Path, doneSha256);
                     }
@@ -784,6 +787,16 @@ public static class ProcessCommand
                         var outcome = AddEmbedding(o, file.Path, sha256, () => ManifestEmbeddings.TryAdd(withDerivatives, output, embedder));
                         embeddingAdded = outcome?.Status == EmbeddingStatus.Added;
                         manifest = outcome?.Manifest ?? manifest;
+                    }
+
+                    if (kind == MediaKind.Photo && status == FileStatus.Done)
+                    {
+                        var withEmbedding = manifest;
+                        var measured = Record(
+                            o, file.Path, sha256,
+                            Try(file.Path, o.EmbeddingProblems, QualityFailed, () => ManifestQualityStep.TryAdd(withEmbedding, output)),
+                            o.EmbeddingProblems, o.WithoutPreviewForEmbedding);
+                        manifest = measured?.Manifest ?? manifest;
                     }
 
                     EmbeddingOutcome? facesOutcome = null;

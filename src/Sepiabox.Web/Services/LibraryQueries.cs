@@ -300,6 +300,7 @@ public sealed class LibraryQueries(
             SELECT a.id, a.kind, a.captured_at, a.duration_seconds,
                    EXISTS (SELECT 1 FROM derivatives d WHERE d.asset_id = a.id AND d.name = {DerivativeNames.Thumbnail}) AS has_thumbnail
             FROM assets a
+            WHERE NOT a.hidden
             ORDER BY a.captured_at DESC NULLS LAST, a.id
             OFFSET {offset} LIMIT {PageSize + 1}
             """).ToListAsync(cancellationToken);
@@ -325,10 +326,12 @@ public sealed class LibraryQueries(
             .Skip(skip).Take(OccasionsPageSize + 1)
             .ToListAsync(cancellationToken);
         var shown = rows.Take(OccasionsPageSize).ToList();
-        var thumbnails = await OccasionThumbnailsAsync(db, [.. shown.Select(o => o.Id)], cancellationToken);
+        var ids = shown.Select(o => o.Id).ToArray();
+        var thumbnails = await OccasionThumbnailsAsync(db, ids, cancellationToken);
+        var hidden = await HiddenCountsAsync(db, ids, cancellationToken);
         return new OccasionsPage(
             page,
-            [.. shown.Select(o => Summary(o, thumbnails))],
+            [.. shown.Select(o => Summary(o, thumbnails, hidden))],
             rows.Count > OccasionsPageSize && page < MaxPage);
     }
 
@@ -336,11 +339,19 @@ public sealed class LibraryQueries(
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var occasion = await db.Occasions.AsNoTracking().SingleOrDefaultAsync(o => o.Id == id, cancellationToken);
-        return occasion is null ? null : Summary(occasion, []);
+        return occasion is null ? null : Summary(occasion, [], await HiddenCountsAsync(db, [id], cancellationToken));
     }
 
-    private static OccasionSummary Summary(Occasion occasion, Dictionary<long, List<string>> thumbnails) =>
-        new(occasion.Id, occasion.StartsAt, occasion.EndsAt, occasion.PlaceLabel, occasion.AssetCount,
+    // An occasion's count is of what its page shows: photos set aside (S-027) are in the occasion but not in its grid.
+    private static async Task<Dictionary<long, int>> HiddenCountsAsync(CatalogDbContext db, long[] eventIds, CancellationToken cancellationToken) =>
+        await db.OccasionAssets.AsNoTracking()
+            .Where(ea => eventIds.Contains(ea.EventId) && db.Assets.Any(a => a.Id == ea.AssetId && a.Hidden))
+            .GroupBy(ea => ea.EventId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Key, g => g.Count, cancellationToken);
+
+    private static OccasionSummary Summary(Occasion occasion, Dictionary<long, List<string>> thumbnails, Dictionary<long, int> hidden) =>
+        new(occasion.Id, occasion.StartsAt, occasion.EndsAt, occasion.PlaceLabel, Math.Max(0, occasion.AssetCount - hidden.GetValueOrDefault(occasion.Id)),
             thumbnails.GetValueOrDefault(occasion.Id) ?? [])
         {
             Type = occasion.Type,
@@ -357,7 +368,7 @@ public sealed class LibraryQueries(
                        row_number() OVER (PARTITION BY ea.event_id ORDER BY a.captured_at, a.id) AS rn
                 FROM event_assets ea
                 JOIN assets a ON a.id = ea.asset_id
-                WHERE ea.event_id = ANY({eventIds})
+                WHERE ea.event_id = ANY({eventIds}) AND NOT a.hidden
                   AND EXISTS (SELECT 1 FROM derivatives d WHERE d.asset_id = a.id AND d.name = {DerivativeNames.Thumbnail})
             ) t
             WHERE t.rn <= {OccasionThumbnails}
@@ -480,7 +491,7 @@ public sealed class LibraryQueries(
 
         var inSeveral = await Described(search.Query(several).Take(StorageListLength));
         var largest = await Described(
-            db.Assets.AsNoTracking().Where(a => a.Kind == AssetKinds.Video)
+            db.Assets.AsNoTracking().Where(a => a.Kind == AssetKinds.Video && !a.Hidden)
                 .OrderByDescending(a => a.SizeBytes).ThenBy(a => a.Id).Take(LargestVideosLength));
         return new StorageReport(
             rows, oneCount!.Total, oneCount.Bytes ?? 0, severalCount!.Total, severalCount.Bytes ?? 0, inSeveral, largest);

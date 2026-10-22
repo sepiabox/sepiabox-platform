@@ -77,6 +77,12 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             // True for every asset before index-only mode (S-063). Never generated, as belt and braces: a column with a
             // default and a CLR default of false is the case where EF may leave the value out of the insert.
             asset.Property(a => a.OriginalStored).HasDefaultValue(true).ValueGeneratedNever();
+            asset.Property(a => a.DHash).HasColumnName("dhash").HasMaxLength(16);
+            // Set aside, S-027: a person's choice, so a new asset is never hidden and an import never changes it.
+            asset.Property(a => a.Hidden).HasDefaultValue(false).ValueGeneratedNever();
+            // The organize page's lists of blurry photos and of hidden ones.
+            asset.HasIndex(a => a.Sharpness).HasDatabaseName("ix_assets_sharpness").HasFilter("sharpness IS NOT NULL");
+            asset.HasIndex(a => a.Hidden).HasDatabaseName("ix_assets_hidden").HasFilter("hidden");
             // Camera clocks have no time zone, so the value is stored exactly as read.
             asset.Property(a => a.CapturedAt).HasColumnType("timestamp without time zone");
             asset.Property(a => a.Location).HasColumnType("geography (Point, 4326)");
