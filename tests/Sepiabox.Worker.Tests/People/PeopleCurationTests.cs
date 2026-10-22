@@ -41,10 +41,11 @@ public sealed class PeopleCurationTests(CatalogFixture fixture)
 
         Assert.Equal(CurationOutcome.Done, outcome);
         var person = await db.People.AsNoTracking().SingleAsync();
-        Assert.Equal((keep.Id, 5, "Bruno"), (person.Id, person.FaceCount, person.Name));
+        // The named person stays, whichever order the two were given in (D-125).
+        Assert.Equal((other.Id, 5, "Bruno"), (person.Id, person.FaceCount, person.Name));
         var faces = await db.Faces.AsNoTracking().ToListAsync();
-        Assert.All(faces, f => Assert.Equal(keep.Id, f.PersonId));
-        Assert.Equal(3, faces.Count(f => f.Assignment == FaceAssignments.Manual));
+        Assert.All(faces, f => Assert.Equal(other.Id, f.PersonId));
+        Assert.Equal(2, faces.Count(f => f.Assignment == FaceAssignments.Manual));
         var centroid = person.Centroid!.ToArray();
         var expected = FaceMath.Centroid([.. a, .. b])!;
         Assert.True(FaceMath.Cosine(expected, centroid) > 0.99999);
@@ -319,6 +320,85 @@ public sealed class PeopleCurationTests(CatalogFixture fixture)
         Assert.Equal(2, await db.People.CountAsync());
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Keeps_the_named_person_the_user_s_person_or_the_larger_one_whatever_order_they_are_given_in(bool swapOrder, bool linkedStays)
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        // The named one has 3 faces, the unnamed 12; with a link, the linked unnamed 2-face person beats the named one of 30.
+        var (stays, leaves) = linkedStays
+            ? (await PersonAsync(db, null, 2, 1, user: Ana), await PersonAsync(db, "Carla", 30, 100))
+            : (await PersonAsync(db, "Dora", 3, 1), await PersonAsync(db, null, 12, 100));
+        var (first, second) = swapOrder ? (leaves, stays) : (stays, leaves);
+
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MergeAsync(first, second));
+
+        var person = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal(stays, person.Id);
+        Assert.Equal(linkedStays ? 32 : 15, await db.Faces.CountAsync(f => f.PersonId == stays));
+    }
+
+    [Fact]
+    public async Task Keeps_the_person_with_more_faces_when_both_are_named_or_neither_is_and_the_older_on_a_tie()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var small = await PersonAsync(db, "Eva", 2, 1);
+        var large = await PersonAsync(db, "Fábio", 5, 100);
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MergeAsync(small, large));
+        Assert.Equal(large, (await db.People.AsNoTracking().SingleAsync()).Id);
+
+        await using var tied = await fixture.CreateMigratedDatabaseAsync();
+        var younger = await PersonAsync(tied, null, 3, 1);
+        var older = await PersonAsync(tied, null, 3, 100);
+        Assert.Equal(CurationOutcome.Done, await Curation(tied).MergeAsync(older, younger));
+        Assert.Equal(Math.Min(younger, older), (await tied.People.AsNoTracking().SingleAsync()).Id);
+    }
+
+    [Fact]
+    public async Task Merges_the_other_way_only_when_the_swap_is_explicit_and_the_name_goes_with_the_one_that_stays()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var named = await PersonAsync(db, "Gil", 3, 1);
+        var unnamed = await PersonAsync(db, null, 12, 100);
+
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MergeAsync(named, unnamed, swap: true));
+
+        var person = await db.People.AsNoTracking().SingleAsync();
+        // The unnamed person stays, and takes the name of the one that left, as a merge always did.
+        Assert.Equal((unnamed, "Gil", 15), (person.Id, person.Name, person.FaceCount));
+    }
+
+    [Fact]
+    public async Task Moves_the_user_link_to_the_person_that_stays_when_a_swap_merges_the_linked_one_away()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var me = await PersonAsync(db, null, 2, 1, user: Ana);
+        var other = await PersonAsync(db, null, 40, 100);
+
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MergeAsync(me, other, swap: true));
+
+        var person = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal((other, Ana), (person.Id, person.UserEmail));
+    }
+
+    [Fact]
+    public async Task A_stale_or_hand_made_request_cannot_delete_a_named_or_linked_person_without_a_swap()
+    {
+        await using var db = await fixture.CreateMigratedDatabaseAsync();
+        var named = await PersonAsync(db, "Hana", 1500, 1);
+        var unnamed = await PersonAsync(db, null, 100, 5000);
+        var me = await PersonAsync(db, null, 1, 9000, user: Ana);
+
+        // The page said the unnamed one stays; the request still cannot make the named one the one that goes.
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MergeAsync(unnamed, named));
+        Assert.Equal([named, me], (await db.People.AsNoTracking().OrderBy(p => p.Id).Select(p => p.Id).ToListAsync()));
+        Assert.Equal(CurationOutcome.Done, await Curation(db).MergeAsync(named, me));
+        var person = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal((me, Ana, "Hana"), (person.Id, person.UserEmail, person.Name));
+    }
+
     private static PeopleCuration Curation(CatalogDbContext db) => new(db);
 
     // Two people, either from imported faces or made directly, oldest first.
@@ -352,4 +432,20 @@ public sealed class PeopleCurationTests(CatalogFixture fixture)
     private static async Task PutAsync(BlobContainerClient container, Manifest manifest) =>
         await container.GetBlobClient(BlobLayout.ManifestBlobName(manifest.Id))
             .UploadAsync(BinaryData.FromString(ManifestJson.Serialize(manifest)), overwrite: true);
+
+    // A person with n counted faces, each in a photo of its own (ids from the base), made by hand: the importer is not the subject here.
+    private static async Task<long> PersonAsync(CatalogDbContext db, string? name, int faces, int baseId, string? user = null)
+    {
+        var person = new Person { Name = name, UserEmail = user, FaceCount = faces };
+        db.People.Add(person);
+        for (var i = 0; i < faces; i++)
+        {
+            var id = (baseId + i).ToString("x64", System.Globalization.CultureInfo.InvariantCulture);
+            db.Assets.Add(new Asset { Id = id, Kind = "photo", ContentType = "image/jpeg", SizeBytes = 1 });
+            db.Faces.Add(new Face { AssetId = id, Person = person, Score = 0.9, Box = [0.1, 0.1, 0.2, 0.2], Embedding = new Pgvector.Vector(SyntheticFaces.Unit(seed: baseId + i)), Assignment = FaceAssignments.Auto });
+        }
+
+        await db.SaveChangesAsync();
+        return person.Id;
+    }
 }

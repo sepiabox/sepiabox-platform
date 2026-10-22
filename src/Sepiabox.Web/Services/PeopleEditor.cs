@@ -13,7 +13,7 @@ public interface IPeopleEditor
 
     Task<CurationOutcome> UnlinkUserAsync(long personId, string email, CancellationToken cancellationToken = default);
 
-    Task<CurationOutcome> MergeAsync(long personId, long otherId, CancellationToken cancellationToken = default);
+    Task<CurationOutcome> MergeAsync(long personId, long otherId, bool swap = false, CancellationToken cancellationToken = default);
 
     Task<CurationOutcome> NotThisPersonAsync(long personId, long faceId, CancellationToken cancellationToken = default);
 
@@ -37,8 +37,8 @@ public sealed class PeopleEditor(IDbContextFactory<CatalogDbContext> contexts) :
     public Task<CurationOutcome> UnlinkUserAsync(long personId, string email, CancellationToken cancellationToken = default) =>
         WithAsync(c => c.UnlinkUserAsync(personId, email, cancellationToken), cancellationToken);
 
-    public Task<CurationOutcome> MergeAsync(long personId, long otherId, CancellationToken cancellationToken = default) =>
-        WithAsync(c => c.MergeAsync(personId, otherId, cancellationToken), cancellationToken);
+    public Task<CurationOutcome> MergeAsync(long personId, long otherId, bool swap = false, CancellationToken cancellationToken = default) =>
+        WithAsync(c => c.MergeAsync(personId, otherId, swap, cancellationToken), cancellationToken);
 
     public Task<CurationOutcome> NotThisPersonAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
         WithAsync(c => c.NotThisPersonAsync(personId, faceId, cancellationToken), cancellationToken);
