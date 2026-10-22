@@ -362,3 +362,54 @@ public sealed class OccasionAsset
 
     public required string AssetId { get; set; }
 }
+
+/// <summary>
+/// An account of a cloud service the family connected (S-037, D-097): the library is shared, so a connection belongs to
+/// no user (D-018). Its token is stored protected, never in clear text; disconnecting deletes the row.
+/// </summary>
+public sealed class ConnectedSource
+{
+    public long Id { get; set; }
+
+    /// <summary>One of <see cref="ConnectedSourceTypes"/>.</summary>
+    public required string Type { get; set; }
+
+    /// <summary>The account's address at the service, lower-cased; a type has one connection per address.</summary>
+    public required string AccountEmail { get; set; }
+
+    /// <summary>The refresh token, protected by ASP.NET Data Protection; only the web reads it (S-037).</summary>
+    public required string EncryptedRefreshToken { get; set; }
+
+    /// <summary>One of <see cref="ConnectedSourceStatuses"/>.</summary>
+    public required string Status { get; set; }
+
+    public DateTimeOffset ConnectedAt { get; set; }
+
+    /// <summary>When the source was last synchronised (S-038); null until then.</summary>
+    public DateTimeOffset? LastSyncAt { get; set; }
+
+    /// <summary>Photos and videos found by the last count, without importing them; null before one.</summary>
+    public int? PhotoCount { get; set; }
+
+    public int? VideoCount { get; set; }
+
+    public DateTimeOffset? CountedAt { get; set; }
+}
+
+/// <summary>The services a <see cref="ConnectedSource"/> can be.</summary>
+public static class ConnectedSourceTypes
+{
+    public const string GoogleDrive = "google-drive";
+}
+
+/// <summary>Whether a connection works.</summary>
+public static class ConnectedSourceStatuses
+{
+    public const string Connected = "connected";
+
+    /// <summary>
+    /// The service no longer honours the token (<c>invalid_grant</c>: the consent screen in Testing mode expires it after
+    /// 7 days, D-024, or it was revoked): the family has to connect again.
+    /// </summary>
+    public const string Reconnect = "reconnect";
+}

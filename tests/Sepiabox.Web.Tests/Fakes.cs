@@ -1,6 +1,7 @@
 using Azure;
 using Microsoft.Extensions.Logging;
 using Sepiabox.Web.Services;
+using Sepiabox.Web.Sources;
 
 namespace Sepiabox.Web.Tests;
 
@@ -383,5 +384,93 @@ internal sealed class FakeSavedPlaces : ISavedPlaces
     {
         Calls.Add(call);
         return Task.FromResult(Outcome);
+    }
+}
+
+/// <summary>An in-memory list of connected accounts (S-037), recording what the page and the endpoints ask of it.</summary>
+internal sealed class FakeConnectedSources : IConnectedSources
+{
+    public bool CanConnectGoogleDrive { get; init; } = true;
+
+    public List<ConnectedSourceSummary> Sources { get; } = [];
+
+    public SourceOutcome Completes { get; init; } = SourceOutcome.Done;
+
+    public SourceOutcome Counts { get; init; } = SourceOutcome.Done;
+
+    /// <summary>The codes and redirect addresses connections were completed with.</summary>
+    public List<(string Code, string RedirectUri)> Completed { get; } = [];
+
+    public List<long> Counted { get; } = [];
+
+    public List<long> Disconnected { get; } = [];
+
+    public Task<IReadOnlyList<ConnectedSourceSummary>> ListAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ConnectedSourceSummary>>([.. Sources]);
+
+    public Uri GoogleDriveAuthorizationUri(string redirectUri, string state) =>
+        new($"https://accounts.example.com/authorize?redirect_uri={Uri.EscapeDataString(redirectUri)}&state={Uri.EscapeDataString(state)}");
+
+    public Task<SourceOutcome> CompleteGoogleDriveConnectionAsync(string code, string redirectUri, CancellationToken cancellationToken = default)
+    {
+        Completed.Add((code, redirectUri));
+        return Task.FromResult(Completes);
+    }
+
+    public Task<SourceOutcome> CountAsync(long id, CancellationToken cancellationToken = default)
+    {
+        Counted.Add(id);
+        return Task.FromResult(Counts);
+    }
+
+    public Task<SourceOutcome> DisconnectAsync(long id, CancellationToken cancellationToken = default)
+    {
+        Disconnected.Add(id);
+        return Task.FromResult(SourceOutcome.Done);
+    }
+}
+
+/// <summary>A Drive that never reaches Google (S-037): a fixed account and count, or the failure a test sets.</summary>
+internal sealed class FakeDrive : IDriveClient, IDriveAuthorization
+{
+    public bool IsConfigured { get; init; } = true;
+
+    public string Email { get; set; } = "Ana@example.com";
+
+    public DriveMediaCount Media { get; set; } = new(12, 3);
+
+    /// <summary>When set, every call with a token throws what it returns (an invalid grant, or Google being down).</summary>
+    public Func<Exception?>? Failure { get; set; }
+
+    /// <summary>The refresh token a code is exchanged for; null makes the exchange fail like a refused code.</summary>
+    public string? RefreshToken { get; set; } = "1//refresh-token-in-clear-text";
+
+    public List<string> TokensUsed { get; } = [];
+
+    public List<string> Revoked { get; } = [];
+
+    public Exception? RevokeFailure { get; set; }
+
+    public Uri AuthorizationUri(string redirectUri, string state) => new($"https://accounts.example.com/authorize?state={state}");
+
+    public Task<string> ExchangeCodeAsync(string code, string redirectUri, CancellationToken cancellationToken = default) =>
+        RefreshToken is { } token ? Task.FromResult(token) : Task.FromException<string>(new DriveAuthorizationException("refused"));
+
+    public Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
+    {
+        Revoked.Add(refreshToken);
+        return RevokeFailure is { } failure ? Task.FromException(failure) : Task.CompletedTask;
+    }
+
+    public Task<string> GetAccountEmailAsync(string refreshToken, CancellationToken cancellationToken = default)
+    {
+        TokensUsed.Add(refreshToken);
+        return Failure?.Invoke() is { } failure ? Task.FromException<string>(failure) : Task.FromResult(Email);
+    }
+
+    public Task<DriveMediaCount> CountMediaAsync(string refreshToken, CancellationToken cancellationToken = default)
+    {
+        TokensUsed.Add(refreshToken);
+        return Failure?.Invoke() is { } failure ? Task.FromException<DriveMediaCount>(failure) : Task.FromResult(Media);
     }
 }

@@ -855,3 +855,60 @@ main {
 .storage-assets .size {
     font-variant-numeric: tabular-nums;
 }
+
+/* The connected accounts (S-037): one block per account, its counts and its actions. */
+.connections {
+    display: grid;
+    gap: 16px;
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+}
+
+.connection {
+    padding: 16px;
+    background: var(--white);
+    border: 1px solid var(--mat);
+    border-radius: 4px;
+}
+
+.connection p {
+    margin: 0 0 8px;
+}
+
+.connection-account .status {
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    background: var(--chip);
+    color: var(--cyanotype);
+}
+
+.connection-account .status-expired {
+    background: transparent;
+    border: 1px solid var(--sepia);
+    color: var(--sepia);
+}
+
+.connection .counts span {
+    margin-right: 16px;
+}
+
+.connection-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
+}
+
+.button.secondary {
+    background: transparent;
+    color: var(--cyanotype);
+    border: 1px solid var(--mat);
+}
+
+.button.secondary:hover:not(:disabled) {
+    background: var(--chip);
+    color: var(--cyanotype-hover);
+}
