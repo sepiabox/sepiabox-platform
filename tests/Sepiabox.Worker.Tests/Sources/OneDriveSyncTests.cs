@@ -81,6 +81,22 @@ public sealed class OneDriveSyncTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task A_delta_link_microsoft_no_longer_honours_lists_the_onedrive_again_and_stages_only_what_is_new()
+    {
+        var (db, store, onedrive, _) = await SetUpAsync(files: 2);
+        await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+        onedrive.AddFile("id-new", "new.jpg", "image/jpeg");
+        onedrive.ResyncOnNextDelta = true;
+
+        var result = await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+
+        Assert.Equal((1, 1, 0), (result.Staged, result.Accounts, result.Failed));
+        Assert.Equal(3, (await store.ListAsync("incoming").ToListAsync()).Count);
+        Assert.Equal(1, onedrive.FullListings - 1);
+        Assert.NotNull((await db.ConnectedSources.AsNoTracking().SingleAsync()).SyncChangesToken);
+    }
+
+    [Fact]
     public async Task A_refresh_token_microsoft_rolled_is_stored_protected_and_used_the_next_time()
     {
         var (db, store, onedrive, _) = await SetUpAsync(files: 1);
@@ -263,6 +279,12 @@ internal sealed class FakeOneDriveSync : IOneDriveSyncClient
 
     public string? FailDownloadOf { get; set; }
 
+    /// <summary>The next delta from a delta link answers 410 once.</summary>
+    public bool ResyncOnNextDelta { get; set; }
+
+    /// <summary>How many deltas started from the beginning.</summary>
+    public int FullListings { get; private set; }
+
     public List<string> Refreshed { get; } = [];
 
     public void AddFile(string id, string name, string mimeType, string parent = "folder-1")
@@ -282,6 +304,17 @@ internal sealed class FakeOneDriveSync : IOneDriveSyncClient
 
     public Task<OneDriveDeltaPage> DeltaAsync(string accessToken, string? link, CancellationToken cancellationToken = default)
     {
+        if (link is not null && !link.Contains("page=", StringComparison.Ordinal) && ResyncOnNextDelta)
+        {
+            ResyncOnNextDelta = false;
+            throw new DeltaResyncRequiredException();
+        }
+
+        if (link is null)
+        {
+            FullListings++;
+        }
+
         if (link is null || link.Contains("page=", StringComparison.Ordinal))
         {
             var start = link is null ? 0 : int.Parse(link[(link.IndexOf("page=", StringComparison.Ordinal) + 5)..], System.Globalization.CultureInfo.InvariantCulture);

@@ -90,7 +90,7 @@ public sealed class OneDriveSync(
         {
             await MarkReconnectAsync(account, totals, cancellationToken);
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested) || store.IsStoreFailure(ex))
+        catch (Exception ex) when (ex is HttpRequestException or IOException or DeltaResyncRequiredException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested) || store.IsStoreFailure(ex))
         {
             // The page the run stopped on is asked for again next time: its link was not kept, and what it staged is known.
             Log.DriveAccountStopped(logger, account.Id, ex.GetType().Name);
@@ -104,7 +104,22 @@ public sealed class OneDriveSync(
         while (run.Remaining > 0)
         {
             var link = account.SyncListToken ?? account.SyncChangesToken;
-            var page = await client.DeltaAsync(run.Token, link, cancellationToken);
+            OneDriveDeltaPage page;
+            try
+            {
+                page = await client.DeltaAsync(run.Token, link, cancellationToken);
+            }
+            catch (DeltaResyncRequiredException) when (link is not null && !run.Resynced)
+            {
+                // The link is too old: list the OneDrive again from the start. What was staged is known (drive_files), so only what
+                // changed since is staged again.
+                run.Resynced = true;
+                (account.SyncChangesToken, account.SyncListToken, account.SyncListing) = (null, null, false);
+                await db.SaveChangesAsync(cancellationToken);
+                Log.OneDriveResync(logger, account.Id);
+                continue;
+            }
+
             foreach (var change in page.Changes)
             {
                 if (change is { Removed: false, File: { } file })
@@ -264,6 +279,8 @@ public sealed class OneDriveSync(
         public string Token { get; } = token;
 
         public Dictionary<string, OneDriveFolder?> Folders { get; } = [];
+
+        public bool Resynced { get; set; }
 
         public int Staged { get; set; }
 

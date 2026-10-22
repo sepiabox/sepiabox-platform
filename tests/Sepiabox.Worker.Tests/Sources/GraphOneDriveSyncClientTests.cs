@@ -1,0 +1,239 @@
+using System.Net;
+using System.Text;
+using Sepiabox.Catalog;
+using Sepiabox.Worker.Sources;
+
+namespace Sepiabox.Worker.Tests.Sources;
+
+/// <summary><see cref="GraphOneDriveSyncClient"/> against a fake in place of Microsoft (S-039): the delta pages, and what it does when Graph throttles or says to start again.</summary>
+public sealed class GraphOneDriveSyncClientTests
+{
+    private const string RefreshToken = "M.refresh-token-never-in-a-message";
+    private const string DeltaUri = "https://graph.microsoft.com/v1.0/me/drive/root/delta";
+
+    [Fact]
+    public async Task Reads_a_delta_page_as_photos_and_videos_that_are_there_and_files_that_are_gone_and_ignores_the_rest()
+    {
+        var graph = new FakeGraph();
+        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.OK, """
+            {"value":[
+              {"id":"photo","name":"Praia.jpg","size":1234,"lastModifiedDateTime":"2021-06-02T11:00:00Z","webUrl":"https://onedrive.live.com/?id=photo",
+               "parentReference":{"id":"folder-1"},"file":{"mimeType":"image/jpeg","hashes":{"sha1Hash":"abc"}}},
+              {"id":"gone","deleted":{}},
+              {"id":"folder","name":"Fotos","folder":{"childCount":2}},
+              {"id":"doc","name":"notes.pdf","file":{"mimeType":"application/pdf"}}],
+             "@odata.nextLink":"https://graph.microsoft.com/v1.0/me/drive/root/delta?token=2"}
+            """);
+
+        var page = await Client(graph).DeltaAsync("access", null);
+
+        Assert.Equal("https://graph.microsoft.com/v1.0/me/drive/root/delta?token=2", page.NextLink);
+        Assert.Null(page.DeltaLink);
+        Assert.Equal([("photo", false), ("gone", true)], page.Changes.Select(c => (c.Id, c.Removed)));
+        var file = page.Changes[0].File!;
+        Assert.Equal(("Praia.jpg", "image/jpeg", 1234L, "abc", "folder-1"), (file.Name, file.MimeType, file.Size, file.Hash, file.ParentId));
+        Assert.Equal(new DateTimeOffset(2021, 6, 2, 11, 0, 0, TimeSpan.Zero), file.ModifiedTime);
+        Assert.Contains("$top=200", graph.Requests.Single(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_last_page_gives_the_delta_link_and_no_next_link()
+    {
+        var graph = new FakeGraph();
+        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.OK, """{"value":[],"@odata.deltaLink":"https://graph.microsoft.com/v1.0/me/drive/root/delta?token=done"}""");
+
+        var page = await Client(graph).DeltaAsync("access", $"{DeltaUri}?token=1");
+
+        Assert.Equal((null, "https://graph.microsoft.com/v1.0/me/drive/root/delta?token=done"), (page.NextLink, page.DeltaLink));
+    }
+
+    [Fact]
+    public async Task A_410_on_a_delta_link_asks_for_the_delta_to_start_again()
+    {
+        var graph = new FakeGraph();
+        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.Gone, """{"error":{"code":"resyncRequired"}}""");
+
+        await Assert.ThrowsAsync<DeltaResyncRequiredException>(() => Client(graph).DeltaAsync("access", $"{DeltaUri}?token=old"));
+        Assert.Single(graph.Requests);
+    }
+
+    [Fact]
+    public async Task A_429_is_asked_again_and_the_run_goes_on_when_graph_stops_throttling()
+    {
+        var graph = new FakeGraph();
+        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.TooManyRequests, "{}", retryAfter: 7);
+        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.TooManyRequests, "{}", retryAfter: 7);
+        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.OK, """{"value":[],"@odata.deltaLink":"https://graph.microsoft.com/v1.0/me/drive/root/delta?token=d"}""");
+
+        var page = await Client(graph).DeltaAsync("access", null);
+
+        Assert.NotNull(page.DeltaLink);
+        Assert.Equal(3, graph.Requests.Count);
+    }
+
+    [Fact]
+    public async Task A_429_that_never_stops_fails_after_a_few_attempts_without_the_token_in_the_message()
+    {
+        var graph = new FakeGraph { Default = (HttpStatusCode.TooManyRequests, "{}", 1) };
+
+        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => Client(graph).DeltaAsync("access-token-secret", null));
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, failure.StatusCode);
+        Assert.Equal(4, graph.Requests.Count);
+        Assert.DoesNotContain("secret", failure.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Waits_as_long_as_retry_after_says_up_to_a_limit()
+    {
+        var graph = new FakeGraph();
+        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.ServiceUnavailable, "{}", retryAfter: 3600);
+        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.OK, """{"value":[]}""");
+        // No fixed delay is given, so what Retry-After says is used; a cancelled token ends the wait at once and shows what it was asked to wait.
+        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new GraphOneDriveSyncClient("id", "secret", graph).DeltaAsync("access", null, cancel.Token));
+
+        Assert.Single(graph.Requests);
+    }
+
+    [Fact]
+    public async Task Never_follows_a_next_link_that_is_not_microsofts_graph()
+    {
+        var graph = new FakeGraph();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Client(graph).DeltaAsync("access", "https://evil.example.com/delta"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Client(graph).DeltaAsync("access", "http://graph.microsoft.com/v1.0/me/drive/root/delta"));
+
+        Assert.Empty(graph.Requests);
+    }
+
+    [Fact]
+    public async Task A_refused_access_token_is_an_authorization_failure()
+    {
+        var graph = new FakeGraph();
+        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.Unauthorized, "{}");
+
+        await Assert.ThrowsAsync<CloudAuthorizationException>(() => Client(graph).DeltaAsync("access", null));
+    }
+
+    [Fact]
+    public async Task A_refresh_gives_the_rolled_token_and_a_revoked_grant_is_an_authorization_failure_and_any_other_error_is_not()
+    {
+        var rolled = new FakeGraph { TokenBody = """{"access_token":"graph-access","refresh_token":"M.rolled"}""" };
+        var refused = new FakeGraph { TokenStatus = HttpStatusCode.BadRequest, TokenBody = """{"error":"invalid_grant"}""" };
+        var down = new FakeGraph { TokenStatus = HttpStatusCode.ServiceUnavailable, TokenBody = """{"error":"temporarily_unavailable"}""" };
+
+        Assert.Equal(new OneDriveToken("graph-access", "M.rolled"), await Client(rolled).RefreshAsync(RefreshToken));
+        Assert.Equal(RefreshToken, System.Web.HttpUtility.ParseQueryString(rolled.TokenForms.Single())["refresh_token"]);
+        await Assert.ThrowsAsync<CloudAuthorizationException>(() => Client(refused).RefreshAsync(RefreshToken));
+        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => Client(down).RefreshAsync(RefreshToken));
+        Assert.DoesNotContain("refresh-token", failure.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Reads_a_folders_name_and_parent_the_top_of_the_drive_as_no_parent_and_a_missing_folder_as_null()
+    {
+        var graph = new FakeGraph();
+        graph.Respond("/v1.0/me/drive/items/f1", HttpStatusCode.OK, """{"id":"f1","name":"Fotos","parentReference":{"id":"root-id"}}""");
+        graph.Respond("/v1.0/me/drive/items/root-id", HttpStatusCode.OK, """{"id":"root-id","name":"root","root":{},"parentReference":{"id":"x"}}""");
+
+        Assert.Equal(new OneDriveFolder("Fotos", "root-id"), await Client(graph).GetFolderAsync("access", "f1"));
+        Assert.Null((await Client(graph).GetFolderAsync("access", "root-id"))!.ParentId);
+        Assert.Null(await Client(graph).GetFolderAsync("access", "nope"));
+    }
+
+    [Fact]
+    public async Task Downloads_from_the_address_graph_gives_without_sending_the_access_token_to_it()
+    {
+        var graph = new FakeGraph();
+        graph.Respond("/v1.0/me/drive/items/a", HttpStatusCode.OK, """{"@microsoft.graph.downloadUrl":"https://files.example.com/a"}""");
+        graph.Downloads["/a"] = Encoding.UTF8.GetBytes("the picture");
+        using var destination = new MemoryStream();
+
+        await Client(graph).DownloadAsync("access", "a", destination);
+
+        Assert.Equal("the picture", Encoding.UTF8.GetString(destination.ToArray()));
+        Assert.Null(graph.DownloadAuthorization);
+    }
+
+    [Fact]
+    public async Task A_download_that_fails_is_an_io_failure_without_the_address_in_the_message()
+    {
+        var graph = new FakeGraph();
+        graph.Respond("/v1.0/me/drive/items/a", HttpStatusCode.OK, """{"@microsoft.graph.downloadUrl":"https://files.example.com/a"}""");
+
+        var failure = await Assert.ThrowsAsync<IOException>(() => Client(graph).DownloadAsync("access", "a", new MemoryStream()));
+
+        Assert.DoesNotContain("files.example.com", failure.Message, StringComparison.Ordinal);
+    }
+
+    private static GraphOneDriveSyncClient Client(FakeGraph graph) => new("client-id", "client-secret", graph, TimeSpan.Zero);
+
+    private sealed class FakeGraph : HttpMessageHandler
+    {
+        private readonly Dictionary<string, Queue<(HttpStatusCode Status, string Body, int? RetryAfter)>> _responses = [];
+
+        public (HttpStatusCode Status, string Body, int? RetryAfter)? Default { get; init; }
+
+        public HttpStatusCode TokenStatus { get; init; } = HttpStatusCode.OK;
+
+        public string TokenBody { get; init; } = """{"access_token":"graph-access"}""";
+
+        public List<string> Requests { get; } = [];
+
+        public List<string> TokenForms { get; } = [];
+
+        public Dictionary<string, byte[]> Downloads { get; } = [];
+
+        public string? DownloadAuthorization { get; private set; }
+
+        public void Respond(string path, HttpStatusCode status, string body, int? retryAfter = null)
+        {
+            if (!_responses.TryGetValue(path, out var queue))
+            {
+                _responses[path] = queue = new Queue<(HttpStatusCode, string, int?)>();
+            }
+
+            queue.Enqueue((status, body, retryAfter));
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri!;
+            if (uri.Host == "login.microsoftonline.com")
+            {
+                TokenForms.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+                return Json(TokenStatus, TokenBody, null);
+            }
+
+            if (uri.Host == "files.example.com")
+            {
+                DownloadAuthorization = request.Headers.Authorization?.ToString();
+                return Downloads.TryGetValue(uri.AbsolutePath, out var bytes)
+                    ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }
+                    : new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            }
+
+            Requests.Add(uri.AbsoluteUri);
+            if (_responses.TryGetValue(uri.AbsolutePath, out var queue) && queue.Count > 0)
+            {
+                var (status, body, retryAfter) = queue.Count > 1 ? queue.Dequeue() : queue.Peek();
+                return Json(status, body, retryAfter);
+            }
+
+            return Default is { } fallback ? Json(fallback.Status, fallback.Body, fallback.RetryAfter) : Json(HttpStatusCode.NotFound, "{}", null);
+        }
+
+        private static HttpResponseMessage Json(HttpStatusCode status, string body, int? retryAfter)
+        {
+            var response = new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+            if (retryAfter is { } seconds)
+            {
+                response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(seconds));
+            }
+
+            return response;
+        }
+    }
+}

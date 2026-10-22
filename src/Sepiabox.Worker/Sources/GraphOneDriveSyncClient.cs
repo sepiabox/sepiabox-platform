@@ -17,6 +17,7 @@ public sealed class GraphOneDriveSyncClient(string clientId, string clientSecret
     private const string DeltaFields = "id,name,size,file,folder,deleted,parentReference,lastModifiedDateTime,webUrl,root";
     private const string DownloadUrlProperty = "@microsoft.graph.downloadUrl";
     private const int MaxAttempts = 4;
+    private static readonly TimeSpan MaxRetryAfter = TimeSpan.FromMinutes(2);
 
     /// <summary>The scopes the connection asks for (S-039): the files, a refresh token, and the account's address.</summary>
     public const string Scope = "Files.Read offline_access User.Read";
@@ -156,6 +157,12 @@ public sealed class GraphOneDriveSyncClient(string clientId, string clientSecret
                     return null;
                 }
 
+                if (response.StatusCode == HttpStatusCode.Gone)
+                {
+                    // A delta link Graph no longer honours (too old, or the drive was reset): the caller starts the listing again.
+                    throw new DeltaResyncRequiredException();
+                }
+
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
                     // The access token was refused moments after it was issued: the account is no longer honoured.
@@ -165,7 +172,7 @@ public sealed class GraphOneDriveSyncClient(string clientId, string clientSecret
                 // Throttled, or a moment's failure: ask again after what Graph says, a few times.
                 if (response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout && attempt < MaxAttempts)
                 {
-                    await Task.Delay(retryDelay ?? response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(2 * attempt), cancellationToken);
+                    await Task.Delay(retryDelay ?? RetryAfter(response) ?? TimeSpan.FromSeconds(2 * attempt), cancellationToken);
                     continue;
                 }
 
@@ -177,6 +184,13 @@ public sealed class GraphOneDriveSyncClient(string clientId, string clientSecret
                 return JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
             }
         }
+    }
+
+    // What Graph asks for in Retry-After (seconds or a date), within a limit, so that a throttled run waits and a wrong header cannot hang it.
+    private static TimeSpan? RetryAfter(HttpResponseMessage response)
+    {
+        var wait = response.Headers.RetryAfter?.Delta ?? (response.Headers.RetryAfter?.Date is { } date ? date - DateTimeOffset.UtcNow : null);
+        return wait is { } w ? TimeSpan.FromSeconds(Math.Clamp(w.TotalSeconds, 0, MaxRetryAfter.TotalSeconds)) : null;
     }
 
     private static OneDriveChange? Read(JsonElement item)
@@ -227,3 +241,6 @@ public sealed class GraphOneDriveSyncClient(string clientId, string clientSecret
         }
     }
 }
+
+/// <summary>Graph answered 410 Gone to a delta link: the link cannot be used any more and the whole drive has to be listed again (S-039).</summary>
+public sealed class DeltaResyncRequiredException() : Exception("Microsoft Graph asks for the delta to start again.");
