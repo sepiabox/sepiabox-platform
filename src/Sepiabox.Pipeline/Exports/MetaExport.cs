@@ -194,6 +194,47 @@ public static partial class MetaExport
         }
     }
 
+    /// <summary>
+    /// The media file's path under the scan root, as written or text-repaired, whichever exists; null when neither does, when
+    /// the path leaves the download or when it is not a photo or a video. <paramref name="baseFolder"/> is the download's root
+    /// under <paramref name="root"/> (empty, or ending in a slash).
+    /// </summary>
+    public static string? Resolve(string root, string baseFolder, MetaMedia media)
+    {
+        ArgumentNullException.ThrowIfNull(media);
+        foreach (var uri in new[] { media.RawUri, media.Uri }.Distinct(StringComparer.Ordinal))
+        {
+            // A NUL is never in a real path and makes the framework throw; the entry is one more that is not in the download.
+            if (uri.Contains('\0', StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            try
+            {
+                var relative = (baseFolder + uri.Replace('\\', '/').TrimStart('/')).Replace("//", "/", StringComparison.Ordinal);
+                var full = Path.GetFullPath(Path.Combine(root, relative));
+                var inside = Path.GetRelativePath(root, full);
+                // Nothing outside the download is ever read, whatever the list says: ".." parts, an absolute path on another drive.
+                if (inside == ".." || inside.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(inside))
+                {
+                    continue;
+                }
+
+                if (File.Exists(full) && IsMedia(full))
+                {
+                    return inside.Replace('\\', '/');
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                // A path the file system cannot take (illegal characters, too long) is not a file of the download.
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Whether <paramref name="path"/> is a photo or video file by its extension.</summary>
     public static bool IsMedia(string path) => MediaTypes.Classify(path) != MediaKind.Other;
 

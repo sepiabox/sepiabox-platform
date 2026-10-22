@@ -153,4 +153,72 @@ public sealed class MetaExportTests
 
         Assert.True(reported > 0);
     }
+
+    [Theory]
+    [InlineData("\u00ff", "\u00ff")]
+    [InlineData("\u0100", "\u0100")]
+    [InlineData("\u007f", "\u007f")]
+    [InlineData("\u0080", "\u0080")]
+    [InlineData("\u00c2\u00a9", "\u00a9")]
+    [InlineData("\u00e2\u0082\u00ac", "\u20ac")]
+    [InlineData("\u00c3\u00a1\u0100", "\u00c3\u00a1\u0100")]
+    public void Repairs_only_inside_the_latin_1_range_and_leaves_the_bounds_alone(string text, string expected) =>
+        Assert.Equal(expected, MetaExport.RepairText(text));
+
+    [Theory]
+    [InlineData("253402300799", "9999-12-31T23:59:59")]
+    [InlineData("-62135596800", "0001-01-01T00:00:00")]
+    public void Reads_the_first_and_the_last_second_of_the_calendar(string json, string expected)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        Assert.Equal(DateTime.Parse(expected, System.Globalization.CultureInfo.InvariantCulture), MetaExport.Epoch(document.RootElement));
+    }
+
+    [Theory]
+    [InlineData("253402300800")]
+    [InlineData("-62135596801")]
+    public void Reads_no_date_one_second_past_the_calendar(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        Assert.Null(MetaExport.Epoch(document.RootElement));
+    }
+
+    [Fact]
+    public void Takes_the_place_and_the_date_of_the_first_entry_that_has_them()
+    {
+        using var document = JsonDocument.Parse("""
+            {"photo_metadata": {"exif_data": [
+              {"latitude": 38.7, "longitude": -9.1, "date_time_original": "2019:06:30 18:00:00"},
+              {"latitude": 41.1, "longitude": -8.6, "date_time_original": "2018:01:01 10:00:00"}]}}
+            """);
+
+        var exif = MetaExport.Exif(document.RootElement)!;
+
+        Assert.Equal(new GeoPoint(38.7, -9.1), exif.Location);
+        Assert.Equal(new DateTime(2019, 6, 30, 18, 0, 0), exif.TakenAt);
+    }
+
+    [Fact]
+    public void Lets_an_empty_title_inherit_the_posts_and_finds_media_nested_in_objects()
+    {
+        using var document = JsonDocument.Parse("""{"title": "Post", "media": [{"uri": "a.jpg", "title": ""}], "wrapper": {"inner": {"uri": "b.jpg"}}}""");
+
+        var items = MetaExport.Items(document.RootElement).ToList();
+
+        Assert.Equal(["a.jpg", "b.jpg"], items.Select(i => i.Uri));
+        Assert.Equal(["Post", "Post"], items.Select(i => i.Title));
+    }
+
+    [Theory]
+    [InlineData(64, true)]
+    [InlineData(65, false)]
+    public void Follows_the_nesting_to_depth_64_and_no_deeper(int depth, bool found)
+    {
+        var json = string.Concat(Enumerable.Repeat("[", depth)) + """{"uri": "a.jpg"}""" + string.Concat(Enumerable.Repeat("]", depth));
+        using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 300 });
+
+        Assert.Equal(found, MetaExport.Items(document.RootElement).Any());
+    }
 }

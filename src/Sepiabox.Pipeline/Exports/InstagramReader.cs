@@ -72,7 +72,7 @@ public sealed partial class InstagramReader : IExportReader
                 var album = Albums(match.Groups["list"].Value);
                 foreach (var media in MetaExport.Items(document.RootElement, () => tooDeep++))
                 {
-                    var relative = Resolve(root, baseFolder, media);
+                    var relative = MetaExport.Resolve(root, baseFolder, media);
                     if (relative is null)
                     {
                         missing++;
@@ -120,29 +120,6 @@ public sealed partial class InstagramReader : IExportReader
             "reels" => [PostsAlbum, ReelsAlbum],
             _ => [PostsAlbum],
         };
-
-    // The media file's path under the scan root, as written or text-repaired, whichever exists; null when neither does or when
-    // the path leaves the download.
-    private static string? Resolve(string root, string baseFolder, MetaMedia media)
-    {
-        foreach (var uri in new[] { media.RawUri, media.Uri }.Distinct(StringComparer.Ordinal))
-        {
-            var relative = (baseFolder + uri.Replace('\\', '/').TrimStart('/')).Replace("//", "/", StringComparison.Ordinal);
-            var full = Path.GetFullPath(Path.Combine(root, relative));
-            var inside = Path.GetRelativePath(root, full);
-            if (inside == ".." || inside.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(inside))
-            {
-                continue;
-            }
-
-            if (File.Exists(full) && MediaTypes.Classify(full) != MediaKind.Other)
-            {
-                return inside.Replace('\\', '/');
-            }
-        }
-
-        return null;
-    }
 
     // What the lists say about one file, merged over the lists it is in (a post and its archived copy): the first caption,
     // date and place found, and every album.

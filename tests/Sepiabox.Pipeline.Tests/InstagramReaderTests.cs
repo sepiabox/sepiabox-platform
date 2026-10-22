@@ -165,6 +165,92 @@ public sealed class InstagramReaderTests : IDisposable
     }
 
     [Fact]
+    public void Counts_a_uri_with_a_nul_or_that_leaves_the_download_as_missing_and_reads_the_good_entry_next_to_it()
+    {
+        Put("media/posts/good.jpg");
+        var outer = Directory.GetParent(_export.Path)!.FullName;
+        var sibling = Path.Combine(outer, "sepiabox-sibling-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(sibling);
+        try
+        {
+            File.WriteAllBytes(Path.Combine(sibling, "x.jpg"), [1]);
+            var name = Path.GetFileName(sibling);
+            Json(Posts, "[{\"media\": [{\"uri\": \"media/posts/a\\u0000b.jpg\"}, {\"uri\": \"media/posts/good.jpg\"}, {\"uri\": \"../" + name + "/x.jpg\"}, {\"uri\": \"/abs/x.jpg\"}, {\"uri\": \"media/../../" + name + "/x.jpg\"}]}]");
+
+            var scan = Read();
+
+            Assert.Equal(1, scan.Count);
+            Assert.NotNull(scan.Find("media/posts/good.jpg"));
+            Assert.Contains(scan.Warnings, w => w.Contains("4 media files named in the post lists are not in the download", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(sibling, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Gives_a_reels_only_item_the_reels_album_and_the_first_list_wins_every_field_of_a_file_in_two()
+    {
+        Put("media/reels/r.mp4");
+        Put("media/posts/p.jpg");
+        Json("your_instagram_activity/content/reels.json", """{"ig_reels_media": [{"media": [{"uri": "media/reels/r.mp4"}]}]}""");
+        Json(
+            "your_instagram_activity/content/archived_posts.json",
+            """{"ig_archived_post_media": [{"media": [{"uri": "media/posts/p.jpg", "title": "first", "creation_timestamp": 1561975200, "media_metadata": {"photo_metadata": {"exif_data": [{"latitude": 38.7, "longitude": -9.1, "date_time_original": "2019:06:30 18:00:00"}]}}}]}]}""");
+        Json(Posts, """[{"media": [{"uri": "media/posts/p.jpg", "title": "second", "creation_timestamp": 1500000000, "media_metadata": {"photo_metadata": {"exif_data": [{"latitude": 41.1, "longitude": -8.6, "date_time_original": "2018:01:01 10:00:00"}]}}}]}]""");
+
+        var scan = Read();
+
+        Assert.Equal(["Instagram", "Instagram reels"], scan.Find("media/reels/r.mp4")!.Albums);
+        var post = scan.Find("media/posts/p.jpg")!;
+        Assert.Equal("first", post.Caption);
+        Assert.Equal(new DateTime(2019, 6, 30, 18, 0, 0), post.CapturedAt);
+        Assert.Equal(new GeoPoint(38.7, -9.1), post.Location);
+        Assert.Equal(["Instagram"], post.Albums);
+    }
+
+    [Fact]
+    public void Finds_the_lists_whatever_the_case_of_their_names_and_does_not_count_a_file_that_differs_only_in_case_as_unlisted()
+    {
+        Put("media/posts/a.jpg");
+        Put("media/posts/A.JPG");
+        Json("Your_Instagram_Activity/Content/Posts_1.JSON", """[{"media": [{"uri": "media/posts/a.jpg", "title": "x"}]}]""");
+
+        var scan = Read();
+
+        Assert.Equal("x", scan.Find("media/posts/a.jpg")!.Caption);
+        Assert.False(scan.IsLeftOut("media/posts/A.JPG"));
+        Assert.Empty(scan.Warnings);
+    }
+
+    [Fact]
+    public void Names_at_most_five_of_the_lists_it_could_not_read()
+    {
+        Put("media/posts/a.jpg");
+        Json(Posts, """[{"media": [{"uri": "media/posts/a.jpg"}]}]""");
+        Json("your_instagram_activity/content/posts_2.json", "{ not json");
+        for (var n = 3; n <= 8; n++)
+        {
+            Json($"your_instagram_activity/content/posts_{n}.json", "{ not json");
+        }
+
+        var warning = Assert.Single(Read().Warnings);
+
+        Assert.StartsWith("7 post lists could not be read", warning, StringComparison.Ordinal);
+        Assert.Equal(5, System.Text.RegularExpressions.Regex.Count(warning, "posts_\\d\\.json"));
+    }
+
+    [Fact]
+    public void Reports_a_list_nested_deeper_than_the_parser_allows_as_unreadable()
+    {
+        Put("media/posts/a.jpg");
+        Json(Posts, string.Concat(Enumerable.Repeat("[", 70)) + string.Concat(Enumerable.Repeat("]", 70)));
+
+        Assert.Contains(Read().Warnings, w => w.Contains("1 post lists could not be read", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Finds_a_file_whose_name_is_on_disk_repaired_or_as_written()
     {
         Put("media/posts/café.jpg");
