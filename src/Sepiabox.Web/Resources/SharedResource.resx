@@ -1500,7 +1500,7 @@
     <value>Deleted after {0} days</value>
   </data>
   <data name="Export_KeptUntil" xml:space="preserve">
-    <value>Kept until {0}</value>
+    <value>Available until {0}</value>
   </data>
   <data name="Export_LinksUntil" xml:space="preserve">
     <value>Links to the originals inside work until {0}</value>

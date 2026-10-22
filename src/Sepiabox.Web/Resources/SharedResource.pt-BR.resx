@@ -1430,7 +1430,7 @@
     <value>Apagada depois de {0} dias</value>
   </data>
   <data name="Export_KeptUntil" xml:space="preserve">
-    <value>Guardada até {0}</value>
+    <value>Disponível até {0}</value>
   </data>
   <data name="Export_LinksUntil" xml:space="preserve">
     <value>Os links para os originais dentro dela valem até {0}</value>

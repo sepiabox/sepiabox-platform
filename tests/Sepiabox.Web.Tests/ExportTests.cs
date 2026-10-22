@@ -122,7 +122,13 @@ public sealed class ExportPageTests : LocalizedContext
 {
     private readonly FakeExports _exports = new();
 
-    public ExportPageTests() => Services.AddSingleton<IExportRequests>(_exports);
+    private readonly FakeFaceSettings _faces = new();
+
+    public ExportPageTests()
+    {
+        Services.AddSingleton<IExportRequests>(_exports);
+        Services.AddSingleton<IFaceSettings>(_faces);
+    }
 
     [Fact]
     public void Offers_the_request_with_face_data_off_and_lists_nothing_when_there_are_no_requests()
@@ -134,6 +140,16 @@ public sealed class ExportPageTests : LocalizedContext
         Assert.Null(page.Find("input[name=IncludeFaceData]").GetAttribute("checked"));
         Assert.Contains("Include face data", page.Find("form.export-request label").TextContent, StringComparison.Ordinal);
         Assert.Empty(page.FindAll("ul.exports"));
+    }
+
+    [Fact]
+    public void Offers_the_face_data_option_only_while_face_recognition_is_on()
+    {
+        Assert.Single(Render<ExportData>().FindAll("input[name=IncludeFaceData]"));
+
+        _faces.State = new Sepiabox.Catalog.People.FaceRecognitionState(false, DateTimeOffset.UnixEpoch, null);
+
+        Assert.Empty(Render<ExportData>().FindAll("input[name=IncludeFaceData]"));
     }
 
     [Fact]
@@ -175,10 +191,10 @@ public sealed class ExportPageTests : LocalizedContext
 
         var items = page.FindAll("ul.exports li");
         Assert.Equal("settings/export/4/download", items[0].QuerySelector("a")!.GetAttribute("href"));
-        Assert.Contains("Kept until", items[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Available until", items[0].TextContent, StringComparison.Ordinal);
         Assert.Contains("Links to the originals inside work until", items[0].TextContent, StringComparison.Ordinal);
         // After 24 hours the links inside are dead, so the page does not promise them; the zip is still kept.
-        Assert.Contains("Kept until", items[1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Available until", items[1].TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("Links to the originals", items[1].TextContent, StringComparison.Ordinal);
         Assert.Contains("Deleted after 7 days", items[2].TextContent, StringComparison.Ordinal);
         Assert.Empty(items[2].QuerySelectorAll("a"));
