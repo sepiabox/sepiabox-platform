@@ -12,7 +12,8 @@ namespace Sepiabox.Ingest.Tests;
 /// </summary>
 public sealed class ProcessExportTests : IDisposable
 {
-    private static readonly TimeZoneInfo s_lisbon = TimeZoneInfo.FindSystemTimeZoneById("Europe/Lisbon");
+    // Found the way the tool finds it, so the tests need no more of the host than the tool does.
+    private static readonly TimeZoneInfo s_lisbon = ProcessOptions.FindTimeZone("Europe/Lisbon")!;
 
     private readonly TempFolder _drive = new();
     private readonly TempFolder _work = new();
@@ -90,7 +91,7 @@ public sealed class ProcessExportTests : IDisposable
         _drive.Write("a.png", TestPhotos.Plain());
         Describe("a.png", """{"capturedAtWall": "2015-06-01T10:00:00"}""");
 
-        Process(TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo"));
+        Process(ProcessOptions.FindTimeZone("Asia/Tokyo")!);
 
         Assert.Equal(new DateTime(2015, 6, 1, 10, 0, 0), ReadManifest().CapturedAt);
     }
@@ -133,6 +134,19 @@ public sealed class ProcessExportTests : IDisposable
         Assert.Equal("Praia de Matosinhos", (string?)json["caption"]);
         Assert.Equal(["Ferias", "Viagem"], json["albums"]!.AsArray().Select(a => (string?)a));
         Assert.True(new ManifestValidator().TryValidate(json.ToJsonString(), out _, out var error), error);
+    }
+
+    [Fact]
+    public void Writes_captions_and_album_names_in_unicode_normalization_form_c()
+    {
+        _drive.Write("a.png", TestPhotos.Plain());
+        Describe("a.png", "{\"caption\": \"Cafe\\u0301\", \"albums\": [\"Fe\\u0301rias\", \"F\\u00e9rias\"]}");
+
+        Process(s_lisbon);
+
+        var manifest = ReadManifest();
+        Assert.Equal("Caf\u00e9", manifest.Caption);
+        Assert.Equal(["F\u00e9rias"], manifest.Albums);
     }
 
     [Fact]
@@ -244,6 +258,31 @@ public sealed class ProcessExportTests : IDisposable
         Assert.Null(defaults.TimeZone);
         Assert.True(ProcessOptions.TryParse(["/in", "--out", "/out"], out var plain, out _));
         Assert.Equal((null, null), (plain.ExportKind, plain.TimeZone));
+    }
+
+    [Fact]
+    public void Finds_a_zone_by_its_iana_id_and_names_both_kinds_of_id_when_there_is_none()
+    {
+        Assert.Equal(TimeSpan.FromHours(1), ProcessOptions.FindTimeZone("Europe/Lisbon")!.GetUtcOffset(new DateTime(2015, 6, 1, 10, 0, 0, DateTimeKind.Utc)));
+        Assert.Null(ProcessOptions.FindTimeZone("Mars/Olympus"));
+        Assert.Null(ProcessOptions.FindTimeZone(string.Empty));
+        Assert.Null(ProcessOptions.FindTimeZone("../etc/passwd"));
+        Assert.False(ProcessOptions.TryParse(["/in", "--out", "/out", "--export", "test", "--time-zone", "Mars/Olympus"], out _, out var error, Registry()));
+        Assert.Contains("IANA id such as Europe/Lisbon", error, StringComparison.Ordinal);
+        Assert.Contains("Windows id", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Runs_with_the_cultures_data_on_so_that_windows_can_find_a_zone_by_its_iana_id()
+    {
+        // Directory.Build.props turns it off for the build; the tool and these tests turn it on again (D-104).
+        Assert.False(AppContext.TryGetSwitch("System.Globalization.Invariant", out var invariant) && invariant);
+        var runtimeConfig = Path.Combine(AppContext.BaseDirectory, "sepiabox-ingest.runtimeconfig.json");
+        if (File.Exists(runtimeConfig))
+        {
+            var text = File.ReadAllText(runtimeConfig);
+            Assert.DoesNotContain("\"System.Globalization.Invariant\": true", text, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

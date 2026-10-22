@@ -78,8 +78,9 @@ public sealed class TakeoutSidecarsTests
     [Fact]
     public void Prefers_an_exact_sidecar_to_a_cut_one_and_does_not_give_one_files_sidecar_to_another()
     {
-        var one = "PXL_20190701_101010123.MP.COVER.ORIGINAL.photo_1.jpg";
-        var two = "PXL_20190701_101010123.MP.COVER.ORIGINAL.photo_2.jpg";
+        // Different at the start, so the cut name still tells them apart.
+        var one = "a_" + Long;
+        var two = "b_" + Long;
         var exactOne = one + ".json";
         var cutTwo = (two + TakeoutSidecars.Supplemental)[..46] + ".json";
 

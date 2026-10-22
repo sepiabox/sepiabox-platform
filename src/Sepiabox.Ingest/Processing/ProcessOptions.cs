@@ -61,6 +61,23 @@ public sealed record ProcessOptions(
     /// </summary>
     public int EffectiveVideoJobs => Math.Min(VideoJobs ?? 1, EffectiveJobs);
 
+    /// <summary>
+    /// The zone for <c>--time-zone</c>: an IANA id such as <c>Europe/Lisbon</c>, which .NET finds on Windows through ICU
+    /// (so this tool runs with ICU, D-104), or, on Windows, a Windows id; null when there is no such zone.
+    /// </summary>
+    /// <param name="id">The id the person gave.</param>
+    public static TimeZoneInfo? FindTimeZone(string id)
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(id);
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
     /// <param name="args">What follows <c>process</c> on the command line.</param>
     /// <param name="options">The options, when the arguments are valid.</param>
     /// <param name="error">Why they are not.</param>
@@ -209,13 +226,10 @@ public sealed record ProcessOptions(
                 return false;
             }
 
-            try
+            timeZone = FindTimeZone(timeZoneId);
+            if (timeZone is null)
             {
-                timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-            }
-            catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
-            {
-                error = $"Unknown time zone '{timeZoneId}'. Give an IANA id such as Europe/Lisbon.";
+                error = $"Unknown time zone '{timeZoneId}'. Give an IANA id such as Europe/Lisbon (on Windows, a Windows id such as GMT Standard Time works too).";
                 return false;
             }
         }

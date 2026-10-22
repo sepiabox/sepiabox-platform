@@ -54,6 +54,25 @@ public sealed class ExportMetadataTests
     }
 
     [Fact]
+    public void Puts_captions_and_album_names_in_unicode_normalization_form_c_so_one_name_is_one_album()
+    {
+        var decomposed = "Cafe\u0301 da Praia";
+        var composed = "Caf\u00e9 da Praia";
+
+        Assert.Equal(composed, ExportFacts.Caption(new ExportMetadata { Caption = decomposed }));
+        Assert.Equal([composed], ExportFacts.Albums(new ExportMetadata { Albums = [decomposed, composed] }));
+        Assert.Equal([composed], ExportFacts.Albums(new ExportMetadata { Albums = ["Cafe\u0301 da Praia"] }));
+    }
+
+    [Fact]
+    public void Finds_a_file_whose_name_is_written_in_the_other_normalization_form()
+    {
+        var scan = new ExportScan([new KeyValuePair<string, ExportMetadata>("F\u00e9rias/a.jpg", new ExportMetadata { Caption = "x" })]);
+
+        Assert.Equal("x", scan.Find("Fe\u0301rias/a.jpg")!.Caption);
+    }
+
+    [Fact]
     public void Cleans_albums_to_distinct_trimmed_names_in_ordinal_order()
     {
         Assert.Equal(["Ferias", "Viagem"], ExportFacts.Albums(new ExportMetadata { Albums = [" Viagem", "Ferias", "Viagem", "", "  "] }));
