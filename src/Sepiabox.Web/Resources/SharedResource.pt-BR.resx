@@ -1323,6 +1323,39 @@
   <data name="Ask_TimedOut" xml:space="preserve">
     <value>Ainda esperando. Você pode continuar esperando ou tentar de novo.</value>
   </data>
+  <data name="Chip_SimilarToRegion" xml:space="preserve">
+    <value>Parecidas com parte de uma foto</value>
+  </data>
+  <data name="Search_MostSimilarToRegion" xml:space="preserve">
+    <value>Mais parecidas com a parte da foto, por ocasião</value>
+  </data>
+  <data name="Search_NotInOccasion" xml:space="preserve">
+    <value>Fora de uma ocasião</value>
+  </data>
+  <data name="Region_Select" xml:space="preserve">
+    <value>Selecionar uma parte da foto</value>
+  </data>
+  <data name="Region_Hint" xml:space="preserve">
+    <value>Toque em “Selecionar uma parte da foto” e arraste sobre a foto para desenhar um retângulo (um retângulo quase quadrado funciona melhor). Com o teclado: Enter começa um retângulo, as setas movem o retângulo, Shift com as setas muda o tamanho, Ctrl ou Alt com elas dá passos maiores e Esc limpa a seleção. Em tela de toque, toque no botão de novo para rolar a página.</value>
+  </data>
+  <data name="Region_FrameLabel" xml:space="preserve">
+    <value>Área da foto: pressione Enter para começar uma seleção</value>
+  </data>
+  <data name="Region_StatusSelected" xml:space="preserve">
+    <value>Área selecionada: {0}% de largura, {1}% de altura.</value>
+  </data>
+  <data name="Region_StatusNone" xml:space="preserve">
+    <value>Nenhuma área selecionada.</value>
+  </data>
+  <data name="Region_Find" xml:space="preserve">
+    <value>Buscar fotos parecidas com esta parte</value>
+  </data>
+  <data name="Region_Clear" xml:space="preserve">
+    <value>Limpar seleção</value>
+  </data>
+  <data name="Region_Unavailable" xml:space="preserve">
+    <value>A busca por uma parte da foto não está disponível agora.</value>
+  </data>
   <data name="Layout_More" xml:space="preserve">
     <value>Mais</value>
     <comment>The header's disclosure for the pages used now and then.</comment>

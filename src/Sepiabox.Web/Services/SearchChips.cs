@@ -123,6 +123,15 @@ public static class SearchChips
                 query with { Filters = f with { SimilarTo = null }, Limit = raised ? SearchQuery.DefaultLimit : query.Limit }));
         }
 
+        if (f.SimilarToRegion is { } region)
+        {
+            // As for the similar ones above: the raised limit goes with the search.
+            var raised = region.Limit is { } asked && asked > SearchQuery.DefaultLimit && query.Limit == asked;
+            chips.Add(new SearchChip(
+                text["Chip_SimilarToRegion"],
+                query with { Filters = f with { SimilarToRegion = null }, Limit = raised ? SearchQuery.DefaultLimit : query.Limit }));
+        }
+
         if (f.UndatedOnly)
         {
             Add(text["Chip_Undated"], f with { UndatedOnly = false });
@@ -153,7 +162,7 @@ public static class SearchChips
         }
 
         // A search for similar ones raises its limit with "Show more" (S-017): how many it shows is not a filter to remove.
-        if (query.Aggregate is null && query.Limit != SearchQuery.DefaultLimit && f.SimilarTo is null)
+        if (query.Aggregate is null && query.Limit != SearchQuery.DefaultLimit && f.SimilarTo is null && f.SimilarToRegion is null)
         {
             chips.Add(new SearchChip(text["Chip_Limit", query.Limit], query with { Limit = SearchQuery.DefaultLimit }));
         }
