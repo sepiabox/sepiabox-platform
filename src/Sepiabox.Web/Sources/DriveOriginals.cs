@@ -60,7 +60,7 @@ public sealed partial class DriveOriginals(
                 ? (DriveOriginalOutcome.Opened, opened)
                 : (DriveOriginalOutcome.NotFound, null);
         }
-        catch (DriveAuthorizationException)
+        catch (CloudAuthorizationException)
         {
             return (await NeedReconnectingAsync(db, account, cancellationToken), null);
         }

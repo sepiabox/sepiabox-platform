@@ -182,7 +182,7 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
     public async Task A_token_google_refuses_or_a_key_ring_that_cannot_read_it_makes_the_account_reconnect()
     {
         await using var db = await SeedAsync();
-        var drive = new FakeDrive { Failure = () => new DriveAuthorizationException("invalid_grant") };
+        var drive = new FakeDrive { Failure = () => new CloudAuthorizationException("invalid_grant") };
         var source = await SourceIdAsync(db, "Fotos/Praia 2019.jpg");
 
         var refused = await Originals(db, drive).OpenAsync(Ids.Of(1), source);

@@ -1,6 +1,4 @@
-using Sepiabox.Storage;
-
-namespace Sepiabox.Worker.Sources;
+namespace Sepiabox.Storage;
 
 /// <summary>
 /// A write-only stream onto a staged upload (S-038): a download writes into it and the bytes go to the store a block at a time, so a

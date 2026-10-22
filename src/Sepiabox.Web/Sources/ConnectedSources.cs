@@ -121,7 +121,7 @@ public sealed partial class ConnectedSources(
             token = await authorization.ExchangeCodeAsync(code, redirectUri, cancellationToken);
             email = (await drive.GetAccountEmailAsync(token, cancellationToken)).Trim().ToLowerInvariant();
         }
-        catch (DriveAuthorizationException ex)
+        catch (CloudAuthorizationException ex)
         {
             LogCodeRefused(log, ex);
             return SourceOutcome.Failed;
@@ -188,7 +188,7 @@ public sealed partial class ConnectedSources(
         {
             found = await drive.CountMediaAsync(token, cancellationToken);
         }
-        catch (DriveAuthorizationException ex)
+        catch (CloudAuthorizationException ex)
         {
             LogTokenRefused(log, id, ex);
             return await NeedReconnectingAsync(db, source, cancellationToken);

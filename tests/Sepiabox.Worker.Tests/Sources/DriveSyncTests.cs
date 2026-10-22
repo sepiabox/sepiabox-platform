@@ -210,7 +210,7 @@ public sealed class DriveSyncTests(CatalogFixture fixture)
     public async Task A_token_google_refuses_makes_the_account_reconnect_and_stages_nothing()
     {
         var (db, store, drive, _) = await SetUpAsync(files: 3);
-        drive.Failure = () => new DriveAuthorizationException("invalid_grant");
+        drive.Failure = () => new CloudAuthorizationException("invalid_grant");
 
         var result = await Sync(db, store, drive).RunAsync(CancellationToken.None);
 

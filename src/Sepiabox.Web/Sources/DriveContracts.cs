@@ -3,12 +3,6 @@ namespace Sepiabox.Web.Sources;
 /// <summary>The photos and videos a Google Drive holds, counted without importing them (S-037).</summary>
 public sealed record DriveMediaCount(int Photos, int Videos);
 
-/// <summary>
-/// Google refused the token or the code: <c>invalid_grant</c>, which is what a refresh token past the 7 days of an app in
-/// Testing mode (D-024), or one revoked, gets. The connection then needs to be made again.
-/// </summary>
-public sealed class DriveAuthorizationException(string message, Exception? inner = null) : Exception(message, inner);
-
 /// <summary>A file of a Drive being read (S-038): its content and what a download needs to name it. Dispose it when the content is read.</summary>
 public sealed class DriveFileDownload(Stream content, string name, string contentType, long? length, IDisposable? owner = null) : IAsyncDisposable
 {
@@ -30,7 +24,7 @@ public sealed class DriveFileDownload(Stream content, string name, string conten
 /// <summary>
 /// What the web asks of an account that is already connected (S-037, D-051): behind an interface so that tests, which
 /// never reach Google, use a fake. Every call takes the plain refresh token and throws
-/// <see cref="DriveAuthorizationException"/> when Google no longer honours it.
+/// <see cref="Sepiabox.Catalog.CloudAuthorizationException"/> when Google no longer honours it.
 /// </summary>
 public interface IDriveClient
 {
@@ -59,7 +53,7 @@ public interface IDriveAuthorization
     /// </summary>
     Uri AuthorizationUri(string redirectUri, string state);
 
-    /// <summary>The refresh token for a code; throws <see cref="DriveAuthorizationException"/> when Google refuses it or sends none.</summary>
+    /// <summary>The refresh token for a code; throws <see cref="Sepiabox.Catalog.CloudAuthorizationException"/> when Google refuses it or sends none.</summary>
     Task<string> ExchangeCodeAsync(string code, string redirectUri, CancellationToken cancellationToken = default);
 
     /// <summary>Tells Google to forget the token; callers treat a failure as nothing to do.</summary>

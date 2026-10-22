@@ -13,6 +13,9 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Information, Message = "No Google OAuth client is configured (Auth:Google): there is nothing to sync.")]
     public static partial void DriveSyncNotConfigured(ILogger logger);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "No OneDrive OAuth client is configured (OneDrive:ClientId, OneDrive:ClientSecret): there is nothing to sync.")]
+    public static partial void OneDriveSyncNotConfigured(ILogger logger);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "The refresh token of connected account {AccountId} cannot be read (another key ring, or damaged); it needs to be connected again.")]
     public static partial void DriveTokenUnreadable(ILogger logger, long accountId);
 

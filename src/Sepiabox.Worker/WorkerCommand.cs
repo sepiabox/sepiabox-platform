@@ -16,6 +16,8 @@ public enum WorkerAction
     EventsRebuild,
     EventsClassify,
     SyncGoogleDrive,
+    SyncOneDrive,
+    SyncAll,
 }
 
 /// <summary>The three GeoNames dump files that <c>geonames load</c> reads (S-012).</summary>
@@ -56,12 +58,14 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                                      run places refresh. What the sepiabox-geonames job runs (S-059).
           places refresh [--all]     Name the place of assets that have a location but no place yet;
                                      --all names every asset with a location again (after a newer dump).
-          sync google-drive          For each connected Google Drive (S-037, S-038), put the photos and videos that are
-                                     new or changed in the incoming container in reference mode, and mark the sources
-                                     of those that are gone; the first run lists everything, Sync:MaxFilesPerRun
-                                     (default 500) files a run. Reads the refresh tokens with the web's key ring and
-                                     the Google OAuth client (Auth:Google) from Key Vault. What the sepiabox-sync job
-                                     runs, daily; never migrates.
+          sync [google-drive|onedrive]
+                                     For each connected Google Drive (S-037, S-038) and OneDrive (S-039), put the
+                                     photos and videos that are new or changed in the incoming container in
+                                     reference mode, and mark the sources of those that are gone; the first run
+                                     lists everything, Sync:MaxFilesPerRun (default 500) files a run. Reads the
+                                     refresh tokens with the web's key ring and each service's OAuth client
+                                     (Auth:Google, OneDrive) from Key Vault. Without a service name, both: what the
+                                     sepiabox-sync job runs, daily; never migrates.
           faces sweep                After face recognition was turned off, erase the faces found before
                                      that from every manifest written since the last sweep (S-022); does
                                      nothing while it was never turned off. What the sepiabox-faces job runs.
@@ -119,6 +123,12 @@ public sealed record WorkerCommand(WorkerAction Action, bool MigrateFirst, GeoNa
                 return true;
             case ["sync", "google-drive"]:
                 command = new WorkerCommand(WorkerAction.SyncGoogleDrive, false);
+                return true;
+            case ["sync", "onedrive"]:
+                command = new WorkerCommand(WorkerAction.SyncOneDrive, false);
+                return true;
+            case ["sync"]:
+                command = new WorkerCommand(WorkerAction.SyncAll, false);
                 return true;
             case ["events", "rebuild"]:
                 command = new WorkerCommand(WorkerAction.EventsRebuild, false);

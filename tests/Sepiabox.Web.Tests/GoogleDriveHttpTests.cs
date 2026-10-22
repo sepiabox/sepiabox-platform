@@ -58,8 +58,8 @@ public sealed class GoogleDriveHttpTests
     {
         var google = new FakeDriveApi { RefreshStatus = HttpStatusCode.BadRequest, RefreshBody = """{"error":"invalid_grant","error_description":"Token has been expired or revoked."}""" };
 
-        await Assert.ThrowsAsync<DriveAuthorizationException>(() => Drive(google).CountMediaAsync(RefreshToken));
-        await Assert.ThrowsAsync<DriveAuthorizationException>(() => Drive(google).GetAccountEmailAsync(RefreshToken));
+        await Assert.ThrowsAsync<CloudAuthorizationException>(() => Drive(google).CountMediaAsync(RefreshToken));
+        await Assert.ThrowsAsync<CloudAuthorizationException>(() => Drive(google).GetAccountEmailAsync(RefreshToken));
         Assert.Empty(google.FileRequests);
     }
 

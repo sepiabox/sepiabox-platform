@@ -530,7 +530,7 @@ public sealed class ConnectedSourcesCatalogTests(CatalogFixture catalog)
         await sources.CompleteGoogleDriveConnectionAsync(Code, Redirect);
         var id = (await sources.ListAsync()).Single().Id;
         await sources.CountAsync(id);
-        drive.Failure = () => new DriveAuthorizationException("invalid_grant");
+        drive.Failure = () => new CloudAuthorizationException("invalid_grant");
 
         var outcome = await sources.CountAsync(id);
 
@@ -550,7 +550,7 @@ public sealed class ConnectedSourcesCatalogTests(CatalogFixture catalog)
         var id = (await sources.ListAsync()).Single().Id;
         await sources.CountAsync(id);
         var first = (await db.ConnectedSources.AsNoTracking().SingleAsync()).EncryptedRefreshToken;
-        drive.Failure = () => new DriveAuthorizationException("invalid_grant");
+        drive.Failure = () => new CloudAuthorizationException("invalid_grant");
         await sources.CountAsync(id);
         drive.Failure = null;
         drive.RefreshToken = "1//a-new-refresh-token";

@@ -462,7 +462,7 @@ internal sealed class FakeDrive : IDriveClient, IDriveAuthorization
     public Uri AuthorizationUri(string redirectUri, string state) => new($"https://accounts.example.com/authorize?state={state}");
 
     public Task<string> ExchangeCodeAsync(string code, string redirectUri, CancellationToken cancellationToken = default) =>
-        RefreshToken is { } token ? Task.FromResult(token) : Task.FromException<string>(new DriveAuthorizationException("refused"));
+        RefreshToken is { } token ? Task.FromResult(token) : Task.FromException<string>(new CloudAuthorizationException("refused"));
 
     public Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
     {

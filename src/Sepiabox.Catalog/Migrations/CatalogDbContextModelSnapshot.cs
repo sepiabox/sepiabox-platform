@@ -272,13 +272,11 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnName("status");
 
                     b.Property<string>("SyncChangesToken")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
+                        .HasColumnType("text")
                         .HasColumnName("sync_changes_token");
 
                     b.Property<string>("SyncListToken")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
+                        .HasColumnType("text")
                         .HasColumnName("sync_list_token");
 
                     b.Property<bool>("SyncListing")

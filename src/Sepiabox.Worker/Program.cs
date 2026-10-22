@@ -73,7 +73,7 @@ static async Task<int> RunHostAsync(WorkerCommand command, CancellationTokenSour
         builder.Services.AddSingleton<ManifestValidator>();
     }
 
-    if (command.Action == WorkerAction.SyncGoogleDrive)
+    if (command.Action is WorkerAction.SyncGoogleDrive or WorkerAction.SyncOneDrive or WorkerAction.SyncAll)
     {
         AddBlobStore(builder);
         AddDriveSyncServices(builder);
@@ -185,28 +185,9 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         return sweep.Problems.Count == 0 ? ExitCodes.Success : ExitCodes.Failed;
     }
 
-    if (command.Action == WorkerAction.SyncGoogleDrive)
+    if (command.Action is WorkerAction.SyncGoogleDrive or WorkerAction.SyncOneDrive or WorkerAction.SyncAll)
     {
-        var configuration = services.GetRequiredService<IConfiguration>();
-        var client = OAuthClientFrom(configuration);
-        if (client is null)
-        {
-            // Nothing is connected without it (the web needs the same client), so there is nothing to sync.
-            Log.DriveSyncNotConfigured(logger);
-            return ExitCodes.Success;
-        }
-
-        var synced = await new DriveSync(
-                services.GetRequiredService<CatalogDbContext>(),
-                services.GetRequiredService<IBlobStore>(),
-                new GoogleDriveSyncClient(client.Value.Id, client.Value.Secret),
-                services.GetRequiredService<IDataProtectionProvider>(),
-                services.GetRequiredService<TimeProvider>(),
-                logger,
-                configuration.GetValue("Sync:MaxFilesPerRun", DriveSync.DefaultMaxFilesPerRun))
-            .RunAsync(cancellationToken);
-        Log.DriveSyncFinished(logger, synced.Accounts, synced.Staged, synced.Removed, synced.Skipped, synced.Reconnect, synced.Failed);
-        return synced.Failed == 0 ? ExitCodes.Success : ExitCodes.Failed;
+        return await RunSyncAsync(command.Action, services, logger, cancellationToken);
     }
 
     if (command.Action == WorkerAction.ImportFromQueue)
@@ -334,10 +315,55 @@ static void AddDriveSyncServices(HostApplicationBuilder builder)
     }
 }
 
-static (string Id, string Secret)? OAuthClientFrom(IConfiguration configuration) =>
-    configuration["Auth:Google:ClientId"] is { Length: > 0 } id && configuration["Auth:Google:ClientSecret"] is { Length: > 0 } secret
+static (string Id, string Secret)? OAuthClientFrom(IConfiguration configuration, string section) =>
+    configuration[$"{section}:ClientId"] is { Length: > 0 } id && configuration[$"{section}:ClientSecret"] is { Length: > 0 } secret
         ? (id, secret)
         : null;
+
+// The Google Drive sync, the OneDrive sync or both (S-038, S-039): each needs its service's OAuth client, and one that is not configured
+// has nothing connected, so there is nothing to sync. The exit code is Failed if any account's run stopped early.
+static async Task<int> RunSyncAsync(WorkerAction action, IServiceProvider services, ILogger logger, CancellationToken cancellationToken)
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+    var db = services.GetRequiredService<CatalogDbContext>();
+    var store = services.GetRequiredService<IBlobStore>();
+    var protection = services.GetRequiredService<IDataProtectionProvider>();
+    var clock = services.GetRequiredService<TimeProvider>();
+    var maxFiles = configuration.GetValue("Sync:MaxFilesPerRun", DriveSync.DefaultMaxFilesPerRun);
+    var total = new DriveSyncResult(0, 0, 0, 0, 0, 0);
+
+    if (action is WorkerAction.SyncGoogleDrive or WorkerAction.SyncAll)
+    {
+        if (OAuthClientFrom(configuration, "Auth:Google") is { } google)
+        {
+            var done = await new DriveSync(db, store, new GoogleDriveSyncClient(google.Id, google.Secret), protection, clock, logger, maxFiles).RunAsync(cancellationToken);
+            total = Add(total, done);
+        }
+        else
+        {
+            Log.DriveSyncNotConfigured(logger);
+        }
+    }
+
+    if (action is WorkerAction.SyncOneDrive or WorkerAction.SyncAll)
+    {
+        if (OAuthClientFrom(configuration, "OneDrive") is { } microsoft)
+        {
+            var done = await new OneDriveSync(db, store, new GraphOneDriveSyncClient(microsoft.Id, microsoft.Secret), protection, clock, logger, maxFiles).RunAsync(cancellationToken);
+            total = Add(total, done);
+        }
+        else
+        {
+            Log.OneDriveSyncNotConfigured(logger);
+        }
+    }
+
+    Log.DriveSyncFinished(logger, total.Accounts, total.Staged, total.Removed, total.Skipped, total.Reconnect, total.Failed);
+    return total.Failed == 0 ? ExitCodes.Success : ExitCodes.Failed;
+}
+
+static DriveSyncResult Add(DriveSyncResult a, DriveSyncResult b) =>
+    new(a.Accounts + b.Accounts, a.Staged + b.Staged, a.Removed + b.Removed, a.Skipped + b.Skipped, a.Reconnect + b.Reconnect, a.Failed + b.Failed);
 
 // The Azure implementation of IBlobStore (D-051), on the client Aspire registers.
 static void AddBlobStore(HostApplicationBuilder builder)

@@ -460,6 +460,9 @@ public sealed class DriveFile
 public static class ConnectedSourceTypes
 {
     public const string GoogleDrive = "google-drive";
+
+    /// <summary>A personal Microsoft account's OneDrive, through Microsoft Graph (S-039).</summary>
+    public const string OneDrive = "onedrive";
 }
 
 /// <summary>Whether a connection works.</summary>
