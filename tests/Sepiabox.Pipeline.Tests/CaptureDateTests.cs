@@ -113,12 +113,12 @@ public class CaptureDateTests
     }
 
     [Fact]
-    public void Ranks_metadata_over_file_name_over_folder_when_comparing_sources()
+    public void Ranks_metadata_over_export_over_file_name_over_folder_when_comparing_sources()
     {
         Assert.Equal(
-            [CaptureDateSource.Folder, CaptureDateSource.FileName, CaptureDateSource.Metadata],
+            [CaptureDateSource.Folder, CaptureDateSource.FileName, CaptureDateSource.Export, CaptureDateSource.Metadata],
             Enum.GetValues<CaptureDateSource>().OrderBy(CaptureDate.Rank));
-        Assert.Equal(3, Enum.GetValues<CaptureDateSource>().Select(CaptureDate.Rank).Distinct().Count());
+        Assert.Equal(4, Enum.GetValues<CaptureDateSource>().Select(CaptureDate.Rank).Distinct().Count());
     }
 
     [Fact]
