@@ -884,6 +884,7 @@ main {
 
 .privacy {
     display: inline;
+    margin-left: 0.4em;
 }
 
 .privacy > summary {
@@ -893,11 +894,15 @@ main {
     text-decoration: underline;
 }
 
-.privacy > summary::marker {
+.privacy > summary {
+    list-style: none;
+}
+
+.privacy > summary::before {
     content: "\25B8  ";
 }
 
-.privacy[open] > summary::marker {
+.privacy[open] > summary::before {
     content: "\25BE  ";
 }
 
