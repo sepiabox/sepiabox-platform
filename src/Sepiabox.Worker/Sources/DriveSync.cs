@@ -232,7 +232,7 @@ public sealed class DriveSync(
         }
 
         var incoming = new IncomingFile(
-            ConnectedSourceTypes.GoogleDrive, account.AccountEmail, path, IncomingMode.Reference, file.ModifiedTime, file.Id, HttpsOnly(file.WebViewLink));
+            ConnectedSourceTypes.GoogleDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.GoogleDrive, account.AccountEmail), path, IncomingMode.Reference, file.ModifiedTime, file.Id, HttpsOnly(file.WebViewLink));
         var metadata = incoming.ToMetadata();
         if (MetadataBytes(metadata) > MaxMetadataBytes)
         {
@@ -292,10 +292,10 @@ public sealed class DriveSync(
     }
 
     private Task<int> MarkRemovedAsync(ConnectedSource account, string path, DateTimeOffset modifiedAt, long? size, CancellationToken cancellationToken) =>
-        _marks.MarkRemovedAsync(ConnectedSourceTypes.GoogleDrive, account.AccountEmail, path, modifiedAt, size, cancellationToken);
+        _marks.MarkRemovedAsync(ConnectedSourceTypes.GoogleDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.GoogleDrive, account.AccountEmail), path, modifiedAt, size, cancellationToken);
 
     private Task<int> ClearRemovedAsync(ConnectedSource account, string path, DateTimeOffset modifiedAt, long? size, CancellationToken cancellationToken) =>
-        _marks.ClearRemovedAsync(ConnectedSourceTypes.GoogleDrive, account.AccountEmail, path, modifiedAt, size, cancellationToken);
+        _marks.ClearRemovedAsync(ConnectedSourceTypes.GoogleDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.GoogleDrive, account.AccountEmail), path, modifiedAt, size, cancellationToken);
 
     // The folders' names and the file's, with '/', and an extension if the name has none; null when it is not a photo or video.
     private async Task<string?> PathAsync(AccountRun run, DriveFileInfo file, CancellationToken cancellationToken)

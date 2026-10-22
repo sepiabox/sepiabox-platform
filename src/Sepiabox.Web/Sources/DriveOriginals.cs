@@ -39,8 +39,9 @@ public sealed partial class DriveOriginals(
         }
 
         // The account the source was found in, and the id the sync gave the file: the manifest only has the path.
-        var account = await db.ConnectedSources.SingleOrDefaultAsync(
-            s => s.Type == ConnectedSourceTypes.GoogleDrive && s.AccountEmail == source.Name, cancellationToken);
+        var email = ConnectedSourceTypes.AccountOf(source.Type, source.Name);
+        var account = email is null ? null : await db.ConnectedSources.SingleOrDefaultAsync(
+            s => s.Type == source.Type && s.AccountEmail == email, cancellationToken);
         var file = account is null || source.RemovedAt is not null ? null : await FileOfAsync(db, account.Id, source, assetId, cancellationToken);
         if (account is null || file is null)
         {

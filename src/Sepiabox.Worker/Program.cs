@@ -192,7 +192,7 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
         var db = services.GetRequiredService<CatalogDbContext>();
         // From the vault by name in Azure; from configuration (user secrets) on a computer without one.
         var client = services.GetService<SecretClient>() is { } vault
-            ? await VaultSecrets.ReadGoogleClientAsync(vault, logger, cancellationToken)
+            ? await VaultSecrets.ReadGoogleClientAsync(new KeyVaultSecretSource(vault, logger), logger, cancellationToken)
             : OAuthClientFrom(configuration, "Auth:Google");
         if (client is null)
         {
@@ -383,4 +383,22 @@ static ServiceBusBlobEventQueue CreateServiceBusQueue(IConfiguration configurati
         PrefetchCount = 0,
     });
     return new ServiceBusBlobEventQueue(client, receiver);
+}
+
+// The sync's Key Vault, by name (D-115): a get, never a list, because the identity has a role on two secrets and none on the vault.
+// A secret that is not there (404) or that it has no role on yet (403) is not set; anything else is a fault and is thrown.
+internal sealed class KeyVaultSecretSource(SecretClient vault, ILogger logger) : ISecretSource
+{
+    public async Task<string?> GetAsync(string name, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await vault.GetSecretAsync(name, null, cancellationToken)).Value.Value;
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status is 403 or 404)
+        {
+            Log.VaultSecretStatus(logger, name, ex.Status);
+            return null;
+        }
+    }
 }

@@ -466,6 +466,25 @@ public sealed class DriveFile
 public static class ConnectedSourceTypes
 {
     public const string GoogleDrive = "google-drive";
+
+    /// <summary>
+    /// The name a cloud account's files have as a source (<c>asset_sources.name</c>, and so in the manifests, for good): the address and
+    /// the service, <c>ana@example.com (Google Drive)</c>, since one address may be connected to two services and would otherwise be one source.
+    /// </summary>
+    public static string SourceName(string type, string accountEmail) => $"{accountEmail} ({ServiceName(type)})";
+
+    /// <summary>The account address in a source name made by <see cref="SourceName"/> for that type; null when it is not one.</summary>
+    public static string? AccountOf(string type, string sourceName)
+    {
+        var suffix = $" ({ServiceName(type)})";
+        return sourceName.EndsWith(suffix, StringComparison.Ordinal) && sourceName.Length > suffix.Length ? sourceName[..^suffix.Length] : null;
+    }
+
+    private static string ServiceName(string type) => type switch
+    {
+        GoogleDrive => "Google Drive",
+        _ => type,
+    };
 }
 
 /// <summary>Whether a connection works.</summary>

@@ -194,7 +194,7 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
         var account = await db.ConnectedSources.AsNoTracking().SingleAsync();
         var when = new DateTimeOffset(2020, 5, 1, 10, 0, 0, TimeSpan.Zero);
         // Another file at the same path, modified at another time, and the asset's own file with the time its source has.
-        db.AssetSources.Add(new AssetSource { AssetId = Ids.Of(2), Type = "google-drive", Name = Account, Path = "Fotos/Dupe.jpg", ModifiedAt = when });
+        db.AssetSources.Add(new AssetSource { AssetId = Ids.Of(2), Type = "google-drive", Name = Account + " (Google Drive)", Path = "Fotos/Dupe.jpg", ModifiedAt = when });
         db.DriveFiles.AddRange(
             new DriveFile { ConnectedSourceId = account.Id, FileId = "dupe-a", Path = "Fotos/Dupe.jpg", ModifiedAt = when },
             new DriveFile { ConnectedSourceId = account.Id, FileId = "dupe-b", Path = "Fotos/Dupe.jpg", ModifiedAt = when.AddDays(1) });
@@ -263,8 +263,8 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
         var asset = CatalogData.Photo(Ids.Of(1), new DateTime(2019, 7, 14, 9, 0, 0));
         asset.Sources =
         [
-            new AssetSource { AssetId = Ids.Of(1), Type = "google-drive", Name = Account, Path = "Fotos/Praia 2019.jpg", ModifiedAt = DateTimeOffset.UtcNow },
-            new AssetSource { AssetId = Ids.Of(1), Type = "google-drive", Name = Account, Path = "Fotos/Gone.jpg", ModifiedAt = DateTimeOffset.UtcNow, RemovedAt = DateTimeOffset.UtcNow },
+            new AssetSource { AssetId = Ids.Of(1), Type = "google-drive", Name = Account + " (Google Drive)", Path = "Fotos/Praia 2019.jpg", ModifiedAt = DateTimeOffset.UtcNow },
+            new AssetSource { AssetId = Ids.Of(1), Type = "google-drive", Name = Account + " (Google Drive)", Path = "Fotos/Gone.jpg", ModifiedAt = DateTimeOffset.UtcNow, RemovedAt = DateTimeOffset.UtcNow },
             new AssetSource { AssetId = Ids.Of(1), Type = "local", Name = "HD", Path = "2019/praia.jpg", ModifiedAt = DateTimeOffset.UtcNow },
         ];
         db.Assets.AddRange(asset, CatalogData.Photo(Ids.Of(2), null));
