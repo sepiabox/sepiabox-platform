@@ -8,13 +8,14 @@
     <div class="top-end">
         <AuthorizeView>
             <Authorized>
+                <a href="sources" class="nav-link">@Text["Layout_Sources"]</a>
                 <a href="occasions" class="nav-link">@Text["Layout_Occasions"]</a>
                 <a href="organize" class="nav-link">@Text["Layout_Organize"]</a>
                 <a href="people" class="nav-link">@Text["Layout_People"]</a>
                 <a href="places" class="nav-link">@Text["Layout_Places"]</a>
                 <a href="storage" class="nav-link">@Text["Layout_Storage"]</a>
                 <a href="settings" class="nav-link">@Text["Layout_Settings"]</a>
-                <span class="user">@context.User.FindFirst(ClaimTypes.Email)?.Value</span>
+                <span class="user" title="@context.User.FindFirst(ClaimTypes.Email)?.Value">@context.User.FindFirst(ClaimTypes.Email)?.Value</span>
                 <SignOutButton />
             </Authorized>
         </AuthorizeView>

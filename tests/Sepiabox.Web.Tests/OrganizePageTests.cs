@@ -70,6 +70,24 @@ public sealed class OrganizePageTests : LocalizedContext
     }
 
     [Fact]
+    public void Shows_the_2048_preview_of_an_index_only_photo_and_the_thumbnail_when_there_is_no_preview()
+    {
+        _organization.Blurry = [Item(1, 10, DerivativeNames.LargePreview), Item(2, 10, null)];
+
+        var sources = Open("/organize?view=blurry").FindAll("a.thumb img").Select(i => i.GetAttribute("src")).ToList();
+
+        Assert.Equal([$"photos/{Ids.Of(1)}/preview-2048", $"photos/{Ids.Of(2)}/thumb-256"], sources);
+    }
+
+    [Fact]
+    public void Picks_the_largest_preview_a_photo_has_in_the_detail_page_s_order()
+    {
+        Assert.Equal("preview-2048", OrganizeItem.LargestPreview(["thumb-256", "preview-1280", "preview-2048"]));
+        Assert.Equal("preview-1280", OrganizeItem.LargestPreview(["thumb-256", "preview-1280"]));
+        Assert.Null(OrganizeItem.LargestPreview(["thumb-256"]));
+    }
+
+    [Fact]
     public void Buttons_are_styled_buttons_and_the_bulk_helpers_are_hidden_until_the_script_runs()
     {
         _organization.Blurry = [Item(1, 10)];
@@ -99,8 +117,8 @@ public sealed class OrganizePageTests : LocalizedContext
         return Render<Organize>();
     }
 
-    private static OrganizeItem Item(int n, double? sharpness) =>
-        new(new TimelineItem(Ids.Of(n), AssetKinds.Photo, new DateTime(2019, 7, 14, 10, 30 + n, 0), true, null), sharpness, HasPreview: true);
+    private static OrganizeItem Item(int n, double? sharpness, string? previewName = DerivativeNames.Preview) =>
+        new(new TimelineItem(Ids.Of(n), AssetKinds.Photo, new DateTime(2019, 7, 14, 10, 30 + n, 0), true, null), sharpness, previewName);
 
     private sealed class FixedAntiforgery : AntiforgeryStateProvider
     {

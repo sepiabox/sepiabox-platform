@@ -5,9 +5,9 @@
 
 <li class="organize-item">
     <a href="photos/@Photo.Item.Id" class="thumb" target="_blank" rel="noopener" aria-label="@Description, @Text["Organize_NewTab"]">
-        @if (Photo.HasPreview)
+        @if (Photo.PreviewName is { } preview)
         {
-            <img src="photos/@Photo.Item.Id/@DerivativeNames.Preview" alt="" loading="lazy" />
+            <img src="photos/@Photo.Item.Id/@preview" alt="" loading="lazy" />
         }
         else if (Photo.Item.HasThumbnail)
         {

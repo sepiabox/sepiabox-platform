@@ -38,6 +38,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<OccasionAsset> OccasionAssets => Set<OccasionAsset>();
 
+    public DbSet<ConnectedSource> ConnectedSources => Set<ConnectedSource>();
+
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
         options
@@ -209,6 +211,18 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             link.HasOne<Occasion>().WithMany().HasForeignKey(l => l.EventId).OnDelete(DeleteBehavior.Cascade);
             link.HasOne<Asset>().WithMany().HasForeignKey(l => l.AssetId).OnDelete(DeleteBehavior.Cascade);
             link.HasIndex(l => l.EventId);
+        });
+
+        modelBuilder.Entity<ConnectedSource>(source =>
+        {
+            source.ToTable("connected_sources");
+            source.Property(s => s.Type).HasMaxLength(32);
+            // Lower-cased by the code that stores it, so a plain unique index is "ignoring case".
+            source.Property(s => s.AccountEmail).HasMaxLength(320);
+            source.Property(s => s.EncryptedRefreshToken).HasColumnType("text");
+            source.Property(s => s.Status).HasMaxLength(16);
+            source.HasIndex(s => new { s.Type, s.AccountEmail }).IsUnique().HasDatabaseName("ix_connected_sources_account");
+            source.ToTable(t => t.HasCheckConstraint("ck_connected_sources_status", "status IN ('connected', 'reconnect')"));
         });
 
         modelBuilder.Entity<Setting>(setting =>

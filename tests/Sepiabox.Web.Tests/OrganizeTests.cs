@@ -93,6 +93,22 @@ public sealed partial class OrganizeTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Lists_the_largest_preview_each_photo_has()
+    {
+        await using var db = await LibraryAsync();
+        var indexOnly = await db.Assets.Include(a => a.Derivatives).SingleAsync(a => a.Id == Ids.Of(4));
+        indexOnly.Derivatives.Clear();
+        indexOnly.Derivatives.Add(new Derivative { AssetId = indexOnly.Id, Name = "preview-2048", BlobPath = "x/p2048.webp", Width = 2048, Height = 1536, ContentType = "image/webp" });
+        await db.SaveChangesAsync();
+
+        var blurry = await Organization(db).GetBlurryAsync(1);
+        var burst = (await Organization(db).GetBurstsAsync(1)).Items.Single();
+
+        Assert.Equal("preview-2048", blurry.Items.Single().PreviewName);
+        Assert.All(burst.Items, i => Assert.Equal("preview-1280", i.PreviewName));
+    }
+
+    [Fact]
     public async Task Lists_blurry_photos_blurriest_first_and_not_the_hidden_or_unmeasured()
     {
         await using var db = await LibraryAsync();
