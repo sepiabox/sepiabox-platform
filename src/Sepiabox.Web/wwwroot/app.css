@@ -268,19 +268,61 @@ main {
     margin: 8px 0 16px;
 }
 
-/* Hidden until ask.js marks the form busy: a question can take up to a minute (D-101). */
+/* The status line is always in the page, so a screen reader announces what ask.js puts in it (D-101); it is only clipped away
+   while there is nothing to say. */
 .ask-status {
-    display: none;
-    flex-basis: 100%;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+}
+
+.ask.busy .ask-status,
+.ask.failed .ask-status {
+    position: static;
+    width: auto;
+    height: auto;
     margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    flex-basis: 100%;
     color: var(--cyanotype);
 }
 
-.ask.busy .ask-status {
-    display: block;
+.ask.busy .ask-status::before {
+    content: "";
+    display: inline-block;
+    width: 0.9em;
+    height: 0.9em;
+    margin-right: 0.5em;
+    vertical-align: -0.1em;
+    border: 2px solid currentcolor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: ask-spin 0.9s linear infinite;
 }
 
-.ask.busy button {
+@keyframes ask-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ask.busy .ask-status::before {
+        animation: none;
+    }
+}
+
+.ask.failed .ask-status {
+    color: var(--sepia);
+}
+
+.ask button[aria-disabled="true"] {
     opacity: 0.6;
     cursor: progress;
 }

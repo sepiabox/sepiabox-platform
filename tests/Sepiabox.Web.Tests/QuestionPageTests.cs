@@ -106,8 +106,12 @@ public sealed partial class QuestionPageTests
         var page = await http.GetStringAsync(new Uri("/", UriKind.Relative));
 
         var form = Regex.Match(page, "<form class=\"ask\".*?</form>", RegexOptions.Singleline).Value;
+        var decoded = WebUtility.HtmlDecode(form);
         Assert.Contains("class=\"ask-status\" role=\"status\"", form, StringComparison.Ordinal);
-        Assert.Contains(Resource("Ask_Thinking", language), WebUtility.HtmlDecode(form), StringComparison.Ordinal);
+        Assert.Contains($"data-thinking=\"{Resource("Ask_Thinking", language)}\"", decoded, StringComparison.Ordinal);
+        Assert.Contains($"data-slow=\"{Resource("Ask_Slow", language)}\"", decoded, StringComparison.Ordinal);
+        Assert.Contains($"data-timeout=\"{Resource("Ask_TimedOut", language)}\"", decoded, StringComparison.Ordinal);
+        Assert.Matches("role=\"status\"[^>]*></p>", form);
         Assert.Contains("ask.js", page, StringComparison.Ordinal);
         using var script = await http.GetAsync(new Uri(Regex.Match(page, "src=\"(ask[^\"]*\\.js)\"").Groups[1].Value, UriKind.Relative));
         Assert.Equal(HttpStatusCode.OK, script.StatusCode);

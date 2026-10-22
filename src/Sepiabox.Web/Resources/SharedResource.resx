@@ -1185,7 +1185,7 @@
     <comment>Answer to a download of an index-only asset.</comment>
   </data>
   <data name="Ask_Thinking" xml:space="preserve">
-    <value>Thinking about your question. The first one after an update can take up to a minute.</value>
+    <value>Thinking about your question…</value>
   </data>
   <data name="Layout_Sources" xml:space="preserve">
     <value>Sources</value>
@@ -1276,5 +1276,11 @@
   </data>
   <data name="Sources_ReconnectAria" xml:space="preserve">
     <value>Reconnect {0}</value>
+  </data>
+  <data name="Ask_Slow" xml:space="preserve">
+    <value>This is taking longer than usual: the first question after the site was updated can take up to a minute.</value>
+  </data>
+  <data name="Ask_TimedOut" xml:space="preserve">
+    <value>This is taking too long. Try again.</value>
   </data>
 </root>
