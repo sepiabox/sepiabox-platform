@@ -208,15 +208,15 @@ public sealed class PersonPageFormTests : LocalizedContext
         var page = MergePage("?other=9");
 
         Assert.Equal("After merging: Ana (100 faces) keeps the faces of Unnamed (1500 faces), and Unnamed no longer exists.", page.Find(".note").TextContent);
-        Assert.Equal("people/7/merge?other=9&swap=1", page.Find("a.swap").GetAttribute("href"));
+        Assert.Equal("people/7/merge?other=9&swap=1", page.Find("a.merge-swap").GetAttribute("href"));
         Assert.Equal("0", page.Find("input[name=Swap]").GetAttribute("value"));
 
         var swapped = MergePage("?other=9&swap=1");
 
         Assert.Equal(["Ana", "Unnamed"], swapped.FindAll(".merge-people .name").Select(c => c.TextContent));
         Assert.Equal("1", swapped.Find("input[name=Swap]").GetAttribute("value"));
-        Assert.Equal("people/7/merge?other=9", swapped.Find("a.swap").GetAttribute("href"));
-        Assert.Contains("Ana has a name", swapped.Find(".note.danger").TextContent, StringComparison.Ordinal);
+        Assert.Equal("people/7/merge?other=9", swapped.Find("a.merge-swap").GetAttribute("href"));
+        Assert.Contains("Ana has a name and will be deleted", swapped.Find(".note.danger").TextContent, StringComparison.Ordinal);
         Assert.Equal("Ana", swapped.Find(".note.danger strong").TextContent);
         // The danger comes before the result sentence, the button is the danger one and names who stays, and Cancel is a secondary button before it.
         Assert.Equal(["note danger", "note"], swapped.FindAll("p.note").Select(n => n.ClassName));
@@ -234,10 +234,21 @@ public sealed class PersonPageFormTests : LocalizedContext
 
         var page = MergePage("?other=9");
 
-        Assert.Equal(["Will be deleted", "Stays"], page.FindAll(".merge-people .badge").Select(b => b.TextContent));
-        Assert.Contains("leaves", page.Find(".merge-people li:first-child").ClassName, StringComparison.Ordinal);
-        Assert.Contains("stays", page.Find(".merge-people li:last-child").ClassName, StringComparison.Ordinal);
+        Assert.Equal(["Will be deleted", "Stays"], page.FindAll(".merge-people .merge-badge").Select(b => b.TextContent));
+        Assert.Contains("merge-leaves", page.Find(".merge-people li:first-child").ClassName, StringComparison.Ordinal);
+        Assert.Contains("merge-stays", page.Find(".merge-people li:last-child").ClassName, StringComparison.Ordinal);
         Assert.Equal("true", page.Find(".merge-arrow").GetAttribute("aria-hidden"));
+    }
+
+    [Fact]
+    public void Says_that_the_person_who_goes_is_linked_to_the_user_when_they_are_unnamed()
+    {
+        _library.Persons[7] = PersonPages.Person(7, name: null, user: "ana@example.com") with { FaceCount = 5 };
+        _library.Persons[8] = PersonPages.Person(8, name: "Bruno", user: null) with { FaceCount = 900 };
+
+        var page = MergePage("?other=8&swap=1");
+
+        Assert.Equal("⚠ Unnamed is linked to you (\"This is me\") and will be deleted for good. Go on only if that is what you want; otherwise use Swap.", page.Find(".note.danger").TextContent.Trim());
     }
 
     [Fact]
@@ -248,8 +259,8 @@ public sealed class PersonPageFormTests : LocalizedContext
 
         var page = MergePage("?other=8&swap=1");
 
-        Assert.Equal("Trocar: manter a outra pessoa", page.Find("a.swap").TextContent);
-        Assert.Contains("tem nome (ou é você) e será apagada", page.Find(".note.danger").TextContent, StringComparison.Ordinal);
+        Assert.Equal("Trocar: manter a outra pessoa", page.Find("a.merge-swap").TextContent);
+        Assert.Contains("tem nome e será apagada", page.Find(".note.danger").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

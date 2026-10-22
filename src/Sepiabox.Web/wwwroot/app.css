@@ -980,21 +980,21 @@ main {
     border-radius: 8px;
 }
 
-.merge-people .person.leaves {
+.merge-people .person.merge-leaves {
     border-color: var(--danger, #a1301f);
     background: color-mix(in srgb, var(--danger, #a1301f) 8%, transparent);
 }
 
-.merge-people .person.leaves .face {
+.merge-people .person.merge-leaves .face {
     opacity: 0.6;
 }
 
-.merge-people .person.stays {
+.merge-people .person.merge-stays {
     border-color: var(--accent, var(--cyanotype));
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--cyanotype)) 25%, transparent);
 }
 
-.merge-people .badge {
+.merge-people .merge-badge {
     align-self: flex-start;
     padding: 2px 8px;
     border-radius: 999px;
@@ -1002,12 +1002,12 @@ main {
     font-weight: 700;
 }
 
-.merge-people .leaves .badge {
+.merge-people .merge-leaves .merge-badge {
     background: var(--danger, #a1301f);
     color: #fff;
 }
 
-.merge-people .stays .badge {
+.merge-people .merge-stays .merge-badge {
     background: var(--accent, var(--cyanotype));
     color: var(--accent-contrast, #fff);
 }
@@ -1015,6 +1015,19 @@ main {
 .merge-arrow {
     font-size: 2rem;
     color: var(--text-secondary);
+}
+
+/* Phones: the two cards and the arrow do not fit a row, so they stack and the arrow points down at the one that stays. */
+@media (max-width: 600px) {
+    .merge-people {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .merge-arrow {
+        align-self: center;
+        transform: rotate(90deg);
+    }
 }
 
 .note.danger {

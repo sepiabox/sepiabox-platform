@@ -1535,8 +1535,11 @@
   <data name="Merge_Result" xml:space="preserve">
     <value>After merging: {2} ({3} faces) keeps the faces of {0} ({1} faces), and {0} no longer exists.</value>
   </data>
-  <data name="Merge_LeavingKnown" xml:space="preserve">
-    <value>has a name (or is you) and will be deleted for good. Go on only if that is what you want; otherwise use Swap.</value>
+  <data name="Merge_LeavingNamed" xml:space="preserve">
+    <value>has a name and will be deleted for good. Go on only if that is what you want; otherwise use Swap.</value>
+  </data>
+  <data name="Merge_LeavingLinked" xml:space="preserve">
+    <value>is linked to you ("This is me") and will be deleted for good. Go on only if that is what you want; otherwise use Swap.</value>
   </data>
   <data name="Merge_Swap" xml:space="preserve">
     <value>Swap: keep the other person instead</value>

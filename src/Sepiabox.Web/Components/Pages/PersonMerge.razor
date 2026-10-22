@@ -18,18 +18,18 @@ else
     <h1 class="page-heading">@Text["Merge_Title"]</h1>
     <div class="merge-flow">
     <ul class="people merge-people">
-        <li class="person leaves"><span class="caption badge">@Text["Merge_Goes"]</span><PersonCard Person="Summary(_leaves)" /></li>
+        <li class="person merge-leaves"><span class="caption merge-badge">@Text["Merge_Goes"]</span><PersonCard Person="Summary(_leaves)" /></li>
         <li class="merge-arrow" aria-hidden="true">&rarr;</li>
-        <li class="person stays"><span class="caption badge">@Text["Merge_Stays"]</span><PersonCard Person="Summary(_stays)" /></li>
+        <li class="person merge-stays"><span class="caption merge-badge">@Text["Merge_Stays"]</span><PersonCard Person="Summary(_stays)" /></li>
     </ul>
     @* The one that goes on the left, the one that stays on the right. By default the person with a name (or who is the user)
        stays, else the one with more faces (D-125); "Swap" reverses it, on purpose. A named or linked person going is a danger. *@
     @if (Dangerous)
     {
-        <p class="note danger" role="alert"><span aria-hidden="true">&#9888;</span> <strong>@NameOf(_leaves.Name)</strong> @Text["Merge_LeavingKnown"]</p>
+        <p class="note danger" role="alert"><span aria-hidden="true">&#9888;</span> <strong>@NameOf(_leaves.Name)</strong> @Text[_leaves.Name is not null ? "Merge_LeavingNamed" : "Merge_LeavingLinked"]</p>
     }
     <p class="note">@Text["Merge_Result", NameOf(_leaves.Name), _leaves.FaceCount, NameOf(_stays.Name), _stays.FaceCount]</p>
-    <p><a class="swap" href="@SwapHref" data-enhance-nav="false">@Text["Merge_Swap"]</a></p>
+    <p><a class="merge-swap" href="@SwapHref" data-enhance-nav="false">@Text["Merge_Swap"]</a></p>
     <form method="post" @formname="confirm" @onsubmit="ConfirmAsync" class="confirm">
         <AntiforgeryToken />
         <input type="hidden" name="Confirmed" value="yes" />
