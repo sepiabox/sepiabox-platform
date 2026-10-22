@@ -330,6 +330,21 @@ public sealed class AppleExportReaderTests : IDisposable
     }
 
     [Fact]
+    public void Counts_the_photos_whose_coordinate_sign_and_letter_disagree_and_gives_them_no_location()
+    {
+        Put("bad.heic");
+        Put("good.heic");
+        _export.Write("bad.heic.xmp", Encoding.UTF8.GetBytes(XmpText("<exif:GPSLatitude>38.7</exif:GPSLatitude><exif:GPSLatitudeRef>N</exif:GPSLatitudeRef><exif:GPSLongitude>-9.1</exif:GPSLongitude><exif:GPSLongitudeRef>E</exif:GPSLongitudeRef>")));
+        _export.Write("good.heic.xmp", Encoding.UTF8.GetBytes(XmpText("<exif:GPSLatitude>38,43.338N</exif:GPSLatitude><exif:GPSLongitude>9,8.358W</exif:GPSLongitude>")));
+
+        var scan = Read();
+
+        Assert.Null(scan.Find("bad.heic")!.Location);
+        Assert.NotNull(scan.Find("good.heic")!.Location);
+        Assert.Contains("1 photos have a latitude or longitude whose sign and letter disagree and were not given a location.", scan.Warnings);
+    }
+
+    [Fact]
     public void Does_not_take_a_folder_name_as_an_album()
     {
         Put("2018-05-23 Beach/IMG_0001.HEIC");
