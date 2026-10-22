@@ -201,7 +201,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Story | Title | Epic | Depends on | Priority | Size | Status | Track |
 |---|---|---|---|---|---|---|---|
 | S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036, S-064 | Medium | M | `doing` | A |
-| S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010, S-064 | Medium | M | `todo` | A |
+| S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010, S-064 | Medium | M | `doing` | A |
 | S-065 | [Move the code `process` and the cloud worker share into Pipeline](S-065-move-the-shared-process-code-into-pipeline.md) | Cloud sources | S-036, S-063 | Low | S | `todo` | A |
 | S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` | A |
 | S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |

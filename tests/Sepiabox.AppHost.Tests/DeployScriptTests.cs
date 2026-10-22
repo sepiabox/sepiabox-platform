@@ -210,7 +210,7 @@ public sealed class DeployScriptTests : IDisposable
     }
 
     [UnixFact]
-    public async Task Deploy_gives_the_sync_job_a_role_on_each_google_secret_and_on_nothing_else_in_the_vault()
+    public async Task Deploy_gives_the_sync_job_a_role_on_each_client_secret_and_on_nothing_else_in_the_vault()
     {
         var result = await RunDeployAsync("Succeeded");
 
@@ -221,6 +221,8 @@ public sealed class DeployScriptTests : IDisposable
             [
                 $"az role assignment create --assignee-object-id 00000000-0000-0000-0000-0000000000aa --assignee-principal-type ServicePrincipal --role Key Vault Secrets User --scope {vault}/secrets/Auth--Google--ClientId --output none",
                 $"az role assignment create --assignee-object-id 00000000-0000-0000-0000-0000000000aa --assignee-principal-type ServicePrincipal --role Key Vault Secrets User --scope {vault}/secrets/Auth--Google--ClientSecret --output none",
+                $"az role assignment create --assignee-object-id 00000000-0000-0000-0000-0000000000aa --assignee-principal-type ServicePrincipal --role Key Vault Secrets User --scope {vault}/secrets/OneDrive--ClientId --output none",
+                $"az role assignment create --assignee-object-id 00000000-0000-0000-0000-0000000000aa --assignee-principal-type ServicePrincipal --role Key Vault Secrets User --scope {vault}/secrets/OneDrive--ClientSecret --output none",
             ],
             assignments);
         // The secrets exist already, so nothing is written to the owner's vault.
@@ -238,8 +240,9 @@ public sealed class DeployScriptTests : IDisposable
         Assert.Equal(0, result.ExitCode);
         Assert.DoesNotContain(Calls(), call => call.StartsWith("az keyvault secret set", StringComparison.Ordinal));
         var assignments = Calls().Where(call => call.StartsWith("az role assignment create", StringComparison.Ordinal)).ToList();
-        Assert.Single(assignments);
-        Assert.Contains("/secrets/Auth--Google--ClientId", assignments[0], StringComparison.Ordinal);
+        Assert.Equal(3, assignments.Count);
+        Assert.DoesNotContain(assignments, a => a.Contains("/secrets/Auth--Google--ClientSecret", StringComparison.Ordinal));
+        Assert.Contains(assignments, a => a.Contains("/secrets/Auth--Google--ClientId", StringComparison.Ordinal));
         Assert.Contains("Auth--Google--ClientSecret is not set yet; run deploy again after setting it.", result.Output, StringComparison.Ordinal);
         // The deploy goes on: a secret that is not set yet does not stop it.
         Assert.Contains(DeploySync, Calls());
