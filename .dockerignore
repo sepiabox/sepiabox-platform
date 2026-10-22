@@ -5,4 +5,6 @@
 .claude/
 **/.vs/
 tests/
-docs/
+# The schemas are embedded resources of Sepiabox.Search and Sepiabox.Pipeline, so they are the one part of docs/ the build reads.
+docs/*
+!docs/schemas/
