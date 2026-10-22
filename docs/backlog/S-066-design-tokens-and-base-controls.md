@@ -18,7 +18,7 @@ The owner finds the app plain and dated (D-119). DaVinci's audit ranks the base 
 - A theme switch in the app (system setting only; S-069 may add one).
 
 ### Acceptance criteria
-- [ ] Given any page in light and in dark, then every text and control pair measured in DaVinci's table passes WCAG AA, and control borders reach 3:1.
+- [ ] Given any page in light and in dark, then every text and control colour pair of the tokens passes WCAG AA and control borders reach 3:1, checked by a unit test over the token values.
 - [ ] Given the header at 1024 px and 390 px in `en` and `pt-BR`, then it is one row with no horizontal scroll, the current page is marked, and the language switch works without JavaScript.
 - [ ] Given keyboard use, then every interactive element shows the focus ring.
 - [ ] Existing pages keep working with no markup change other than the header.

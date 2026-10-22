@@ -1,6 +1,6 @@
-## S-069 — Remaining pages, empty states and a theme switch
+## S-069 — Remaining pages on the shared components
 **Epic:** Visual design
-**Depends on:** S-066, S-067, S-068
+**Depends on:** S-066, S-067, S-068, S-037, S-039, S-040
 **Priority:** Medium
 **Size:** M
 
@@ -9,15 +9,16 @@ Different pages do the same job with different patterns (D-119). Mockup: `docs/d
 
 ### Scope
 - People (named cards with avatars, a "Needs a name" section, the callout with the count), person, occasions, places, storage, sources, organize, settings and export moved onto the shared components.
-- Illustrated empty states (SVG, no images of people), notes as toast-like cards.
-- A theme switch (system / light / dark) in Settings, remembered per browser.
+- Pages that change meanwhile (sources after S-039, export after S-040) are moved as they are on main when this story starts.
+
+### Out of scope
+- Empty states and the theme switch (S-070).
 
 ### Acceptance criteria
 - [ ] Given each page in `en` and `pt-BR`, light and dark, at 1024 and 390 px, then it uses the shared components and has no horizontal scroll.
-- [ ] Given the theme switch on "dark" with a light system setting, then the app is dark, and it stays so after a reload.
 
 ### Technical notes
 - DaVinci reviews every page. Decisions: D-050, D-119.
 
 ### Expected tests
-- bUnit per page for the component classes; the theme switch's cookie.
+- bUnit per page for the component classes.

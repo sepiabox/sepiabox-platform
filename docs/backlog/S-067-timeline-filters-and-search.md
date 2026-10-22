@@ -1,6 +1,6 @@
 ## S-067 — Timeline filters and the question box, redesigned
 **Epic:** Visual design
-**Depends on:** S-066
+**Depends on:** S-066, S-052
 **Priority:** High
 **Size:** M
 
@@ -23,6 +23,7 @@ The owner's main complaint: the filters are native selects, a listbox and a bare
 - [ ] Given `en` and `pt-BR`, then every label and chip text comes from the resources.
 
 ### Technical notes
+- `<details name>` (exclusive popovers) needs a current browser (Chrome, Edge, Safari and Firefox of 2024 or later); in an older one the popovers simply do not close each other.
 - Reuse the `more.js` pattern for closing on an outside click; no framework. DaVinci reviews.
 - Decisions: D-050, D-119.
 

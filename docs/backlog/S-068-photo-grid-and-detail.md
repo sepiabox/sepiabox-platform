@@ -1,6 +1,6 @@
 ## S-068 — Photo grid and photo detail, redesigned
 **Epic:** Visual design
-**Depends on:** S-066
+**Depends on:** S-066, S-041, S-052, S-064
 **Priority:** Medium
 **Size:** M
 
