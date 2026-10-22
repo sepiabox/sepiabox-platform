@@ -66,6 +66,15 @@ public static partial class MediaEndpoints
             return Results.NotFound();
         }
 
+        if (!original.Stored)
+        {
+            // An index-only asset (S-063, D-088) has no blob: say where it is, instead of signing a link that leads nowhere.
+            return Results.Problem(
+                title: text["Download_KeptAtSource_Title"],
+                detail: text["Download_KeptAtSource"],
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
         try
         {
             var url = await links.ForOriginalAsync(id, original, http.RequestAborted);

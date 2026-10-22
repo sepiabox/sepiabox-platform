@@ -11,7 +11,7 @@
 {
     <div class="player">
         <video data-player controls preload="metadata" playsinline aria-label="@Label"
-               src="photos/@AssetId/@DerivativeNames.Proxy" poster="@PosterUrl"></video>
+               src="photos/@AssetId/@(ProxyName ?? DerivativeNames.Proxy)" poster="@PosterUrl"></video>
         @* Empty, and so hidden by CSS, until video.js fills it; screen readers announce the text as it appears. *@
         <p class="player-error" role="alert" data-message="@Text["Video_PlaybackFailed"]"></p>
     </div>
@@ -37,7 +37,11 @@ else
     [Parameter]
     public string? PosterName { get; set; }
 
-    /// <summary>Whether the 720p version exists; until it does, there is nothing the browser can play.</summary>
+    /// <summary>The playable version to use (S-064): <c>proxy-1080p</c> or <c>proxy-720p</c>; the 720p one when not given.</summary>
+    [Parameter]
+    public string? ProxyName { get; set; }
+
+    /// <summary>Whether a playable version exists; until it does, there is nothing the browser can play.</summary>
     [Parameter]
     public bool HasProxy { get; set; }
 

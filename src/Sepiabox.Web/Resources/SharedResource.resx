@@ -1150,4 +1150,38 @@
   <data name="Occasions_ShowAll" xml:space="preserve">
     <value>Show all occasions</value>
   </data>
+  <data name="Source_OpenGooglePhotos" xml:space="preserve">
+    <value>Open in Google Photos</value>
+  </data>
+  <data name="Source_OpenInstagram" xml:space="preserve">
+    <value>Open on Instagram</value>
+  </data>
+  <data name="Source_OpenAtSource" xml:space="preserve">
+    <value>Open at the source</value>
+  </data>
+  <data name="Source_NewTab" xml:space="preserve">
+    <value>(opens in a new tab)</value>
+    <comment>Read by screen readers after a link to a source.</comment>
+  </data>
+  <data name="Source_StoredOnDrive" xml:space="preserve">
+    <value>Original on the drive '{0}':</value>
+    <comment>{0} is the drive's name; the file's path follows, in its own markup.</comment>
+  </data>
+  <data name="Source_StoredApple" xml:space="preserve">
+    <value>Original in Apple Photos / iCloud Photos; it can't be opened from here.</value>
+  </data>
+  <data name="Source_StoredFacebook" xml:space="preserve">
+    <value>Original on Facebook; it can't be opened from here.</value>
+  </data>
+  <data name="Source_StoredIn" xml:space="preserve">
+    <value>Original in {0}; it can't be opened from here.</value>
+    <comment>{0} is the export's name.</comment>
+  </data>
+  <data name="Download_KeptAtSource_Title" xml:space="preserve">
+    <value>The original is not stored here</value>
+  </data>
+  <data name="Download_KeptAtSource" xml:space="preserve">
+    <value>Sepiabox keeps no copy of this original: it stays at its source.</value>
+    <comment>Answer to a download of an index-only asset.</comment>
+  </data>
 </root>

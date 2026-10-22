@@ -14,7 +14,7 @@
         <figure class="preview">
             @if (AssetKinds.IsVideo(_asset.Kind))
             {
-                <VideoPlayer AssetId="@_asset.Id" Label="@VideoLabel" PosterName="@_asset.PreviewName" HasProxy="_asset.HasProxy" />
+                <VideoPlayer AssetId="@_asset.Id" Label="@VideoLabel" PosterName="@_asset.PreviewName" HasProxy="_asset.HasProxy" ProxyName="@_asset.ProxyName" />
             }
             else if (_asset.PreviewName is { } preview)
             {
@@ -94,13 +94,38 @@
             <ul class="sources">
                 @foreach (var source in _asset.Sources)
                 {
-                    <li><span class="source-name">@source.Name</span> <span class="mono">@source.Path</span></li>
+                    var link = SourceLinks.SafeUrl(source.Url);
+                    var line = link is null && !_asset.OriginalStored ? SourceLinks.StoredLine(source, Text) : null;
+                    <li>
+                        @if (line is not null)
+                        {
+                            @* An original Sepiabox does not keep, with no address: say where it is (S-064). *@
+                            <span class="source-line">@line.Text@if (line.Path is { } path){@(" ")<span class="mono">@path</span>}</span>
+                        }
+                        else
+                        {
+                            <span class="source-name">@source.Name</span> <span class="mono">@source.Path</span>
+                        }
+                        @if (link is not null)
+                        {
+                            @* The address is untrusted text: only https is ever a link, in a new tab that gets nothing from this page. *@
+                            <a class="source-link" href="@link" target="_blank" rel="noopener noreferrer">@SourceLinks.LinkText(source, Text)<span class="visually-hidden">@(" " + Text["Source_NewTab"].Value)</span></a>
+                        }
+                    </li>
                 }
             </ul>
 
             @* Not an enhanced navigation: Blazor would fetch the redirect itself, fail on CORS and read the original twice.
                No `download` attribute: Content-Disposition names the file, and a failure message must stay visible. *@
-            <p><a class="button" href="photos/@_asset.Id/original" data-enhance-nav="false">@Text["Detail_DownloadOriginal"]</a></p>
+            @if (_asset.OriginalStored)
+            {
+                <p><a class="button" href="photos/@_asset.Id/original" data-enhance-nav="false">@Text["Detail_DownloadOriginal"]</a></p>
+            }
+            else
+            {
+                @* Where the button would be: say why there is none (S-064). *@
+                <p class="muted kept-at-source">@Text["Download_KeptAtSource"]</p>
+            }
         </section>
     </div>
 }

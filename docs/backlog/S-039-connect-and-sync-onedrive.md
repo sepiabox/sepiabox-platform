@@ -23,6 +23,7 @@ The same as Google Drive, for personal Microsoft accounts, via Microsoft Graph.
 - [ ] Given a synced OneDrive photo whose original is not stored, when its detail page renders, then the S-064 source list shows "Open original" for the OneDrive source.
 
 ### Technical notes
+- **Detail page (S-064, D-095).** Extend `SourceLinks` (`src/Sepiabox.Web/Services/SourceLinks.cs`) with an internal-link kind, an `Href` plus a text key, for "Open original" through the server; its `s_cloudTypes` set is the hook where a cloud source gets no line today. Check the cloud type names against that set when this story lands: `google-drive` and this story's OneDrive type name (`onedrive` today).
 - `Microsoft.Graph` package. `IOneDriveClient` interface for tests.
 - Portability (D-051): write to `incoming` through `IBlobStore` (S-050).
 
