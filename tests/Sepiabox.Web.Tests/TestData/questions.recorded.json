@@ -126,7 +126,7 @@
     "storage-photos-2019/pt": "{\"filters\":{\"kinds\":[\"photo\"],\"years\":[2019]},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\"}}",
     "storage-videos-2019/en": "{\"filters\":{\"kinds\":[\"video\"],\"years\":[2019]},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\"}}",
     "storage-videos-2019/pt": "{\"filters\":{\"kinds\":[\"video\"],\"years\":[2019]},\"aggregate\":{\"count\":\"assets\",\"sum\":\"bytes\"}}",
-    "this-year-videos/en": "{\"filters\":{\"kinds\":[\"video\"],\"years\":[2026]}}",
+    "this-year-videos/en": "{\"filters\":{\"kinds\":[\"video\"],\"dateFrom\":\"2026-01-01\",\"dateTo\":\"2026-12-31\"}}",
     "this-year-videos/pt": "{\"filters\":{\"kinds\":[\"video\"],\"dateFrom\":\"2026-01-01\",\"dateTo\":\"2026-10-20\"}}",
     "three-years-ago-today/en": "{\"filters\":{\"kinds\":[\"photo\"],\"onThisDay\":{\"yearsAgo\":3}}}",
     "three-years-ago-today/pt": "{\"filters\":{\"kinds\":[\"photo\"],\"onThisDay\":{\"yearsAgo\":3}}}",

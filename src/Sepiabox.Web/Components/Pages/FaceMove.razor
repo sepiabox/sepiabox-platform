@@ -90,6 +90,6 @@ else
             outcome = CurationOutcome.NotFound;
         }
 
-        Navigation.NavigateTo(await PersonLinks.AfterAsync(Library, Id, outcome, "moved"));
+        Navigation.NavigateTo(await PersonLinks.AfterAsync(Library, Id, outcome, "moved", PersonLinks.AnchorAfter(_person, FaceId)));
     }
 }

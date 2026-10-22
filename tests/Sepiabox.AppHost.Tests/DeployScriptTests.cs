@@ -18,6 +18,7 @@ public sealed class DeployScriptTests : IDisposable
     private const string DeployWeb = "azd deploy web --no-prompt";
     private const string DeployImport = "azd deploy import --no-prompt";
     private const string DeployImportAll = "azd deploy import-all --no-prompt";
+    private const string DeployExport = "azd deploy export --no-prompt";
     private const string DeployGeoNames = "azd deploy geonames --no-prompt";
     private const string DeployFaces = "azd deploy faces --no-prompt";
     private const string DeployProcess = "azd deploy process --no-prompt";
@@ -173,6 +174,8 @@ public sealed class DeployScriptTests : IDisposable
                 DeployFaces,
                 // The event-driven process job (S-036), from its own Dockerfile.
                 DeployProcess,
+                // The scheduled export job (S-040) too.
+                DeployExport,
                 // The manual GeoNames job runs the new image too (S-059), before the queue receives again.
                 DeployGeoNames,
                 ResumeQueue,
@@ -182,7 +185,7 @@ public sealed class DeployScriptTests : IDisposable
                 && !call.StartsWith("az group", StringComparison.Ordinal)
                 && !call.StartsWith("az postgres", StringComparison.Ordinal)));
         // What azure.yaml's predeploy hook checks, so that only this script deploys.
-        Assert.Equal(["1", "1", "1", "1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
+        Assert.Equal(["1", "1", "1", "1", "1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
         Assert.Equal($"web sepiaboxacr.azurecr.io/sepiabox-web-models:{ModelsTag()}", File.ReadAllLines(_calls + ".base")[^1]);
         Assert.Contains("Migrations applied.", result.Output, StringComparison.Ordinal);
     }
