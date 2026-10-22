@@ -288,6 +288,31 @@ public sealed class AssetDeletionTests(CatalogFixture fixture)
     }
 
     [Fact]
+    public async Task Does_not_remove_a_person_named_while_the_run_was_going_on()
+    {
+        await using var world = await World.CreateAsync(fixture);
+        await world.SeedAsync(1, (Wrong, "2019/a.jpg"));
+        await world.SeedAsync(2, (Wrong, "2019/b.jpg"));
+        await world.ImportAsync();
+        var person = new Person { FaceCount = 2 };
+        world.Db.People.Add(person);
+        await world.Db.SaveChangesAsync();
+        world.Db.Faces.AddRange(World.NewFace(1, person, 0), World.NewFace(2, person, 1));
+        await world.Db.SaveChangesAsync();
+        world.Db.ChangeTracker.Clear();
+        var deletion = world.Deletion();
+        var plan = await deletion.PlanAsync(Wrong, default);
+
+        // Asset 1 is deleted alone, then the family names the person, then asset 2 goes with the same instance (one run).
+        await deletion.DeleteAsync(plan with { Matched = [plan.Matched[0]] }, default);
+        await world.Db.People.Where(p => p.Id == person.Id).ExecuteUpdateAsync(u => u.SetProperty(p => p.Name, "Ana").SetProperty(p => p.UserEmail, "ana@example.com"));
+        await deletion.DeleteAsync(plan with { Matched = [plan.Matched[1]] }, default);
+
+        var left = Assert.Single(await world.Db.People.AsNoTracking().ToListAsync());
+        Assert.Equal(("Ana", "ana@example.com", 0), (left.Name, left.UserEmail, left.FaceCount));
+    }
+
+    [Fact]
     public async Task Keeps_a_named_person_whose_every_face_was_deleted_with_no_count_and_no_centroid()
     {
         await using var world = await World.CreateAsync(fixture);

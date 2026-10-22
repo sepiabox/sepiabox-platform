@@ -118,6 +118,12 @@ public sealed class AssetDeletion(CatalogDbContext db, IBlobStore store, IManife
                 {
                     // One asset must not stop the rest; its deletion is idempotent, so a rerun finishes it.
                     Log.AssetDeleteFailed(logger, asset.Id, ex.GetType().Name);
+                    if (ex is InvalidOperationException)
+                    {
+                        // Not a storage or database failure: a bug (a threading one, say) must not hide behind "run again".
+                        Log.AssetDeleteInvalid(logger, asset.Id, ex.Message);
+                    }
+
                     kept.Add(new KeptAsset(asset.Id, asset.SourcePaths, $"failed ({ex.GetType().Name}); run again"));
                 }
             });
@@ -285,6 +291,9 @@ public sealed class AssetDeletion(CatalogDbContext db, IBlobStore store, IManife
         // The people's stored count and centroid (an average of face embeddings, biometric data) are recomputed from the faces
         // that remain, under the lock the importers and the family's edits take (D-077), so no trace of a deleted photo's faces is left.
         await FaceAssigner.LockAsync(db, cancellationToken);
+        // Under the lock, nothing tracked from an earlier asset is trusted: a person loaded then may have been named since, and a
+        // stale unnamed copy would be removed by the recompute.
+        db.ChangeTracker.Clear();
         var personIds = await db.Faces.Where(f => f.AssetId == id && f.PersonId != null).Select(f => f.PersonId!.Value).Distinct().ToListAsync(cancellationToken);
         await db.AssetEmbeddings.Where(e => e.AssetId == id).ExecuteDeleteAsync(cancellationToken);
         await db.Faces.Where(f => f.AssetId == id).ExecuteDeleteAsync(cancellationToken);
