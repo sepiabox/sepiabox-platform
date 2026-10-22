@@ -1227,7 +1227,7 @@
     <value>Connection expired</value>
   </data>
   <data name="Sources_ExpiredHint" xml:space="preserve">
-    <value>Google stopped honouring the access, which happens every 7 days while the app is in testing mode. Reconnect to count again.</value>
+    <value>Google no longer accepts the access to this account. It expires every 7 days while the app is in testing. Reconnect to count again.</value>
   </data>
   <data name="Sources_None" xml:space="preserve">
     <value>No account is connected yet.</value>
@@ -1254,15 +1254,24 @@
     <value>Counted.</value>
   </data>
   <data name="Sources_Note_disconnected" xml:space="preserve">
-    <value>Disconnected.</value>
+    <value>Disconnected. Nothing changed in Google Drive; you can connect it again at any time.</value>
   </data>
   <data name="Sources_Note_reconnect" xml:space="preserve">
-    <value>Google no longer honours the access to this account. Reconnect it.</value>
+    <value>Google no longer accepts the access to this account. Reconnect it.</value>
   </data>
   <data name="Sources_Note_countFailed" xml:space="preserve">
     <value>Could not count right now. Try again later.</value>
   </data>
   <data name="Sources_Note_notFound" xml:space="preserve">
     <value>That connection is gone.</value>
+  </data>
+  <data name="Sources_DisconnectAria" xml:space="preserve">
+    <value>Disconnect {0}</value>
+  </data>
+  <data name="Sources_CountAria" xml:space="preserve">
+    <value>Count photos and videos for {0}</value>
+  </data>
+  <data name="Sources_ReconnectAria" xml:space="preserve">
+    <value>Reconnect {0}</value>
   </data>
 </root>

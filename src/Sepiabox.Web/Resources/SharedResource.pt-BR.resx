@@ -1165,7 +1165,7 @@
     <value>Conexão expirada</value>
   </data>
   <data name="Sources_ExpiredHint" xml:space="preserve">
-    <value>O Google deixou de aceitar o acesso, o que acontece a cada 7 dias enquanto o app está em modo de teste. Reconecte para contar de novo.</value>
+    <value>O Google deixou de aceitar o acesso a esta conta. Ele expira a cada 7 dias enquanto o app está em testes. Reconecte para contar de novo.</value>
   </data>
   <data name="Sources_None" xml:space="preserve">
     <value>Nenhuma conta conectada ainda.</value>
@@ -1192,7 +1192,7 @@
     <value>Contagem feita.</value>
   </data>
   <data name="Sources_Note_disconnected" xml:space="preserve">
-    <value>Desconectado.</value>
+    <value>Desconectado. Nada mudou no Google Drive; você pode conectar de novo quando quiser.</value>
   </data>
   <data name="Sources_Note_reconnect" xml:space="preserve">
     <value>O Google deixou de aceitar o acesso a esta conta. Reconecte-a.</value>
@@ -1202,5 +1202,14 @@
   </data>
   <data name="Sources_Note_notFound" xml:space="preserve">
     <value>Essa conexão não existe mais.</value>
+  </data>
+  <data name="Sources_DisconnectAria" xml:space="preserve">
+    <value>Desconectar {0}</value>
+  </data>
+  <data name="Sources_CountAria" xml:space="preserve">
+    <value>Contar fotos e vídeos de {0}</value>
+  </data>
+  <data name="Sources_ReconnectAria" xml:space="preserve">
+    <value>Reconectar {0}</value>
   </data>
 </root>

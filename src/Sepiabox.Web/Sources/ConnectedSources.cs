@@ -126,36 +126,47 @@ public sealed partial class ConnectedSources(
             LogCodeRefused(log, ex);
             return SourceOutcome.Failed;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             LogConnectFailed(log, ex);
             return SourceOutcome.Failed;
         }
 
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        var existing = await db.ConnectedSources.SingleOrDefaultAsync(
-            s => s.Type == ConnectedSourceTypes.GoogleDrive && s.AccountEmail == email, cancellationToken);
+        var protectedToken = tokens.Protect(token);
+        var existing = await FindAsync(db, email, cancellationToken);
         if (existing is null)
         {
             db.ConnectedSources.Add(new ConnectedSource
             {
                 Type = ConnectedSourceTypes.GoogleDrive,
                 AccountEmail = email,
-                EncryptedRefreshToken = tokens.Protect(token),
+                EncryptedRefreshToken = protectedToken,
                 Status = ConnectedSourceStatuses.Connected,
                 ConnectedAt = clock.GetUtcNow(),
             });
-        }
-        else
-        {
-            // The same account connecting again: a new token, and the counts and the last sync stay.
-            existing.EncryptedRefreshToken = tokens.Protect(token);
-            existing.Status = ConnectedSourceStatuses.Connected;
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+                return SourceOutcome.Done;
+            }
+            catch (DbUpdateException)
+            {
+                // Two callbacks for a new account at once: the other one won the unique key, so this is an update.
+                db.ChangeTracker.Clear();
+                existing = await FindAsync(db, email, cancellationToken) ?? throw new InvalidOperationException("The connection could not be saved.");
+            }
         }
 
+        // The same account connecting again: a new token, and the counts and the last sync stay.
+        existing.EncryptedRefreshToken = protectedToken;
+        existing.Status = ConnectedSourceStatuses.Connected;
         await db.SaveChangesAsync(cancellationToken);
         return SourceOutcome.Done;
     }
+
+    private static Task<ConnectedSource?> FindAsync(CatalogDbContext db, string email, CancellationToken cancellationToken) =>
+        db.ConnectedSources.SingleOrDefaultAsync(s => s.Type == ConnectedSourceTypes.GoogleDrive && s.AccountEmail == email, cancellationToken);
 
     public async Task<SourceOutcome> CountAsync(long id, CancellationToken cancellationToken = default)
     {
@@ -182,7 +193,7 @@ public sealed partial class ConnectedSources(
             LogTokenRefused(log, id, ex);
             return await NeedReconnectingAsync(db, source, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             LogCountFailed(log, id, ex);
             return SourceOutcome.Failed;
@@ -210,7 +221,7 @@ public sealed partial class ConnectedSources(
             {
                 await authorization.RevokeAsync(token, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 LogRevokeFailed(log, id, ex);
             }

@@ -2,6 +2,7 @@ using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Drive.v3;
+using Google.Apis.Http;
 using Google.Apis.Services;
 using Sepiabox.Web.Auth;
 
@@ -10,10 +11,13 @@ namespace Sepiabox.Web.Sources;
 /// <summary>
 /// Google's side of <see cref="IDriveClient"/> and <see cref="IDriveAuthorization"/> (S-037): the Drive API with the
 /// same OAuth client as the Google sign-in (<c>Auth:Google</c>), asked for the read-only scope in a flow of its own
-/// (incremental authorization). Not run by any test: they use fakes (D-097).
+/// (incremental authorization). The tests of the web use fakes of the interfaces; this class is tested alone with a
+/// fake <see cref="HttpMessageHandler"/> in place of Google (D-097).
 /// </summary>
-public sealed class GoogleDrive(OAuthClient? client) : IDriveClient, IDriveAuthorization
+public sealed class GoogleDrive(OAuthClient? client, HttpMessageHandler? handler = null) : IDriveClient, IDriveAuthorization
 {
+    private const string RevokeEndpoint = "https://oauth2.googleapis.com/revoke";
+
     private const string UserId = "sepiabox";
     private const string AuthorizationEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
 
@@ -54,8 +58,33 @@ public sealed class GoogleDrive(OAuthClient? client) : IDriveClient, IDriveAutho
         }
     }
 
-    public Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default) =>
-        Flow().RevokeTokenAsync(UserId, refreshToken, cancellationToken);
+    /// <summary>
+    /// The token goes in the body of a form, never in the address: the HTTP instrumentation records whole URLs, and
+    /// Google's own client sends it as <c>?token=</c>, which would put a live refresh token in the telemetry. A failure
+    /// is thrown without the request or the token in it.
+    /// </summary>
+    public async Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
+    {
+        using var http = handler is null ? new HttpClient() : new HttpClient(new SharedHandler(handler));
+        using var body = new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = refreshToken });
+        HttpResponseMessage response;
+        try
+        {
+            response = await http.PostAsync(new Uri(RevokeEndpoint), body, cancellationToken);
+        }
+        catch (HttpRequestException)
+        {
+            throw new InvalidOperationException("Google could not be reached to revoke the token.");
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException($"Google answered {(int)response.StatusCode} to the revocation.");
+            }
+        }
+    }
 
     public async Task<string> GetAccountEmailAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
@@ -105,6 +134,7 @@ public sealed class GoogleDrive(OAuthClient? client) : IDriveClient, IDriveAutho
         {
             ClientSecrets = new ClientSecrets { ClientId = oauth.ClientId, ClientSecret = oauth.ClientSecret },
             Scopes = [DriveService.Scope.DriveReadonly],
+            HttpClientFactory = handler is null ? new HttpClientFactory() : new HandlerFactory(handler),
         });
     }
 
@@ -112,6 +142,7 @@ public sealed class GoogleDrive(OAuthClient? client) : IDriveClient, IDriveAutho
     {
         HttpClientInitializer = new UserCredential(Flow(), UserId, new TokenResponse { RefreshToken = refreshToken }),
         ApplicationName = "Sepiabox",
+        HttpClientFactory = handler is null ? new HttpClientFactory() : new HandlerFactory(handler),
     });
 
     // The credential refreshes the access token on the first call: a token Google no longer honours fails there.
@@ -125,5 +156,19 @@ public sealed class GoogleDrive(OAuthClient? client) : IDriveClient, IDriveAutho
         {
             throw new DriveAuthorizationException("Google no longer honours the token.", ex);
         }
+    }
+
+    // A handler given by a test: Google's clients dispose what they are given, and this is used for several calls.
+    private sealed class HandlerFactory(HttpMessageHandler handler) : HttpClientFactory
+    {
+        protected override HttpMessageHandler CreateHandler(CreateHttpClientArgs args) => new SharedHandler(handler);
+    }
+
+    private sealed class SharedHandler(HttpMessageHandler inner) : HttpMessageHandler
+    {
+        private readonly HttpMessageInvoker _invoker = new(inner, disposeHandler: false);
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            _invoker.SendAsync(request, cancellationToken);
     }
 }

@@ -61,21 +61,21 @@
                     <div class="connection-actions">
                         @if (source.NeedsReconnecting)
                         {
-                            <a class="button" href="@SourceEndpoints.ConnectPath.TrimStart('/')">@Text["Sources_Reconnect"]</a>
+                            <a class="button" href="@SourceEndpoints.ConnectPath.TrimStart('/')" aria-label="@Text["Sources_ReconnectAria", source.AccountEmail]">@Text["Sources_Reconnect"]</a>
                         }
                         else
                         {
                             <form method="post" @formname="@("count-" + source.Id.ToString(CultureInfo.InvariantCulture))" @onsubmit="CountAsync">
                                 <AntiforgeryToken />
                                 <input type="hidden" name="SourceId" value="@source.Id.ToString(CultureInfo.InvariantCulture)" />
-                                <button type="submit" class="button">@Text["Sources_Count"]</button>
+                                <button type="submit" class="button" aria-label="@Text["Sources_CountAria", source.AccountEmail]">@Text["Sources_Count"]</button>
                             </form>
                         }
 
                         <form method="post" @formname="@("disconnect-" + source.Id.ToString(CultureInfo.InvariantCulture))" @onsubmit="DisconnectAsync">
                             <AntiforgeryToken />
                             <input type="hidden" name="SourceId" value="@source.Id.ToString(CultureInfo.InvariantCulture)" />
-                            <button type="submit" class="button secondary">@Text["Sources_Disconnect"]</button>
+                            <button type="submit" class="button secondary" aria-label="@Text["Sources_DisconnectAria", source.AccountEmail]">@Text["Sources_Disconnect"]</button>
                         </form>
                     </div>
                 </li>

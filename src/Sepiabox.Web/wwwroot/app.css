@@ -546,6 +546,10 @@ main {
 .user {
     font-family: var(--font-mono);
     font-size: 0.875rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 18rem;
+    white-space: nowrap;
 }
 
 .sign-out {
@@ -876,6 +880,10 @@ main {
     margin: 0 0 8px;
 }
 
+.connection-account {
+    overflow-wrap: anywhere;
+}
+
 .connection-account .status {
     margin-left: 8px;
     padding: 1px 8px;
@@ -905,7 +913,7 @@ main {
 .button.secondary {
     background: transparent;
     color: var(--cyanotype);
-    border: 1px solid var(--mat);
+    border: 1px solid var(--cyanotype);
 }
 
 .button.secondary:hover:not(:disabled) {

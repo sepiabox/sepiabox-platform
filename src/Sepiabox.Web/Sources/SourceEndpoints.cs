@@ -20,8 +20,9 @@ public static class SourceEndpoints
     /// <summary>The cookie that carries the state's nonce, so a callback is the answer to this browser's own request.</summary>
     public const string StateCookie = "sepiabox-drive-state";
 
-    private const string StatePurpose = "Sepiabox.Web.ConnectedSources.State.v1";
-    private static readonly TimeSpan s_stateLifetime = TimeSpan.FromMinutes(10);
+    public const string StatePurpose = "Sepiabox.Web.ConnectedSources.State.v1";
+    /// <summary>How long a state is good for: the time to consent at Google.</summary>
+    public static readonly TimeSpan StateLifetime = TimeSpan.FromMinutes(10);
 
     public static WebApplication MapSourceEndpoints(this WebApplication app)
     {
@@ -42,14 +43,14 @@ public static class SourceEndpoints
 
         var email = http.User.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
         var nonce = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(16));
-        var state = StateProtector(protection).Protect($"{nonce}|{email.ToLowerInvariant()}", s_stateLifetime);
+        var state = StateProtector(protection).Protect($"{nonce}|{email.ToLowerInvariant()}", StateLifetime);
         http.Response.Cookies.Append(StateCookie, nonce, new CookieOptions
         {
             HttpOnly = true,
             Secure = http.Request.IsHttps,
             // Lax: the cookie must come back with Google's redirect, a top-level GET from another site.
             SameSite = SameSiteMode.Lax,
-            MaxAge = s_stateLifetime,
+            MaxAge = StateLifetime,
             Path = http.Request.PathBase + "/sources/google-drive",
         });
         return Results.Redirect(sources.GoogleDriveAuthorizationUri(RedirectUri(http.Request), state).AbsoluteUri);
@@ -101,7 +102,7 @@ public static class SourceEndpoints
         }
     }
 
-    internal static ITimeLimitedDataProtector StateProtector(IDataProtectionProvider protection) =>
+    public static ITimeLimitedDataProtector StateProtector(IDataProtectionProvider protection) =>
         protection.CreateProtector(StatePurpose).ToTimeLimitedDataProtector();
 
     private static IResult Back(HttpContext http, string note) =>

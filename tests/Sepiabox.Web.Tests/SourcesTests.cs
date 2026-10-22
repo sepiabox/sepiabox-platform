@@ -120,6 +120,32 @@ public sealed class SourcesPageTests : LocalizedContext
         Assert.Equal(["Count photos and videos", "Disconnect"], page.FindAll(".connection-actions button").Select(b => b.TextContent));
     }
 
+    [Theory]
+    [InlineData(Cultures.English, new[] { "Count photos and videos for ana@example.com", "Disconnect ana@example.com", "Count photos and videos for bruno@example.com", "Disconnect bruno@example.com" })]
+    [InlineData(Cultures.BrazilianPortuguese, new[] { "Contar fotos e vídeos de ana@example.com", "Desconectar ana@example.com", "Contar fotos e vídeos de bruno@example.com", "Desconectar bruno@example.com" })]
+    public void Gives_each_account_s_buttons_names_that_tell_them_apart_and_start_with_the_visible_text(string culture, string[] names)
+    {
+        using var _ = Cultures.Use(culture);
+        _sources.Sources.Add(Summary(1));
+        _sources.Sources.Add(Summary(2) with { AccountEmail = "bruno@example.com" });
+
+        var buttons = Render<ConnectedAccounts>().FindAll(".connection-actions button");
+
+        Assert.Equal(names, buttons.Select(b => b.GetAttribute("aria-label")));
+        Assert.All(buttons, b => Assert.StartsWith(b.TextContent, b.GetAttribute("aria-label"), StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "Reconnect ana@example.com")]
+    [InlineData(Cultures.BrazilianPortuguese, "Reconectar ana@example.com")]
+    public void Names_the_account_on_its_reconnect_link(string culture, string name)
+    {
+        using var _ = Cultures.Use(culture);
+        _sources.Sources.Add(Summary(1) with { Status = ConnectedSourceStatuses.Reconnect });
+
+        Assert.Equal(name, Render<ConnectedAccounts>().Find(".connection-actions a.button").GetAttribute("aria-label"));
+    }
+
     [Fact]
     public void Says_an_account_is_not_counted_yet_and_offers_to_count_it()
     {
@@ -162,8 +188,8 @@ public sealed class SourcesPageTests : LocalizedContext
     [Theory]
     [InlineData("connected", "Google Drive connected.")]
     [InlineData("denied", "Google Drive was not connected: access was not granted.")]
-    [InlineData("reconnect", "Google no longer honours the access to this account. Reconnect it.")]
-    [InlineData("disconnected", "Disconnected.")]
+    [InlineData("reconnect", "Google no longer accepts the access to this account. Reconnect it.")]
+    [InlineData("disconnected", "Disconnected. Nothing changed in Google Drive; you can connect it again at any time.")]
     public void Shows_what_happened_from_a_note_in_the_address_and_nothing_else(string note, string text)
     {
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/sources?note={note}");
@@ -384,6 +410,59 @@ public sealed class SourceEndpointTests
         var expired = SourceEndpoints.StateProtector(keys).Protect("nonce-1|ana@example.com", TimeSpan.FromMilliseconds(1));
         Thread.Sleep(50);
         Assert.False(SourceEndpoints.StateIsOurs(keys, expired, "nonce-1", "ana@example.com"));
+        var past = SourceEndpoints.StateProtector(keys).Protect("nonce-1|ana@example.com", DateTimeOffset.UtcNow.AddMinutes(-1));
+        Assert.False(SourceEndpoints.StateIsOurs(keys, past, "nonce-1", "ana@example.com"));
+    }
+
+    [Fact]
+    public async Task Makes_a_state_and_a_cookie_that_last_ten_minutes()
+    {
+        await using var web = Web(new FakeConnectedSources());
+        using var http = web.CreateSignedInClient(followRedirects: false);
+        var before = DateTimeOffset.UtcNow;
+
+        var response = await http.GetAsync(new Uri(SourceEndpoints.ConnectPath, UriKind.Relative));
+
+        var state = HttpUtility.ParseQueryString(response.Headers.Location!.Query)["state"]!;
+        SourceEndpoints.StateProtector(web.Services.GetRequiredService<IDataProtectionProvider>()).Unprotect(state, out var expires);
+        Assert.InRange(expires, before + SourceEndpoints.StateLifetime - TimeSpan.FromSeconds(1), DateTimeOffset.UtcNow + SourceEndpoints.StateLifetime);
+        Assert.Equal(TimeSpan.FromMinutes(10), SourceEndpoints.StateLifetime);
+        Assert.Contains("max-age=600", response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith(SourceEndpoints.StateCookie, StringComparison.Ordinal)), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Refuses_a_state_that_has_expired_even_for_the_right_browser_and_person()
+    {
+        var sources = new FakeConnectedSources();
+        await using var web = Web(sources);
+        using var http = web.CreateSignedInClient(followRedirects: false);
+        var started = await http.GetAsync(new Uri(SourceEndpoints.ConnectPath, UriKind.Relative));
+        var nonce = started.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith(SourceEndpoints.StateCookie + "=", StringComparison.Ordinal))
+            .Split(';')[0][(SourceEndpoints.StateCookie.Length + 1)..];
+        var expired = SourceEndpoints.StateProtector(web.Services.GetRequiredService<IDataProtectionProvider>())
+            .Protect($"{nonce}|{TestUsers.Allowed}", DateTimeOffset.UtcNow.AddMinutes(-1));
+
+        var response = await http.GetAsync(new Uri($"{SourceEndpoints.CallbackPath}?code=c&state={Uri.EscapeDataString(expired)}", UriKind.Relative));
+
+        Assert.Equal("/sources?note=state", response.Headers.Location!.OriginalString);
+        Assert.Empty(sources.Completed);
+    }
+
+    [Fact]
+    public async Task Deletes_the_state_cookie_on_the_callback_whatever_it_comes_to()
+    {
+        await using var web = Web(new FakeConnectedSources());
+        using var http = web.CreateSignedInClient(followRedirects: false);
+        var state = await StartAsync(http);
+
+        foreach (var query in new[] { $"code=c&state={Uri.EscapeDataString(state)}", "code=c&state=forged" })
+        {
+            var response = await http.GetAsync(new Uri($"{SourceEndpoints.CallbackPath}?{query}", UriKind.Relative));
+
+            var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"), c => c.StartsWith(SourceEndpoints.StateCookie + "=", StringComparison.Ordinal));
+            Assert.Contains("expires=Thu, 01 Jan 1970", cookie, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("path=/sources/google-drive", cookie, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private static WebFactory Web(FakeConnectedSources sources) => new(new FakeLibrary()) { ConnectedSources = sources };
@@ -548,6 +627,68 @@ public sealed class ConnectedSourcesCatalogTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Trims_and_lower_cases_the_address_google_gives()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        var sources = Sources(db, new FakeDrive { Email = "  Ana@Example.COM \n" }, out _);
+
+        await sources.CompleteGoogleDriveConnectionAsync(Code, Redirect);
+
+        Assert.Equal("ana@example.com", (await db.ConnectedSources.AsNoTracking().SingleAsync()).AccountEmail);
+    }
+
+    [Fact]
+    public async Task A_callback_that_loses_the_race_for_a_new_account_updates_the_row_the_other_one_made()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        var connection = catalog.ConnectionStringFor(db);
+        var drive = new FakeDrive { RefreshToken = "1//the-later-token" };
+        var rival = new RivalInsert(connection);
+        var sources = new ConnectedSources(
+            new TestContexts(connection, rival), new DriveTokenProtector(s_keys), drive, drive, TimeProvider.System, NullLogger<ConnectedSources>.Instance);
+
+        var outcome = await sources.CompleteGoogleDriveConnectionAsync(Code, Redirect);
+
+        Assert.Equal(SourceOutcome.Done, outcome);
+        Assert.True(rival.Fired);
+        var row = await db.ConnectedSources.AsNoTracking().SingleAsync();
+        Assert.Equal(ConnectedSourceStatuses.Connected, row.Status);
+        Assert.Equal("1//the-later-token", new DriveTokenProtector(s_keys).Unprotect(row.EncryptedRefreshToken));
+    }
+
+    [Fact]
+    public async Task A_timeout_that_is_not_the_caller_giving_up_is_a_failure_not_an_error()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        var drive = new FakeDrive();
+        var sources = Sources(db, drive, out _);
+        await sources.CompleteGoogleDriveConnectionAsync(Code, Redirect);
+        var id = (await sources.ListAsync()).Single().Id;
+        drive.Failure = () => new TaskCanceledException("The request timed out.");
+
+        Assert.Equal(SourceOutcome.Failed, await sources.CountAsync(id));
+        drive.RevokeFailure = new TaskCanceledException("The request timed out.");
+        Assert.Equal(SourceOutcome.Done, await sources.DisconnectAsync(id));
+        drive.Failure = () => new TaskCanceledException("The request timed out.");
+        Assert.Equal(SourceOutcome.Failed, await Sources(db, drive, out _).CompleteGoogleDriveConnectionAsync(Code, Redirect));
+    }
+
+    [Fact]
+    public async Task Gives_up_when_the_caller_does()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        var drive = new FakeDrive();
+        var sources = Sources(db, drive, out _);
+        await sources.CompleteGoogleDriveConnectionAsync(Code, Redirect);
+        var id = (await sources.ListAsync()).Single().Id;
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        drive.Failure = () => new OperationCanceledException(cancelled.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sources.CountAsync(id, cancelled.Token));
+    }
+
+    [Fact]
     public async Task Disconnecting_deletes_the_token_and_asks_google_to_forget_it()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();
@@ -590,6 +731,28 @@ public sealed class ConnectedSourcesCatalogTests(CatalogFixture catalog)
         db.ChangeTracker.Clear();
         db.ConnectedSources.Add(Row("bruno@example.com", "broken"));
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+    }
+
+    // Inserts the same account from another context just before the first save, as a second callback would have.
+    private sealed class RivalInsert(string connectionString) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        public bool Fired { get; private set; }
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Fired)
+            {
+                Fired = true;
+                await using var other = new TestContexts(connectionString).CreateDbContext();
+                other.ConnectedSources.Add(Row("ana@example.com", ConnectedSourceStatuses.Reconnect));
+                await other.SaveChangesAsync(cancellationToken);
+            }
+
+            return result;
+        }
     }
 
     private static ConnectedSource Row(string email, string status) => new()

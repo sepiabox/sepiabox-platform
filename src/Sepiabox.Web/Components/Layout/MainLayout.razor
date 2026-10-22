@@ -14,7 +14,7 @@
                 <a href="places" class="nav-link">@Text["Layout_Places"]</a>
                 <a href="storage" class="nav-link">@Text["Layout_Storage"]</a>
                 <a href="settings" class="nav-link">@Text["Layout_Settings"]</a>
-                <span class="user">@context.User.FindFirst(ClaimTypes.Email)?.Value</span>
+                <span class="user" title="@context.User.FindFirst(ClaimTypes.Email)?.Value">@context.User.FindFirst(ClaimTypes.Email)?.Value</span>
                 <SignOutButton />
             </Authorized>
         </AuthorizeView>
