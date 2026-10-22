@@ -146,6 +146,36 @@ public sealed class FacebookReaderTests : IDisposable
     }
 
     [Fact]
+    public void Skips_a_key_of_a_posts_object_that_is_not_a_list()
+    {
+        Put("media/a.jpg");
+        Json(Posts, """{"meta": {"version": 2}, "posts": [{"data": [{"post": "listed"}], "attachments": [{"data": [{"media": {"uri": "media/a.jpg"}}]}]}]}""");
+
+        Assert.Equal("listed", Read().Find("media/a.jpg")!.Caption);
+    }
+
+    [Fact]
+    public void Takes_the_taken_timestamp_of_a_later_exif_entry_when_the_first_has_none()
+    {
+        Put("media/a.jpg");
+        Json(
+            Album,
+            """{"name": "Paris", "photos": [{"uri": "media/a.jpg", "creation_timestamp": 1561975800, "media_metadata": {"photo_metadata": {"exif_data": [{"iso": 100}, {"taken_timestamp": 1561975200}]}}}]}""");
+
+        Assert.Equal(new DateTime(2019, 7, 1, 10, 0, 0, DateTimeKind.Utc), Read().Find("media/a.jpg")!.CapturedAt);
+    }
+
+    [Fact]
+    public void Keeps_the_album_lists_posted_time_over_a_posts_for_a_file_in_both()
+    {
+        Put("media/a.jpg");
+        Json(Album, """{"name": "Paris", "photos": [{"uri": "media/a.jpg", "creation_timestamp": 1561975800}]}""");
+        Json(Posts, """[{"timestamp": 1500000000, "attachments": [{"data": [{"media": {"uri": "media/a.jpg"}}]}]}]""");
+
+        Assert.Equal(new DateTime(2019, 7, 1, 10, 10, 0, DateTimeKind.Utc), Read().Find("media/a.jpg")!.CapturedAt);
+    }
+
+    [Fact]
     public void Reads_the_videos_of_an_album_and_an_albums_name_repaired_and_trimmed()
     {
         Put("media/v.mp4");
