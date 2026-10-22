@@ -7,6 +7,53 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Information, Message = "Container {Container} does not exist yet; nothing to import.")]
     public static partial void NoManifestContainer(ILogger logger, string container);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Export {Id} written to {BlobName}: {Assets} assets, {Bytes} bytes.")]
+    public static partial void ExportWritten(ILogger logger, long id, string blobName, int assets, long bytes);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Export {Id} failed.")]
+    public static partial void ExportFailed(ILogger logger, long id, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Export {Id} was running for too long and is failed as interrupted.")]
+    public static partial void ExportInterrupted(ILogger logger, long id);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deleted the zip of export {Id}: it had face data and face recognition is off.")]
+    public static partial void ExportFaceDataErased(ILogger logger, long id);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Wrote {Exports} export(s).")]
+    public static partial void ExportsDone(ILogger logger, int exports);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Another export run holds the lock; nothing to do.")]
+    public static partial void ExportBusy(ILogger logger);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Processing incoming files without {Step}: {Reason}")]
+    public static partial void IncomingStepUnavailable(ILogger logger, string step, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Incoming run finished: {Processed} processed, {LeftOut} left out (not photos or videos), {Skipped} skipped and kept in incoming (a lifecycle rule deletes them after 30 days).")]
+    public static partial void IncomingFinished(ILogger logger, int processed, int leftOut, int skipped);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Skipped file in incoming: {Skipped}")]
+    public static partial void IncomingSkippedFile(ILogger logger, string skipped);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Processed incoming file {BlobName} as {AssetId} ({Mode} mode).")]
+    public static partial void IncomingProcessed(ILogger logger, string blobName, string assetId, string mode);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Incoming file {BlobName} is already processed: its blob is gone.")]
+    public static partial void IncomingAlreadyDone(ILogger logger, string blobName);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Left out incoming file {BlobName}: {Reason}")]
+    public static partial void IncomingLeftOut(ILogger logger, string blobName, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not process incoming file {BlobName}, which stays in incoming: {Reason}")]
+    public static partial void IncomingProblem(ILogger logger, string blobName, string? reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Made the video of incoming file {BlobName} without sound: {Reason}")]
+    public static partial void IncomingWithoutSound(ILogger logger, string blobName, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Left a step out of asset {AssetId}: {Reason}")]
+    public static partial void IncomingStepLeftOut(ILogger logger, string assetId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not delete the temporary folder {Folder}.")]
+    public static partial void IncomingWorkFolderNotDeleted(ILogger logger, string folder, Exception exception);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Skipping manifest {BlobName}: {Reason}")]
     public static partial void ManifestProblem(ILogger logger, string blobName, string reason);
 
@@ -78,4 +125,13 @@ internal static partial class Log
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The host did not stop cleanly; the exit code reflects the command.")]
     public static partial void StopFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Deleting asset {AssetId} failed ({ExceptionType}); it is kept, and a rerun finishes it.")]
+    public static partial void AssetDeleteFailed(ILogger logger, string assetId, string exceptionType);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Deleting asset {AssetId} hit an unexpected invalid operation: {Reason}")]
+    public static partial void AssetDeleteInvalid(ILogger logger, string assetId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "assets delete for source {Source} finished with exit code {ExitCode}.")]
+    public static partial void AssetsDeleteFinished(ILogger logger, string source, int exitCode);
 }

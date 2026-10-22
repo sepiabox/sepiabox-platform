@@ -47,7 +47,7 @@ Browser ──HTTPS──► Web (Blazor, Container Apps) ── Google/Microsof
 1. `sepiabox-ingest scan <folder>`: read-only; counts photos/videos, years, duplicates, unreadable files.
 2. `sepiabox-ingest process <folder> --out <workdir>`: for each file computes the SHA-256 (asset identity), reads EXIF/QuickTime (date, GPS or a phone video's ISO 6709 location (D-060), camera, dimensions; an undated file takes its date from its file or parent folder name, D-046), generates WebP thumbnails, video posters and 720p versions, the CLIP embedding and, only with `--faces`, faces (D-047). Writes **one JSON manifest per asset** (schema v1, `docs/schemas/manifest.v1.json`). State is kept in SQLite so runs can resume.
 3. `sepiabox-ingest upload <workdir>`: uploads originals (**Cold** tier), derivatives (**Hot**) and, last, the manifest. Resumes where it stopped. A work folder made by `process --index-only` (D-088, S-063) uploads no originals: they stay at their source (the drive, an export folder), its previews are larger (photos 2048 px, videos 1080p), and the catalog records where each original lives.
-4. In the cloud, each new manifest triggers the import (Event Grid filtered to the `manifests` container → queue → worker job, one execution at a time).
+4. In the cloud, each new manifest triggers the import (Event Grid filtered to the `manifests` container → queue → worker job, one execution at a time). A file a cloud connector writes to `incoming` (its source, path and mode in the blob's metadata) triggers `process --from-queue` the same way (second subscription and queue, a job whose image has FFmpeg and the models, S-036, D-107): it makes the derivatives and the manifest and deletes the blob.
 
 Originals are **never re-read** in the cloud during local ingest (reading the Cold tier costs ~US$ 0.03/GB). Files that arrive through the cloud (Drive, OneDrive) go through the same pipeline in the worker, in reference mode (D-023): their originals stay in Drive or OneDrive. Exports of Google Photos, Apple Photos / iCloud, Instagram and Facebook are extracted on the PC and read by `process --export <kind>`, which takes dates, places, captions and albums from the export's metadata files (D-053).
 
@@ -74,7 +74,7 @@ Natural-language questions: the text (never the photos) goes to **Claude Haiku 5
 - Sign-in with **Google** and **Microsoft** (Apple will come with the iOS app). A **list of allowed e-mails** is checked when the sign-in returns (not on the list, no cookie) and a default authorization policy protects every route.
 - In Azure each service has its own managed identity with only the roles it uses; the web connects to PostgreSQL as a role that cannot change the schema, and reads the owner's secrets (sign-in, the access list, the Anthropic key) from Key Vault; its data protection keys live in Blob Storage under a Key Vault key (D-062).
 - Face recognition is optional; it can be turned off and face data deleted. No inference of sensitive categories (religion, health).
-- Full export at any time.
+- Full export at any time: Settings → Export all data asks the `sepiabox-export` job for a zip with `catalog.json`, `originals.txt` (24 h links) and a README, with face data only if asked (D-110).
 
 ## Cloud and costs
 

@@ -9,8 +9,10 @@ namespace Sepiabox.Storage;
 /// as Azure (S-050). Containers come into being with <see cref="CreateContainer"/>, as Azure containers are created beforehand; a write to one that is not there throws. Read URLs are
 /// <c>memory://</c> addresses that say what they were asked for.
 /// </summary>
-public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
+public sealed class InMemoryBlobStore(TimeProvider? time = null, TimeSpan? maxReadUrlLifetime = null) : IBlobStore
 {
+    private readonly TimeSpan _maxLinkLifetime = maxReadUrlLifetime ?? MaxReadUrlLifetime;
+
     /// <summary>The longest a link may last, as in Azure (<c>AzureBlobStore.MaxReadUrlLifetime</c>).</summary>
     public static readonly TimeSpan MaxReadUrlLifetime = TimeSpan.FromHours(4);
 
@@ -51,7 +53,7 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
         {
             return Task.FromResult(
                 _containers.TryGetValue(container, out var blobs) && blobs.TryGetValue(name, out var stored)
-                    ? new BlobContent(stored.Content, stored.Version, stored.LastModified)
+                    ? new BlobContent(stored.Content, stored.Version, stored.LastModified) { Metadata = stored.Metadata }
                     : null);
         }
     }
@@ -99,9 +101,15 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
 
     public Task<BlobWriteResult> WriteAsync(
         string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        WriteAsync(container, name, content, contentType, condition, new Dictionary<string, string>(), cancellationToken);
+
+    public Task<BlobWriteResult> WriteAsync(
+        string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(metadata);
         lock (_lock)
         {
             if (!_containers.TryGetValue(container, out var blobs))
@@ -122,9 +130,30 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
             }
 
             var version = (++_versions).ToString(CultureInfo.InvariantCulture);
-            blobs[name] = new Stored(BinaryData.FromBytes(content.ToArray()), contentType, version, _time.GetUtcNow());
+            blobs[name] = new Stored(BinaryData.FromBytes(content.ToArray()), contentType, version, _time.GetUtcNow())
+            {
+                Metadata = new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase),
+            };
             return Task.FromResult(new BlobWriteResult(BlobWriteStatus.Written, version));
         }
+    }
+
+    public async Task<BlobInfo?> DownloadToAsync(string container, string name, Stream stream, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        Stored? stored;
+        lock (_lock)
+        {
+            stored = _containers.TryGetValue(container, out var blobs) && blobs.TryGetValue(name, out var found) ? found : null;
+        }
+
+        if (stored is null)
+        {
+            return null;
+        }
+
+        await stream.WriteAsync(stored.Content.ToMemory(), cancellationToken);
+        return new BlobInfo(stored.Content.ToMemory().Length, stored.Version, stored.LastModified, stored.ContentType, stored.Metadata);
     }
 
     public Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default)
@@ -135,13 +164,33 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
         }
     }
 
+    public Task<BlobDeleteStatus> DeleteIfVersionAsync(string container, string name, string version, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(version);
+        lock (_lock)
+        {
+            if (!_containers.TryGetValue(container, out var blobs) || !blobs.TryGetValue(name, out var stored))
+            {
+                return Task.FromResult(BlobDeleteStatus.NotFound);
+            }
+
+            if (stored.Version != version)
+            {
+                return Task.FromResult(BlobDeleteStatus.ConditionNotMet);
+            }
+
+            blobs.Remove(name);
+            return Task.FromResult(BlobDeleteStatus.Deleted);
+        }
+    }
+
     public Task<Uri> CreateReadUrlAsync(
         string container, string name, DateTimeOffset expiresOn, BlobReadUrlOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        if (expiresOn > _time.GetUtcNow() + MaxReadUrlLifetime)
+        if (expiresOn > _time.GetUtcNow() + _maxLinkLifetime)
         {
-            throw new ArgumentOutOfRangeException(nameof(expiresOn), expiresOn, $"A link lasts at most {MaxReadUrlLifetime}.");
+            throw new ArgumentOutOfRangeException(nameof(expiresOn), expiresOn, $"A link lasts at most {_maxLinkLifetime}.");
         }
 
         var url = $"memory://{container}/{Uri.EscapeDataString(name).Replace("%2F", "/", StringComparison.Ordinal)}"
@@ -186,8 +235,13 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
             return Task.CompletedTask;
         }
 
-        public Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default)
+        public Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default) =>
+            CommitAsync(contentType, storageClass, new Dictionary<string, string>(), cancellationToken);
+
+        public Task CommitAsync(
+            string contentType, BlobStorageClass storageClass, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(metadata);
             if (_committed)
             {
                 throw new InvalidOperationException("The upload is already committed.");
@@ -208,7 +262,10 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
                     throw new InvalidOperationException($"The container {container} does not exist.");
                 }
 
-                blobs[name] = new Stored(BinaryData.FromBytes(content), contentType, (++store._versions).ToString(CultureInfo.InvariantCulture), store._time.GetUtcNow(), storageClass);
+                blobs[name] = new Stored(BinaryData.FromBytes(content), contentType, (++store._versions).ToString(CultureInfo.InvariantCulture), store._time.GetUtcNow(), storageClass)
+                {
+                    Metadata = new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase),
+                };
             }
 
             _committed = true;
@@ -219,5 +276,8 @@ public sealed class InMemoryBlobStore(TimeProvider? time = null) : IBlobStore
     }
 
     private sealed record Stored(
-        BinaryData Content, string ContentType, string Version, DateTimeOffset LastModified, BlobStorageClass StorageClass = BlobStorageClass.Default);
+        BinaryData Content, string ContentType, string Version, DateTimeOffset LastModified, BlobStorageClass StorageClass = BlobStorageClass.Default)
+    {
+        public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
+    }
 }

@@ -13,6 +13,7 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
     {
         ["2a2b9908-6ea1-4ae2-8e65-a410df84e7d1"] = "Storage Blob Data Reader",
         ["ba92f5b4-2d11-453d-a403-e96b0029c9fe"] = "Storage Blob Data Contributor",
+        ["db58b8e5-c6ad-4a2a-8342-4190687cbf4a"] = "Storage Blob Delegator",
         ["4633458b-17de-408a-b874-0445c86b69e6"] = "Key Vault Secrets User",
         ["12338af0-0e69-4776-bea7-57ae8d297424"] = "Key Vault Crypto User",
         ["7f951dda-4ed3-4680-a7ca-43fe172d538d"] = "AcrPull",
@@ -31,8 +32,25 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
             {
                 // The Container Apps environment's identity pulls the images.
                 "aca_mi.properties.principalId: AcrPull on registries registry",
+                // The export job writes the exports container, reads the originals only to sign links to them, and asks the
+                // account for a delegation key (S-040, D-110).
+                "export-identity: Storage Blob Data Contributor on containers exports",
+                "export-identity: Storage Blob Data Reader on containers originals",
+                "export-identity: Storage Blob Delegator on storageAccounts storage",
+                // The admin job deletes a source's blobs (S-057, D-108) from three containers, never account-wide: that would reach
+                // the web's key ring and `incoming`.
+                "admin-identity: Storage Blob Data Contributor on containers derivatives",
+                "admin-identity: Storage Blob Data Contributor on containers manifests",
+                "admin-identity: Storage Blob Data Contributor on containers originals",
                 // The faces job rewrites manifests, and nothing else in storage (S-022).
                 "faces-identity: Storage Blob Data Contributor on containers manifests",
+                // The process job (S-036) reads and deletes incoming, copies originals, writes derivatives and manifests: those four containers.
+                "process-identity: Storage Blob Data Contributor on containers derivatives",
+                "process-identity: Storage Blob Data Contributor on containers incoming",
+                "process-identity: Storage Blob Data Contributor on containers manifests",
+                "process-identity: Storage Blob Data Contributor on containers originals",
+                // ... and receives from the incoming queue, which KEDA reads with the Manage claim.
+                "process-identity: Azure Service Bus Data Owner on queues incoming",
                 // The uploaders, one assignment per id in uploaderPrincipalIds.
                 "id: Storage Blob Data Contributor on storageAccounts storage",
                 // The import jobs read blobs and the queue; KEDA reads its length with the Manage claim (D-063).
@@ -42,6 +60,7 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
                 "migrate-identity: Key Vault Secrets User on vaults database-vault",
                 // Event Grid's system topic delivers storage events to the queue (S-033).
                 "storageEvents.identity.principalId: Azure Service Bus Data Sender on queues manifests",
+                "storageEvents.identity.principalId: Azure Service Bus Data Sender on queues incoming",
                 // The web reads blobs, writes only the key ring, reads the owner's secrets and uses one key.
                 "web-identity: Key Vault Crypto User on keys dataprotection",
                 "web-identity: Key Vault Secrets User on vaults vault",
@@ -78,7 +97,7 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
     public void Owner_secrets_reach_only_the_web_and_only_from_key_vault_when_published()
     {
         var webEnvironment = Environment("web");
-        var jobKeys = new[] { "migrate", "import", "import-all", "geonames", "faces" }.SelectMany(job => Environment(job).Keys).ToList();
+        var jobKeys = new[] { "migrate", "import", "import-all", "geonames", "faces", "process", "admin", "export" }.SelectMany(job => Environment(job).Keys).ToList();
 
         // Key Vault is the web's configuration source: Auth--Google--ClientId is Auth:Google:ClientId (D-051).
         Assert.Equal("{vault.connectionString}", webEnvironment["ConnectionStrings__vault"]);

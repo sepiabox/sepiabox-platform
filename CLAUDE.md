@@ -42,6 +42,7 @@ src/
   Sepiabox.AppHost/    .NET Aspire AppHost: PostgreSQL, Azurite and the web, locally and for azd
   Sepiabox.ServiceDefaults/  health checks and OpenTelemetry shared by the services
 infra/postgres/        PostgreSQL image with pgvector and PostGIS
+infra/worker/          the worker's image for `process --from-queue`: FFmpeg and the verified models (S-036)
 scripts/deploy.sh      the only way to deploy: azd provision, migrate job, then the web (D-061)
 azure.yaml             azd project: the AppHost is the infrastructure
 tests/

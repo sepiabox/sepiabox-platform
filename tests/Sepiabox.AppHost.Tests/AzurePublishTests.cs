@@ -92,6 +92,23 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
     }
 
     [Fact]
+    public void Storage_has_one_lifecycle_policy_with_a_rule_for_incoming_after_thirty_days_and_one_for_exports_after_seven_when_published()
+    {
+        // One policy per account, always named default: a second resource would replace the first, so every story's rule is in this one.
+        var policy = Assert.Single(published.Declarations("Microsoft.Storage/storageAccounts/managementPolicies"));
+
+        Assert.Equal("'default'", policy.Property("name"));
+        Assert.Contains("'incoming/'", policy.Body, StringComparison.Ordinal);
+        Assert.Contains("'exports/'", policy.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("'originals/'", policy.Body, StringComparison.Ordinal);
+        Assert.Contains("daysAfterModificationGreaterThan: 30", policy.Body, StringComparison.Ordinal);
+        Assert.Contains("daysAfterModificationGreaterThan: 7", policy.Body, StringComparison.Ordinal);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Count(policy.Body, "delete:"));
+        Assert.Equal(30, AzureInfrastructure.IncomingRetentionDays);
+        Assert.Equal(7, AzureInfrastructure.ExportRetentionDays);
+    }
+
+    [Fact]
     public void Storage_blocks_public_access_and_has_every_private_container_when_published()
     {
         var account = published.The("Microsoft.Storage/storageAccounts");

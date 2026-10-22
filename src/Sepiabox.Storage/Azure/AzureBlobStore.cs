@@ -13,7 +13,13 @@ namespace Sepiabox.Storage.Azure;
 /// managed identity), which never exposes an account key (D-039); the key is requested once and reused while it outlives
 /// the longest link (D-049).
 /// </summary>
-public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time = null) : IBlobStore, IDisposable
+/// <param name="service">The account's client.</param>
+/// <param name="time">The clock.</param>
+/// <param name="maxReadUrlLifetime">
+/// The longest a link may last; <see cref="MaxReadUrlLifetime"/> (4 hours) unless given. The export's originals list asks
+/// for 24 hours (S-040, D-110): its store is made with that, and the delegation key then lasts that long and two hours more.
+/// </param>
+public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time = null, TimeSpan? maxReadUrlLifetime = null) : IBlobStore, IDisposable
 {
     /// <summary>
     /// The longest a link this store signs may last (a video's, D-049). A delegation key is reused while it outlives
@@ -23,8 +29,7 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
 
     private static readonly TimeSpan s_clockSkew = TimeSpan.FromMinutes(5);
 
-    // A user delegation SAS stops working when its key expires.
-    private static readonly TimeSpan s_delegationKeyLifetime = MaxReadUrlLifetime + TimeSpan.FromHours(2);
+    private readonly TimeSpan _maxLinkLifetime = maxReadUrlLifetime ?? MaxReadUrlLifetime;
 
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly SemaphoreSlim _keyLock = new(1, 1);
@@ -62,7 +67,10 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
         try
         {
             var current = (await Blob(container, name).DownloadContentAsync(cancellationToken)).Value;
-            return new BlobContent(current.Content, Unquoted(current.Details.ETag), current.Details.LastModified);
+            return new BlobContent(current.Content, Unquoted(current.Details.ETag), current.Details.LastModified)
+            {
+                Metadata = new Dictionary<string, string>(current.Details.Metadata),
+            };
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
@@ -146,16 +154,82 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
         }
     }
 
+    public async Task<BlobWriteResult> WriteAsync(
+        string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        var options = new BlobUploadOptions
+        {
+            HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
+            Metadata = new Dictionary<string, string>(metadata),
+            Conditions = condition.Kind switch
+            {
+                BlobWriteConditionKind.IfNew => new BlobRequestConditions { IfNoneMatch = ETag.All },
+                BlobWriteConditionKind.IfVersion => new BlobRequestConditions { IfMatch = new ETag(Quoted(condition.Version!)) },
+                _ => null,
+            },
+        };
+        try
+        {
+            var written = (await Blob(container, name).UploadAsync(content, options, cancellationToken)).Value;
+            return new BlobWriteResult(BlobWriteStatus.Written, Unquoted(written.ETag));
+        }
+        catch (RequestFailedException ex) when (condition.Kind != BlobWriteConditionKind.Always && LostTheCondition(ex, condition))
+        {
+            return new BlobWriteResult(BlobWriteStatus.ConditionNotMet);
+        }
+    }
+
+    public async Task<BlobInfo?> DownloadToAsync(string container, string name, Stream stream, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        try
+        {
+            var download = (await Blob(container, name).DownloadStreamingAsync(cancellationToken: cancellationToken)).Value;
+            await using (download.Content)
+            {
+                await download.Content.CopyToAsync(stream, cancellationToken);
+            }
+
+            var details = download.Details;
+            return new BlobInfo(
+                details.ContentLength, Unquoted(details.ETag), details.LastModified, details.ContentType ?? "application/octet-stream",
+                new Dictionary<string, string>(details.Metadata));
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+    }
+
     public async Task<bool> DeleteAsync(string container, string name, CancellationToken cancellationToken = default) =>
         (await Blob(container, name).DeleteIfExistsAsync(cancellationToken: cancellationToken)).Value;
+
+    public async Task<BlobDeleteStatus> DeleteIfVersionAsync(string container, string name, string version, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(version);
+        try
+        {
+            await Blob(container, name).DeleteAsync(
+                DeleteSnapshotsOption.IncludeSnapshots, new BlobRequestConditions { IfMatch = new ETag(Quoted(version)) }, cancellationToken);
+            return BlobDeleteStatus.Deleted;
+        }
+        catch (RequestFailedException ex) when (ex.Status is 412 or 404)
+        {
+            // A condition on a blob that is not there fails with 412 in the emulator and 404 in Azure: look, so that a blob
+            // that is gone is told from one that changed.
+            return await Blob(container, name).ExistsAsync(cancellationToken) ? BlobDeleteStatus.ConditionNotMet : BlobDeleteStatus.NotFound;
+        }
+    }
 
     public async Task<Uri> CreateReadUrlAsync(
         string container, string name, DateTimeOffset expiresOn, BlobReadUrlOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        if (expiresOn > _time.GetUtcNow() + MaxReadUrlLifetime)
+        if (expiresOn > _time.GetUtcNow() + _maxLinkLifetime)
         {
-            throw new ArgumentOutOfRangeException(nameof(expiresOn), expiresOn, $"A link lasts at most {MaxReadUrlLifetime}.");
+            throw new ArgumentOutOfRangeException(nameof(expiresOn), expiresOn, $"A link lasts at most {_maxLinkLifetime}.");
         }
 
         var blob = Blob(container, name);
@@ -210,8 +284,13 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
             _blockIds.Add(id);
         }
 
-        public async Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default)
+        public Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default) =>
+            CommitAsync(contentType, storageClass, new Dictionary<string, string>(), cancellationToken);
+
+        public async Task CommitAsync(
+            string contentType, BlobStorageClass storageClass, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(metadata);
             if (_committed)
             {
                 throw new InvalidOperationException("The upload is already committed.");
@@ -222,6 +301,7 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
                 new CommitBlockListOptions
                 {
                     HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
+                    Metadata = new Dictionary<string, string>(metadata),
                     AccessTier = storageClass == BlobStorageClass.Cold ? AccessTier.Cold : (AccessTier?)null,
                 },
                 cancellationToken);
@@ -264,7 +344,8 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
             if (_delegationKey is not { } key || !IsStillGood(key))
             {
                 var now = _time.GetUtcNow();
-                key = await service.GetUserDelegationKeyAsync(now - s_clockSkew, now + s_delegationKeyLifetime, cancellationToken);
+                // A user delegation SAS stops working when its key expires.
+                key = await service.GetUserDelegationKeyAsync(now - s_clockSkew, now + _maxLinkLifetime + TimeSpan.FromHours(2), cancellationToken);
                 _delegationKey = key;
             }
 
@@ -277,5 +358,5 @@ public sealed class AzureBlobStore(BlobServiceClient service, TimeProvider? time
     }
 
     private bool IsStillGood(UserDelegationKey key) =>
-        key.SignedExpiresOn - _time.GetUtcNow() >= MaxReadUrlLifetime + s_clockSkew;
+        key.SignedExpiresOn - _time.GetUtcNow() >= _maxLinkLifetime + s_clockSkew;
 }
