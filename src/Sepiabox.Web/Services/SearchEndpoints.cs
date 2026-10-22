@@ -79,10 +79,11 @@ public static class SearchEndpoints
             // The text model is missing or failed to load (S-016, D-070): the rest of the search still works.
             http.Response.Headers.RetryAfter = "3600";
             // In the visitor's language (S-056), like the page; the field names what to leave out.
+            var region = query.Filters.SimilarToRegion is not null;
             return Results.Problem(
-                detail: text["Search_DescribeUnavailable"],
+                detail: region ? text["Region_Unavailable"] : text["Search_DescribeUnavailable"],
                 statusCode: StatusCodes.Status503ServiceUnavailable,
-                extensions: new Dictionary<string, object?> { ["field"] = "filters.visual" });
+                extensions: new Dictionary<string, object?> { ["field"] = region ? "filters.similarToRegion" : "filters.visual" });
         }
         catch (UnknownPeopleException unknown)
         {
@@ -100,7 +101,10 @@ public static class SearchEndpoints
             return Results.Problem(
                 detail: SimilarSearch.Message(missing, text),
                 statusCode: missing.Exists ? StatusCodes.Status409Conflict : StatusCodes.Status404NotFound,
-                extensions: new Dictionary<string, object?> { ["field"] = "filters.similarTo.assetId" });
+                extensions: new Dictionary<string, object?>
+                {
+                    ["field"] = query.Filters.SimilarToRegion is not null ? "filters.similarToRegion.assetId" : "filters.similarTo.assetId",
+                });
         }
 
         return Results.Ok(response);

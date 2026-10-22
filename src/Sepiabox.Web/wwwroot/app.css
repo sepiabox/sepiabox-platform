@@ -191,6 +191,20 @@ main {
     font-size: 1.25rem;
 }
 
+/* The occasions of a search by part of a photo are headed like months; the heading above them is quieter. */
+.month h3 {
+    margin: 32px 0 12px;
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    line-height: 1.2;
+}
+
+.region-heading {
+    margin: 16px 0 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
 .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -525,6 +539,69 @@ main {
 .preview video {
     max-height: 80vh;
     background: var(--developer);
+}
+
+/* "Photos like this part of a photo" (S-041): the rectangle is drawn over the preview, in pixels set by region.js. */
+.region-frame {
+    position: relative;
+}
+
+.region-frame.selecting {
+    cursor: crosshair;
+    touch-action: none;
+    user-select: none;
+}
+
+.region-frame.selecting {
+    outline: 3px dashed var(--developer);
+    outline-offset: -3px;
+}
+
+.region-tools .button[aria-pressed="true"] {
+    outline: 3px solid var(--developer);
+    outline-offset: 2px;
+}
+
+.region-frame:focus-visible {
+    outline: 3px solid var(--developer);
+    outline-offset: -3px;
+}
+
+.region-box {
+    position: absolute;
+    box-sizing: border-box;
+    border: 2px solid var(--white);
+    outline: 2px solid var(--developer);
+    background: color-mix(in srgb, var(--white) 18%, transparent);
+    pointer-events: none;
+}
+
+.region-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: center;
+    padding: 12px 16px;
+}
+
+.region-tools form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: center;
+}
+
+/* Without the script every control in it is hidden; the padding alone would leave a gap under the photo. */
+.region-tools:not(:has(> :not([hidden]))) {
+    display: none;
+}
+
+.region-status:empty {
+    display: none;
+}
+
+.region-tools p {
+    margin: 0;
 }
 
 .player-error {

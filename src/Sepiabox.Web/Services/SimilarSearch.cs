@@ -31,19 +31,27 @@ public static class SimilarSearch
     public static SearchQuery? More(SearchQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        if (query.Filters.SimilarTo is not { } similar)
+        var shown = query.ResultLimit;
+        var next = Steps.FirstOrDefault(step => step > shown);
+        if (next == 0)
         {
             return null;
         }
 
-        var shown = query.ResultLimit;
-        var next = Steps.FirstOrDefault(step => step > shown);
-        return next == 0
-            ? null
-            : query with
+        // A search for a region of a photo (S-041) steps the same way.
+        return query.Filters switch
+        {
+            { SimilarTo: { } similar } => query with
             {
                 Limit = Math.Max(query.Limit, next),
                 Filters = query.Filters with { SimilarTo = similar with { Limit = next } },
-            };
+            },
+            { SimilarToRegion: { } region } => query with
+            {
+                Limit = Math.Max(query.Limit, next),
+                Filters = query.Filters with { SimilarToRegion = region with { Limit = next } },
+            },
+            _ => null,
+        };
     }
 }

@@ -48,9 +48,9 @@ public static class QuestionPrompt
     /// <summary>
     /// The DSL's filters a question cannot express, left out of the output format (D-086, D-092): <c>similarTo</c> names an
     /// asset by its id, which only the photo detail page knows (S-017), and <c>eventIds</c> names occasions by ids, which
-    /// only the occasions pages know (S-023).
+    /// only the occasions pages know (S-023); <c>similarToRegion</c> names a photo and a box drawn on it (S-041, D-099).
     /// </summary>
-    public static readonly IReadOnlyList<string> NotFromQuestions = ["similarTo", "eventIds", "sourceCount", "quality", "includeHidden"];
+    public static readonly IReadOnlyList<string> NotFromQuestions = ["similarTo", "eventIds", "sourceCount", "quality", "includeHidden", "similarToRegion"];
 
     /// <summary>
     /// The <c>aggregate</c> fields a question cannot express yet (S-028, D-093): sizes and the number of sources are

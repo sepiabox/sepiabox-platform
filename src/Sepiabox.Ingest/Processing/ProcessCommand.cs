@@ -2,6 +2,7 @@ using System.Diagnostics;
 using ImageMagick;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Pipeline.Embeddings;
+using Sepiabox.Pipeline.Exports;
 using Sepiabox.Pipeline.Faces;
 using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
@@ -194,6 +195,9 @@ public static class ProcessCommand
         // The mode is the work folder's (S-063): a run asking for the other one stops before it reads or writes anything.
         WorkFolderModes.Check(StatePath(output), options.Mode);
         var indexOnly = options.IndexOnly;
+        // What an official export says about its files (S-045), read once and read-only; nothing is written to the folder.
+        var export = ReadExport(options, root, hooks, cancellationToken);
+        var exportZone = options.TimeZone ?? TimeZoneInfo.Local;
         // Faces are biometric data: without --faces nothing looks for them, whatever detector was passed in.
         var faces = options.Faces ? faceDetector : null;
         var manifestFolder = Path.Combine(output, "manifests");
@@ -342,7 +346,8 @@ public static class ProcessCommand
                 }
 
                 var kind = MediaTypes.Classify(file.Path);
-                if (kind == MediaKind.Other || file.Path.StartsWith(outputPrefix, StringComparison.OrdinalIgnoreCase))
+                if (kind == MediaKind.Other || file.Path.StartsWith(outputPrefix, StringComparison.OrdinalIgnoreCase)
+                    || export?.IsLeftOut(Path.GetRelativePath(root, file.Path)) == true)
                 {
                     continue;
                 }
@@ -767,8 +772,9 @@ public static class ProcessCommand
             var modifiedTicks = file.ModifiedAt.UtcTicks;
             try
             {
+                // The export's kind when the folder is an export (S-045), so the web can say where the original is.
                 var source = new ManifestSource(
-                    LocalSourceType,
+                    options.ExportKind ?? LocalSourceType,
                     sourceName,
                     ManifestSource.NormalizePath(Path.GetRelativePath(root, file.Path)),
                     file.ModifiedAt);
@@ -778,7 +784,8 @@ public static class ProcessCommand
                     RemoveSource(output, oldSha256, source);
                 }
 
-                var described = Describe(manifestFolder, sha256, kind, file, source, clock, content, indexOnly);
+                var described = Describe(
+                    manifestFolder, sha256, kind, file, source, clock, content, indexOnly, export?.Find(source.Path), exportZone);
                 var (manifest, status, derivativeProblem, noVideo, withoutSound, sound) =
                     AddDerivatives(output, file, described, content, video, redoProxy, indexOnly, stop.Token);
                 if (withoutSound is not null)
@@ -951,10 +958,26 @@ public static class ProcessCommand
         }
     }
 
+    /// <summary>The scan of the export the run was asked to read, or null without <c>--export</c>.</summary>
+    private static ExportScan? ReadExport(ProcessOptions options, string root, ProcessHooks? hooks, CancellationToken cancellationToken)
+    {
+        if (options.ExportKind is not { } kind)
+        {
+            return null;
+        }
+
+        var readers = hooks?.ExportReaders ?? ExportReaderRegistry.Default;
+        return readers.TryGet(kind, out var reader)
+            ? reader.Read(root, cancellationToken)
+            : throw new ExportReadException($"Unknown export kind '{kind}'. Known kinds: {string.Join(", ", readers.Kinds)}.");
+    }
+
     private static Manifest Describe(
         string manifestFolder, string sha256, MediaKind kind, FoundFile file, ManifestSource source, TimeProvider clock, byte[]? content,
-        bool indexOnly)
+        bool indexOnly, ExportMetadata? export, TimeZoneInfo exportZone)
     {
+        var exportDate = ExportFacts.WallClock(export, exportZone);
+        var exportLocation = ExportFacts.Location(export);
         // Written only when false, as the schema says; a work folder keeps one mode, so every manifest in it agrees.
         bool? originalStored = indexOnly ? false : null;
         var path = ManifestPath(manifestFolder, sha256);
@@ -965,7 +988,10 @@ public static class ProcessCommand
             var existing = ManifestJson.Deserialize(File.ReadAllText(path));
             return existing with
             {
-                Captured = CaptureDate.Stronger(existing.Captured, CaptureDate.Resolve(null, file.Path, clock)),
+                Captured = CaptureDate.Stronger(existing.Captured, CaptureDate.Resolve(null, file.Path, clock, exportDate)),
+                Location = existing.Location ?? exportLocation,
+                Caption = ManifestMerge.LongerCaption(existing.Caption, ExportFacts.Caption(export)),
+                Albums = ManifestMerge.UnionAlbums(existing.Albums, ExportFacts.Albums(export)),
                 Sources = WithSource(existing.Sources, source),
                 OriginalStored = originalStored,
             };
@@ -989,8 +1015,11 @@ public static class ProcessCommand
             SizeBytes = file.Size,
             ContentType = MediaTypes.ContentType(file.Path),
             // The file's own date when plausible, otherwise one from its path (D-046).
-            Captured = CaptureDate.Resolve(metadata.RawCapturedAt, file.Path, clock),
-            Location = metadata.Location,
+            Captured = CaptureDate.Resolve(metadata.RawCapturedAt, file.Path, clock, exportDate),
+            // The file's own place wins; the export's fills in only when the file has none (S-045, D-104).
+            Location = metadata.Location ?? exportLocation,
+            Caption = ExportFacts.Caption(export),
+            Albums = ExportFacts.Albums(export),
             Camera = metadata.Camera,
             Width = metadata.Width,
             Height = metadata.Height,
@@ -1118,7 +1147,8 @@ public static class ProcessCommand
     /// its turn came), and another read-ahead budget.
     /// </summary>
     internal sealed record ProcessHooks(
-        IVideoProcessor? Video = null, Action<string>? BeforeWork = null, long? ReadAheadBytes = null, Action<string>? BeforeRead = null);
+        IVideoProcessor? Video = null, Action<string>? BeforeWork = null, long? ReadAheadBytes = null, Action<string>? BeforeRead = null,
+        ExportReaderRegistry? ExportReaders = null);
 
     /// <summary>Photos read ahead and waiting in memory at most, so a slow step never lets the reader fill the memory.</summary>
     internal const long ReadAheadBytes = 256L * 1024 * 1024;

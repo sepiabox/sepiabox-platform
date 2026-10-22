@@ -4,8 +4,10 @@ using Sepiabox.Ingest.Processing;
 using Sepiabox.Ingest.Reporting;
 using Sepiabox.Ingest.Scanning;
 using Sepiabox.Ingest.Uploading;
+using Sepiabox.Pipeline.Exports;
 using Sepiabox.Pipeline.Video;
 using Sepiabox.Search.Models;
+using Sepiabox.Storage.Azure;
 
 const string Usage = """
     Usage: sepiabox-ingest <command> [options]
@@ -39,6 +41,11 @@ const string Usage = """
       --jobs <n>            Process n files at once (1 to 64). Default: half the processors. The drive is
                             still read by one reader, front to back; the result is the same for any n.
       --video-jobs <n>      Videos read and transcoded at once. Default: 1.
+      --export <kind>       The folder is an official export of a photo service (the readers come with
+                            the importers for each service). Its dates, places, captions and albums
+                            are added to what the files say; the export is only read.
+      --time-zone <id>      With --export: the zone (such as Europe/Lisbon) the export's UTC times are
+                            shown in. Default: this computer's.
       --index-only          The originals stay where they are and are never uploaded; Sepiabox keeps no
                             copy of them. Photos get a 2048 px preview and videos a 1080p version instead
                             of 1280 px and 720p. Belongs to the work folder: the first run records it,
@@ -90,7 +97,7 @@ catch (WorkFolderModeException ex)
     Console.Error.WriteLine(ex.Message);
     return 2;
 }
-catch (Exception ex) when (ex is DirectoryNotFoundException or ClockSkewException)
+catch (Exception ex) when (ex is DirectoryNotFoundException or ClockSkewException or ExportReadException)
 {
     Console.Error.WriteLine(ex.Message);
     return 1;
@@ -184,6 +191,15 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
     return result.Problems.Count == 0 ? 0 : 1;
 }
 
+// The one place that knows where blobs live: Azure with the signed-in identity, or the local emulator (D-051).
+static AzureBlobStore CreateBlobStore(UploadOptions options) => new(options.Destination switch
+{
+    UploadDestination.Azure => new Azure.Storage.Blobs.BlobServiceClient(
+        new Uri($"https://{options.Account}.blob.core.windows.net"), new Azure.Identity.DefaultAzureCredential()),
+    _ => new Azure.Storage.Blobs.BlobServiceClient(
+        Environment.GetEnvironmentVariable(UploadCommand.ConnectionVariable) ?? "UseDevelopmentStorage=true"),
+});
+
 static async Task<int> RunUpload(string[] args, CancellationToken cancellationToken)
 {
     if (!UploadOptions.TryParse(args, out var options, out var error))
@@ -192,7 +208,8 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
     }
 
     var progress = new ConsoleProgress<long>(bytes => Console.Error.Write($"\r{ScanReport.FormatBytes(bytes)} sent..."));
-    var result = await UploadCommand.RunAsync(options, UploadCommand.CreateClient(options), progress, cancellationToken);
+    using var store = CreateBlobStore(options);
+    var result = await UploadCommand.RunAsync(options, store, progress, cancellationToken);
     Console.Error.WriteLine();
 
     Console.WriteLine($"{result.Assets:N0} assets: uploaded {result.Uploaded:N0} files ({ScanReport.FormatBytes(result.Bytes)}), already there {result.Skipped:N0}, {(result.IndexOnly ? $"originals left at their source {result.OriginalsLeftAtSource:N0}, " : "")}problems {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
