@@ -1385,4 +1385,8 @@
   <data name="Ask_TimedOut" xml:space="preserve">
     <value>Still waiting. You can keep waiting or try again.</value>
   </data>
+  <data name="Layout_More" xml:space="preserve">
+    <value>More</value>
+    <comment>The header's disclosure for the pages used now and then.</comment>
+  </data>
 </root>

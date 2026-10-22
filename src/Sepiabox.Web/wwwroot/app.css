@@ -720,6 +720,72 @@ main {
     text-decoration: none;
 }
 
+.nav-link[aria-current="page"],
+.more-active {
+    color: var(--cyanotype);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+}
+
+/* The pages used now and then, behind a disclosure that needs no JavaScript (D-102). */
+.more {
+    position: relative;
+}
+
+.more > summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.more > summary::-webkit-details-marker {
+    display: none;
+}
+
+.more > summary::after {
+    content: " ▾" / "";
+}
+
+.more-current {
+    font-weight: 400;
+}
+
+.more-list {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 20;
+    display: grid;
+    gap: 2px;
+    min-width: 11rem;
+    max-width: calc(100vw - 32px);
+    padding: 8px;
+    background: var(--white);
+    border: 1px solid var(--mat);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.more-list .nav-link {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 12px;
+}
+
+/* On a phone the list opens in the flow of the header, not over the page, so it cannot run off the screen. */
+@media (max-width: 600px) {
+    .more[open] {
+        flex-basis: 100%;
+    }
+
+    .more-list {
+        position: static;
+        margin-top: 8px;
+        max-width: none;
+        box-shadow: none;
+    }
+}
+
 .nav-link:hover,
 .nav-link:focus-visible {
     color: var(--cyanotype);
