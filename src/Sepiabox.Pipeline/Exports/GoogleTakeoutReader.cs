@@ -19,11 +19,32 @@ public sealed partial class GoogleTakeoutReader : IExportReader
     [GeneratedRegex(@"^(Photos from|Fotos de|Fotos von|Photos de|Foto's uit|Foto del|Foto dal|Zdjęcia z|Fotky z|Foton från) (19|20)\d\d$", RegexOptions.IgnoreCase)]
     private static partial Regex YearFolder();
 
-    // Folders that are the export's own, never an album.
-    private static readonly HashSet<string> s_containers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Takeout", "Google Photos", "Google Fotos", "Google Foto's", "Google Photos (1)",
-    };
+    // The export's own folders, never an album: "Takeout", "Google Photos" and their translations, with the " (2)" Google adds
+    // when an export is split in several.
+    [GeneratedRegex(@"^(Takeout|Google Photos|Google Fotos|Google Foto's|Google Foto|Google Zdjęcia)( \(\d+\))?$", RegexOptions.IgnoreCase)]
+    private static partial Regex Container();
+
+    // The folder of what the person deleted (Takeout calls it Trash; the word is in the language of the account). Its items
+    // are not imported: manifests only ever grow (D-036), so a wrong import could not be undone.
+    private static readonly HashSet<string> s_trash = Names(
+        "Trash", "Bin", "Lixeira", "Reciclagem", "Papierkorb", "Corbeille", "Papelera", "Cestino", "Prullenbak", "Papperskorg",
+        "Papirkurv", "Roskakori", "Kosz", "Koš", "Kôš", "Szemetes", "Çöp Kutusu", "Корзина", "ゴミ箱", "휴지통");
+
+    // Archive is a state of a photo, not an album: its photos stay in the library without an album of that name.
+    private static readonly HashSet<string> s_archive = Names(
+        "Archive", "Arquivo", "Arquivados", "Archiv", "Archivo", "Archivio", "Archief", "Arkiv", "Arkisto", "Archiwum", "Archivovat", "Archívum",
+        "Arşiv", "Архив", "アーカイブ", "보관함");
+
+    // Folders of videos Google could not process: not an album either.
+    private static readonly HashSet<string> s_failedVideos = Names(
+        "Failed Videos", "Vídeos com falha", "Vídeos que falharam", "Fehlgeschlagene Videos", "Vidéos ayant échoué", "Vídeos fallidos");
+
+    // An album whose name has a year is probably a year folder in a language this reader does not know.
+    [GeneratedRegex(@"(?<!\d)(19|20)\d\d(?!\d)")]
+    private static partial Regex YearInName();
+
+    private static HashSet<string> Names(params string[] names) =>
+        new(names.Select(n => n.Normalize(System.Text.NormalizationForm.FormC)), StringComparer.OrdinalIgnoreCase);
 
     public string Kind => ExportKind;
 
@@ -36,8 +57,11 @@ public sealed partial class GoogleTakeoutReader : IExportReader
         }
 
         var files = new List<KeyValuePair<string, ExportMetadata>>();
+        var leftOut = new List<string>();
+        var albumNames = new HashSet<string>(StringComparer.Ordinal);
         var withoutSidecar = 0;
         var unreadable = 0;
+        var trashed = 0;
         foreach (var directory in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories).Prepend(root).Order(StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -48,37 +72,55 @@ public sealed partial class GoogleTakeoutReader : IExportReader
                 continue;
             }
 
-            var album = Album(root, directory);
+            var folder = Path.GetFileName(directory);
+            var inTrash = IsInTrash(root, directory);
             var matches = TakeoutSidecars.Match(media, names.Where(n => !n.Equals("metadata.json", StringComparison.OrdinalIgnoreCase)).ToList());
-            var parsed = new Dictionary<string, ExportMetadata?>(StringComparer.OrdinalIgnoreCase);
+            var parsed = new Dictionary<string, Sidecar?>(StringComparer.OrdinalIgnoreCase);
             foreach (var name in media)
             {
-                ExportMetadata? sidecar = null;
-                if (matches[name] is { } json)
+                Sidecar? sidecar = null;
+                var matched = matches[name] is not null;
+                if (matches[name] is { } json && !parsed.TryGetValue(json, out sidecar))
                 {
-                    if (!parsed.TryGetValue(json, out sidecar))
-                    {
-                        sidecar = Parse(Path.Combine(directory, json));
-                        parsed[json] = sidecar;
-                    }
-
-                    if (sidecar is null)
-                    {
-                        unreadable++;
-                    }
+                    sidecar = ParseSidecar(Path.Combine(directory, json));
+                    parsed[json] = sidecar;
                 }
-                else
+
+                var relative = Path.GetRelativePath(root, Path.Combine(directory, name)).Replace('\\', '/');
+                // The sidecar's own flag says whether the photo is in the trash; the folder's name only when it says nothing.
+                if (sidecar?.Trashed ?? inTrash)
+                {
+                    leftOut.Add(relative);
+                    trashed++;
+                    continue;
+                }
+
+                if (!matched)
                 {
                     withoutSidecar++;
                 }
+                else if (sidecar is null)
+                {
+                    unreadable++;
+                }
 
-                var metadata = (sidecar ?? new ExportMetadata()) with { Albums = album is null ? [] : [album] };
-                var relative = Path.GetRelativePath(root, Path.Combine(directory, name)).Replace('\\', '/');
+                var album = Album(root, directory, archived: sidecar?.Archived);
+                if (album is not null)
+                {
+                    albumNames.Add(album);
+                }
+
+                var metadata = (sidecar?.Facts ?? new ExportMetadata()) with { Albums = album is null ? [] : [album] };
                 files.Add(new KeyValuePair<string, ExportMetadata>(relative, metadata));
             }
         }
 
         var warnings = new List<string>();
+        if (trashed > 0)
+        {
+            warnings.Add($"{trashed:N0} items in Trash were not imported.");
+        }
+
         if (withoutSidecar > 0)
         {
             warnings.Add($"{withoutSidecar:N0} photos and videos in the export have no JSON sidecar and were read from their own metadata only.");
@@ -89,22 +131,36 @@ public sealed partial class GoogleTakeoutReader : IExportReader
             warnings.Add($"{unreadable:N0} photos and videos have a JSON sidecar that could not be read; their own metadata was used.");
         }
 
-        return new ExportScan(files, warnings: warnings);
+        var yearLike = albumNames.Where(n => YearInName().IsMatch(n)).Order(StringComparer.Ordinal).ToList();
+        if (yearLike.Count > 0)
+        {
+            var names = $"{string.Join(", ", yearLike.Take(10))}{(yearLike.Count > 10 ? ", ..." : string.Empty)}";
+            warnings.Add(yearLike.Count == 1
+                ? $"1 album looks like a year folder: {names}. Check it is an album."
+                : $"{yearLike.Count:N0} albums look like year folders: {names}. Check they are albums.");
+        }
+
+        return new ExportScan(files, leftOut, warnings);
     }
 
+    /// <summary>Whether the folder is, or is inside, a Trash folder.</summary>
+    public static bool IsInTrash(string root, string directory) =>
+        Path.GetRelativePath(root, directory).Split(['/', '\\']).Any(part => s_trash.Contains(part.Normalize(System.Text.NormalizationForm.FormC)));
+
     /// <summary>
-    /// The album a folder is: its <c>metadata.json</c>'s title, else its name; none for the export's own folders and the
-    /// <c>Photos from YYYY</c> folders.
+    /// The album a folder is: its <c>metadata.json</c>'s title, else its name; none for the export's own folders, the
+    /// <c>Photos from YYYY</c> folders, the Archive folder (a state, not an album; unless the sidecar says
+    /// <paramref name="archived"/> is false) and the folder of failed videos.
     /// </summary>
-    public static string? Album(string root, string directory)
+    public static string? Album(string root, string directory, bool? archived = null)
     {
         if (string.Equals(Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar), Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar), StringComparison.Ordinal))
         {
             return null;
         }
 
-        var name = Path.GetFileName(directory);
-        if (s_containers.Contains(name) || YearFolder().IsMatch(name))
+        var name = Path.GetFileName(directory).Normalize(System.Text.NormalizationForm.FormC);
+        if (Container().IsMatch(name) || YearFolder().IsMatch(name) || s_failedVideos.Contains(name) || (s_archive.Contains(name) && archived != false))
         {
             return null;
         }
@@ -134,6 +190,30 @@ public sealed partial class GoogleTakeoutReader : IExportReader
             return null;
         }
     }
+
+    /// <summary>What a sidecar says, and whether it says the photo is in the trash or archived (unconfirmed fields, D-106).</summary>
+    private sealed record Sidecar(ExportMetadata Facts, bool? Trashed, bool? Archived);
+
+    private static Sidecar? ParseSidecar(string path)
+    {
+        if (Parse(path) is not { } facts)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllBytes(path));
+            return new Sidecar(facts, Flag(document.RootElement, "trashed"), Flag(document.RootElement, "archived"));
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static bool? Flag(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;
 
     /// <summary>What a sidecar says, or null when it cannot be read as one.</summary>
     public static ExportMetadata? Parse(string path)

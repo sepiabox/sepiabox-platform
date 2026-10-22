@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Sepiabox.Pipeline.Exports;
@@ -22,11 +23,11 @@ public static partial class TakeoutSidecars
     public const int MinimumCutLength = 40;
 
     // The word Google adds to an edited copy, by language of the account: "IMG_0001-edited.jpg", "IMG_0001-bearbeitet.jpg".
-    private static readonly string[] s_editedWords =
-    [
+    private static readonly string[] s_editedWords = new[]
+    {
         "edited", "bearbeitet", "modifié", "modifie", "editado", "modificato", "bewerkt", "redigerad", "redigeret", "muokattu",
         "edytowane", "upraveno", "szerkesztett", "düzenlendi", "отредактировано", "編集済み", "편집됨",
-    ];
+    }.Select(w => w.Normalize(NormalizationForm.FormC)).ToArray();
 
     [GeneratedRegex(@"^(?<base>.*)\((?<n>\d+)\)(?<ext>\.[^.]*)$")]
     private static partial Regex Duplicate();
@@ -42,17 +43,19 @@ public static partial class TakeoutSidecars
         ArgumentNullException.ThrowIfNull(mediaNames);
         ArgumentNullException.ThrowIfNull(jsonNames);
 
+        // Compared in normalization form C (a Mac writes file names in form D); the names given back are the ones given.
         var sidecars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var json in jsonNames.Where(n => n.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
         {
-            sidecars.TryAdd(json[..^".json".Length], json);
+            sidecars.TryAdd(json[..^".json".Length].Normalize(NormalizationForm.FormC), json);
         }
 
+        var stemsOf = mediaNames.ToDictionary(m => m, m => Stems(m), StringComparer.Ordinal);
         var result = new Dictionary<string, string?>(StringComparer.Ordinal);
         var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var media in mediaNames)
         {
-            var found = Stems(media).Select(stem => sidecars.TryGetValue(stem, out var json) ? json : null).FirstOrDefault(json => json is not null);
+            var found = stemsOf[media].Select(stem => sidecars.TryGetValue(stem, out var json) ? json : null).FirstOrDefault(json => json is not null);
             result[media] = found;
             if (found is not null)
             {
@@ -62,22 +65,31 @@ public static partial class TakeoutSidecars
 
         foreach (var media in mediaNames.Where(m => result[m] is null))
         {
-            var stems = Stems(media);
+            var stems = stemsOf[media];
             var cut = sidecars
                 .Where(pair => !claimed.Contains(pair.Value) && pair.Key.Length >= MinimumCutLength
                     && stems.Any(stem => stem.Length > pair.Key.Length && stem.StartsWith(pair.Key, StringComparison.OrdinalIgnoreCase)))
                 .Select(pair => pair.Value)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            // Two sidecars, or a sidecar that two media files could own, is a guess; no sidecar is the honest answer.
-            if (cut.Count == 1 && !mediaNames.Any(other => other != media && Stems(other).Any(s => s.StartsWith(cut[0][..^".json".Length], StringComparison.OrdinalIgnoreCase))))
+            // Two sidecars, or a sidecar that another photo could own, is a guess; no sidecar is the honest answer. An
+            // original and its edited copy are one photo's two files and share the sidecar: not another owner.
+            if (cut.Count == 1)
             {
-                result[media] = cut[0];
+                var stem = cut[0][..^".json".Length].Normalize(NormalizationForm.FormC);
+                var rival = mediaNames.Any(other => other != media && !SameOriginal(media, other) && stemsOf[other].Any(s => s.StartsWith(stem, StringComparison.OrdinalIgnoreCase)));
+                if (!rival)
+                {
+                    result[media] = cut[0];
+                }
             }
         }
 
         return result;
     }
+
+    private static bool SameOriginal(string a, string b) =>
+        string.Equals(Original(a), Original(b), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The sidecar names (without <c>.json</c>) that <paramref name="media"/> may have, most specific first: its own, and
@@ -85,6 +97,7 @@ public static partial class TakeoutSidecars
     /// </summary>
     public static IReadOnlyList<string> Stems(string media)
     {
+        media = media.Normalize(NormalizationForm.FormC);
         var names = new List<string> { media };
         var original = Original(media);
         if (original != media)
@@ -111,20 +124,34 @@ public static partial class TakeoutSidecars
         return [.. stems.Distinct(StringComparer.OrdinalIgnoreCase)];
     }
 
-    /// <summary>The name of the file an edited copy was made from, or <paramref name="media"/> itself.</summary>
+    /// <summary>
+    /// The name of the file an edited copy was made from, or <paramref name="media"/> itself. A number after the edited word
+    /// (<c>IMG-edited(1).jpg</c>, a second edited copy) is kept after the name, as a duplicate's: <c>IMG(1).jpg</c>.
+    /// </summary>
     public static string Original(string media)
     {
-        var extension = Path.GetExtension(media);
-        var stem = media[..^extension.Length];
+        var name = media.Normalize(NormalizationForm.FormC);
+        var extension = Path.GetExtension(name);
+        var stem = name[..^extension.Length];
+        var number = string.Empty;
+        if (Number().Match(stem) is { Success: true } numbered)
+        {
+            number = numbered.Value;
+            stem = stem[..^number.Length];
+        }
+
         foreach (var word in s_editedWords)
         {
             var suffix = "-" + word;
             if (stem.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && stem.Length > suffix.Length)
             {
-                return stem[..^suffix.Length] + extension;
+                return stem[..^suffix.Length] + number + extension;
             }
         }
 
         return media;
     }
+
+    [GeneratedRegex(@"\(\d+\)$")]
+    private static partial Regex Number();
 }

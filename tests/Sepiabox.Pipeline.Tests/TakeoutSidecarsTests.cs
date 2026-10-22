@@ -76,6 +76,54 @@ public sealed class TakeoutSidecarsTests
     }
 
     [Fact]
+    public void An_original_with_a_long_name_and_its_edited_copy_share_the_cut_sidecar()
+    {
+        var original = Long;
+        var edited = Long.Replace(".jpg", "-edited.jpg", StringComparison.Ordinal);
+        var cut = (Long + TakeoutSidecars.Supplemental)[..46] + ".json";
+
+        var match = TakeoutSidecars.Match([original, edited], [cut]);
+
+        Assert.Equal(cut, match[original]);
+        Assert.Equal(cut, match[edited]);
+        // An edited copy alone, whose original is not in the folder, finds it too.
+        Assert.Equal(cut, TakeoutSidecars.Match([edited], [cut])[edited]);
+    }
+
+    [Fact]
+    public void A_cut_sidecar_is_still_not_shared_with_a_different_photo_that_could_own_it()
+    {
+        var one = "PXL_20190701_101010123.MP.COVER.ORIGINAL.photo_1.jpg";
+        var two = "PXL_20190701_101010123.MP.COVER.ORIGINAL.photo_2-edited.jpg";
+        var cut = (one + TakeoutSidecars.Supplemental)[..46] + ".json";
+
+        var match = TakeoutSidecars.Match([one, two], [cut]);
+
+        Assert.Null(match[one]);
+        Assert.Null(match[two]);
+    }
+
+    [Theory]
+    [InlineData("IMG-edited(1).jpg", "IMG(1).jpg")]
+    [InlineData("IMG-edited.jpg", "IMG.jpg")]
+    [InlineData("IMG-modifie\u0301.jpg", "IMG.jpg")]
+    [InlineData("IMG-modifi\u00e9.jpg", "IMG.jpg")]
+    [InlineData("IMG(1).jpg", "IMG(1).jpg")]
+    public void Finds_the_original_of_an_edited_copy_in_normalization_form_c_and_keeps_a_duplicates_number(string media, string expected)
+    {
+        Assert.Equal(expected, TakeoutSidecars.Original(media));
+    }
+
+    [Fact]
+    public void A_second_edited_copy_uses_the_duplicates_sidecar_and_names_are_compared_in_form_c()
+    {
+        var match = TakeoutSidecars.Match(["IMG-edited(1).jpg", "Fe\u0301rias-edited.jpg"], ["IMG.jpg(1).json", "F\u00e9rias.jpg.json"]);
+
+        Assert.Equal("IMG.jpg(1).json", match["IMG-edited(1).jpg"]);
+        Assert.Equal("F\u00e9rias.jpg.json", match["Fe\u0301rias-edited.jpg"]);
+    }
+
+    [Fact]
     public void Prefers_an_exact_sidecar_to_a_cut_one_and_does_not_give_one_files_sidecar_to_another()
     {
         // Different at the start, so the cut name still tells them apart.

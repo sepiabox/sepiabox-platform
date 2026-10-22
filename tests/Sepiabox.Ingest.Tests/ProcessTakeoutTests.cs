@@ -175,6 +175,23 @@ public sealed class ProcessTakeoutTests : IDisposable
     }
 
     [Fact]
+    public void Does_not_import_what_is_in_trash_and_keeps_archived_photos_without_an_album()
+    {
+        _drive.Write("Trash/gone.jpg", Photo("gone"));
+        _drive.Write("Archive/kept.jpg", Photo("kept"));
+        Json("Trash/gone.jpg.json", """{"description": "deleted"}""");
+        Json("Archive/kept.jpg.json", """{"description": "kept", "archived": true}""");
+
+        var result = Process();
+
+        var manifest = ReadManifest();
+        Assert.Equal("kept", manifest.Caption);
+        Assert.Null(manifest.Albums);
+        Assert.Contains("1 items in Trash were not imported.", result.Warning, StringComparison.Ordinal);
+        Assert.Equal(1, result.Processed);
+    }
+
+    [Fact]
     public void Does_not_touch_the_export()
     {
         _drive.Write("Trip/a.jpg", Photo("a"));

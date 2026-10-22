@@ -109,6 +109,130 @@ public sealed class GoogleTakeoutReaderTests : IDisposable
         Assert.Empty(scan.Find("Takeout/Google Photos/c.jpg")!.Albums);
     }
 
+    [Theory]
+    [InlineData("Trash")]
+    [InlineData("Lixeira")]
+    [InlineData("Papierkorb")]
+    [InlineData("Takeout/Google Photos/Corbeille")]
+    [InlineData("Takeout/Google Photos/Photos from 2019/Bin")]
+    public void Does_not_import_what_is_in_a_trash_folder_whatever_its_language_and_says_so_once(string folder)
+    {
+        Put($"{folder}/a.jpg");
+        Put($"{folder}/b.mp4");
+        Put("Trip/c.jpg");
+        Json($"{folder}/a.jpg.json", """{"description": "deleted"}""");
+        Json("Trip/c.jpg.json", "{}");
+
+        var scan = Read();
+
+        Assert.Equal(1, scan.Count);
+        Assert.NotNull(scan.Find("Trip/c.jpg"));
+        Assert.True(scan.IsLeftOut($"{folder}/a.jpg"));
+        Assert.True(scan.IsLeftOut($"{folder}/b.mp4"));
+        Assert.Equal("2 items in Trash were not imported.", Assert.Single(scan.Warnings));
+    }
+
+    [Fact]
+    public void Prefers_the_sidecars_trashed_flag_to_the_folders_name()
+    {
+        Put("Trip/gone.jpg");
+        Put("Trash/kept.jpg");
+        Put("Trash/plain.jpg");
+        Json("Trip/gone.jpg.json", """{"trashed": true}""");
+        Json("Trash/kept.jpg.json", """{"trashed": false}""");
+        Json("Trash/plain.jpg.json", "{}");
+
+        var scan = Read();
+
+        Assert.True(scan.IsLeftOut("Trip/gone.jpg"));
+        Assert.NotNull(scan.Find("Trash/kept.jpg"));
+        Assert.True(scan.IsLeftOut("Trash/plain.jpg"));
+        Assert.Equal("2 items in Trash were not imported.", Assert.Single(scan.Warnings));
+    }
+
+    [Fact]
+    public void Does_not_count_an_item_in_trash_among_those_without_a_sidecar()
+    {
+        Put("Trash/a.jpg");
+
+        Assert.Equal("1 items in Trash were not imported.", Assert.Single(Read().Warnings));
+    }
+
+    [Theory]
+    [InlineData("Archive")]
+    [InlineData("Arquivo")]
+    [InlineData("Archiv")]
+    public void Keeps_archived_photos_in_the_library_without_an_album_of_that_name(string folder)
+    {
+        Put($"{folder}/a.jpg");
+        Json($"{folder}/a.jpg.json", """{"archived": true}""");
+
+        var scan = Read();
+
+        Assert.Empty(scan.Find($"{folder}/a.jpg")!.Albums);
+        Assert.False(scan.IsLeftOut($"{folder}/a.jpg"));
+    }
+
+    [Fact]
+    public void Treats_a_folder_named_like_the_archive_as_an_album_only_when_the_sidecar_says_the_photo_is_not_archived()
+    {
+        Put("Archive/a.jpg");
+        Json("Archive/a.jpg.json", """{"archived": false}""");
+
+        Assert.Equal(["Archive"], Read().Find("Archive/a.jpg")!.Albums);
+    }
+
+    [Fact]
+    public void Failed_videos_are_not_an_album()
+    {
+        Put("Failed Videos/a.mp4");
+        Json("Failed Videos/a.mp4.json", "{}");
+
+        Assert.Empty(Read().Find("Failed Videos/a.mp4")!.Albums);
+    }
+
+    [Theory]
+    [InlineData("Takeout")]
+    [InlineData("Google Photos")]
+    [InlineData("Google Photos (2)")]
+    [InlineData("Google Fotos (12)")]
+    public void Never_makes_an_album_of_the_exports_own_folders_including_numbered_ones(string folder)
+    {
+        Put($"{folder}/a.jpg");
+        Json($"{folder}/a.jpg.json", "{}");
+
+        Assert.Empty(Read().Find($"{folder}/a.jpg")!.Albums);
+    }
+
+    [Fact]
+    public void Warns_about_albums_whose_names_have_a_year_so_they_can_be_checked()
+    {
+        Put("Summer 2019/a.jpg");
+        Put("Natal 2018/b.jpg");
+        Put("Trip/c.jpg");
+        Put("Room 12345/d.jpg");
+        foreach (var path in new[] { "Summer 2019/a.jpg", "Natal 2018/b.jpg", "Trip/c.jpg", "Room 12345/d.jpg" })
+        {
+            Json(path + ".json", "{}");
+        }
+
+        var warning = Assert.Single(Read().Warnings);
+
+        Assert.Equal("2 albums look like year folders: Natal 2018, Summer 2019. Check they are albums.", warning);
+        Put("Only 2020/e.jpg");
+        Json("Only 2020/e.jpg.json", "{}");
+        Assert.Contains("3 albums look like year folders", Assert.Single(Read().Warnings), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_one_album_looks_like_a_year_folder_in_the_singular()
+    {
+        Put("Summer 2019/a.jpg");
+        Json("Summer 2019/a.jpg.json", "{}");
+
+        Assert.Equal("1 album looks like a year folder: Summer 2019. Check it is an album.", Assert.Single(Read().Warnings));
+    }
+
     [Fact]
     public void Gives_every_copy_of_a_file_its_own_folders_album_and_the_same_sidecar_facts()
     {
