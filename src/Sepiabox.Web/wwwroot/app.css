@@ -644,6 +644,22 @@ main {
     margin: 0;
 }
 
+/* A caption is the family's own text: its line breaks stay, and a long word or address breaks rather than widening the page (S-052). */
+.facts dt.caption-label,
+.facts dd.caption {
+    grid-column: 1 / -1;
+}
+
+.facts dd.caption {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.photo-albums {
+    padding-left: 18px;
+    overflow-wrap: anywhere;
+}
+
 /* Names and paths may break anywhere, but only when they do not fit (not mid-word in a sentence that does). */
 .sources {
     padding-left: 18px;
@@ -1191,4 +1207,24 @@ main {
 .button.secondary:hover:not(:disabled) {
     background: var(--chip);
     color: var(--cyanotype-hover);
+}
+
+/* A long album name must not widen the bar or the page (S-052): the select shrinks to its cell and shows an ellipsis. */
+.filters label {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.filters select {
+    min-width: 0;
+    max-width: min(100%, 20rem);
+}
+
+/* The disclosure triangle stays (display: list-item), and the line reads as a link with a 44 px target. */
+.more-albums summary {
+    display: list-item;
+    cursor: pointer;
+    padding: 12px 0;
+    color: var(--cyanotype);
+    text-decoration: underline;
 }

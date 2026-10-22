@@ -50,7 +50,7 @@ public static class QuestionPrompt
     /// asset by its id, which only the photo detail page knows (S-017), and <c>eventIds</c> names occasions by ids, which
     /// only the occasions pages know (S-023); <c>similarToRegion</c> names a photo and a box drawn on it (S-041, D-099).
     /// </summary>
-    public static readonly IReadOnlyList<string> NotFromQuestions = ["similarTo", "eventIds", "quality", "includeHidden", "similarToRegion"];
+    public static readonly IReadOnlyList<string> NotFromQuestions = ["similarTo", "eventIds", "quality", "includeHidden", "similarToRegion", "albums"];
 
     /// <summary>
     /// The properties of <c>filters</c> the output format makes required but nullable, so they cost a union type instead

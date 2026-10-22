@@ -41,9 +41,18 @@ namespace Sepiabox.Catalog.Migrations
                         .HasColumnType("text")
                         .HasColumnName("camera_model");
 
+                    b.Property<string>("Caption")
+                        .HasColumnType("text")
+                        .HasColumnName("caption");
+
                     b.Property<DateTime?>("CapturedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("captured_at");
+
+                    b.Property<string>("CapturedAtSource")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("captured_at_source");
 
                     b.Property<string>("ContentType")
                         .IsRequired()
@@ -145,6 +154,25 @@ namespace Sepiabox.Catalog.Migrations
                     NpgsqlIndexBuilderExtensions.HasNullSortOrder(b.HasIndex("CapturedAt", "Id"), new[] { NullSortOrder.NullsLast, NullSortOrder.NullsLast });
 
                     b.ToTable("assets", (string)null);
+                });
+
+            modelBuilder.Entity("Sepiabox.Catalog.AssetAlbum", b =>
+                {
+                    b.Property<string>("AssetId")
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("asset_id");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.HasKey("AssetId", "Name")
+                        .HasName("pk_asset_albums");
+
+                    b.HasIndex("Name")
+                        .HasDatabaseName("ix_asset_albums_name");
+
+                    b.ToTable("asset_albums", (string)null);
                 });
 
             modelBuilder.Entity("Sepiabox.Catalog.AssetEmbedding", b =>
@@ -813,6 +841,16 @@ namespace Sepiabox.Catalog.Migrations
                     b.ToTable("settings", (string)null);
                 });
 
+            modelBuilder.Entity("Sepiabox.Catalog.AssetAlbum", b =>
+                {
+                    b.HasOne("Sepiabox.Catalog.Asset", null)
+                        .WithMany("Albums")
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_asset_albums_assets_asset_id");
+                });
+
             modelBuilder.Entity("Sepiabox.Catalog.AssetEmbedding", b =>
                 {
                     b.HasOne("Sepiabox.Catalog.Asset", null)
@@ -890,6 +928,8 @@ namespace Sepiabox.Catalog.Migrations
 
             modelBuilder.Entity("Sepiabox.Catalog.Asset", b =>
                 {
+                    b.Navigation("Albums");
+
                     b.Navigation("Derivatives");
 
                     b.Navigation("Sources");
