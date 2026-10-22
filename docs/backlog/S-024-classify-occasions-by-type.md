@@ -27,7 +27,7 @@ Knowing that an occasion is a wedding uses the CLIP embeddings already stored (z
 - [x] Given `eventTypes=[wedding]`, when occasions are searched, then only occasions of that type are returned. *(`OccasionsCatalogTests`: the DSL filter on assets, and the occasions page's `?type=`.)*
 - [x] Given 4 occasions of type `wedding` in 2026, when I count `events` with `eventTypes=[wedding]` and `years=[2026]`, then `total` is 4. *(`OccasionsCatalogTests`, and the golden question `events-weddings-2026`.)*
 
-- [ ] Given the golden set's questions about occasions, `birthday-in-sintra` (now an occasion type) and the four `events-*` ones (English and Brazilian Portuguese), when they run with the real API before `done` (D-054), then each means its expected query on the fixture catalog, as in S-025 (one recorded retry per question). *(Waits for the recording run below: until then their recorded responses are placeholders, the expected queries.)*
+- [x] Given the golden set's questions about occasions, `birthday-in-sintra` (now an occasion type) and the four `events-*` ones (English and Brazilian Portuguese), when they run with the real API before `done` (D-054), then each means its expected query on the fixture catalog, as in S-025 (one recorded retry per question). *(Recorded on `story/S-024-classify-occasions-by-type`: `Model claude-haiku-5-5, 2026-10-22: 118/118 passed, 0 after a retry ().` The MVP acceptance run, which shares the output format, was re-recorded too: `16/16 answered right, 0 after a retry ()`.)*
 
 ### Technical notes
 - Text embeddings computed once (S-016) and kept in memory; tests use a fake encoder.
@@ -57,4 +57,4 @@ In a session that has `SEPIABOX_ANTHROPIC_API_KEY` and Docker, on this story's b
 If the run fails, keep the story `blocked` (the recorded file is unchanged) and report the misses: they are prompt or golden-set fixes for a review iteration. The prompt now says what an occasion type is and when to use `eventTypes` (QuestionPrompt, "Occasions"): a miss on `birthday-in-sintra` is likely the prompt's wording about a birthday named with a person and a place.
 
 ### Status
-- `blocked` (2026-10-22): everything is implemented and tested (D-094) but the required live golden run with recording (D-054), above.
+- `done` (2026-10-22): implemented and reviewed (D-094); the live golden run passed 118/118 and was recorded (D-054).

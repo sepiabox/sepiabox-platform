@@ -150,7 +150,8 @@ public static class QuestionPrompt
           St John's/São João 23-24 June; Easter/Páscoa Good Friday to Easter Sunday of that year; Carnival/Carnaval
           the Saturday before Ash Wednesday to Shrove Tuesday of that year. Never just the year.
         - "On this day", "today in other years", "neste dia", "hoje em outros anos" is {"onThisDay": {}}; "a year ago
-          today", "há um ano", "faz 3 anos hoje" is {"onThisDay": {"yearsAgo": N}}.
+          today", "há um ano", "faz 3 anos hoje" is {"onThisDay": {"yearsAgo": N}}. These show the items, with no
+          aggregate, unless the question asks how many.
         - Places: use the stored English name from the context's city list ("Lisboa" is "Lisbon", "Porto" stays "Porto");
           for a city that is not in the list, use its usual English name. A country is its two-letter code ("Portugal"
           PT, "Brasil"/"Brazil" BR, "Espanha"/"Spain" ES). A region or continent is not a filter: use the countries or

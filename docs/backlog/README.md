@@ -162,7 +162,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-064 | [Show where an index-only original lives](S-064-show-where-an-index-only-original-lives.md) | Web app | S-063, S-011, S-044 | Medium | S | `done` | A |
 | S-028 | [See the library's storage and sources](S-028-see-the-library-s-storage-and-sources.md) | Organization | S-026 | Low | S | `done` | A |
 | S-023 | [Group photos into occasions](S-023-group-photos-into-occasions.md) | Occasions | S-012 | Medium | M | `done` | B |
-| S-024 | [Classify occasions by type](S-024-classify-occasions-by-type.md) | Occasions | S-023, S-016, S-026, S-014 | Medium | M | `blocked` | B |
+| S-024 | [Classify occasions by type](S-024-classify-occasions-by-type.md) | Occasions | S-023, S-016, S-026, S-014 | Medium | M | `done` | B |
 
 ### Sprint 14 — Portability, Google Drive and tidying the library
 
