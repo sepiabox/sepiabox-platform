@@ -9,7 +9,10 @@ public sealed record BlobContent(BinaryData Content, string Version, DateTimeOff
 /// <summary>A blob in a listing.</summary>
 /// <param name="Name">The blob's name in its container.</param>
 /// <param name="Version">Its version tag, as <see cref="IBlobStore.ReadAsync"/> would give it.</param>
-/// <param name="LastModified">When it was last written, on the store's clock.</param>
+/// <param name="LastModified">
+/// When it was last written, on the store's clock; <see cref="DateTimeOffset.MaxValue"/> when the store does not say, so
+/// that a caller that skips blobs older than some time keeps this one (a sweep that erases data must not skip a blob).
+/// </param>
 public sealed record BlobListing(string Name, string Version, DateTimeOffset LastModified);
 
 /// <summary>One page of a listing: <see cref="ContinuationToken"/> asks for the next, and is null on the last.</summary>
@@ -87,7 +90,7 @@ public interface IStagedUpload : IAsyncDisposable
     /// <summary>Adds the next block (the bytes are copied or sent before this returns, so the caller may reuse them).</summary>
     Task AppendAsync(ReadOnlyMemory<byte> block, CancellationToken cancellationToken = default);
 
-    /// <summary>Makes the blob from the blocks appended so far, replacing one that is there. An upload commits once.</summary>
+    /// <summary>Makes the blob from the blocks appended so far, replacing one that is there. An upload commits once: a second commit, or an append after it, throws <see cref="InvalidOperationException"/>.</summary>
     Task CommitAsync(string contentType, BlobStorageClass storageClass = BlobStorageClass.Default, CancellationToken cancellationToken = default);
 }
 
@@ -99,12 +102,6 @@ public interface IBlobStore
 {
     /// <summary>Whether the container exists.</summary>
     Task<bool> ContainerExistsAsync(string container, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Whether <paramref name="exception"/> is the store failing a request (a refused call, a timeout, a connection that
-    /// closed) rather than a bug in the caller, so that a caller with many things to do can report this one and go on.
-    /// </summary>
-    bool IsStoreFailure(Exception exception) => false;
 
     /// <summary>Creates the container unless it is there.</summary>
     Task CreateContainerAsync(string container, CancellationToken cancellationToken = default);
@@ -125,7 +122,18 @@ public interface IBlobStore
     /// <summary>The blob, or null when it is not there (nor its container).</summary>
     Task<BlobContent?> ReadAsync(string container, string name, CancellationToken cancellationToken = default);
 
-    /// <summary>The blobs of the container whose name starts with <paramref name="prefix"/> (all when null), in name order.</summary>
+    /// <summary>
+    /// Whether <paramref name="exception"/> is the store failing a request (a refused call, a timeout) rather than a bug in
+    /// the caller, so that a caller with many things to do can report this one and go on. Not a missing blob or container.
+    /// A store that wraps another (a decorator, a test double) must forward this to it: the default says no, and a failure
+    /// that is not recognised stops the caller as a bug.
+    /// </summary>
+    bool IsStoreFailure(Exception exception) => false;
+
+    /// <summary>
+    /// The blobs of the container whose name starts with <paramref name="prefix"/> (all when null), in name order. A
+    /// container that is not there has none, as for <see cref="ListPageAsync"/>.
+    /// </summary>
     IAsyncEnumerable<BlobListing> ListAsync(string container, string? prefix = null, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -137,7 +145,8 @@ public interface IBlobStore
 
     /// <summary>
     /// Writes the blob if <paramref name="condition"/> holds. A condition that does not hold is
-    /// <see cref="BlobWriteStatus.ConditionNotMet"/>, never an exception.
+    /// <see cref="BlobWriteStatus.ConditionNotMet"/>, never an exception; any other failure is one, and so is a container
+    /// that is not there (a write does not create it: the container is set up beforehand).
     /// </summary>
     Task<BlobWriteResult> WriteAsync(
         string container, string name, BinaryData content, string contentType, BlobWriteCondition condition,

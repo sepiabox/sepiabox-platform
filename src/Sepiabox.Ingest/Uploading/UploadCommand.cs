@@ -312,31 +312,47 @@ public static class UploadCommand
             CancellationToken cancellationToken)
         {
             await using var stream = MediaFile.OpenRead(path);
-            await using var upload = store.BeginUpload(container, blobName);
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = ArrayPool<byte>.Shared.Rent(BlockSize);
+            IStagedUpload? upload = null;
             try
             {
-                int read;
-                while ((read = await stream.ReadAtLeastAsync(buffer.AsMemory(0, BlockSize), BlockSize, throwOnEndOfStream: false, cancellationToken)) > 0)
+                var read = await stream.ReadAtLeastAsync(buffer.AsMemory(0, BlockSize), BlockSize, throwOnEndOfStream: false, cancellationToken);
+                if (expectedHash is null && read < BlockSize)
+                {
+                    // A file of one block or less (a thumbnail, a preview) is one request, not a block and a commit: with
+                    // tens of thousands of photos the difference is hours (D-100). Derivatives keep the default class.
+                    await store.WriteAsync(
+                        container, blobName, BinaryData.FromBytes(buffer.AsMemory(0, read)), contentType, BlobWriteCondition.Always, cancellationToken);
+                    AddBytes(read);
+                    return true;
+                }
+
+                upload = store.BeginUpload(container, blobName);
+                while (read > 0)
                 {
                     hash.AppendData(buffer, 0, read);
                     await upload.AppendAsync(buffer.AsMemory(0, read), cancellationToken);
                     AddBytes(read);
+                    read = await stream.ReadAtLeastAsync(buffer.AsMemory(0, BlockSize), BlockSize, throwOnEndOfStream: false, cancellationToken);
                 }
+
+                if (expectedHash is not null && Convert.ToHexStringLower(hash.GetHashAndReset()) != expectedHash)
+                {
+                    return false;
+                }
+
+                await upload.CommitAsync(contentType, storageClass, cancellationToken);
+                return true;
             }
             finally
             {
                 ArrayPool<byte>.Shared.Return(buffer);
+                if (upload is not null)
+                {
+                    await upload.DisposeAsync();
+                }
             }
-
-            if (expectedHash is not null && Convert.ToHexStringLower(hash.GetHashAndReset()) != expectedHash)
-            {
-                return false;
-            }
-
-            await upload.CommitAsync(contentType, storageClass, cancellationToken);
-            return true;
         }
 
         private async Task UploadWorkFileAsync(

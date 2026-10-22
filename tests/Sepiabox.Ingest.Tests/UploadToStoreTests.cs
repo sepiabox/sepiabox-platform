@@ -67,6 +67,21 @@ public sealed class UploadToStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Sends_a_derivative_of_one_block_or_less_as_one_write_and_stages_only_the_original()
+    {
+        _drive.Write("a.jpg", TestPhotos.Porto("red"));
+        var manifest = Process().Single();
+        var counting = new CountingStore(_store);
+
+        var result = await UploadCommand.RunAsync(new UploadOptions(_work.Path, UploadDestination.Local), counting);
+
+        Assert.Empty(result.Problems);
+        Assert.Equal([BlobLayout.OriginalsContainer + "/" + manifest.Id], counting.Staged);
+        Assert.Contains(counting.Writes, w => w.StartsWith(BlobLayout.DerivativesContainer + "/", StringComparison.Ordinal));
+        Assert.Equal(manifest.Derivatives.Count, (await ToListAsync(_store.ListAsync(BlobLayout.DerivativesContainer))).Count);
+    }
+
+    [Fact]
     public async Task Refuses_a_computer_clock_that_is_far_from_the_stores()
     {
         _drive.Write("a.jpg", TestPhotos.Porto("red"));
@@ -96,6 +111,34 @@ public sealed class UploadToStoreTests : IDisposable
         }
 
         return all;
+    }
+
+    private sealed class CountingStore(IBlobStore inner) : DelegatingBlobStore(inner)
+    {
+        public List<string> Staged { get; } = [];
+
+        public List<string> Writes { get; } = [];
+
+        public override IStagedUpload BeginUpload(string container, string name)
+        {
+            lock (Staged)
+            {
+                Staged.Add($"{container}/{name}");
+            }
+
+            return base.BeginUpload(container, name);
+        }
+
+        public override Task<BlobWriteResult> WriteAsync(
+            string container, string name, BinaryData content, string contentType, BlobWriteCondition condition, CancellationToken cancellationToken = default)
+        {
+            lock (Writes)
+            {
+                Writes.Add($"{container}/{name}");
+            }
+
+            return base.WriteAsync(container, name, content, contentType, condition, cancellationToken);
+        }
     }
 
     private sealed class Ahead(TimeSpan by) : TimeProvider

@@ -3,6 +3,7 @@ using Azure.Identity;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Logging.Abstractions;
+using Sepiabox.Storage.Azure;
 using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
@@ -21,6 +22,8 @@ public sealed class MediaEndpointsTests
         new TaskCanceledException("The operation was canceled."),
     ];
 
+    private static readonly AzureBlobStore s_blobs = new(new Azure.Storage.Blobs.BlobServiceClient("UseDevelopmentStorage=true"));
+
     [Fact]
     public async Task A_programming_error_inside_a_retry_failure_is_not_hidden_as_a_503()
     {
@@ -29,7 +32,7 @@ public sealed class MediaEndpointsTests
         var failure = new AggregateException(new RequestFailedException(503, "ServerBusy"), new InvalidOperationException("bug"));
 
         await Assert.ThrowsAsync<AggregateException>(() => MediaEndpoints.DerivativeAsync(
-            Ids.Of(1), DerivativeNames.Thumbnail, new DefaultHttpContext(), library, new FailingLinks(failure), NullLogger<Program>.Instance));
+            Ids.Of(1), DerivativeNames.Thumbnail, new DefaultHttpContext(), library, new FailingLinks(failure), s_blobs, NullLogger<Program>.Instance));
     }
 
     [Fact]
@@ -43,7 +46,7 @@ public sealed class MediaEndpointsTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => MediaEndpoints.DerivativeAsync(
             Ids.Of(1), DerivativeNames.Thumbnail, http, library,
-            new FailingLinks(new TaskCanceledException("client gone", null, aborted.Token)), NullLogger<Program>.Instance));
+            new FailingLinks(new TaskCanceledException("client gone", null, aborted.Token)), s_blobs, NullLogger<Program>.Instance));
     }
 
     [Theory]
@@ -55,7 +58,7 @@ public sealed class MediaEndpointsTests
         var http = new DefaultHttpContext();
 
         var result = await MediaEndpoints.DerivativeAsync(
-            Ids.Of(1), DerivativeNames.Thumbnail, http, library, new FailingLinks(failure), NullLogger<Program>.Instance);
+            Ids.Of(1), DerivativeNames.Thumbnail, http, library, new FailingLinks(failure), s_blobs, NullLogger<Program>.Instance);
 
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, Assert.IsType<StatusCodeHttpResult>(result).StatusCode);
         Assert.Equal("no-store", http.Response.Headers.CacheControl.ToString());
@@ -75,7 +78,7 @@ public sealed class MediaEndpointsTests
 
         var result = await MediaEndpoints.OriginalAsync(
             Ids.Of(2), http, library, new FailingLinks(new CredentialUnavailableException("no identity")), Cultures.Text(),
-            NullLogger<Program>.Instance);
+            s_blobs, NullLogger<Program>.Instance);
 
         var text = Assert.IsType<ContentHttpResult>(result);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, text.StatusCode);
@@ -94,7 +97,7 @@ public sealed class MediaEndpointsTests
         library.Assets[Ids.Of(3)] = Details.Photo(Ids.Of(3));
 
         var result = await MediaEndpoints.DerivativeAsync(
-            Ids.Of(3), name, new DefaultHttpContext(), library, new FailingLinks(), NullLogger<Program>.Instance);
+            Ids.Of(3), name, new DefaultHttpContext(), library, new FailingLinks(), s_blobs, NullLogger<Program>.Instance);
 
         Assert.IsType<NotFound>(result);
     }

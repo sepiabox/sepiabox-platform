@@ -87,8 +87,21 @@ public abstract class BlobStoreContract
         await upload.AppendAsync(new byte[] { 1 });
         await upload.CommitAsync("application/octet-stream");
 
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => upload.CommitAsync("application/octet-stream"));
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => upload.AppendAsync(new byte[] { 2 }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => upload.CommitAsync("application/octet-stream"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => upload.AppendAsync(new byte[] { 2 }));
+    }
+
+    [Fact]
+    public async Task A_staged_upload_to_a_container_that_is_not_there_fails_when_committed()
+    {
+        await using var upload = Store.BeginUpload("no-such-container", "a.bin");
+
+        await Assert.ThrowsAnyAsync<Exception>(async () =>
+        {
+            await upload.AppendAsync(new byte[] { 1 });
+            await upload.CommitAsync("application/octet-stream");
+        });
+        Assert.False(await Store.ContainerExistsAsync("no-such-container"));
     }
 
     [Fact]
@@ -254,6 +267,64 @@ public abstract class BlobStoreContract
 
         Assert.Equal(["m1.json", "m2.json", "m3.json", "m4.json", "m5.json"], names);
         Assert.Equal(3, pages);
+    }
+
+    [Fact]
+    public async Task Pages_only_through_the_names_that_start_with_the_prefix()
+    {
+        foreach (var name in new[] { "a/1.json", "b/1.json", "b/2.json", "b/3.json", "c/1.json" })
+        {
+            await Write(name, "x");
+        }
+
+        var names = new List<string>();
+        string? token = null;
+        var pages = 0;
+        do
+        {
+            var page = await Store.ListPageAsync(Container, "b/", token, pageSize: 2);
+            names.AddRange(page.Items.Select(i => i.Name));
+            token = page.ContinuationToken;
+            pages++;
+        }
+        while (token is not null && pages < 10);
+
+        Assert.Equal(["b/1.json", "b/2.json", "b/3.json"], names);
+    }
+
+    [Fact]
+    public async Task A_listing_of_a_container_that_is_not_there_is_empty()
+    {
+        Assert.Empty(await ToListAsync(Store.ListAsync("no-such-container")));
+        Assert.Empty(await ToListAsync(Store.ListAsync("no-such-container", "a/")));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task A_write_to_a_container_that_is_not_there_fails_whatever_the_condition(int kind)
+    {
+        var condition = kind switch
+        {
+            0 => BlobWriteCondition.Always,
+            1 => BlobWriteCondition.IfNew,
+            _ => BlobWriteCondition.IfVersion("1"),
+        };
+
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => Store.WriteAsync("no-such-container", "a.json", BinaryData.FromString("x"), "text/plain", condition));
+        Assert.False(await Store.ContainerExistsAsync("no-such-container"));
+    }
+
+    [Fact]
+    public async Task Refuses_a_read_url_that_lasts_longer_than_four_hours()
+    {
+        await Write("a.json", "x");
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => Store.CreateReadUrlAsync(Container, "a.json", DateTimeOffset.UtcNow.AddHours(4).AddMinutes(5)));
+        await Store.CreateReadUrlAsync(Container, "a.json", DateTimeOffset.UtcNow.AddHours(3));
     }
 
     [Fact]

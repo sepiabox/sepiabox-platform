@@ -15,11 +15,13 @@ public sealed class PortabilityTests
     [InlineData("Sepiabox.Ingest")]
     [InlineData("Sepiabox.Worker")]
     [InlineData("Sepiabox.Web")]
-    public void No_source_file_outside_the_composition_root_uses_an_azure_storage_namespace(string project)
+    public void No_source_file_outside_the_composition_root_names_the_azure_sdk(string project)
     {
+        // The storage namespaces, the SDK's exception (ask IBlobStore.IsStoreFailure) and Azure.Core (its pipeline types).
+        string[] forbidden = ["Azure.Storage", "RequestFailedException", "Azure.Core"];
         var offending = SourceFiles(project)
             .Where(file => !s_hostWiring.Contains(Path.GetFileName(file), StringComparer.Ordinal) || Path.GetDirectoryName(file) != ProjectFolder(project))
-            .Where(file => File.ReadAllText(file).Contains("Azure.Storage", StringComparison.Ordinal))
+            .Where(file => forbidden.Any(word => File.ReadAllText(file).Contains(word, StringComparison.Ordinal)))
             .Select(file => Path.GetRelativePath(Root, file))
             .ToList();
 

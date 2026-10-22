@@ -1,4 +1,3 @@
-using Azure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
@@ -139,7 +138,7 @@ public sealed class ManifestImporter(
             etag = download.Version;
             writtenAt = download.LastModified;
         }
-        catch (RequestFailedException ex) when (!transientFailuresThrow)
+        catch (Exception ex) when (!transientFailuresThrow && store.IsStoreFailure(ex))
         {
             return (false, $"could not be downloaded: {ex.Message}");
         }
