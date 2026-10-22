@@ -82,6 +82,9 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Information, Message = "Stripped the faces the family deleted from the manifests (full pass: {Full}): {Assets} asset(s) visited, {Stripped} manifest(s) written, {Unchanged} already without them, {Problems} with problems.")]
     public static partial void IgnoredFacesStripped(ILogger logger, int assets, bool full, int stripped, int unchanged, int problems);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The strip of deleted faces stopped at its deadline with {NotVisited} asset(s) not visited; the next run starts again (nothing was recorded).")]
+    public static partial void StripStoppedAtDeadline(ILogger logger, int notVisited);
+
     [LoggerMessage(Level = LogLevel.Error, Message = "The faces job ended Failed in its {Half} half: {Problems} manifest(s) with problems.")]
     public static partial void FacesJobHalfFailed(ILogger logger, string half, int problems);
 

@@ -180,6 +180,9 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
 
     if (command.Action == WorkerAction.FacesSweep)
     {
+        // The job's replica timeout is 30 minutes (AzureInfrastructure.FacesTimeoutSeconds), and the sweep may use 25 of them: the strip
+        // stops starting new assets at minute 28 of the job, so it is never killed half way with nothing recorded.
+        var jobDeadline = services.GetRequiredService<TimeProvider>().GetUtcNow() + TimeSpan.FromMinutes(28);
         var sweep = await new ManifestFacesSweep(
                 services.GetRequiredService<CatalogDbContext>(),
                 services.GetRequiredService<IBlobStore>(),
@@ -193,7 +196,7 @@ static async Task<int> RunCommandAsync(WorkerCommand command, IServiceProvider r
                 new ManifestStore(services.GetRequiredService<ManifestValidator>(), services.GetRequiredService<IBlobStore>()),
                 services.GetRequiredService<TimeProvider>(),
                 logger)
-            .RunAsync(BlobLayout.ManifestsContainer, cancellationToken);
+            .RunAsync(BlobLayout.ManifestsContainer, jobDeadline, cancellationToken);
         if (sweep.Problems.Count > 0)
         {
             Log.FacesJobHalfFailed(logger, "sweep (the erase of all faces)", sweep.Problems.Count);

@@ -14,6 +14,9 @@ public sealed record StripResult(int Assets, int Stripped, int Unchanged, IReadO
 {
     /// <summary>Whether the run looked at every asset with remembered boxes (the first run and one a day) and not only the new ones.</summary>
     public bool Full { get; init; }
+
+    /// <summary>False when the run stopped at its deadline before every asset was visited: nothing was recorded, and the next run starts again.</summary>
+    public bool Finished { get; init; } = true;
 }
 
 /// <summary>Bounds of one strip run.</summary>
@@ -49,7 +52,10 @@ public sealed class IgnoredFacesStrip(CatalogDbContext db, ManifestStore store, 
 
     private readonly StripOptions _options = options ?? StripOptions.Default;
 
-    public async Task<StripResult> RunAsync(string container, CancellationToken cancellationToken)
+    /// <param name="container">The container of manifests.</param>
+    /// <param name="deadline">When to stop starting new assets (the faces job gives itself 30 minutes and the sweep may have used 25 of them); a run that stops here is not finished and moves no checkpoint. Null: no deadline.</param>
+    /// <param name="cancellationToken">Stops the run.</param>
+    public async Task<StripResult> RunAsync(string container, DateTimeOffset? deadline, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(container);
         var started = clock.GetUtcNow();
@@ -68,13 +74,19 @@ public sealed class IgnoredFacesStrip(CatalogDbContext db, ManifestStore store, 
         // The boxes of each visited asset are all of its remembered boxes, not only the new ones.
         var boxes = (await db.ErasedFaces.AsNoTracking().Where(f => assets.Contains(f.AssetId)).Select(f => new { f.AssetId, f.Box }).ToListAsync(cancellationToken))
             .GroupBy(f => f.AssetId, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Select(f => f.Box).ToList(), StringComparer.Ordinal);
-        var (stripped, unchanged) = (0, 0);
+        var (stripped, unchanged, notVisited) = (0, 0, 0);
         var problems = new System.Collections.Concurrent.ConcurrentQueue<string>();
         await Parallel.ForEachAsync(
             assets,
             new ParallelOptions { MaxDegreeOfParallelism = _options.Concurrency, CancellationToken = cancellationToken },
             async (asset, stop) =>
             {
+                if (deadline is { } limit && clock.GetUtcNow() >= limit)
+                {
+                    Interlocked.Increment(ref notVisited);
+                    return;
+                }
+
                 var remembered = boxes[asset];
                 var result = await store.WriteMergedAsync(
                     container,
@@ -95,9 +107,10 @@ public sealed class IgnoredFacesStrip(CatalogDbContext db, ManifestStore store, 
                 }
             });
 
-        if (problems.IsEmpty)
+        var finished = notVisited == 0;
+        if (problems.IsEmpty && finished)
         {
-            // Only a clean run moves the checkpoint: one with a problem is tried again from the same place.
+            // Only a clean, complete run moves the checkpoint: one with a problem, or stopped by its deadline, is tried again from the same place.
             await WriteAsync(CheckpointKey, started, cancellationToken);
             if (full)
             {
@@ -105,8 +118,13 @@ public sealed class IgnoredFacesStrip(CatalogDbContext db, ManifestStore store, 
             }
         }
 
-        Log.IgnoredFacesStripped(logger, assets.Count, full, stripped, unchanged, problems.Count);
-        return new StripResult(assets.Count, stripped, unchanged, [.. problems.Order(StringComparer.Ordinal)]) { Full = full };
+        Log.IgnoredFacesStripped(logger, assets.Count - notVisited, full, stripped, unchanged, problems.Count);
+        if (!finished)
+        {
+            Log.StripStoppedAtDeadline(logger, notVisited);
+        }
+
+        return new StripResult(assets.Count - notVisited, stripped, unchanged, [.. problems.Order(StringComparer.Ordinal)]) { Full = full, Finished = finished };
     }
 
     private async Task<DateTimeOffset?> ReadAsync(string key, CancellationToken cancellationToken)
