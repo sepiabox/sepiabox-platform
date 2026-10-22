@@ -15,6 +15,7 @@
                 <details class="nav-more" data-more>
                     <summary aria-label="@MoreLabel" class="nav-link@(MoreCurrent is null ? string.Empty : " nav-more-active")">@Text["Layout_More"]@if (MoreCurrent is { } current){<span class="nav-more-current">: @Text[current]</span>}</summary>
                     <div class="nav-more-list" tabindex="-1">
+                        <span class="user user-in-more" title="@context.User.FindFirst(ClaimTypes.Email)?.Value">@context.User.FindFirst(ClaimTypes.Email)?.Value</span>
                         @foreach (var (href, key) in s_more)
                         {
                             <a href="@href" class="nav-link" aria-current="@Current(href)">@Text[key]</a>
