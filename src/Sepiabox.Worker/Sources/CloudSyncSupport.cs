@@ -1,4 +1,6 @@
 using System.Text;
+using Microsoft.EntityFrameworkCore;
+using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Incoming;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Storage;
@@ -55,20 +57,19 @@ public static class CloudRescan
     /// The next run lists the whole account again and stages every file, so those the processing job skipped are put in <c>incoming</c> again;
     /// files already processed are found by their content and only gain the source they already had. False when no such account is connected.
     /// </summary>
-    public static async Task<bool> RescanAsync(Sepiabox.Catalog.CatalogDbContext db, string type, string accountEmail, CancellationToken cancellationToken)
+    public static async Task<bool> RescanAsync(CatalogDbContext db, string type, string accountEmail, CancellationToken cancellationToken)
     {
         var email = accountEmail.Trim().ToLowerInvariant();
-        var account = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleOrDefaultAsync(
-            db.ConnectedSources, s => s.Type == type && s.AccountEmail == email, cancellationToken);
+        var account = await db.ConnectedSources.SingleOrDefaultAsync(s => s.Type == type && s.AccountEmail == email, cancellationToken);
         if (account is null)
         {
             return false;
         }
 
-        await Microsoft.EntityFrameworkCore.RelationalQueryableExtensions.ExecuteDeleteAsync(db.DriveFiles.Where(f => f.ConnectedSourceId == account.Id), cancellationToken);
-        foreach (var entry in db.ChangeTracker.Entries<Sepiabox.Catalog.DriveFile>().ToList())
+        await db.DriveFiles.Where(f => f.ConnectedSourceId == account.Id).ExecuteDeleteAsync(cancellationToken);
+        foreach (var entry in db.ChangeTracker.Entries<DriveFile>().ToList())
         {
-            entry.State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+            entry.State = EntityState.Detached;
         }
 
         (account.SyncChangesToken, account.SyncListToken, account.SyncListing) = (null, null, false);

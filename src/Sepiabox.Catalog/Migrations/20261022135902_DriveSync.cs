@@ -14,15 +14,13 @@ namespace Sepiabox.Catalog.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "sync_changes_token",
                 table: "connected_sources",
-                type: "character varying(500)",
-                maxLength: 500,
+                type: "text",
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "sync_list_token",
                 table: "connected_sources",
-                type: "character varying(500)",
-                maxLength: 500,
+                type: "text",
                 nullable: true);
 
             migrationBuilder.AddColumn<bool>(

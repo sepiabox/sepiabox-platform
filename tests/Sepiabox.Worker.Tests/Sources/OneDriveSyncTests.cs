@@ -19,6 +19,7 @@ namespace Sepiabox.Worker.Tests.Sources;
 public sealed class OneDriveSyncTests(CatalogFixture fixture)
 {
     private const string Account = "ana@outlook.com";
+    private const string SourceName = "ana@outlook.com (OneDrive)";
     private const string Token = "M.the-first-refresh-token";
     private static readonly EphemeralDataProtectionProvider s_keys = new();
     private static readonly DateTimeOffset s_modified = new(2021, 6, 2, 11, 0, 0, TimeSpan.Zero);
@@ -37,7 +38,7 @@ public sealed class OneDriveSyncTests(CatalogFixture fixture)
         {
             var read = (await store.ReadAsync("incoming", blob.Name))!;
             Assert.True(IncomingFile.TryRead(read.Metadata, out var incoming, out var problem), problem);
-            Assert.Equal(("onedrive", Account, IncomingMode.Reference), (incoming.SourceType, incoming.SourceName, incoming.Mode));
+            Assert.Equal(("onedrive", SourceName, IncomingMode.Reference), (incoming.SourceType, incoming.SourceName, incoming.Mode));
             Assert.StartsWith("Fotos/photo-", incoming.Path, StringComparison.Ordinal);
             Assert.Equal(onedrive.Content[incoming.ExternalId!], read.Content.ToArray());
         }
@@ -94,6 +95,32 @@ public sealed class OneDriveSyncTests(CatalogFixture fixture)
         Assert.Equal(3, (await store.ListAsync("incoming").ToListAsync()).Count);
         Assert.Equal(1, onedrive.FullListings - 1);
         Assert.NotNull((await db.ConnectedSources.AsNoTracking().SingleAsync()).SyncChangesToken);
+    }
+
+    [Fact]
+    public async Task A_file_with_a_type_graph_does_not_know_is_staged_by_its_extension_and_counted_as_skipped_when_there_is_none()
+    {
+        var (db, store, onedrive, _) = await SetUpAsync(files: 0);
+        onedrive.AddFile("id-raw", "IMG_0001.CR2", "application/octet-stream");
+        onedrive.AddFile("id-mystery", "mystery", "application/octet-stream");
+
+        var result = await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+
+        Assert.Equal((1, 1), (result.Staged, result.Skipped));
+    }
+
+    [Fact]
+    public async Task Rescan_forgets_the_delta_state_and_the_staged_files_of_that_onedrive_only()
+    {
+        var (db, store, onedrive, account) = await SetUpAsync(files: 3);
+        await Sync(db, store, onedrive).RunAsync(CancellationToken.None);
+
+        Assert.True(await Sync(db, store, onedrive).RescanAsync(" Ana@Outlook.com ", CancellationToken.None));
+
+        Assert.Equal(0, await db.DriveFiles.CountAsync(f => f.ConnectedSourceId == account));
+        Assert.Null((await db.ConnectedSources.AsNoTracking().SingleAsync()).SyncChangesToken);
+        Assert.Equal(3, (await Sync(db, store, onedrive).RunAsync(CancellationToken.None)).Staged);
+        Assert.False(await Sync(db, store, onedrive).RescanAsync("nobody@outlook.com", CancellationToken.None));
     }
 
     [Fact]
@@ -245,7 +272,7 @@ public sealed class OneDriveSyncTests(CatalogFixture fixture)
             Kind = "photo",
             ContentType = "image/jpeg",
             SizeBytes = size,
-            Sources = [new AssetSource { AssetId = assetId, Type = "onedrive", Name = Account, Path = path, ModifiedAt = s_modified }],
+            Sources = [new AssetSource { AssetId = assetId, Type = "onedrive", Name = SourceName, Path = path, ModifiedAt = s_modified }],
         });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();

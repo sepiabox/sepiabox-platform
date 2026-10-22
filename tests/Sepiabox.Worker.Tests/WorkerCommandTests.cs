@@ -66,7 +66,9 @@ public sealed class WorkerCommandTests
         Assert.True(WorkerCommand.TryParse(["sync"], out var all, out _));
         Assert.Equal(new WorkerCommand(WorkerAction.SyncAll, false), all);
         Assert.False(WorkerCommand.TryParse(["sync", "onedrive", "--migrate"], out _, out _));
-        Assert.False(WorkerCommand.TryParse(["sync", "onedrive", "--rescan", "a@b.c"], out _, out _));
+        Assert.True(WorkerCommand.TryParse(["sync", "onedrive", "--rescan", "a@b.c"], out var rescanOneDrive, out _));
+        Assert.Equal(new WorkerCommand(WorkerAction.SyncOneDrive, false, Rescan: "a@b.c"), rescanOneDrive);
+        Assert.False(WorkerCommand.TryParse(["sync", "--rescan", "a@b.c"], out _, out _));
         Assert.False(WorkerCommand.TryParse(["sync", "google-drive", "--migrate"], out _, out _));
         Assert.True(WorkerCommand.TryParse(["sync", "google-drive", "--rescan", "ana@example.com"], out var rescan, out _));
         Assert.Equal(new WorkerCommand(WorkerAction.SyncGoogleDrive, false, Rescan: "ana@example.com"), rescan);

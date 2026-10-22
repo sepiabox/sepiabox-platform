@@ -339,7 +339,7 @@ public sealed class OneDriveOriginalTests(CatalogFixture catalog)
     {
         var db = await catalog.CreateMigratedDatabaseAsync();
         var asset = CatalogData.Photo(Ids.Of(1), new DateTime(2019, 7, 14, 9, 0, 0));
-        asset.Sources = [new AssetSource { AssetId = Ids.Of(1), Type = "onedrive", Name = Account, Path = "Fotos/Praia.jpg", ModifiedAt = DateTimeOffset.UtcNow }];
+        asset.Sources = [new AssetSource { AssetId = Ids.Of(1), Type = "onedrive", Name = Account + " (OneDrive)", Path = "Fotos/Praia.jpg", ModifiedAt = DateTimeOffset.UtcNow }];
         db.Assets.Add(asset);
         var account = new ConnectedSource
         {

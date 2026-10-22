@@ -74,7 +74,7 @@ public sealed class GraphOneDriveSyncClientTests
     [Fact]
     public async Task A_429_that_never_stops_fails_after_a_few_attempts_without_the_token_in_the_message()
     {
-        var graph = new FakeGraph { Default = (HttpStatusCode.TooManyRequests, "{}", 1) };
+        var graph = new FakeGraph { Default = (HttpStatusCode.TooManyRequests, "{}", 0) };
 
         var failure = await Assert.ThrowsAsync<HttpRequestException>(() => Client(graph).DeltaAsync("access-token-secret", null));
 
@@ -84,17 +84,82 @@ public sealed class GraphOneDriveSyncClientTests
     }
 
     [Fact]
-    public async Task Waits_as_long_as_retry_after_says_up_to_a_limit()
+    public async Task A_retry_after_of_more_than_five_minutes_ends_the_call_at_once_and_one_of_a_few_seconds_is_waited()
+    {
+        var long_ = new FakeGraph();
+        long_.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.TooManyRequests, "{}", retryAfter: 301);
+        var short_ = new FakeGraph();
+        short_.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.TooManyRequests, "{}", retryAfter: 0);
+        short_.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.OK, """{"value":[]}""");
+
+        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => new GraphOneDriveSyncClient("id", "secret", long_).DeltaAsync("access", null));
+        await new GraphOneDriveSyncClient("id", "secret", short_, TimeSpan.Zero).DeltaAsync("access", null);
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, failure.StatusCode);
+        Assert.Single(long_.Requests);
+        Assert.Equal(2, short_.Requests.Count);
+    }
+
+    [Fact]
+    public async Task A_404_on_a_delta_link_asks_for_the_delta_to_start_again_and_on_the_first_call_is_a_failure()
     {
         var graph = new FakeGraph();
-        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.ServiceUnavailable, "{}", retryAfter: 3600);
-        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.OK, """{"value":[]}""");
-        // No fixed delay is given, so what Retry-After says is used; a cancelled token ends the wait at once and shows what it was asked to wait.
-        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new GraphOneDriveSyncClient("id", "secret", graph).DeltaAsync("access", null, cancel.Token));
+        await Assert.ThrowsAsync<DeltaResyncRequiredException>(() => Client(graph).DeltaAsync("access", $"{DeltaUri}?token=gone"));
+        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => Client(graph).DeltaAsync("access", null));
+        Assert.Equal(HttpStatusCode.NotFound, failure.StatusCode);
+    }
 
-        Assert.Single(graph.Requests);
+    [Fact]
+    public async Task A_401_is_asked_once_more_before_it_is_an_authorization_failure()
+    {
+        var recovers = new FakeGraph();
+        recovers.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.Unauthorized, "{}");
+        recovers.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.OK, """{"value":[]}""");
+        var stays = new FakeGraph();
+        stays.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.Unauthorized, "{}");
+
+        await Client(recovers).DeltaAsync("access", null);
+        await Assert.ThrowsAsync<CloudAuthorizationException>(() => Client(stays).DeltaAsync("access", null));
+
+        Assert.Equal(2, recovers.Requests.Count);
+        Assert.Equal(2, stays.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Keeps_files_of_an_unknown_type_for_the_sync_to_decide_by_name_and_leaves_out_documents()
+    {
+        var graph = new FakeGraph();
+        graph.Respond("/v1.0/me/drive/root/delta", HttpStatusCode.OK, """
+            {"value":[
+              {"id":"raw","name":"IMG_1.CR2","file":{"mimeType":"application/octet-stream"}},
+              {"id":"none","name":"clip.mov","file":{}},
+              {"id":"doc","name":"a.pdf","file":{"mimeType":"application/pdf"}}]}
+            """);
+
+        var page = await Client(graph).DeltaAsync("access", null);
+
+        Assert.Equal(["raw", "none"], page.Changes.Select(c => c.Id));
+    }
+
+    [Fact]
+    public async Task An_invalid_client_is_a_failure_and_not_a_reason_to_connect_again()
+    {
+        var graph = new FakeGraph { TokenStatus = HttpStatusCode.Unauthorized, TokenBody = """{"error":"invalid_client"}""" };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => Client(graph).RefreshAsync(RefreshToken));
+    }
+
+    [Theory]
+    [InlineData("https://files.example.com/a?tempauth=secret&x=1", false)]
+    [InlineData("https://files.example.com/a?x=1&tempauth=secret", false)]
+    [InlineData("https://graph.microsoft.com/v1.0/me/drive/root/delta?token=2", true)]
+    [InlineData("https://files.example.com/a", true)]
+    public void The_tracing_leaves_out_a_request_whose_address_carries_a_credential(string uri, bool traced)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+
+        Assert.Equal(traced, Microsoft.Extensions.Hosting.TelemetryFilter.IsTraced(request));
     }
 
     [Fact]

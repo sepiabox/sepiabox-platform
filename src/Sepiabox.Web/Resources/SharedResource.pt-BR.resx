@@ -1321,7 +1321,7 @@
     <value>O OneDrive ainda não foi configurado, então não dá para conectá-lo.</value>
   </data>
   <data name="Sources_DisconnectHintOneDrive" xml:space="preserve">
-    <value>Desconectar apaga o acesso guardado à conta. Nada muda no OneDrive. Para remover o app também da conta Microsoft, use a página de permissões de apps dessa conta.</value>
+    <value>Desconectar apaga o acesso guardado à conta. Nada muda no OneDrive. Isso não revoga o acesso na Microsoft: para remover o app também da conta Microsoft, use a página de permissões de apps em account.microsoft.com.</value>
   </data>
   <data name="Sources_Note_connectedOneDrive" xml:space="preserve">
     <value>OneDrive conectado.</value>

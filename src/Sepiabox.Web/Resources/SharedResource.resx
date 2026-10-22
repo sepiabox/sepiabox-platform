@@ -1383,7 +1383,7 @@
     <value>OneDrive is not set up yet, so it cannot be connected.</value>
   </data>
   <data name="Sources_DisconnectHintOneDrive" xml:space="preserve">
-    <value>Disconnecting deletes the stored access to the account. Nothing in OneDrive changes. To remove the app from the Microsoft account as well, use the app permissions page of that account.</value>
+    <value>Disconnecting deletes the stored access to the account. Nothing in OneDrive changes. This does not revoke the access at Microsoft: to remove the app from the Microsoft account as well, use the app permissions page at account.microsoft.com.</value>
   </data>
   <data name="Sources_Note_connectedOneDrive" xml:space="preserve">
     <value>OneDrive connected.</value>
