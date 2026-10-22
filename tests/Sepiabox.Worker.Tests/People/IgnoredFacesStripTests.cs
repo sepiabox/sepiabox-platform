@@ -39,7 +39,7 @@ public sealed class IgnoredFacesStripTests(CatalogFixture fixture)
         Assert.Equal([s_neighbour, s_elsewhere], stored.Faces.Select(f => f.Box.ToArray()));
         Assert.DoesNotContain(manifest.Faces[0].Embedding, ManifestJson.Serialize(stored), StringComparison.Ordinal);
         // Nothing but the faces changed: what the asset is, where it came from, and how its faces were found.
-        Assert.Equal(manifest with { Faces = stored.Faces }, stored with { });
+        Assert.Equal(ManifestJson.Serialize(manifest with { Faces = stored.Faces }), ManifestJson.Serialize(stored));
         Assert.Equal((manifest.FacesVersion, manifest.FacesProcessed), (stored.FacesVersion, stored.FacesProcessed));
     }
 
@@ -139,10 +139,15 @@ public sealed class IgnoredFacesStripTests(CatalogFixture fixture)
         await using var db = await fixture.CreateMigratedDatabaseAsync();
         var store = Store();
         var manifest = await PutAsync(store, 9, (s_sameFace, 1), (s_elsewhere, 2));
+        var importer = new ManifestImporter(db, store, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance);
+        await importer.ImportOneAsync(BlobLayout.ManifestsContainer, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
+        Assert.Equal(2, await db.Faces.CountAsync());
+        // What deleting the face data does in the catalog: the row goes and its box is remembered.
+        await db.Faces.Where(f => f.Box[0] == s_sameFace[0]).ExecuteDeleteAsync();
         await ForgetAsync(db, manifest.Id, s_deleted);
         await Strip(db, store).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
 
-        var result = await new ManifestImporter(db, store, new ManifestValidator(), new PostgisPlaceResolver(db), TimeProvider.System, NullLogger<ManifestImporter>.Instance)
+        var result = await importer
             .ImportOneAsync(BlobLayout.ManifestsContainer, BlobLayout.ManifestBlobName(manifest.Id), CancellationToken.None);
 
         Assert.Equal(1, result.Imported);
@@ -162,7 +167,8 @@ public sealed class IgnoredFacesStripTests(CatalogFixture fixture)
 
         var result = await Strip(db, store).RunAsync(BlobLayout.ManifestsContainer, CancellationToken.None);
 
-        Assert.Equal((1, [badId]), (result.Stripped, result.Problems.ToArray()));
+        Assert.Equal(1, result.Stripped);
+        Assert.Equal([badId], result.Problems);
         Assert.Empty((await StoredAsync(store, good.Id)).Faces);
     }
 
@@ -189,6 +195,12 @@ public sealed class IgnoredFacesStripTests(CatalogFixture fixture)
     // What deleting a person's face data leaves in the catalog: the box, never the embedding.
     private static async Task ForgetAsync(CatalogDbContext db, string assetId, double[] box)
     {
+        // erased_faces points at the asset, so the asset is in the catalog (the manifest need not be in storage).
+        if (!await db.Assets.AnyAsync(a => a.Id == assetId))
+        {
+            db.Assets.Add(new Asset { Id = assetId, Kind = "photo", ContentType = "image/jpeg", SizeBytes = 1, ImportedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+        }
+
         db.ErasedFaces.Add(new ErasedFace { AssetId = assetId, Box = box, ErasedAt = DateTimeOffset.UtcNow });
         await db.SaveChangesAsync();
     }

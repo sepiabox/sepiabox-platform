@@ -222,3 +222,39 @@ internal sealed class StoppedClock(DateTimeOffset now) : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => now.ToUniversalTime();
 }
+
+/// <summary>Removing some faces from a stored manifest (#111, D-121): a removal, not a merge, so the merge's "more faces win" cannot undo it.</summary>
+public sealed class ManifestStripFacesTests
+{
+    private static ManifestFace Face(double left) => new([left, 0.1, 0.2, 0.2], 0.9, "AAAA");
+
+    private static Manifest Stored(params ManifestFace[] faces) =>
+        TestManifests.Photo(TestManifests.Source("HD da Ana", "2019/praia.jpg")) with { FacesProcessed = true, FacesVersion = 1, Faces = faces };
+
+    [Fact]
+    public void Removes_the_faces_asked_for_and_keeps_the_rest_in_their_order_with_the_version_and_time_they_had()
+    {
+        var stored = Stored(Face(0.1), Face(0.4), Face(0.7)) with { FacesDetectedAt = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero) };
+
+        var stripped = ManifestMerge.StripFaces(stored, face => face.Box[0] < 0.5);
+
+        Assert.Equal([0.7], stripped!.Faces.Select(f => f.Box[0]));
+        Assert.Equal((stored.FacesVersion, stored.FacesDetectedAt, stored.FacesProcessed), (stripped.FacesVersion, stripped.FacesDetectedAt, stripped.FacesProcessed));
+    }
+
+    [Fact]
+    public void Says_nothing_to_write_when_no_face_matches_or_faces_were_never_looked_for()
+    {
+        Assert.Null(ManifestMerge.StripFaces(Stored(Face(0.7)), _ => false));
+        Assert.Null(ManifestMerge.StripFaces(Stored() with { FacesProcessed = false, FacesVersion = null }, _ => true));
+    }
+
+    [Fact]
+    public void Keeps_a_manifest_with_no_face_left_as_one_that_looked_and_found_none()
+    {
+        var stripped = ManifestMerge.StripFaces(Stored(Face(0.1)), _ => true)!;
+
+        Assert.True(stripped.FacesProcessed);
+        Assert.Empty(stripped.Faces);
+    }
+}
