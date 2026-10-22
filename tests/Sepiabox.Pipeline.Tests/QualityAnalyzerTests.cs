@@ -22,6 +22,44 @@ public sealed class QualityAnalyzerTests : IDisposable
     }
 
     [Fact]
+    public void Measures_the_variance_of_the_laplacian_about_its_mean_not_about_zero()
+    {
+        // Four pixels wide, three high; the two interior pixels have a Laplacian of -40 and +10: mean -15, variance 625.
+        using var image = Gray(4, 3, [0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0]);
+
+        Assert.Equal(625, QualityAnalyzer.Sharpness(image), 6);
+    }
+
+    [Fact]
+    public void A_constant_curvature_has_no_sharpness_though_its_laplacian_is_not_zero()
+    {
+        // Columns of x squared: every interior Laplacian is 2, so the mean is 2 and the variance 0 (a mean taken as 0 would say 4).
+        var pixels = new byte[5 * 5];
+        for (var y = 0; y < 5; y++)
+        {
+            for (var x = 0; x < 5; x++)
+            {
+                pixels[(y * 5) + x] = (byte)(x * x);
+            }
+        }
+
+        using var image = Gray(5, 5, pixels);
+
+        Assert.Equal(0, QualityAnalyzer.Sharpness(image), 6);
+    }
+
+    [Fact]
+    public void Sets_a_bit_when_a_pixel_is_brighter_than_the_one_to_its_right_most_significant_bit_first()
+    {
+        Assert.Equal("0000000000000000", QualityAnalyzer.DHash(Gray(9, 8, Rows(row => row))));
+        Assert.Equal("ffffffffffffffff", QualityAnalyzer.DHash(Gray(9, 8, Rows(row => [.. row.Reverse()]))));
+        // Only the first comparison of the first row (200 > 10) is true.
+        Assert.Equal("8000000000000000", QualityAnalyzer.DHash(Gray(9, 8, Rows((row, y) => y == 0 ? [200, .. row.Skip(1)] : row))));
+        // Only the last comparison of the last row (70 > 0) is true.
+        Assert.Equal("0000000000000001", QualityAnalyzer.DHash(Gray(9, 8, Rows((row, y) => y == 7 ? [.. row.Take(8), 0] : row))));
+    }
+
+    [Fact]
     public void A_flat_image_has_no_sharpness()
     {
         using var flat = new MagickImage(MagickColors.Gray, 400, 300);
@@ -196,6 +234,32 @@ public sealed class QualityAnalyzerTests : IDisposable
 
         Assert.False(new ManifestValidator().TryValidate(node.ToJsonString(), out _, out _));
     }
+
+    [Fact]
+    public void Merging_equal_sharpness_keeps_the_larger_hash_in_either_order()
+    {
+        var a = TestManifests.Photo(TestManifests.Source("HD da Ana", "a.jpg")) with { Quality = new ManifestQuality(20, "00000000000000aa") };
+        var b = a with { Quality = new ManifestQuality(20, "00000000000000bb") };
+
+        Assert.Equal("00000000000000bb", ManifestMerge.Merge(a, b).Quality!.DHash);
+        Assert.Equal("00000000000000bb", ManifestMerge.Merge(b, a).Quality!.DHash);
+        Assert.Equal(b.Quality, ManifestQuality.Stronger(a.Quality, b.Quality));
+        Assert.Equal(b.Quality, ManifestQuality.Stronger(b.Quality, a.Quality));
+    }
+
+    private static MagickImage Gray(int width, int height, byte[] pixels)
+    {
+        var image = new MagickImage();
+        image.ReadPixels(pixels, new PixelReadSettings((uint)width, (uint)height, StorageType.Char, "R"));
+        image.ColorSpace = ColorSpace.Gray;
+        return image;
+    }
+
+    // Eight rows of nine pixels rising 0, 10 ... 80, changed by the function given (the row, and its number).
+    private static byte[] Rows(Func<byte[], byte[]> change) => Rows((row, _) => change(row));
+
+    private static byte[] Rows(Func<byte[], int, byte[]> change) =>
+        [.. Enumerable.Range(0, 8).SelectMany(y => change([.. Enumerable.Range(0, 9).Select(x => (byte)(x * 10))], y))];
 
     private Manifest PhotoWithPreview(int seed)
     {

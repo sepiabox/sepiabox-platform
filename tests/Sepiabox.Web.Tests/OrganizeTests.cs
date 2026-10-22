@@ -109,6 +109,54 @@ public sealed partial class OrganizeTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task A_photo_exactly_at_the_threshold_is_sharp_and_one_just_below_is_blurry()
+    {
+        await using var db = await LibraryAsync();
+        db.Assets.AddRange(Measured(7, 100, "ffffffffffffffff"), Measured(8, 99.99, "fffffffffffffffe"));
+        await db.SaveChangesAsync();
+
+        var blurry = await IdsAsync(db, new SearchFilters { Quality = new QualityFilter { Blurry = true } });
+        var sharp = await IdsAsync(db, new SearchFilters { Quality = new QualityFilter { Blurry = false } });
+        var listed = (await Organization(db).GetBlurryAsync(1)).Items.Select(i => i.Item.Id).ToList();
+
+        Assert.Contains(Ids.Of(8), blurry);
+        Assert.DoesNotContain(Ids.Of(7), blurry);
+        Assert.Contains(Ids.Of(7), sharp);
+        Assert.DoesNotContain(Ids.Of(8), sharp);
+        Assert.Contains(Ids.Of(8), listed);
+        Assert.DoesNotContain(Ids.Of(7), listed);
+    }
+
+    [Fact]
+    public async Task The_blurry_list_starts_with_the_blurriest_and_leaves_out_a_hidden_one()
+    {
+        await using var db = await LibraryAsync();
+        db.Assets.AddRange(Measured(7, 5, "ffffffffffffffff"), Measured(8, 60, "fffffffffffffffe"));
+        await db.SaveChangesAsync();
+        var organization = Organization(db);
+
+        var before = (await organization.GetBlurryAsync(1)).Items.Select(i => i.Item.Id).ToList();
+        await organization.HideAsync([Ids.Of(7)]);
+        var after = (await organization.GetBlurryAsync(1)).Items.Select(i => i.Item.Id).ToList();
+
+        Assert.Equal([Ids.Of(7), Ids.Of(4), Ids.Of(8)], before);
+        Assert.Equal([Ids.Of(4), Ids.Of(8)], after);
+    }
+
+    [Fact]
+    public async Task Ignores_ids_that_are_not_assets_when_bringing_photos_back_too()
+    {
+        await using var db = await LibraryAsync();
+        var organization = Organization(db);
+        await organization.HideAsync([Ids.Of(1), Ids.Of(2)]);
+
+        var changed = await organization.UnhideAsync([Ids.Of(1), "not-an-id", new string('G', 64), "../x", Ids.Of(99)]);
+
+        Assert.Equal(1, changed);
+        Assert.Equal([Ids.Of(2)], await db.Assets.AsNoTracking().Where(a => a.Hidden).Select(a => a.Id).ToListAsync());
+    }
+
+    [Fact]
     public async Task Lists_blurry_photos_blurriest_first_and_not_the_hidden_or_unmeasured()
     {
         await using var db = await LibraryAsync();
@@ -252,6 +300,14 @@ public sealed partial class OrganizeTests(CatalogFixture catalog)
 
     private static async Task<List<string>> IdsAsync(CatalogDbContext db, SearchFilters filters) =>
         [.. (await Search(db).ExecuteAsync(new SearchQuery { Filters = filters })).Hits.Select(h => h.Id)];
+
+    private static Asset Measured(int n, double sharpness, string hash)
+    {
+        var asset = CatalogData.Photo(Ids.Of(n), s_shot.AddSeconds(20_000 + (n * 3_600)));
+        asset.Sharpness = sharpness;
+        asset.DHash = hash;
+        return asset;
+    }
 
     // Photos 1 to 3: a burst a second apart (2 is the sharpest); 4: far away and blurry; 5: not measured; 6: far away, sharp.
     private async Task<CatalogDbContext> LibraryAsync()
