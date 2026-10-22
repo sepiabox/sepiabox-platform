@@ -9,7 +9,7 @@ using static Sepiabox.Tests.Shared.TestManifests;
 
 namespace Sepiabox.Worker.Tests;
 
-/// <summary>The caption and albums of a manifest in the catalog (S-052, D-112): imported, idempotent, and only ever added to.</summary>
+/// <summary>The caption and albums of a manifest in the catalog (S-052, D-114): imported, idempotent, and only ever added to.</summary>
 [Collection(CatalogGroup.Name)]
 [Trait("Category", "Integration")]
 public sealed class AlbumImportTests(CatalogFixture fixture)

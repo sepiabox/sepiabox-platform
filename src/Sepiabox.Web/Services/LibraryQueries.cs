@@ -698,7 +698,7 @@ public sealed class LibraryQueries(
         var countryNames = db.Assets.Where(a => a.PlaceCountry != null).Select(a => a.PlaceCountry);
         var countries = await db.GeoNames.Where(g => g.CountryName != null && countryNames.Contains(g.CountryName))
             .Select(g => g.CountryCode).Distinct().OrderBy(c => c).ToListAsync(cancellationToken);
-        // Names the DSL can take (200 characters), most used first when there are more than the bar can hold (D-112).
+        // Names the DSL can take (200 characters), most used first when there are more than the bar can hold (D-114).
         var albums = await db.AssetAlbums.Where(l => l.Name.Length <= SearchQueryJson.MaxNameLength)
             .GroupBy(l => l.Name).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).Take(MaxAlbums).Select(g => g.Key)
             .ToListAsync(cancellationToken);

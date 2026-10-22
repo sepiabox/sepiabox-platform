@@ -92,7 +92,7 @@
           "items": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
         },
         "albums": {
-          "description": "Album names (S-052, D-112), matched ignoring case: assets in any of the albums an export put them in. A name no album has matches nothing. Never part of the question translator's output format: the filter bar and the photo's page produce it.",
+          "description": "Album names (S-052, D-114), matched ignoring case: assets in any of the albums an export put them in. A name no album has matches nothing. Never part of the question translator's output format: the filter bar and the photo's page produce it.",
           "type": "array",
           "minItems": 1,
           "maxItems": 50,

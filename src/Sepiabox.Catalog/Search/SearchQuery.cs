@@ -145,7 +145,7 @@ public sealed record SearchFilters
     public IReadOnlyList<string>? Sources { get; init; }
 
     /// <summary>
-    /// Album names (S-052, D-112), matched ignoring case: assets in any of the albums an export put them in. A name no
+    /// Album names (S-052, D-114), matched ignoring case: assets in any of the albums an export put them in. A name no
     /// album has matches nothing. The filter bar and the photo's page produce it; questions never do.
     /// </summary>
     public IReadOnlyList<string>? Albums { get; init; }

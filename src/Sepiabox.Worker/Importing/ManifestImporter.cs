@@ -285,7 +285,7 @@ public sealed class ManifestImporter(
             (asset.Sharpness, asset.DHash) = (quality.Sharpness, quality.DHash);
         }
 
-        // A manifest without a caption leaves a stored one as it is (S-052, D-112), as one without albums leaves the albums.
+        // A manifest without a caption leaves a stored one as it is (S-052, D-114), as one without albums leaves the albums.
         asset.Caption = manifest.Caption ?? asset.Caption;
         foreach (var album in manifest.Albums ?? [])
         {

@@ -72,7 +72,7 @@ public sealed class Asset
     public bool Hidden { get; set; }
 
     /// <summary>
-    /// What the owner or an export's maker wrote about the photo (S-052, D-112), as the manifest carries it (the longer
+    /// What the owner or an export's maker wrote about the photo (S-052, D-114), as the manifest carries it (the longer
     /// caption of the sources merged, S-045); null when none. An import without a caption leaves a stored one as it is.
     /// </summary>
     public string? Caption { get; set; }
@@ -91,7 +91,7 @@ public sealed class Asset
     public List<AssetAlbum> Albums { get; set; } = [];
 }
 
-/// <summary>An album an asset is in (S-052, D-112), named as the family wrote it; one row per asset and name.</summary>
+/// <summary>An album an asset is in (S-052, D-114), named as the family wrote it; one row per asset and name.</summary>
 public sealed class AssetAlbum
 {
     public required string AssetId { get; set; }

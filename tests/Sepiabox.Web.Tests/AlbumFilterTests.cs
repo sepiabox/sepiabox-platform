@@ -6,7 +6,7 @@ using Sepiabox.Web.Services;
 
 namespace Sepiabox.Web.Tests;
 
-/// <summary>The albums in the DSL, the links, the chips and the filter bar (S-052, D-112).</summary>
+/// <summary>The albums in the DSL, the links, the chips and the filter bar (S-052, D-114).</summary>
 public sealed class AlbumFilterTests : LocalizedContext
 {
     [Theory]
