@@ -40,13 +40,31 @@ public sealed class RegionCropTests
     public void Prepares_a_224_square_of_rgb_from_an_encoded_photo_whatever_the_shape_of_the_region()
     {
         using var image = new MagickImage(MagickColors.Orange, 640, 480);
-        var bytes = image.ToByteArray(MagickFormat.Jpeg);
+        var bytes = image.ToByteArray(MagickFormat.WebP);
 
         var tall = RegionCrop.Prepare(bytes, [0.1, 0.1, 0.2, 0.8]);
         var wide = RegionCrop.Prepare(bytes, [0, 0, 1, 0.1]);
 
         Assert.Equal(ClipPreprocessor.Size * ClipPreprocessor.Size * 3, tall.Length);
         Assert.Equal(tall.Length, wide.Length);
+    }
+
+    [Fact]
+    public void Refuses_a_preview_with_oversized_dimensions_before_decoding_it()
+    {
+        using var image = new MagickImage(MagickColors.White, RegionCrop.MaxSide + 1, 8);
+        var bytes = image.ToByteArray(MagickFormat.WebP);
+
+        Assert.Throws<InvalidOperationException>(() => RegionCrop.Prepare(bytes, [0, 0, 1, 1]));
+    }
+
+    [Fact]
+    public void Reads_only_webp_whatever_the_bytes_claim_to_be()
+    {
+        using var image = new MagickImage(MagickColors.Orange, 64, 64);
+        var png = image.ToByteArray(MagickFormat.Png);
+
+        Assert.ThrowsAny<MagickException>(() => RegionCrop.Prepare(png, [0, 0, 1, 1]));
     }
 
     [Theory]

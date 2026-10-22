@@ -123,7 +123,7 @@ public sealed class RegionSearchCatalogTests(CatalogFixture catalog)
         using var api = await Post(http, Body("[0.1, 0.2, 0.3, 0.4]"));
         var detail = await http.GetStringAsync(new Uri($"/photos/{Ids.Of(5)}", UriKind.Relative));
 
-        Assert.Contains("Search by a part of a photo is not available right now", html, StringComparison.Ordinal);
+        Assert.Contains("Searching by part of a photo isn", html, StringComparison.Ordinal);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, api.StatusCode);
         Assert.Contains("filters.similarToRegion", await api.Content.ReadAsStringAsync(), StringComparison.Ordinal);
         Assert.DoesNotContain("data-region-frame", detail, StringComparison.Ordinal);

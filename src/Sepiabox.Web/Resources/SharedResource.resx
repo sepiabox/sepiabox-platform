@@ -1201,7 +1201,17 @@
     <comment>Button on the photo detail that starts drawing a rectangle on the preview (S-041).</comment>
   </data>
   <data name="Region_Hint" xml:space="preserve">
-    <value>Drag on the photo to draw a rectangle. With the keyboard: Enter starts one, the arrow keys move it, Shift with the arrow keys resizes it, Escape clears it.</value>
+    <value>Press “Select a part of the photo”, then drag on the photo to draw a rectangle (a roughly square one works best). With the keyboard: Enter starts a rectangle, the arrow keys move it, Shift with the arrow keys resizes it, Ctrl or Alt makes the steps bigger and Escape clears the selection. On a touch screen, press the button again to scroll the page.</value>
+  </data>
+  <data name="Region_FrameLabel" xml:space="preserve">
+    <value>Photo area: press Enter to start a selection</value>
+  </data>
+  <data name="Region_StatusSelected" xml:space="preserve">
+    <value>Selected area: {0}% wide, {1}% tall.</value>
+    <comment>Read out when a selection is finished; {0} and {1} are filled in by region.js (S-041).</comment>
+  </data>
+  <data name="Region_StatusNone" xml:space="preserve">
+    <value>No area selected.</value>
   </data>
   <data name="Region_Find" xml:space="preserve">
     <value>Find photos like this part</value>
@@ -1210,6 +1220,6 @@
     <value>Clear selection</value>
   </data>
   <data name="Region_Unavailable" xml:space="preserve">
-    <value>Search by a part of a photo is not available right now: the image model is missing.</value>
+    <value>Searching by part of a photo isn't available right now.</value>
   </data>
 </root>

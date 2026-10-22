@@ -9,6 +9,12 @@ namespace Sepiabox.Search.Clip;
 /// </summary>
 public static class RegionCrop
 {
+    /// <summary>The longest side of a preview that is decoded: previews are 1280 or 2048 pixels, so more is not one (D-099).</summary>
+    public const uint MaxSide = 8192;
+
+    /// <summary>The most pixels of a preview that are decoded.</summary>
+    public const ulong MaxPixels = 40_000_000;
+
     /// <summary>Slack for a box drawn to the very edge, whose x + width is 1 plus a rounding error.</summary>
     private const double Epsilon = 1e-9;
 
@@ -39,6 +45,18 @@ public static class RegionCrop
         return (left, top, (uint)(right - left), (uint)(bottom - top));
     }
 
+    /// <summary>
+    /// Limits what Magick.NET may decode in this process, for the web, which decodes nothing else: the web never needs more
+    /// than a preview. Process-wide, so it is not called by the pipeline.
+    /// </summary>
+    public static void LimitDecoding()
+    {
+        ResourceLimits.Width = MaxSide;
+        ResourceLimits.Height = MaxSide;
+        ResourceLimits.Area = MaxPixels;
+        ResourceLimits.Memory = 512UL * 1024 * 1024;
+    }
+
     /// <summary>Cuts the region of <paramref name="image"/> out, in place.</summary>
     public static void Crop(MagickImage image, IReadOnlyList<double> box)
     {
@@ -55,7 +73,16 @@ public static class RegionCrop
     public static byte[] Prepare(byte[] photo, IReadOnlyList<double> box)
     {
         ArgumentNullException.ThrowIfNull(photo);
-        using var image = new MagickImage(photo);
+        // Previews, posters included, are WebP. Naming the format keeps every other decoder out of reach of bytes that came
+        // from a URL, and the header says how big the image is before any of it is decoded.
+        var settings = new MagickReadSettings { Format = MagickFormat.WebP };
+        var info = new MagickImageInfo(photo, settings);
+        if (info.Width > MaxSide || info.Height > MaxSide || (ulong)info.Width * info.Height > MaxPixels)
+        {
+            throw new InvalidOperationException($"The preview is {info.Width} × {info.Height} pixels, larger than a preview can be.");
+        }
+
+        using var image = new MagickImage(photo, settings);
         image.AutoOrient();
         Crop(image, box);
         return ClipPreprocessor.ResizeAndCrop(image);

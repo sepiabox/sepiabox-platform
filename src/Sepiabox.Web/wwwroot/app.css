@@ -104,6 +104,12 @@ a:hover {
     color: var(--cyanotype-hover);
 }
 
+/* A rule that sets display (.button, the region form) would otherwise win over the hidden attribute, and show what a script
+   has not yet turned on. */
+[hidden] {
+    display: none !important;
+}
+
 h1, h2 {
     font-family: var(--font-display);
     font-weight: 700;
@@ -184,6 +190,20 @@ main {
 .month h2 {
     margin: 32px 0 12px;
     font-size: 1.25rem;
+}
+
+/* The occasions of a search by part of a photo are headed like months; the heading above them is quieter. */
+.month h3 {
+    margin: 32px 0 12px;
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    line-height: 1.2;
+}
+
+.region-heading {
+    margin: 16px 0 0;
+    font-size: 1rem;
+    font-weight: 600;
 }
 
 .grid {
@@ -472,6 +492,16 @@ main {
     cursor: crosshair;
     touch-action: none;
     user-select: none;
+}
+
+.region-frame.selecting {
+    outline: 3px dashed var(--developer);
+    outline-offset: -3px;
+}
+
+.region-tools .button[aria-pressed="true"] {
+    outline: 3px solid var(--developer);
+    outline-offset: 2px;
 }
 
 .region-frame:focus-visible {

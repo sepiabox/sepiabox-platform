@@ -26,6 +26,9 @@ public sealed class SignedLinkPreviewSource(IDbContextFactory<CatalogDbContext> 
     /// <summary>A preview is a few hundred kilobytes; more than this is not one.</summary>
     public const long MaxBytes = 32 * 1024 * 1024;
 
+    // The 1280 pixel preview first, then the 2048 pixel one of an index-only photo, then a video's poster. Process embeds
+    // the largest derivative it has; the smaller one here costs a little in how fine a detail the region keeps, and saves
+    // downloading and decoding a larger file for a request that waits for it (D-099).
     private static readonly string[] s_order = [DerivativeNames.Preview, DerivativeNames.LargePreview, DerivativeNames.Poster];
 
     public async Task<byte[]?> ReadAsync(string assetId, CancellationToken cancellationToken = default)
@@ -52,7 +55,22 @@ public sealed class SignedLinkPreviewSource(IDbContextFactory<CatalogDbContext> 
                 throw new InvalidOperationException("The preview is larger than a preview can be.");
             }
 
-            return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+            // Content-Length may be absent or wrong, so the cap is on what is actually read.
+            await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var content = new MemoryStream();
+            var buffer = new byte[81920];
+            int read;
+            while ((read = await body.ReadAsync(buffer, cancellationToken)) > 0)
+            {
+                if (content.Length + read > MaxBytes)
+                {
+                    throw new InvalidOperationException("The preview is larger than a preview can be.");
+                }
+
+                content.Write(buffer, 0, read);
+            }
+
+            return content.ToArray();
         }
         catch (HttpRequestException ex)
         {
@@ -106,6 +124,7 @@ public sealed partial class ClipRegionEmbedder : IRegionEmbedder, IDisposable
         _previews = previews;
         _log = log;
         _clock = clock ?? TimeProvider.System;
+        RegionCrop.LimitDecoding();
     }
 
     /// <summary>True while the model is loaded or its file is there to load; false after a file that cannot be used.</summary>
@@ -121,7 +140,9 @@ public sealed partial class ClipRegionEmbedder : IRegionEmbedder, IDisposable
             throw new ArgumentException("The box must be [x, y, width, height], relative to the photo.", nameof(box));
         }
 
-        var encoder = Load();
+        // Verifying 350 MB and building the session take seconds: not on the request's thread, and before the fetch, so a
+        // model that is missing is answered without downloading a preview.
+        var encoder = _encoder ?? await Task.Run(Load, cancellationToken);
         var photo = await _previews.ReadAsync(assetId, cancellationToken)
             ?? throw new AssetNotAnalysedException(assetId, null);
         try

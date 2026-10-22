@@ -1135,7 +1135,16 @@
     <value>Selecionar uma parte da foto</value>
   </data>
   <data name="Region_Hint" xml:space="preserve">
-    <value>Arraste sobre a foto para desenhar um retângulo. Com o teclado: Enter começa um, as setas o movem, Shift com as setas muda o tamanho, Esc o limpa.</value>
+    <value>Toque em “Selecionar uma parte da foto” e arraste sobre a foto para desenhar um retângulo (um retângulo quase quadrado funciona melhor). Com o teclado: Enter começa um retângulo, as setas movem o retângulo, Shift com as setas muda o tamanho, Ctrl ou Alt com elas dá passos maiores e Esc limpa a seleção. Em tela de toque, toque no botão de novo para rolar a página.</value>
+  </data>
+  <data name="Region_FrameLabel" xml:space="preserve">
+    <value>Área da foto: pressione Enter para começar uma seleção</value>
+  </data>
+  <data name="Region_StatusSelected" xml:space="preserve">
+    <value>Área selecionada: {0}% de largura, {1}% de altura.</value>
+  </data>
+  <data name="Region_StatusNone" xml:space="preserve">
+    <value>Nenhuma área selecionada.</value>
   </data>
   <data name="Region_Find" xml:space="preserve">
     <value>Buscar fotos parecidas com esta parte</value>
@@ -1144,6 +1153,6 @@
     <value>Limpar seleção</value>
   </data>
   <data name="Region_Unavailable" xml:space="preserve">
-    <value>A busca por uma parte da foto não está disponível agora: falta o modelo de imagem.</value>
+    <value>A busca por uma parte da foto não está disponível agora.</value>
   </data>
 </root>

@@ -23,7 +23,7 @@
                 {
                     @* "Photos like this part" (S-041): wwwroot/region.js shows the button and the form; without it, the page is as ever. *@
                     <div class="region" data-region>
-                        <div class="region-frame" data-region-frame aria-describedby="region-hint">
+                        <div class="region-frame" data-region-frame role="group" aria-label="@Text["Region_FrameLabel"]" aria-describedby="region-hint">
                             <img src="photos/@_asset.Id/@preview" alt="@Text.KindLabel(_asset.Kind)" />
                             <div class="region-box" data-region-box hidden></div>
                         </div>
@@ -34,7 +34,7 @@
                                 <input type="hidden" name="@SearchLinks.RegionAssetParameter" value="@_asset.Id" />
                                 <input type="hidden" name="@SearchLinks.RegionBoxParameter" value="" data-region-input />
                                 <p id="region-hint" class="muted">@Text["Region_Hint"]</p>
-                                <p class="region-status muted" data-region-status role="status"></p>
+                                <p class="region-status muted" data-region-status data-selected="@Text["Region_StatusSelected"]" data-none="@Text["Region_StatusNone"]" role="status"></p>
                                 <button type="submit" class="button" data-region-submit disabled>@Text["Region_Find"]</button>
                                 <button type="button" class="button" data-region-clear hidden>@Text["Region_Clear"]</button>
                             </form>

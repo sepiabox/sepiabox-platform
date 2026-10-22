@@ -1,7 +1,7 @@
 // "Photos like this part of a photo" (S-041, D-099): draws a rectangle on the photo's preview and puts it in the form
 // next to it as x,y,width,height, fractions of the photo (not of the image element: a tall photo is letterboxed by
 // object-fit: contain). Works with a mouse, a finger or a pen, and with the keyboard: Enter or Space starts a box in the
-// middle, the arrow keys move it, Shift with the arrow keys resizes it, Escape clears it. Without this script the form
+// middle, the arrow keys move it, Shift with the arrow keys resizes it, Ctrl or Alt makes the steps bigger, Escape clears it. Without this script the form
 // stays hidden and the page is unchanged. There is no automated test of this script (the repository has no JavaScript
 // test setup); docs/operations.md has the manual check.
 (() => {
@@ -49,10 +49,6 @@
                 input.value = "";
                 submit.disabled = true;
                 clear.hidden = true;
-                if (status) {
-                    status.textContent = "";
-                }
-
                 return;
             }
 
@@ -65,9 +61,18 @@
             input.value = [selection.x, selection.y, selection.w, selection.h].map(v => v.toFixed(4)).join(",");
             submit.disabled = false;
             clear.hidden = false;
-            if (status) {
-                status.textContent = `${Math.round(selection.w * 100)}% × ${Math.round(selection.h * 100)}%`;
+        }
+
+        // Said in words, and only when a selection is finished: a live region that changes on every pointer move would be
+        // read out over and over. The texts come from the page, in its language.
+        function announce() {
+            if (!status) {
+                return;
             }
+
+            status.textContent = selection
+                ? (status.dataset.selected || "").replace("{0}", Math.round(selection.w * 100)).replace("{1}", Math.round(selection.h * 100))
+                : (status.dataset.none || "");
         }
 
         function pointAt(event) {
@@ -88,6 +93,7 @@
             } else {
                 selection = null;
                 render();
+                announce();
             }
         }
 
@@ -97,6 +103,7 @@
         clear.addEventListener("click", () => {
             selection = null;
             render();
+            announce();
             frame.focus();
         });
 
@@ -135,6 +142,7 @@
             }
 
             render();
+            announce();
         };
 
         frame.addEventListener("pointerup", finish);
@@ -148,6 +156,7 @@
             if (event.key === "Escape") {
                 selection = null;
                 render();
+                announce();
                 return;
             }
 
@@ -156,12 +165,15 @@
                     event.preventDefault();
                     selection = { x: 0.3, y: 0.3, w: 0.4, h: 0.4 };
                     render();
+                    announce();
                 }
 
                 return;
             }
 
-            const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
+            // Ctrl or Alt with an arrow takes a step five times as big.
+            const size = event.ctrlKey || event.altKey ? step * 5 : step;
+            const delta = { ArrowLeft: [-size, 0], ArrowRight: [size, 0], ArrowUp: [0, -size], ArrowDown: [0, size] }[event.key];
             if (!delta) {
                 return;
             }
@@ -176,6 +188,7 @@
             }
 
             render();
+            announce();
         });
 
         window.addEventListener("resize", render);

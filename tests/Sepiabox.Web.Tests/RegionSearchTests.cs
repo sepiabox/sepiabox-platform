@@ -200,7 +200,7 @@ public sealed class RegionSearchTests : LocalizedContext
     [Fact]
     public void The_region_text_is_in_both_languages()
     {
-        foreach (var key in new[] { "Region_Select", "Region_Hint", "Region_Find", "Region_Clear", "Region_Unavailable", "Chip_SimilarToRegion", "Search_MostSimilarToRegion", "Search_NotInOccasion" })
+        foreach (var key in new[] { "Region_Select", "Region_Hint", "Region_FrameLabel", "Region_StatusSelected", "Region_StatusNone", "Region_Find", "Region_Clear", "Region_Unavailable", "Chip_SimilarToRegion", "Search_MostSimilarToRegion", "Search_NotInOccasion" })
         {
             Assert.NotEqual(key, Cultures.Text()[key].Value);
         }
