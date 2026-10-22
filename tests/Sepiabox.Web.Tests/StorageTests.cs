@@ -61,15 +61,17 @@ public sealed class StorageDslTests
     }
 
     [Fact]
-    public void Refuses_the_storage_fields_in_a_translated_answer()
+    public void Accepts_the_storage_fields_in_a_translated_answer_since_the_translator_writes_them()
     {
-        Assert.Equal(
-            "filters.sourceCount is not part of an answer yet: the storage page shows it.",
-            QuestionService.Validate("""{"filters":{"sourceCount":{"eq":1}}}"""));
-        Assert.Equal(
-            "aggregate.sum is not part of an answer yet: the storage page shows sizes.",
-            QuestionService.Validate("""{"filters":{},"aggregate":{"count":"assets","sum":"bytes"}}"""));
+        Assert.Null(QuestionService.Validate("""{"filters":{"sourceCount":{"eq":1}}}"""));
+        Assert.Null(QuestionService.Validate("""{"filters":{"sourceCount":{"gte":2},"kinds":["photo"]},"aggregate":{"count":"assets"}}"""));
+        Assert.Null(QuestionService.Validate("""{"filters":{},"aggregate":{"count":"assets","sum":"bytes"}}"""));
         Assert.Null(QuestionService.Validate("""{"filters":{"years":[2019]},"aggregate":{"count":"assets"}}"""));
+        // Still the DSL's own rules: exactly one of eq and gte, and no size per person.
+        Assert.NotNull(QuestionService.Validate("""{"filters":{"sourceCount":{"eq":1,"gte":2}}}"""));
+        Assert.NotNull(QuestionService.Validate("""{"filters":{},"aggregate":{"count":"assets","groupBy":"person","sum":"bytes"}}"""));
+        // What the output format leaves out is still refused.
+        Assert.NotNull(QuestionService.Validate("""{"filters":{"quality":{"blurry":true}}}"""));
     }
 
     [Fact]

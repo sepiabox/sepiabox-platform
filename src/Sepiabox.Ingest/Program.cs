@@ -64,6 +64,10 @@ const string Usage = """
       --destination local   Azurite, or the connection string in SEPIABOX_BLOB_CONNECTION.
       --destination azure   An Azure storage account; sign in first with az login.
       --account <name>      Storage account name, for --destination azure.
+      --resend-source <name>
+                            Send the assets of this source again, even though upload's record says they are
+                            there: for after sepiabox-worker assets delete --source <name> removed them from
+                            the library and the same work folder is uploaded again.
     """;
 
 if (args.Length == 0 || args[0] is "-h" or "--help" or "help")
@@ -175,6 +179,14 @@ static int RunProcess(string[] args, CancellationToken cancellationToken)
     // Next to the problems, on the same output: not failures, but never catalogued, so each one can be checked.
     LeftOutReport.Write(result.LeftOut, options.ListLeftOut, Console.Out);
     WithoutSoundReport.Write(result.WithoutSound, Console.Out);
+    if (result.DamagedEarlier > 0)
+    {
+        // Reported by the run that found them; they would repeat on every run of a large drive.
+        Console.WriteLine(result.DamagedEarlier == 1
+            ? "1 damaged photo reported by an earlier run is unchanged and was not read again; run process with --retry-left-out to read it again."
+            : $"{result.DamagedEarlier:N0} damaged photos reported by earlier runs are unchanged and were not read again; run process with --retry-left-out to read them again.");
+    }
+
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");
@@ -205,6 +217,11 @@ static async Task<int> RunUpload(string[] args, CancellationToken cancellationTo
     Console.Error.WriteLine();
 
     Console.WriteLine($"{result.Assets:N0} assets: uploaded {result.Uploaded:N0} files ({ScanReport.FormatBytes(result.Bytes)}), already there {result.Skipped:N0}, {(result.IndexOnly ? $"originals left at their source {result.OriginalsLeftAtSource:N0}, " : "")}problems {result.Problems.Count:N0} in {result.Duration:hh\\:mm\\:ss}.");
+    if (options.ResendSource is not null)
+    {
+        Console.WriteLine($"Sent again, as asked: {result.AssetsResent:N0} assets of the source '{options.ResendSource}'.");
+    }
+
     foreach (var problem in result.Problems)
     {
         Console.WriteLine($"  {problem.Path}: {problem.Reason}");
