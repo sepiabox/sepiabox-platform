@@ -173,7 +173,7 @@ public static class QuestionPrompt
         - What the picture shows (snow, a beach, a dog, a sunset, a birthday cake, mountains, people dancing) goes in
           visual.text as a short English description, translated from Portuguese ("neve" is "snow", "praia" is "beach",
           "cachorro"/"cão" is "dog", "pôr do sol" is "sunset"). Only when the question says what the picture shows: a
-          season, a date, a place or an event is not picture content ("last summer" has no visual). Never put places,
+          season, a date, a place or an event is not picture content ("last summer" has no visual, and neither has "fotos de Coimbra"). Never put places,
           dates, kinds or sources in it, and never set minScore.
         - "Without a date", "sem data" is {"undatedOnly": true}, never together with a date filter. Only when the question
           asks for items without a date: otherwise leave undatedOnly out, never write it as false.
@@ -224,6 +224,7 @@ public static class QuestionPrompt
         "Sítio da avó" and "Apartamento Graça" in its saved places list, "Apartamento Graça" being the home place:
         "videos from Faro in October 2017" -> {"filters": {"kinds": ["video"], "years": [2017], "months": [10], "places": {"cities": ["Faro"]}}}
         "vídeos de Faro em outubro de 2017" -> {"filters": {"kinds": ["video"], "years": [2017], "months": [10], "places": {"cities": ["Faro"]}}}
+        "fotos de Coimbra" -> {"filters": {"kinds": ["photo"], "places": {"cities": ["Coimbra"]}}}
         "videos from August, every year" -> {"filters": {"kinds": ["video"], "months": [8]}}
         "vídeos de agosto de todos os anos" -> {"filters": {"kinds": ["video"], "months": [8]}}
         "pictures of snow from last winter" -> {"filters": {"kinds": ["photo"], "dateFrom": "2024-12-01", "dateTo": "2025-02-28", "visual": {"text": "snow"}}}
