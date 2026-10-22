@@ -130,7 +130,7 @@ public sealed class UploadToStoreTests : IDisposable
         Assert.Equal(placeholder, (await _store.ReadAsync(BlobLayout.OriginalsContainer, manifest.Id))!.Content.ToArray());
     }
 
-    // One block or less is one write; more is staged and committed with the default class, never Cold, even for an Azure
+    // Less than one block is one write; a block or more is staged and committed with the default class, never Cold, even for an Azure
     // destination, which asks for Cold only for originals (D-100).
     [Theory]
     [InlineData(UploadCommand.BlockSize - 1, false)]
