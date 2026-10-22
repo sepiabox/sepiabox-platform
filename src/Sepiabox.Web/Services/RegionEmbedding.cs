@@ -89,7 +89,7 @@ public sealed partial class ClipRegionEmbedder : IRegionEmbedder, IDisposable
 {
     public static readonly TimeSpan RetryAfter = TimeSpan.FromMinutes(5);
 
-    public delegate ClipImageEncoder? Loader(out string? warning, out ClipLoadFailure failure);
+    public delegate IClipImageEncoder? Loader(out string? warning, out ClipLoadFailure failure);
 
     private readonly Lock _loading = new();
     private readonly string _modelFolder;
@@ -99,7 +99,7 @@ public sealed partial class ClipRegionEmbedder : IRegionEmbedder, IDisposable
     private readonly TimeProvider _clock;
     private readonly ILogger<ClipRegionEmbedder> _log;
 
-    private ClipImageEncoder? _encoder;
+    private IClipImageEncoder? _encoder;
     private DateTimeOffset? _failedUntil;
     private bool _failedForGood;
 
@@ -143,8 +143,22 @@ public sealed partial class ClipRegionEmbedder : IRegionEmbedder, IDisposable
         // Verifying 350 MB and building the session take seconds: not on the request's thread, and before the fetch, so a
         // model that is missing is answered without downloading a preview.
         var encoder = _encoder ?? await Task.Run(Load, cancellationToken);
-        var photo = await _previews.ReadAsync(assetId, cancellationToken)
-            ?? throw new AssetNotAnalysedException(assetId, null);
+        byte[]? photo;
+        try
+        {
+            photo = await _previews.ReadAsync(assetId, cancellationToken);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
+        {
+            // Storage that does not answer, or a preview that is not one: the same "not available right now" as a model that cannot embed.
+            throw new VisualSearchUnavailableException("The preview of the photo could not be fetched.", ex);
+        }
+
+        if (photo is null)
+        {
+            throw new AssetNotAnalysedException(assetId, null);
+        }
+
         try
         {
             // Cutting and embedding take tens of milliseconds, off the request's thread.
@@ -158,7 +172,7 @@ public sealed partial class ClipRegionEmbedder : IRegionEmbedder, IDisposable
 
     public void Dispose() => _encoder?.Dispose();
 
-    private ClipImageEncoder Load()
+    private IClipImageEncoder Load()
     {
         if (_encoder is { } loaded)
         {
@@ -177,7 +191,7 @@ public sealed partial class ClipRegionEmbedder : IRegionEmbedder, IDisposable
                 throw new VisualSearchUnavailableException("The CLIP image model cannot be used.");
             }
 
-            ClipImageEncoder? encoder;
+            IClipImageEncoder? encoder;
             string? warning;
             ClipLoadFailure failure;
             try

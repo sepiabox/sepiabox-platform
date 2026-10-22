@@ -4,12 +4,19 @@ using Sepiabox.Search.Models;
 
 namespace Sepiabox.Search.Clip;
 
+/// <summary>CLIP's image side as the web uses it, so a test can stand in for the 350 MB model.</summary>
+public interface IClipImageEncoder : IDisposable
+{
+    /// <summary>The embedding of one prepared 224 × 224 RGB image (<see cref="ClipPreprocessor"/>).</summary>
+    float[] Encode(ReadOnlySpan<byte> rgb);
+}
+
 /// <summary>
 /// CLIP ViT-B/32 image embeddings of an image already cut and resized to the model's input (S-041, D-099): the web
 /// compares a region of a photo with the stored embeddings, which <c>process</c> computed from whole photos with the
 /// same model and preprocessing (D-016). One instance per process; ONNX Runtime sessions are safe to share.
 /// </summary>
-public sealed class ClipImageEncoder : IDisposable
+public sealed class ClipImageEncoder : IClipImageEncoder
 {
     public const int Dimensions = 512;
 

@@ -17,7 +17,7 @@ public sealed class RegionSearchTests : LocalizedContext
     [Fact]
     public void Parses_a_region_and_keeps_it_through_json_and_the_address()
     {
-        Assert.True(SearchQueryJson.TryParse($$$"""{"filters": {"similarToRegion": {"assetId": "{{{s_id}}}", "box": [0.1, 0.2, 0.3, 0.4]}, "years": [2020]}}""", out var query, out var error), error);
+        Assert.True(SearchQueryJson.TryParse($$$$"""{"filters": {"similarToRegion": {"assetId": "{{{{s_id}}}}", "box": [0.1, 0.2, 0.3, 0.4]}, "years": [2020]}}""", out var query, out var error), error);
 
         var region = query.Filters.SimilarToRegion!;
         Assert.Equal(s_id, region.AssetId);
@@ -32,7 +32,7 @@ public sealed class RegionSearchTests : LocalizedContext
     [Fact]
     public void The_limit_is_capped_by_the_query_s_own()
     {
-        Assert.True(SearchQueryJson.TryParse($$$"""{"filters": {"similarToRegion": {"assetId": "{{{s_id}}}", "box": [0, 0, 1, 1], "limit": 500}}, "limit": 20}""", out var query, out _));
+        Assert.True(SearchQueryJson.TryParse($$$$"""{"filters": {"similarToRegion": {"assetId": "{{{{s_id}}}}", "box": [0, 0, 1, 1], "limit": 500}}, "limit": 20}""", out var query, out _));
 
         Assert.Equal(20, query.ResultLimit);
     }
@@ -55,6 +55,65 @@ public sealed class RegionSearchTests : LocalizedContext
 
         Assert.False(ok);
         Assert.Contains(expected, error, StringComparison.Ordinal);
+    }
+
+    // One table for both places that decide whether a box is inside the photo: the filter and the crop.
+    public static TheoryData<double[], bool> Boxes => new()
+    {
+        { [0, 0, 1, 1], true },
+        { [0.34, 0, 0.5, 1], true },
+        { [0.5, 0.5, 0.5 + 1e-10, 0.5], true },
+        { [0.5, 0, 0.5 + 1e-9, 1], true },
+        { [0.5, 0, 0.5 + 1e-8, 1], false },
+        { [0, 0.5, 1, 0.5 + 1e-8], false },
+        { [0, 0, 0, 1], false },
+        { [0, 0, 1, 0], false },
+        { [-1e-12, 0, 1, 1], false },
+        { [0.1, 0.2, 0.3], false },
+        { [double.NaN, 0, 1, 1], false },
+        { [0, 0, double.PositiveInfinity, 1], false },
+    };
+
+    [Theory]
+    [MemberData(nameof(Boxes))]
+    public void The_filter_and_the_crop_agree_on_which_boxes_are_inside_the_photo(double[] box, bool valid)
+    {
+        Assert.Equal(valid, SimilarToRegionFilter.IsValidBox(box));
+        Assert.Equal(valid, RegionCrop.IsValid(box));
+    }
+
+    [Theory]
+    [InlineData(64, true)]
+    [InlineData(63, false)]
+    [InlineData(65, false)]
+    public void Wants_an_asset_id_of_exactly_64_characters(int length, bool valid)
+    {
+        var id = new string('a', length);
+
+        var ok = SearchQueryJson.TryParse("""{"filters": {"similarToRegion": {"assetId": "ID", "box": [0, 0, 1, 1]}}}""".Replace("ID", id, StringComparison.Ordinal), out _, out var error);
+
+        Assert.Equal(valid, ok);
+        Assert.True(valid || error!.Contains("assetId", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Wants_the_asset_id_in_lower_case_hexadecimal()
+    {
+        var upper = new string('A', 64);
+        var notHex = new string('g', 64);
+
+        Assert.False(SearchQueryJson.TryParse("""{"filters": {"similarToRegion": {"assetId": "ID", "box": [0, 0, 1, 1]}}}""".Replace("ID", upper, StringComparison.Ordinal), out _, out _));
+        Assert.False(SearchQueryJson.TryParse("""{"filters": {"similarToRegion": {"assetId": "ID", "box": [0, 0, 1, 1]}}}""".Replace("ID", notHex, StringComparison.Ordinal), out _, out _));
+    }
+
+    [Fact]
+    public void Accepts_a_box_drawn_to_the_edge_by_the_slack_and_not_beyond_it()
+    {
+        var edge = (0.5 + (SimilarToRegionFilter.BoxSlack / 2)).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        var over = (0.5 + (SimilarToRegionFilter.BoxSlack * 2)).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.True(SearchQueryJson.TryParse(WithId("""{"filters": {"similarToRegion": {"assetId": "ID", "box": [0.5, 0, SPAN, 1]}}}""").Replace("SPAN", edge, StringComparison.Ordinal), out _, out _));
+        Assert.False(SearchQueryJson.TryParse(WithId("""{"filters": {"similarToRegion": {"assetId": "ID", "box": [0.5, 0, SPAN, 1]}}}""").Replace("SPAN", over, StringComparison.Ordinal), out _, out _));
     }
 
     [Theory]
@@ -291,6 +350,58 @@ public sealed class ClipRegionEmbedderTests
 
         await Assert.ThrowsAsync<ArgumentException>(() => embedder.EmbedAsync(Ids.Of(1), [0.5, 0.5, 0.6, 0.6]));
         Assert.Equal(0, calls);
+    }
+
+    [Theory]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(HttpRequestException))]
+    public async Task Answers_unavailable_not_an_error_page_when_the_preview_cannot_be_fetched(Type failure)
+    {
+        using var embedder = new ClipRegionEmbedder(
+            "/models",
+            (out string? warning, out ClipLoadFailure failureKind) =>
+            {
+                (warning, failureKind) = (null, ClipLoadFailure.Missing);
+                return new FixedEncoder();
+            },
+            () => true,
+            new ThrowingPreview((Exception)Activator.CreateInstance(failure, "storage is down")!),
+            NullLogger<ClipRegionEmbedder>.Instance);
+
+        var thrown = await Assert.ThrowsAsync<VisualSearchUnavailableException>(() => embedder.EmbedAsync(Ids.Of(1), [0, 0, 1, 1]));
+
+        Assert.IsType(failure, thrown.InnerException);
+    }
+
+    [Fact]
+    public async Task Says_the_photo_is_not_in_the_library_when_it_has_no_preview()
+    {
+        using var embedder = new ClipRegionEmbedder(
+            "/models",
+            (out string? warning, out ClipLoadFailure failureKind) =>
+            {
+                (warning, failureKind) = (null, ClipLoadFailure.Missing);
+                return new FixedEncoder();
+            },
+            () => true,
+            new FixedPreview(null),
+            NullLogger<ClipRegionEmbedder>.Instance);
+
+        await Assert.ThrowsAsync<AssetNotAnalysedException>(() => embedder.EmbedAsync(Ids.Of(1), [0, 0, 1, 1]));
+    }
+
+    private sealed class FixedEncoder : IClipImageEncoder
+    {
+        public float[] Encode(ReadOnlySpan<byte> rgb) => [1f];
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class ThrowingPreview(Exception failure) : IPreviewSource
+    {
+        public Task<byte[]?> ReadAsync(string assetId, CancellationToken cancellationToken = default) => Task.FromException<byte[]?>(failure);
     }
 
     private static ClipRegionEmbedder Embedder(ClipRegionEmbedder.Loader load, bool present, byte[]? preview, TimeProvider? clock = null) =>

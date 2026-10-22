@@ -50,6 +50,43 @@ public sealed class RegionCropTests
     }
 
     [Fact]
+    public void Takes_the_floor_of_the_left_edge_and_the_ceiling_of_the_right_one()
+    {
+        // 0.34 of 100 px is 34 (floor), and 0.34 + 0.5 = 0.84 is 84 (ceiling): the region never loses what was drawn.
+        var (x, y, width, height) = RegionCrop.PixelBox(100, 100, [0.34, 0, 0.5, 1]);
+
+        Assert.Equal((34, 0, 50u, 100u), (x, y, width, height));
+    }
+
+    [Fact]
+    public void Rounds_a_fraction_of_a_pixel_outwards_on_both_edges()
+    {
+        var (x, _, width, _) = RegionCrop.PixelBox(100, 100, [0.345, 0, 0.5, 1]);
+
+        // 34.5 to 84.5: pixels 34 up to 85.
+        Assert.Equal((34, 51u), (x, width));
+    }
+
+    [Fact]
+    public void Accepts_a_box_whose_far_edge_is_over_one_by_a_rounding_error()
+    {
+        Assert.True(RegionCrop.IsValid([0.5, 0, 0.5 + 1e-10, 1]));
+        var (x, _, width, _) = RegionCrop.PixelBox(100, 100, [0.5, 0, 0.5 + 1e-10, 1]);
+        Assert.Equal((50, 50u), (x, width));
+    }
+
+    [Fact]
+    public void Refuses_a_preview_over_the_pixel_limit_by_its_header_alone()
+    {
+        // Each side is inside the limit, the area is not: 6400 × 6400 is 40.96 million pixels.
+        using var image = new MagickImage(MagickColors.White, 6400, 6400);
+        var bytes = image.ToByteArray(MagickFormat.WebP);
+
+        var thrown = Assert.Throws<InvalidOperationException>(() => RegionCrop.Prepare(bytes, [0, 0, 1, 1]));
+        Assert.Contains("larger than a preview", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Refuses_a_preview_with_oversized_dimensions_before_decoding_it()
     {
         using var image = new MagickImage(MagickColors.White, RegionCrop.MaxSide + 1, 8);

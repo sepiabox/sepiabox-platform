@@ -533,6 +533,15 @@ main {
     align-items: center;
 }
 
+/* Without the script every control in it is hidden; the padding alone would leave a gap under the photo. */
+.region-tools:not(:has(> :not([hidden]))) {
+    display: none;
+}
+
+.region-status:empty {
+    display: none;
+}
+
 .region-tools p {
     margin: 0;
 }
