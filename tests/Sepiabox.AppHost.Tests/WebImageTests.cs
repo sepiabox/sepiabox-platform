@@ -69,7 +69,7 @@ public sealed class WebImageTests
             // The pinned SHA-256 of models.json, read inside the published web as its non-root user.
             using var models = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(Repository.Root, "models", "models.json")));
             foreach (var model in models.RootElement.GetProperty("models").EnumerateArray()
-                .Where(m => m.GetProperty("name").GetString() is "clip-vit-b32-text" or "clip-bpe-vocab"))
+                .Where(m => m.GetProperty("name").GetString() is "clip-vit-b32-text" or "clip-bpe-vocab" or "clip-vit-b32-vision"))
             {
                 var sum = await Run("docker", ["run", "--rm", "--user", "app", "--entrypoint", "sha256sum", $"{registry}/{WebRepository}:one", "/models/" + model.GetProperty("file").GetString()]);
                 Assert.StartsWith(model.GetProperty("sha256").GetString()!, sum, StringComparison.Ordinal);

@@ -1,5 +1,6 @@
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using Sepiabox.Search.Clip;
 using Sepiabox.Search.Models;
 
 namespace Sepiabox.Pipeline.Embeddings;
@@ -51,7 +52,17 @@ public sealed class ClipImageEmbedder : IImageEmbedder, IDisposable
 
     public float[] Embed(string path)
     {
-        var tensor = new DenseTensor<float>(ClipPreprocessor.Prepare(path), [1, 3, ClipPreprocessor.Size, ClipPreprocessor.Size]);
+        float[] input;
+        try
+        {
+            input = ClipPreprocessor.Prepare(path);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new EmbeddingException(ex.Message);
+        }
+
+        var tensor = new DenseTensor<float>(input, [1, 3, ClipPreprocessor.Size, ClipPreprocessor.Size]);
         using var results = _session.Run([NamedOnnxValue.CreateFromTensor(_input, tensor)], [OutputName]);
         var embedding = results[0].AsEnumerable<float>().ToArray();
         if (embedding.Length != Dimensions)

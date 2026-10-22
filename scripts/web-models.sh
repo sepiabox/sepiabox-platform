@@ -11,9 +11,9 @@ set -euo pipefail
 
 readonly repository="sepiabox-web-models"
 readonly base_image="mcr.microsoft.com/dotnet/aspnet:10.0"
-# The files the web reads (D-070): their names are those in models/models.json.
-readonly model_files=("clip-vit-b32-text.onnx" "clip-bpe-simple-vocab-16e6.txt.gz")
-readonly model_names="clip-vit-b32-text,clip-bpe-vocab"
+# The files the web reads (D-070; the vision model since S-041, D-099): their names are those in models/models.json.
+readonly model_files=("clip-vit-b32-text.onnx" "clip-bpe-simple-vocab-16e6.txt.gz" "clip-vit-b32-vision.onnx")
+readonly model_names="clip-vit-b32-text,clip-bpe-vocab,clip-vit-b32-vision"
 
 cd "$(dirname "$0")/.."
 

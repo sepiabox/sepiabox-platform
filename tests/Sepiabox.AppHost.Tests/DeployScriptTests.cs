@@ -141,6 +141,7 @@ public sealed class DeployScriptTests : IDisposable
         Directory.CreateDirectory(Models);
         File.WriteAllText(Path.Combine(Models, "clip-vit-b32-text.onnx"), "model");
         File.WriteAllText(Path.Combine(Models, "clip-bpe-simple-vocab-16e6.txt.gz"), "merges");
+        File.WriteAllText(Path.Combine(Models, "clip-vit-b32-vision.onnx"), "vision");
     }
 
     public void Dispose() => Directory.Delete(_stubs, recursive: true);
@@ -491,7 +492,7 @@ public sealed class DeployScriptTests : IDisposable
         var image = $"sepiaboxacr.azurecr.io/sepiabox-web-models:{ModelsTag()}";
         Assert.Equal(image, result.Output.Trim());
         Assert.Contains(
-            $"dotnet run --project src/Sepiabox.Ingest --configuration Release -- models download --models {Models} --only clip-vit-b32-text,clip-bpe-vocab",
+            $"dotnet run --project src/Sepiabox.Ingest --configuration Release -- models download --models {Models} --only clip-vit-b32-text,clip-bpe-vocab,clip-vit-b32-vision",
             Calls());
         Assert.Contains(
             Calls(),
@@ -499,9 +500,9 @@ public sealed class DeployScriptTests : IDisposable
                 $"docker build --platform linux/amd64 --provenance=false --sbom=false --build-arg BASE_IMAGE=mcr.microsoft.com/dotnet/aspnet@sha256:0123abcd --file infra/web-models/Dockerfile --tag {image} ",
                 StringComparison.Ordinal));
         Assert.Equal($"docker push --quiet {image}", Calls()[^1]);
-        // Exactly the two files the web reads and the list that pins them.
+        // Exactly the three files the web reads and the list that pins them.
         Assert.Equal(
-            ["clip-bpe-simple-vocab-16e6.txt.gz", "clip-vit-b32-text.onnx", "models.json"],
+            ["clip-bpe-simple-vocab-16e6.txt.gz", "clip-vit-b32-text.onnx", "clip-vit-b32-vision.onnx", "models.json"],
             File.ReadAllLines(_calls + ".context").Order(StringComparer.Ordinal));
     }
 
