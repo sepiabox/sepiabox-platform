@@ -51,6 +51,31 @@ public sealed class PeopleQueryTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Gives_the_filter_bar_the_best_counted_face_of_each_named_person_with_a_thumbnail()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.AddRange(CatalogData.Photo(Ids.Of(1), null), CatalogData.Photo(Ids.Of(2), null, withDerivatives: false));
+        var ana = new Person { Name = "Ana", FaceCount = 2 };
+        var bruno = new Person { Name = "Bruno", FaceCount = 1 };
+        var unnamed = new Person { FaceCount = 1 };
+        db.People.AddRange(ana, bruno, unnamed);
+        db.Faces.AddRange(
+            Face(Ids.Of(1), ana, 0.80, [0.5, 0.5, 0.2, 0.2]),
+            Face(Ids.Of(1), ana, 0.90, [0.3, 0.3, 0.2, 0.2]),
+            Face(Ids.Of(1), ana, 0.99, [0.7, 0.1, 0.2, 0.2], FaceAssignments.Excluded),
+            Face(Ids.Of(2), bruno, 0.9, [0.1, 0.1, 0.2, 0.2]),
+            Face(Ids.Of(1), unnamed, 0.9, [0.1, 0.1, 0.2, 0.2]));
+        await db.SaveChangesAsync();
+
+        var options = await new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db))).GetFilterOptionsAsync();
+
+        Assert.Equal(["Ana", "Bruno"], options.People);
+        var cover = Assert.Single(options.PersonCovers);
+        Assert.Equal("Ana", cover.Key);
+        Assert.Equal([0.3, 0.3, 0.2, 0.2], cover.Value.Box);
+    }
+
+    [Fact]
     public async Task Shows_a_person_s_faces_best_first_without_the_excluded_ones_and_who_they_can_be_merged_with()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();

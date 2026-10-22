@@ -1,0 +1,30 @@
+@* The choices of a one-valued filter as radios (S-067): "Any" first, with the empty value a select's empty option sent, so the form
+   gives the same address as before. *@
+
+<label class="opt">
+    <input type="radio" name="@Name" value="" checked="@(Selected is null)" />
+    <span>@Text["Filter_Any"]</span>
+</label>
+@foreach (var (value, label) in Options)
+{
+    <label class="opt">
+        <input type="radio" name="@Name" value="@value" checked="@IsSelected(value)" />
+        <span>@label</span>
+    </label>
+}
+
+@code {
+    /// <summary>The form field's name: <c>year</c>, <c>month</c>, <c>kind</c>, <c>city</c>, <c>source</c> or <c>album</c>.</summary>
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>The value each choice sends, and the text it shows.</summary>
+    [Parameter, EditorRequired]
+    public IEnumerable<(string Value, string Label)> Options { get; set; } = [];
+
+    /// <summary>The value chosen now, or null for any; names are compared ignoring case, as the selects did.</summary>
+    [Parameter]
+    public string? Selected { get; set; }
+
+    private bool IsSelected(string value) => string.Equals(Selected, value, StringComparison.OrdinalIgnoreCase);
+}

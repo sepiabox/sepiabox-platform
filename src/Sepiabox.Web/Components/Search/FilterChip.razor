@@ -1,0 +1,30 @@
+@* One filter as a dropdown chip (S-067, D-123): a details element whose summary reads "Year: 2019" and is tinted when a value is
+   set, and whose popover holds the choices. It works without JavaScript; `name="f"` makes the popovers close each other in
+   current browsers, and filters.js closes one on an outside click or Escape. *@
+
+<details class="fchip" name="f" data-set="@(Set ? "" : null)">
+    <summary>
+        <span class="k">@Label@(Set ? ":" : string.Empty)</span>
+        <span class="v">@(Set ? Value : Text["Filter_Any"])</span>
+        <svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </summary>
+    <div class="pop" role="group" aria-label="@Label">
+        @ChildContent
+    </div>
+</details>
+
+@code {
+    /// <summary>The filter's name, as the label of the chip and of its popover.</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>What is chosen, as the summary shows it; used only when <see cref="Set"/>.</summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public bool Set { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

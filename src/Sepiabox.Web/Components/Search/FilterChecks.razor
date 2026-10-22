@@ -1,0 +1,51 @@
+@* The choices of a many-valued filter as checkboxes (S-067): saved places and people. Several can be ticked; the form is submitted
+   by "Show results" or "Apply filters", never by a tick (a person choosing three names gets one page, not three). A search box
+   narrows a long list once filters.js is there; without it the whole list shows. *@
+
+@if (Searchable)
+{
+    <input class="pop-search" type="search" placeholder="@SearchPlaceholder" aria-label="@SearchPlaceholder" data-filter-search autocomplete="off" />
+}
+<div class="opts" data-filter-options>
+    @foreach (var value in Options)
+    {
+        <label class="opt" data-name="@value">
+            <input type="checkbox" name="@Name" value="@value" checked="@IsSelected(value)" />
+            @if (Avatar is not null)
+            {
+                @Avatar(value)
+            }
+            <span>@value</span>
+        </label>
+    }
+</div>
+@if (Footer is not null)
+{
+    <div class="pop-foot">@Footer</div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public IEnumerable<string> Options { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<string> Selected { get; set; } = [];
+
+    [Parameter]
+    public bool Searchable { get; set; }
+
+    [Parameter]
+    public string? SearchPlaceholder { get; set; }
+
+    /// <summary>What goes before a choice's name: a person's avatar.</summary>
+    [Parameter]
+    public RenderFragment<string>? Avatar { get; set; }
+
+    [Parameter]
+    public RenderFragment? Footer { get; set; }
+
+    private bool IsSelected(string value) => Selected.Contains(value, StringComparer.OrdinalIgnoreCase);
+}

@@ -109,6 +109,9 @@ public sealed record FilterOptions(
     /// <summary>Whether the signed-in user said "This is me" for someone, so "me" can be filtered on.</summary>
     public bool MeLinked { get; init; }
 
+    /// <summary>The face crop of each named person with one (S-067), by name, for the people picker's avatars; initials show for the rest.</summary>
+    public IReadOnlyDictionary<string, FaceCrop> PersonCovers { get; init; } = new Dictionary<string, FaceCrop>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The family's places (S-014), by name in display order; read on every request, since they change.</summary>
     public IReadOnlyList<string> SavedPlaces { get; init; } = [];
 
@@ -663,9 +666,29 @@ public sealed class LibraryQueries(
         // People are renamed and merged at any time (S-020), so they are read now rather than cached.
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         // FaceCount is the person's counted faces (D-079); the most photographed first when there are more than fit.
-        var people = await db.People.AsNoTracking().Where(p => p.Name != null && p.FaceCount > 0)
-            .OrderByDescending(p => p.FaceCount).ThenBy(p => p.Id).Take(MaxPeople).Select(p => p.Name!)
+        var named = await db.People.AsNoTracking().Where(p => p.Name != null && p.FaceCount > 0)
+            .OrderByDescending(p => p.FaceCount).ThenBy(p => p.Id).Take(MaxPeople)
+            .Select(p => new
+            {
+                Name = p.Name!,
+                Cover = p.Faces
+                    .Where(f => f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual)
+                    .OrderByDescending(f => f.Score).ThenBy(f => f.Id)
+                    .Select(f => new { f.AssetId, f.Box })
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
+        var people = named.Select(p => p.Name).ToList();
+        // Each person's face as the picker's avatar, cropped from its asset's thumbnail (D-047).
+        var thumbnails = await ThumbnailSizesAsync(db, [.. named.Where(p => p.Cover is not null).Select(p => p.Cover!.AssetId)], cancellationToken);
+        var covers = new Dictionary<string, FaceCrop>(StringComparer.OrdinalIgnoreCase);
+        foreach (var person in named)
+        {
+            if (person.Cover is { } cover && Crop(cover.AssetId, cover.Box, thumbnails) is { } crop)
+            {
+                covers.TryAdd(person.Name, crop);
+            }
+        }
         var me = Me();
         var meLinked = me is not null && await db.People.AsNoTracking().AnyAsync(p => p.UserEmail == me, cancellationToken);
         // The family's places change at any time too (S-014).
@@ -678,6 +701,7 @@ public sealed class LibraryQueries(
             Sources = [.. options.Sources.Order(byName)],
             Albums = [.. options.Albums.Order(byName)],
             People = [.. people.Order(byName)],
+            PersonCovers = covers,
             MeLinked = meLinked,
             SavedPlaces = [.. places.Select(p => p.Name).Order(byName)],
             HomePlace = places.FirstOrDefault(p => p.IsHome)?.Name,

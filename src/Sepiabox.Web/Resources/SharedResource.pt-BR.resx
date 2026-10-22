@@ -1459,4 +1459,16 @@
   <data name="Detail_MoreAlbums_Other" xml:space="preserve">
     <value>Mais {0} álbuns</value>
   </data>
+  <data name="Filter_Selected" xml:space="preserve">
+    <value>{0} selecionados</value>
+  </data>
+  <data name="Filter_PeopleSearch" xml:space="preserve">
+    <value>Buscar pessoas</value>
+  </data>
+  <data name="Filter_Reset" xml:space="preserve">
+    <value>Limpar</value>
+  </data>
+  <data name="Filter_ShowResults" xml:space="preserve">
+    <value>Mostrar resultados</value>
+  </data>
 </root>

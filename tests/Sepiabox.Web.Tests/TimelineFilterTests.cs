@@ -27,8 +27,8 @@ public sealed class TimelineFilterTests : LocalizedContext
         Assert.Null(library.RequestedPage);
         Assert.Equal(["December 2019"], page.FindAll("section.month h2").Select(h => h.TextContent));
         Assert.Single(page.FindAll("ul.grid li"));
-        Assert.Equal("Lisbon", page.Find("select[name=city] option[selected]").TextContent);
-        Assert.Equal("12", page.Find("select[name=month] option[selected]").GetAttribute("value"));
+        Assert.Equal("Lisbon", page.Find("input[name=city][checked]").ParentElement!.TextContent.Trim());
+        Assert.Equal("12", page.Find("input[name=month][checked]").GetAttribute("value"));
         Assert.Equal("./", page.Find("a.clear").GetAttribute("href"));
     }
 
@@ -94,7 +94,7 @@ public sealed class TimelineFilterTests : LocalizedContext
         var page = RenderAt(link);
 
         var shortcut = page.Find("a.shortcut");
-        Assert.Equal("On this day", shortcut.TextContent);
+        Assert.Equal("On this day", shortcut.TextContent.Trim());
         Assert.Equal(link, shortcut.GetAttribute("href"));
         Assert.Equal("page", shortcut.GetAttribute("aria-current"));
         Assert.Equal($"photos/{Ids.Of(31)}?q={link["./?q=".Length..]}", page.Find("a.thumb").GetAttribute("href"));
@@ -107,10 +107,10 @@ public sealed class TimelineFilterTests : LocalizedContext
 
         var page = Render<Timeline>();
 
-        Assert.Equal(["", "2021", "2019"], page.FindAll("select[name=year] option").Select(o => o.GetAttribute("value")));
-        Assert.Equal(["", "Lisbon", "Porto"], page.FindAll("select[name=city] option").Select(o => o.GetAttribute("value")));
-        Assert.Equal(13, page.FindAll("select[name=month] option").Count);
-        Assert.Equal("December", page.FindAll("select[name=month] option")[12].TextContent);
+        Assert.Equal(["", "2021", "2019"], page.FindAll("input[name=year]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["", "Lisbon", "Porto"], page.FindAll("input[name=city]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(13, page.FindAll("input[name=month]").Count);
+        Assert.Equal("December", page.FindAll("input[name=month]")[12].ParentElement!.TextContent.Trim());
         Assert.Equal("get", page.Find("form.filters").GetAttribute("method"));
         Assert.Empty(page.FindAll("a.clear"));
     }
@@ -123,9 +123,9 @@ public sealed class TimelineFilterTests : LocalizedContext
 
         var page = Render<Timeline>();
 
-        Assert.Equal("Neste dia", page.Find("a.shortcut").TextContent);
+        Assert.Equal("Neste dia", page.Find("a.shortcut").TextContent.Trim());
         Assert.Equal("Filtrar", page.Find("form.filters button").TextContent);
-        Assert.Equal("Dezembro", page.FindAll("select[name=month] option")[12].TextContent);
+        Assert.Equal("Dezembro", page.FindAll("input[name=month]")[12].ParentElement!.TextContent.Trim());
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public sealed class TimelineFilterTests : LocalizedContext
         var page = RenderAt(SearchLinks.Timeline(SearchLinks.FromFields(null, "12", null, "Lisbon", null)));
 
         Assert.Empty(page.FindAll("input[name=text]"));
-        Assert.NotEmpty(page.FindAll("select[name=city]"));
+        Assert.NotEmpty(page.FindAll("input[name=city]"));
         Assert.Single(library.Searches);
         Assert.Single(page.FindAll("ul.grid li"));
     }
