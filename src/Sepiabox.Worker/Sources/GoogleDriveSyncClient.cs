@@ -19,6 +19,9 @@ public sealed class GoogleDriveSyncClient(string clientId, string clientSecret, 
 {
     private const string UserId = "sepiabox";
 
+    /// <summary>What the worker asks Google for: read-only, the promise to the family (D-024). Never a wider scope.</summary>
+    public static IReadOnlyList<string> Scopes { get; } = [DriveService.Scope.DriveReadonly];
+
     private const string FileFields = "id,name,mimeType,size,modifiedTime,md5Checksum,parents,webViewLink,ownedByMe";
 
     // The photos and videos the account owns that are not in the trash, wherever they are in the Drive. Files other people shared with the
@@ -119,7 +122,7 @@ public sealed class GoogleDriveSyncClient(string clientId, string clientSecret, 
     private GoogleAuthorizationCodeFlow Flow() => new(new GoogleAuthorizationCodeFlow.Initializer
     {
         ClientSecrets = new ClientSecrets { ClientId = clientId, ClientSecret = clientSecret },
-        Scopes = [DriveService.Scope.DriveReadonly],
+        Scopes = [.. Scopes],
         HttpClientFactory = handler is null ? new HttpClientFactory() : new HandlerFactory(handler),
     });
 

@@ -40,6 +40,29 @@ public sealed class GoogleDriveSyncClientTests
     }
 
     [Fact]
+    public void Asks_for_exactly_the_read_only_scope_and_never_sends_another()
+    {
+        Assert.Equal(["https://www.googleapis.com/auth/drive.readonly"], GoogleDriveSyncClient.Scopes);
+    }
+
+    [Fact]
+    public async Task Sends_no_request_that_changes_the_drive()
+    {
+        var google = new FakeGoogle();
+        google.Json["/drive/v3/changes/startPageToken"] = """{"startPageToken":"42"}""";
+        google.Json["/drive/v3/files"] = """{"files":[]}""";
+        google.Json["/drive/v3/changes"] = """{"newStartPageToken":"43","changes":[]}""";
+        var client = Client(google);
+
+        await client.GetStartPageTokenAsync(RefreshToken);
+        await client.ListMediaAsync(RefreshToken, null);
+        await client.ListChangesAsync(RefreshToken, "42");
+
+        Assert.NotEmpty(google.Requests);
+        Assert.All(google.Requests.Where(r => r.Path.StartsWith("/drive", StringComparison.Ordinal)), r => Assert.Equal(HttpMethod.Get, r.Method));
+    }
+
+    [Fact]
     public async Task Leaves_out_a_change_to_a_file_somebody_else_owns()
     {
         var google = new FakeGoogle();
@@ -154,7 +177,7 @@ public sealed class GoogleDriveSyncClientTests
 
     private static GoogleDriveSyncClient Client(FakeGoogle google) => new("client-id", "client-secret", google);
 
-    private sealed record Seen(Uri Uri, string Path, System.Collections.Specialized.NameValueCollection Query);
+    private sealed record Seen(Uri Uri, string Path, System.Collections.Specialized.NameValueCollection Query, HttpMethod Method);
 
     private sealed class FakeGoogle : HttpMessageHandler
     {
@@ -180,7 +203,7 @@ public sealed class GoogleDriveSyncClientTests
             }
 
             var path = uri.AbsolutePath;
-            Requests.Add(new Seen(uri, path, HttpUtility.ParseQueryString(uri.Query)));
+            Requests.Add(new Seen(uri, path, HttpUtility.ParseQueryString(uri.Query), request.Method));
             if (Bytes.TryGetValue(path, out var bytes) && HttpUtility.ParseQueryString(uri.Query)["alt"] == "media")
             {
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) };
