@@ -23,7 +23,8 @@ public sealed record MetaExif(GeoPoint? Location, DateTime? TakenAt);
 /// </summary>
 public static partial class MetaExport
 {
-    private const int MaxDepth = 24;
+    /// <summary>The deepest nesting <see cref="Items(JsonElement, Action?)"/> follows; JSON parsed with the default options cannot be deeper than 64.</summary>
+    public const int MaxDepth = 64;
 
     [GeneratedRegex(@"^(\d{4})[:\-](\d\d)[:\-](\d\d)[T ](\d\d):(\d\d):(\d\d)(?:[.,]\d+)?\s*(Z|[+-]\d\d(?::?\d\d)?)?$", RegexOptions.IgnoreCase)]
     private static partial Regex ExifDate();
@@ -143,17 +144,18 @@ public static partial class MetaExport
     /// walked: a media item takes its own <c>title</c> and <c>creation_timestamp</c> when it has them, else those of the
     /// nearest enclosing object that has them.
     /// </summary>
-    public static IEnumerable<MetaMedia> Items(JsonElement root)
+    public static IEnumerable<MetaMedia> Items(JsonElement root, Action? tooDeep = null)
     {
         var found = new List<MetaMedia>();
-        Walk(root, null, null, found, 0);
+        Walk(root, null, null, found, 0, tooDeep);
         return found;
     }
 
-    private static void Walk(JsonElement element, string? title, DateTime? postedAt, List<MetaMedia> found, int depth)
+    private static void Walk(JsonElement element, string? title, DateTime? postedAt, List<MetaMedia> found, int depth, Action? tooDeep)
     {
         if (depth > MaxDepth)
         {
+            tooDeep?.Invoke();
             return;
         }
 
@@ -162,7 +164,7 @@ public static partial class MetaExport
             case JsonValueKind.Array:
                 foreach (var item in element.EnumerateArray())
                 {
-                    Walk(item, title, postedAt, found, depth + 1);
+                    Walk(item, title, postedAt, found, depth + 1, tooDeep);
                 }
 
                 break;
@@ -182,7 +184,7 @@ public static partial class MetaExport
                 {
                     if (property.Value.ValueKind is JsonValueKind.Array or JsonValueKind.Object)
                     {
-                        Walk(property.Value, ownTitle, ownTime, found, depth + 1);
+                        Walk(property.Value, ownTitle, ownTime, found, depth + 1, tooDeep);
                     }
                 }
 

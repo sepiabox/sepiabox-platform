@@ -143,11 +143,14 @@ public sealed class MetaExportTests
     }
 
     [Fact]
-    public void Stops_at_a_depth_it_cannot_be_asked_to_exceed()
+    public void Stops_at_the_deepest_nesting_and_says_so_instead_of_silently()
     {
         var json = string.Concat(Enumerable.Repeat("[", 200)) + """{"uri": "a.jpg"}""" + string.Concat(Enumerable.Repeat("]", 200));
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 300 });
+        var reported = 0;
 
-        Assert.Empty(MetaExport.Items(document.RootElement));
+        Assert.Empty(MetaExport.Items(document.RootElement, () => reported++));
+
+        Assert.True(reported > 0);
     }
 }

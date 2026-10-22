@@ -51,6 +51,7 @@ public sealed partial class InstagramReader : IExportReader
         var described = new Dictionary<string, Described>(StringComparer.OrdinalIgnoreCase);
         var unreadable = new List<string>();
         var missing = 0;
+        var tooDeep = 0;
         foreach (var (path, match) in lists)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -69,7 +70,7 @@ public sealed partial class InstagramReader : IExportReader
             {
                 var baseFolder = Activity().Replace(match.Groups["root"].Value, string.Empty);
                 var album = Albums(match.Groups["list"].Value);
-                foreach (var media in MetaExport.Items(document.RootElement))
+                foreach (var media in MetaExport.Items(document.RootElement, () => tooDeep++))
                 {
                     var relative = Resolve(root, baseFolder, media);
                     if (relative is null)
@@ -90,12 +91,18 @@ public sealed partial class InstagramReader : IExportReader
         var warnings = new List<string>();
         if (unlisted.Count > 0)
         {
-            warnings.Add($"{unlisted.Count:N0} photos and videos in the download are in no post list (profile pictures, messages, other people's media) and were not imported.");
+            warnings.Add(
+                $"{unlisted.Count:N0} photos and videos in the download are in no post list and were not imported: profile pictures, messages, other people's media, and also your own highlights, IGTV and archived stories if the download keeps them in lists this reader does not read. Check this number against your account.");
         }
 
         if (missing > 0)
         {
             warnings.Add($"{missing:N0} media files named in the post lists are not in the download.");
+        }
+
+        if (tooDeep > 0)
+        {
+            warnings.Add($"{tooDeep:N0} entries in the post lists are nested deeper than {MetaExport.MaxDepth} levels and were not read.");
         }
 
         if (unreadable.Count > 0)
@@ -123,7 +130,7 @@ public sealed partial class InstagramReader : IExportReader
             var relative = (baseFolder + uri.Replace('\\', '/').TrimStart('/')).Replace("//", "/", StringComparison.Ordinal);
             var full = Path.GetFullPath(Path.Combine(root, relative));
             var inside = Path.GetRelativePath(root, full);
-            if (inside.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(inside))
+            if (inside == ".." || inside.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(inside))
             {
                 continue;
             }
