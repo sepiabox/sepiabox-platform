@@ -29,5 +29,8 @@ The owner paused all development until the weekly session limits reset. Main is 
 - Boards are up to date as of 21:25Z: backlog dataset version 76, blob 41ad2124cb2e2eb1b8d1950ad98049c2 (delete it at the next update); sprint board card I-125 is done; cards for S-039, S-066, I-107, I-125, S-065, I-111, S-067 and S-068 updated.
 - Next D-number: D-126.
 
+## First thing on resume: a pipeline bug found by the owner's upload
+- The upload finished on 2026-10-23 (87,888 assets, 865.9 GB with derivatives). 17 manifests failed on DNS errors (retry the same upload) and **8 were rejected as invalid**: their EXIF GPS is garbage (latitude/longitude around -436774), and `MetadataReader.cs:81` takes `TryGetGeoLocation` without a range check (ExportFacts, AppleXmp and Iso6709 do check it). Fix: drop a location outside -90..90 / -180..180 (and NaN), with a test; open an issue, then the owner re-processes those files and uploads. The "/facesProcessed: Expected false" in the same message is the schema's other branch and goes away with the location.
+
 ## Waiting on the owner
 - Nothing blocking. The owner's ingest was at 314 of 706 GB (44%) at about 21:30Z on 2026-10-22. When it ends: sepiabox-import-all, events rebuild, events classify, report.
