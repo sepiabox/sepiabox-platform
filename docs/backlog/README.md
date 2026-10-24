@@ -226,7 +226,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-074 | [Person, Merge and People, on the shared components](S-074-person-merge-and-people-on-shared-components.md) | Visual design | S-069 | Medium | M | `todo` | A |
 | S-075 | [Occasions and Organize, on the shared components](S-075-occasions-and-organize-on-shared-components.md) | Visual design | S-069 | Medium | M | `todo` | A |
 | S-076 | [Storage and Sources, on the shared components](S-076-storage-and-sources-on-shared-components.md) | Visual design | S-069 | Medium | S | `todo` | A |
-| S-070 | [Empty states, notes and a theme switch](S-070-empty-states-and-theme-switch.md) | Visual design | S-069, S-071, S-072, S-073, S-074, S-075, S-076 | Low | S | `todo` | A |
+| S-070 | [Empty states, notes and a theme switch](S-070-empty-states-and-theme-switch.md) | Visual design | S-069, S-071, S-072, S-073, S-074, S-075, S-076 | Low | S | `doing` | A |
 
 ## Epics
 

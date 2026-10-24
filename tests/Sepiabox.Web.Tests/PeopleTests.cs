@@ -149,6 +149,7 @@ public sealed class PeoplePageTests
         var html = await http.GetStringAsync(new Uri("/people", UriKind.Relative));
 
         Assert.Contains("No people yet", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"empty-state\"", html, StringComparison.Ordinal);
     }
 
     [Fact]

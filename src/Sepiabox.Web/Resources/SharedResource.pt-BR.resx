@@ -136,10 +136,10 @@
     <value>Carregando…</value>
   </data>
   <data name="Timeline_EmptyBefore" xml:space="preserve">
-    <value>Ainda não há fotos. Use</value>
+    <value>Use</value>
   </data>
   <data name="Timeline_EmptyAfter" xml:space="preserve">
-    <value>para enviar as do HD externo.</value>
+    <value>para enviar as fotos do seu disco externo. Elas aparecem aqui quando terminar.</value>
   </data>
   <data name="Timeline_NoMore" xml:space="preserve">
     <value>Não há mais fotos.</value>
@@ -1629,5 +1629,38 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Precisa de um nome</value>
+  </data>
+  <data name="Timeline_EmptyTitle" xml:space="preserve">
+    <value>Sua biblioteca está vazia</value>
+  </data>
+  <data name="Search_NoResultsTitle" xml:space="preserve">
+    <value>Nada encontrado</value>
+  </data>
+  <data name="Search_NoResultsHelp" xml:space="preserve">
+    <value>Nada corresponde a estes filtros. Tente menos filtros ou limpe todos.</value>
+  </data>
+  <data name="People_NoneTitle" xml:space="preserve">
+    <value>Ainda não há pessoas</value>
+  </data>
+  <data name="People_NoneHelp" xml:space="preserve">
+    <value>Os rostos aparecem aqui depois que fotos processadas com reconhecimento facial são enviadas.</value>
+  </data>
+  <data name="Storage_EmptyTitle" xml:space="preserve">
+    <value>Nada guardado ainda</value>
+  </data>
+  <data name="Sources_NoneTitle" xml:space="preserve">
+    <value>Nenhuma conta conectada</value>
+  </data>
+  <data name="Sources_NoneHelp" xml:space="preserve">
+    <value>Conecte uma conta do Google Drive para trazer as fotos e os vídeos dela para a biblioteca. O Sepiabox só lê.</value>
+  </data>
+  <data name="Export_NoneTitle" xml:space="preserve">
+    <value>Nenhuma exportação ainda</value>
+  </data>
+  <data name="Export_NoneHelp" xml:space="preserve">
+    <value>Peça uma acima. Quando ficar pronta, ela aparece aqui com um botão para baixar.</value>
+  </data>
+  <data name="Loading_Label" xml:space="preserve">
+    <value>Carregando</value>
   </data>
 </root>

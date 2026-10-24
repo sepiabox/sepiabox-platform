@@ -1,0 +1,36 @@
+@* What a page shows while its data loads (S-070): grey shapes where the grid or the lines will be, which pulse unless the
+   person asked for less motion. The shapes are decoration; the loading label is what a screen reader hears. *@
+
+<div class="skeleton-wrap" role="status" aria-busy="true">
+    <span class="visually-hidden">@Text["Loading_Label"]</span>
+    @if (Lines)
+    {
+        <div class="skeleton-lines" aria-hidden="true">
+            @for (var i = 0; i < Shown; i++)
+            {
+                <span class="skeleton skeleton-line"></span>
+            }
+        </div>
+    }
+    else
+    {
+        <ul class="grid skeleton-grid" aria-hidden="true">
+            @for (var i = 0; i < Shown; i++)
+            {
+                <li class="skeleton skeleton-card"></li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    /// <summary>Lines of text instead of a grid of photos.</summary>
+    [Parameter]
+    public bool Lines { get; set; }
+
+    [Parameter]
+    public int Count { get; set; } = 12;
+
+    // The lines are fewer than the cards: a few rows of a table or a list.
+    private int Shown => Lines ? Math.Min(Count, 5) : Count;
+}

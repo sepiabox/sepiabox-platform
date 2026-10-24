@@ -13,11 +13,14 @@
 
 @if (_report is null)
 {
-    <p class="muted">@Text["Timeline_Loading"]</p>
+    <Skeleton Lines="true" />
 }
 else if (_report.Rows.Count == 0)
 {
-    <p class="empty">@Text["Storage_Empty"]</p>
+    <EmptyState Title="@Text["Storage_EmptyTitle"]">
+        <Icon><ellipse cx="12" cy="6" rx="7.5" ry="3" /><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6" /></Icon>
+        <ChildContent>@Text["Storage_Empty"]</ChildContent>
+    </EmptyState>
 }
 else
 {

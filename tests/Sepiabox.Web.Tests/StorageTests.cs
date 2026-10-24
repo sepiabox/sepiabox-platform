@@ -306,7 +306,8 @@ public sealed class StoragePageTests : LocalizedContext
     {
         var page = RenderPage(new StorageReport([], 0, 0, 0, 0, [], []));
 
-        Assert.Equal("The library has no photos or videos yet.", page.Find("p.empty").TextContent);
+        Assert.Equal("Nothing stored yet", page.Find(".empty-state .empty-title").TextContent);
+        Assert.Equal("The library has no photos or videos yet.", page.Find(".empty-state .empty-help").TextContent);
         Assert.Empty(page.FindAll("table"));
     }
 

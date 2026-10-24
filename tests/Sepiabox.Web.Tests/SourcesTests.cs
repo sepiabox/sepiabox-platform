@@ -180,9 +180,11 @@ public sealed class SourcesPageTests : LocalizedContext
     {
         var page = Render<ConnectedAccounts>();
 
-        Assert.Equal("Connect Google Drive", page.Find("a.connect").TextContent);
+        // The empty state's own action is the one way to connect: the button is not repeated under it.
+        Assert.Equal("Connect Google Drive", page.Find(".empty-state .empty-action a.connect").TextContent);
+        Assert.Single(page.FindAll("a.connect"));
         Assert.Equal("sources/google-drive/connect", page.Find("a.connect").GetAttribute("href"));
-        Assert.Equal("No account is connected yet.", page.Find("p.empty").TextContent);
+        Assert.Equal("No account connected", page.Find(".empty-state .empty-title").TextContent);
     }
 
     [Theory]
