@@ -141,7 +141,12 @@
     {
         var zone = Services.GetService<SearchOptions>()?.TimeZone ?? TimeZoneInfo.Utc;
         var when = TimeZoneInfo.ConvertTime(deletion.DeletedAt, zone).ToString("g", System.Globalization.CultureInfo.CurrentCulture);
-        var key = deletion.Scope == FaceDataDeletionScopes.Library ? "Settings_Faces_History_Library" : "Settings_Faces_History_Person";
+        var key = deletion.Scope switch
+        {
+            FaceDataDeletionScopes.Library => "Settings_Faces_History_Library",
+            FaceDataDeletionScopes.Ignore => "Settings_Faces_History_Ignore",
+            _ => "Settings_Faces_History_Person",
+        };
         return Text[key, when, deletion.DeletedBy, deletion.Faces, deletion.People].Value;
     }
 }

@@ -92,8 +92,8 @@ public sealed record AssetDetail(
     public string? ProxyName { get; init; }
 }
 
-/// <summary>A person in a photo; <see cref="Name"/> is null while they are unnamed.</summary>
-public sealed record AssetPerson(long Id, string? Name);
+/// <summary>A person in a photo, with the one face of them in it (#107: to ignore it); <see cref="Name"/> is null while they are unnamed.</summary>
+public sealed record AssetPerson(long Id, string? Name, long FaceId = 0, FaceCrop? Crop = null);
 
 /// <summary>The assets a search found, up to its limit; <see cref="HasMore"/> says whether more matched.</summary>
 public sealed record SearchPage(IReadOnlyList<TimelineItem> Items, bool HasMore);
@@ -431,12 +431,21 @@ public sealed class LibraryQueries(
         }
 
         // Only counted faces put someone in a photo (D-077, D-079).
-        var people = await db.Faces.AsNoTracking()
+        var faces = await db.Faces.AsNoTracking()
             .Where(f => f.AssetId == id && f.PersonId != null
                 && (f.Assignment == FaceAssignments.Auto || f.Assignment == FaceAssignments.Manual))
-            .Select(f => new AssetPerson(f.PersonId!.Value, f.Person!.Name))
-            .Distinct()
+            .Select(f => new { PersonId = f.PersonId!.Value, f.Person!.Name, FaceId = f.Id, f.Box })
             .ToListAsync(cancellationToken);
+        // The face as cropped from the asset's own thumbnail (D-047), for the page that asks before ignoring it (#107).
+        var thumbnail = asset.Derivatives.FirstOrDefault(d => d.Name == DerivativeNames.Thumbnail && d.Width > 0 && d.Height > 0);
+        var people = faces
+            .Select(f => new AssetPerson(
+                f.PersonId, f.Name, f.FaceId,
+                thumbnail is not null && f.Box is { Length: 4 } ? new FaceCrop(id, f.Box, thumbnail.Width, thumbnail.Height) : null))
+            // One entry per person, with their first face in the photo (D-077 allows one; a data fix could leave two).
+            .OrderBy(p => p.FaceId)
+            .DistinctBy(p => p.Id)
+            .ToList();
         var hasEmbedding = await db.AssetEmbeddings.AnyAsync(e => e.AssetId == id && e.Model == PgvectorSimilarity.ModelKey, cancellationToken);
         // The largest the asset has (S-064): an index-only photo has the 2048 px preview and no 1280 px one, a video the
         // 1080p version and no 720p one; a work folder processed in both modes has both.
