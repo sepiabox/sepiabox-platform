@@ -122,6 +122,8 @@
     --brand-soft: #f2e6da;
     --brand-ink: #7a4520;
     --danger: #a1301f;
+    --success: #2d6a30;
+    --warning: #8a5300;
     --focus: #1f4c7466;
     --stage: #16110d; /* the dark stage a photo is shown on, in both themes */
     --shadow-sm: 0 1px 2px rgb(35 26 20 / 0.08);
@@ -158,6 +160,8 @@
         --brand-soft: #33261b;
         --brand-ink: #e8b887;
         --danger: #f0907f;
+        --success: #8bd48a;
+        --warning: #f2b84b;
         --focus: #8fbce399;
         --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
         --shadow-md: 0 4px 14px rgb(0 0 0 / 0.45);
@@ -182,6 +186,8 @@
     --brand-soft: #33261b;
     --brand-ink: #e8b887;
     --danger: #f0907f;
+    --success: #8bd48a;
+    --warning: #f2b84b;
     --focus: #8fbce399;
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-md: 0 4px 14px rgb(0 0 0 / 0.45);
@@ -375,7 +381,7 @@ h1:focus {
     border-bottom: 1px solid var(--border);
 }
 
-/* Sticky only where the header is one row (1024 px and up): below that it wraps to two or three rows, and a sticky header of that height
+/* Sticky only where the header is one row (960 px and up): below that it wraps to two or three rows, and a sticky header of that height
    would cover a quarter of a phone's screen (and half of it with "More" open). There it scrolls away with the page. */
 @media (min-width: 960px) {
     .top {
@@ -2571,24 +2577,33 @@ svg.icon {
     flex: none;
 }
 
+/* A one-line note does not stretch across a wide screen: it keeps the text measure. */
+.note {
+    max-width: 72ch;
+}
+
 .note-success {
-    border-left-color: var(--accent);
+    border-left-color: var(--success);
 }
 
 .note-success .icon {
-    color: var(--accent);
+    color: var(--success);
 }
 
 .note-warning {
-    border-left-color: var(--sepia);
+    border-left-color: var(--warning);
 }
 
 .note-warning .icon {
-    color: var(--sepia);
+    color: var(--warning);
 }
 
 .note-info {
-    border-left-color: var(--brand-ink);
+    border-left-color: var(--accent);
+}
+
+.note-info .icon {
+    color: var(--accent);
 }
 
 .note-error {
@@ -2611,9 +2626,10 @@ svg.icon {
     text-align: center;
 }
 
-.empty-icon {
+.empty-state .empty-icon {
     width: 56px;
     height: 56px;
+    stroke-width: 1.4;
     color: var(--text-3);
 }
 
