@@ -964,6 +964,100 @@ main {
     background: var(--white);
 }
 
+/* A merge deletes a person for good (D-125, #125): the one that goes looks like it, the one that stays has a ring, and the warning
+   and the button are in the danger colour when the one that goes is named or is the user. */
+.merge-people {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+}
+
+.merge-people .person {
+    width: 160px;
+    padding: 8px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+}
+
+.merge-people .person.merge-leaves {
+    border-color: var(--danger, #a1301f);
+    background: color-mix(in srgb, var(--danger, #a1301f) 8%, transparent);
+}
+
+.merge-people .person.merge-leaves .face {
+    opacity: 0.6;
+}
+
+.merge-people .person.merge-stays {
+    border-color: var(--accent, var(--cyanotype));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--cyanotype)) 25%, transparent);
+}
+
+.merge-people .merge-badge {
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.merge-people .merge-leaves .merge-badge {
+    background: var(--danger, #a1301f);
+    color: #fff;
+}
+
+.merge-people .merge-stays .merge-badge {
+    background: var(--accent, var(--cyanotype));
+    color: var(--accent-contrast, #fff);
+}
+
+.merge-arrow {
+    font-size: 2rem;
+    color: var(--text-secondary);
+}
+
+/* Phones: the two cards and the arrow do not fit a row, so they stack and the arrow points down at the one that stays. */
+@media (max-width: 600px) {
+    .merge-people {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .merge-arrow {
+        align-self: center;
+        transform: rotate(90deg);
+    }
+}
+
+.note.danger {
+    border: 1px solid var(--danger, #a1301f);
+    border-left-width: 4px;
+    background: color-mix(in srgb, var(--danger, #a1301f) 10%, var(--white, transparent));
+}
+
+.note.danger strong {
+    font-weight: 800;
+}
+
+.merge-flow .confirm {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.merge-flow .button.danger {
+    background: var(--danger, #a1301f);
+    border-color: var(--danger, #a1301f);
+    color: #fff;
+}
+
+.merge-flow .button.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger, #a1301f) 85%, #000);
+    color: #fff;
+}
+
 /* After a correction on a person's page (#106) the page jumps to the next face, which would leave the note off screen: it
    stays in view while the page is scrolled, and a face card lands below the note. */
 .person-note {
