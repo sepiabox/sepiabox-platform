@@ -592,7 +592,7 @@
     <value>Mover um rosto</value>
   </data>
   <data name="Move_Label" xml:space="preserve">
-    <value>Para</value>
+    <value>Mover este rosto para</value>
   </data>
   <data name="Move_NewPerson" xml:space="preserve">
     <value>Uma pessoa nova</value>
@@ -709,7 +709,7 @@
     <value>Apagar dados faciais</value>
   </data>
   <data name="Delete_Explain" xml:space="preserve">
-    <value>Esta pessoa, o nome e todos os rostos dela são apagados, e isso não pode ser desfeito. As fotos ficam, e os rostos dela não voltam quando as fotos forem importadas de novo. Para apagar todos os rostos também das cópias das informações guardadas na nuvem (manifestos), desligue o reconhecimento facial em Configurações. Os backups automáticos ainda mantêm os dados apagados por até 7 dias; depois disso, eles deixam de existir.</value>
+    <value>Esta pessoa, o nome e todos os rostos dela são apagados. Isso não pode ser desfeito.</value>
   </data>
   <data name="Delete_Confirm" xml:space="preserve">
     <value>Apagar</value>
@@ -1550,10 +1550,10 @@
     <value>Ignorar e apagar o rosto sem nome {0}</value>
   </data>
   <data name="Person_Delete_Hint" xml:space="preserve">
-    <value>Apaga esta pessoa, o nome e todos os rostos dela.</value>
+    <value>Apaga esta pessoa, o nome e todos os rostos dela. Os rostos não voltam quando as fotos forem importadas de novo.</value>
   </data>
   <data name="Person_Ignore_Hint" xml:space="preserve">
-    <value>Para desconhecidos (cartazes, multidões): apaga esta pessoa sem nome e os rostos dela, para que não voltem.</value>
+    <value>Para desconhecidos (cartazes, multidões): a mesma exclusão de uma pessoa sem nome e dos rostos dela, para que não voltem. Uma pessoa com nome não pode ser ignorada.</value>
   </data>
   <data name="Settings_Faces_History_Ignore" xml:space="preserve">
     <value>{0}, por {1}: rostos sem nome apagados: {2}; pessoas apagadas: {3}.</value>
@@ -1631,12 +1631,30 @@
     <value>Precisa de um nome</value>
   </data>
   <data name="Person_Me_Label" xml:space="preserve">
-    <value>Esta sou eu</value>
+    <value>Sou eu</value>
   </data>
   <data name="Person_Me_Hint" xml:space="preserve">
     <value>Liga esta pessoa ao seu login, para que "Comigo" a encontre.</value>
   </data>
   <data name="Person_Danger_Heading" xml:space="preserve">
-    <value>Remover</value>
+    <value>Zona de perigo</value>
+  </data>
+  <data name="Delete_Effect_Photos" xml:space="preserve">
+    <value>As fotos ficam, e os rostos dela não voltam quando as fotos forem importadas de novo.</value>
+  </data>
+  <data name="Delete_Effect_Cloud" xml:space="preserve">
+    <value>Para apagar todos os rostos também das cópias das informações guardadas na nuvem (manifestos), desligue o reconhecimento facial em Configurações.</value>
+  </data>
+  <data name="Delete_Effect_Backups" xml:space="preserve">
+    <value>Os backups automáticos ainda mantêm os dados apagados por até 7 dias; depois disso, eles deixam de existir.</value>
+  </data>
+  <data name="Person_Delete_Label" xml:space="preserve">
+    <value>Dados faciais</value>
+  </data>
+  <data name="Person_Ignore_Label" xml:space="preserve">
+    <value>Desconhecido</value>
+  </data>
+  <data name="Move_TitleOf" xml:space="preserve">
+    <value>Mover um rosto de {0}</value>
   </data>
 </root>

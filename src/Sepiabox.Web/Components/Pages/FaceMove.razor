@@ -15,7 +15,7 @@
 }
 else
 {
-    <PageHead Title="@Text["Move_Title"]">
+    <PageHead Title="@Text["Move_TitleOf", _person.Name ?? Text["People_Unnamed"].Value]">
         <Back><a href="people/@_person.Id">@(_person.Name ?? Text["People_Unnamed"])</a></Back>
     </PageHead>
     <Panel Class="confirm-panel">

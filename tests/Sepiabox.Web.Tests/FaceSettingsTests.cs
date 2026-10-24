@@ -135,6 +135,9 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         Assert.Equal(("post", "Apagar"), (confirmation.Find("form.confirm").GetAttribute("method"), confirmation.Find("form.confirm button").TextContent));
         // The consequence is one bold line, Cancel comes first and has the focus, and the button is the danger one.
         Assert.NotNull(confirmation.Find("p.note.danger strong"));
+        // Only the first line is bold; what stays, the cloud copies and the backups are plain bullets under it.
+        Assert.StartsWith("Esta pessoa, o nome e todos os rostos dela são apagados. Isso não pode ser desfeito.", confirmation.Find("p.note.danger strong").TextContent, StringComparison.Ordinal);
+        Assert.Equal(3, confirmation.FindAll(".confirm-panel ul.ignore-effects li").Count);
         var actions = confirmation.Find("form.confirm").Children.Where(c => c.LocalName is "a" or "button").ToList();
         Assert.Equal(["a", "button"], actions.Select(c => c.LocalName));
         Assert.True(actions[0].HasAttribute("autofocus"));

@@ -2137,6 +2137,7 @@ button[data-close] {
 }
 
 .person-edit .form-actions {
+    margin-top: 0;
     display: flex;
     gap: var(--s-2, 8px);
 }
@@ -2173,8 +2174,17 @@ button[data-close] {
 }
 
 .person-faces .button.small {
+    min-height: 32px;
     padding: 2px 8px;
     font-size: var(--text-sm, 0.85rem);
+}
+
+.person-faces {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+.confirm-panel .card-face {
+    justify-items: start;
 }
 
 @media (max-width: 800px) {

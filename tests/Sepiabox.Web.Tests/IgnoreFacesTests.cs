@@ -171,7 +171,9 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         Assert.Equal("Ignore this person", unnamed.Find("div.ignore-person a").TextContent);
         // Each of the two deletions says what it is for.
         Assert.Contains("strangers", unnamed.Find("div.ignore-person .muted").TextContent, StringComparison.Ordinal);
-        Assert.Equal("Deletes this person, their name and all their faces.", unnamed.Find("div.delete-face-data .muted").TextContent);
+        Assert.StartsWith("Deletes this person, their name and all their faces.", unnamed.Find("div.delete-face-data .muted").TextContent, StringComparison.Ordinal);
+        Assert.Equal("Danger zone", unnamed.Find(".danger-zone h3").TextContent);
+        Assert.Equal(["Face data", "Stranger"], unnamed.FindAll(".danger-zone .form-label").Select(l => l.TextContent));
         Assert.Equal("false", unnamed.Find("div.ignore-person a").GetAttribute("data-enhance-nav"));
         Assert.Empty(named.FindAll("div.ignore-person"));
     }

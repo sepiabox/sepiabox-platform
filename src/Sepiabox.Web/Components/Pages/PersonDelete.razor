@@ -22,6 +22,11 @@ else
             <li class="person"><PersonCard Person="Summary(_person)" /></li>
         </ul>
         <p class="note danger"><strong>@Text["Delete_Explain"]</strong></p>
+        <ul class="ignore-effects">
+            <li>@Text["Delete_Effect_Photos"]</li>
+            <li>@Text["Delete_Effect_Cloud"]</li>
+            <li>@Text["Delete_Effect_Backups"]</li>
+        </ul>
         <form method="post" @formname="delete" @onsubmit="ConfirmAsync" class="confirm">
             <AntiforgeryToken />
             <input type="hidden" name="Confirmed" value="yes" />

@@ -11,7 +11,7 @@
 </PageHead>
 @if (Note == "IgnoreChanged")
 {
-    <p class="note" role="status">@Text["IgnoreMany_Changed"]</p>
+    <Notice Variant="@NoticeVariant.Info">@Text["IgnoreMany_Changed"]</Notice>
 }
 
 <Panel Class="confirm-panel">

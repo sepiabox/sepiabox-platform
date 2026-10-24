@@ -639,7 +639,7 @@
     <value>Move a face</value>
   </data>
   <data name="Move_Label" xml:space="preserve">
-    <value>To</value>
+    <value>Move this face to</value>
   </data>
   <data name="Move_NewPerson" xml:space="preserve">
     <value>A new person</value>
@@ -756,7 +756,7 @@
     <value>Delete face data</value>
   </data>
   <data name="Delete_Explain" xml:space="preserve">
-    <value>This person, their name and all their faces are deleted, and this cannot be undone. The photos stay, and their faces are not found again when the photos are imported again. To erase every face from the copies of the library's information kept in the cloud (manifests) too, turn face recognition off in Settings. Automatic backups still hold the deleted data for up to 7 days; after that it is gone.</value>
+    <value>This person, their name and all their faces are deleted. This cannot be undone.</value>
   </data>
   <data name="Delete_Confirm" xml:space="preserve">
     <value>Delete</value>
@@ -1623,10 +1623,10 @@
     <value>Ignore and delete unnamed face {0}</value>
   </data>
   <data name="Person_Delete_Hint" xml:space="preserve">
-    <value>Deletes this person, their name and all their faces.</value>
+    <value>Deletes this person, their name and all their faces. The faces are not found again when the photos are imported again.</value>
   </data>
   <data name="Person_Ignore_Hint" xml:space="preserve">
-    <value>For strangers (posters, crowds): deletes this unnamed person and their faces, so they do not come back.</value>
+    <value>For strangers (posters, crowds): the same deletion of an unnamed person and their faces, so they do not come back. A person with a name cannot be ignored.</value>
   </data>
   <data name="Settings_Faces_History_Ignore" xml:space="preserve">
     <value>{0}, by {1}: unnamed faces deleted: {2}; people deleted: {3}.</value>
@@ -1710,6 +1710,24 @@
     <value>Link this person to your sign-in, so "With me" finds them.</value>
   </data>
   <data name="Person_Danger_Heading" xml:space="preserve">
-    <value>Remove</value>
+    <value>Danger zone</value>
+  </data>
+  <data name="Delete_Effect_Photos" xml:space="preserve">
+    <value>The photos stay, and their faces are not found again when the photos are imported again.</value>
+  </data>
+  <data name="Delete_Effect_Cloud" xml:space="preserve">
+    <value>To erase every face from the copies of the library's information kept in the cloud (manifests) too, turn face recognition off in Settings.</value>
+  </data>
+  <data name="Delete_Effect_Backups" xml:space="preserve">
+    <value>Automatic backups still hold the deleted data for up to 7 days; after that it is gone.</value>
+  </data>
+  <data name="Person_Delete_Label" xml:space="preserve">
+    <value>Face data</value>
+  </data>
+  <data name="Person_Ignore_Label" xml:space="preserve">
+    <value>Stranger</value>
+  </data>
+  <data name="Move_TitleOf" xml:space="preserve">
+    <value>Move a face of {0}</value>
   </data>
 </root>

@@ -137,6 +137,21 @@ public sealed class PersonPageFormTests : LocalizedContext
     }
 
     [Fact]
+    public void Says_this_is_me_without_assuming_a_gender_in_portuguese_and_names_the_person_on_the_move_page()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+        _library.Persons[7] = PersonPages.Person(7, name: "Ana", user: null);
+
+        var page = Render<Person>(p => p.Add(x => x.Id, 7L));
+        Services.GetRequiredService<NavigationManager>().NavigateTo("people/7/faces/70/move");
+        var move = Render<FaceMove>(p => p.Add(x => x.Id, 7L).Add(x => x.FaceId, 70L));
+
+        Assert.Equal("Sou eu", page.Find("form.me .form-label").TextContent);
+        Assert.Equal("Mover um rosto de Ana", move.Find("h1").TextContent);
+        Assert.Equal("Mover este rosto para", move.Find("label.form-label").TextContent);
+    }
+
+    [Fact]
     public void Offers_no_ignore_for_a_named_person_and_styles_the_face_buttons_as_secondary()
     {
         var page = Render<Person>(p => p.Add(x => x.Id, 7L));
