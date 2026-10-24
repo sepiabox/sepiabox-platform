@@ -818,9 +818,6 @@
   <data name="Places_DeleteConfirm" xml:space="preserve">
     <value>Delete</value>
   </data>
-  <data name="Places_None" xml:space="preserve">
-    <value>No places yet. Save one from a photo with a location, or with its latitude and longitude.</value>
-  </data>
   <data name="Places_Done_Created" xml:space="preserve">
     <value>The place was saved.</value>
   </data>
@@ -1588,5 +1585,26 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Needs a name</value>
+  </data>
+  <data name="Places_HomeHelp" xml:space="preserve">
+    <value>Questions such as “photos more than 300 km from home” use this place, and it is listed first.</value>
+  </data>
+  <data name="Places_Edit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="Places_EmptyTitle" xml:space="preserve">
+    <value>No places yet</value>
+  </data>
+  <data name="Places_EmptyHelp" xml:space="preserve">
+    <value>Save the places you go back to, such as home or a grandparent’s house, then ask for the photos taken there or far from there. You can also save one from a photo with a location.</value>
+  </data>
+  <data name="Places_AddHome" xml:space="preserve">
+    <value>Add your home</value>
+  </data>
+  <data name="Places_HomeName" xml:space="preserve">
+    <value>Home</value>
+  </data>
+  <data name="Places_Saved" xml:space="preserve">
+    <value>Saved places</value>
   </data>
 </root>

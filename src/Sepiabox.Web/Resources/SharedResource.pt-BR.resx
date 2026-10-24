@@ -771,9 +771,6 @@
   <data name="Places_DeleteConfirm" xml:space="preserve">
     <value>Apagar</value>
   </data>
-  <data name="Places_None" xml:space="preserve">
-    <value>Ainda não há lugares. Salve um a partir de uma foto com localização, ou com a latitude e a longitude.</value>
-  </data>
   <data name="Places_Done_Created" xml:space="preserve">
     <value>O lugar foi salvo.</value>
   </data>
@@ -1515,5 +1512,26 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Precisa de um nome</value>
+  </data>
+  <data name="Places_HomeHelp" xml:space="preserve">
+    <value>Perguntas como “fotos a mais de 300 km de casa” usam este lugar, e ele aparece primeiro.</value>
+  </data>
+  <data name="Places_Edit" xml:space="preserve">
+    <value>Editar</value>
+  </data>
+  <data name="Places_EmptyTitle" xml:space="preserve">
+    <value>Nenhum lugar ainda</value>
+  </data>
+  <data name="Places_EmptyHelp" xml:space="preserve">
+    <value>Salve os lugares aonde você volta, como sua casa ou a casa dos avós, e peça as fotos tiradas lá ou longe de lá. Também dá para salvar um a partir de uma foto com localização.</value>
+  </data>
+  <data name="Places_AddHome" xml:space="preserve">
+    <value>Adicionar sua casa</value>
+  </data>
+  <data name="Places_HomeName" xml:space="preserve">
+    <value>Casa</value>
+  </data>
+  <data name="Places_Saved" xml:space="preserve">
+    <value>Lugares salvos</value>
   </data>
 </root>
