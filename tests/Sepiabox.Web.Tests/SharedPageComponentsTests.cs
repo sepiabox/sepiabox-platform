@@ -209,3 +209,18 @@ public sealed class DangerButtonTests
         Assert.Contains("button danger", button, StringComparison.Ordinal);
     }
 }
+
+/// <summary>The history tables of Settings and Export (S-072).</summary>
+public sealed class HistoryTableStylesheetTests
+{
+    private static string Css { get; } = File.ReadAllText(Path.Combine(SourceTree.WebProject, "wwwroot", "app.css"));
+
+    [Fact]
+    public void Keeps_a_date_on_one_line_an_address_whole_and_the_action_cell_a_table_cell()
+    {
+        Assert.Matches(@"\.face-deletions \.when,\s*\.exports \.when\s*\{\s*white-space:\s*nowrap", Css);
+        Assert.Matches(@"\.face-deletions \.who\s*\{\s*min-width:\s*14rem", Css);
+        Assert.DoesNotMatch(@"\.exports \.action\s*\{", Css);
+        Assert.Matches(@"\.exports \.error\s*\{\s*padding:\s*0;\s*border:\s*0", Css);
+    }
+}

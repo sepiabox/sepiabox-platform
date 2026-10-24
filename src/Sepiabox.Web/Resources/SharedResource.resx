@@ -726,7 +726,7 @@
     <value>Turn face recognition on</value>
   </data>
   <data name="Settings_Faces_WorkFolder" xml:space="preserve">
-    <value>Faces are also kept on each computer that ran process --faces, in its work folder. Uploading it again does not bring them back, but to delete them there too, delete the work folder, or run process into a new one without --faces.</value>
+    <value>Face data is also kept on each computer that processed your photos with face recognition. Uploading again does not bring it back; to remove it there too, delete that computer's work folder.</value>
   </data>
   <data name="Settings_Faces_History" xml:space="preserve">
     <value>Face data deleted</value>

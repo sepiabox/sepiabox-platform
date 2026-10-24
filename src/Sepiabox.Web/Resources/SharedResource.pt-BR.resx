@@ -679,7 +679,7 @@
     <value>Ativar o reconhecimento facial</value>
   </data>
   <data name="Settings_Faces_WorkFolder" xml:space="preserve">
-    <value>Os rostos também ficam em cada computador que rodou process --faces, na pasta de trabalho. Enviá-la de novo não os traz de volta, mas para apagá-los também lá, apague a pasta de trabalho ou rode process numa pasta nova sem --faces.</value>
+    <value>Os dados faciais também ficam em cada computador que processou suas fotos com reconhecimento facial. Enviar de novo não os traz de volta; para removê-los de lá também, apague a pasta de trabalho desse computador.</value>
   </data>
   <data name="Settings_Faces_History" xml:space="preserve">
     <value>Dados faciais apagados</value>

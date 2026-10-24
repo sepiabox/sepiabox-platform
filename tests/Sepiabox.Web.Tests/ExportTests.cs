@@ -208,6 +208,9 @@ public sealed class ExportPageTests : LocalizedContext
         Assert.Equal("Failed", rows[1].QuerySelector(".status-badge.status-failed")!.TextContent);
         Assert.Equal("No.", rows[1].QuerySelector(".action .error")!.TextContent);
         Assert.Empty(rows[1].QuerySelector(".size")!.TextContent);
+        // The grid is on a wrapper inside the cell, so the cell stays a table cell and the row lines run through.
+        Assert.NotNull(rows[0].QuerySelector("td.action > div.action-stack a.button"));
+        Assert.NotNull(page.Find("p.measure"));
     }
 
     [Fact]

@@ -16,7 +16,7 @@
 <PageHead Title="@Text["Export_Heading"]">
     <Subtitle>@Text["Export_Intro"]</Subtitle>
 </PageHead>
-<p class="muted">@Text["Export_Contents"]</p>
+<p class="muted measure">@Text["Export_Contents"]</p>
 
 @if (NoteText is { } note)
 {
@@ -71,7 +71,7 @@
                             }
                         </td>
                         <td class="size">@(request.Status == ExportStatuses.Done ? ByteSizes.Format(request.SizeBytes ?? 0) : null)</td>
-                        <td class="action">
+                        <td class="action"><div class="action-stack">
                             @if (request.Status == ExportStatuses.Done)
                             {
                                 @if (request.BlobName is null)
@@ -97,7 +97,7 @@
                             {
                                 <span class="error">@request.Error</span>
                             }
-                        </td>
+                        </div></td>
                     </tr>
                 }
             </tbody>

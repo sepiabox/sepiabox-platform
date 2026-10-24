@@ -2966,10 +2966,25 @@ svg.icon {
     border-bottom: 0;
 }
 
-.exports .action {
+.exports .action-stack {
     display: grid;
     gap: var(--s-1);
     justify-items: start;
+}
+
+.exports .error {
+    padding: 0;
+    border: 0;
+}
+
+.face-deletions .when,
+.exports .when {
+    white-space: nowrap;
+}
+
+.face-deletions .who {
+    min-width: 14rem;
+    overflow-wrap: normal;
 }
 
 .exports tr {
