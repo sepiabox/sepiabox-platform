@@ -1703,4 +1703,7 @@
   <data name="People_NeedsName" xml:space="preserve">
     <value>Needs a name</value>
   </data>
+  <data name="Storage_Previews" xml:space="preserve">
+    <value>Some of the items in several sources</value>
+  </data>
 </root>

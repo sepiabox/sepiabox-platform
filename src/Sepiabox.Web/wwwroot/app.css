@@ -2288,6 +2288,37 @@ button[data-close] {
 }
 
 /* The storage page (S-028): a table like a count's ranking, and the assets under it in the timeline's grid. */
+.stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: var(--s-4);
+    margin: 0 0 var(--s-5);
+}
+
+.stat-card {
+    display: grid;
+    align-content: start;
+    gap: var(--s-2);
+    padding: var(--s-5);
+}
+
+.stat-card h2,
+.stat-card p {
+    margin: 0;
+}
+
+.stat-card .stat-line {
+    font-family: var(--font-display);
+    font-size: var(--text-xl, 1.5rem);
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+/* The totals are a table of five narrow columns: a card as wide as they need, not the page. */
+.storage-totals {
+    max-width: 56rem;
+}
+
 .storage-totals table {
     border-collapse: collapse;
 }
@@ -2429,15 +2460,76 @@ button[data-close] {
     list-style: none;
 }
 
-.connection {
-    padding: var(--s-4);
-    background: var(--surface-2);
+.connection,
+.service-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--s-4);
+    align-items: start;
+    padding: var(--s-4) var(--s-5);
+    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--r-md);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
 }
 
-.connection p {
-    margin: 0 0 8px;
+.service-card {
+    margin: 0 0 var(--s-5);
+}
+
+.service-icon {
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+    box-sizing: border-box;
+    background: var(--accent-soft);
+    border-radius: var(--r-md);
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+}
+
+.connection-body h2,
+.connection-body p {
+    margin: 0 0 var(--s-1);
+}
+
+.connection-side {
+    display: grid;
+    justify-items: end;
+    gap: var(--s-2);
+    max-width: 22rem;
+}
+
+.connection-side .connection-actions {
+    justify-content: flex-end;
+}
+
+.disconnect-hint {
+    margin: 0;
+    text-align: right;
+}
+
+.connect-more {
+    margin: 0;
+}
+
+@media (max-width: 800px) {
+    .connection,
+    .service-card {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .connection-side {
+        grid-column: 1 / -1;
+        justify-items: start;
+        max-width: none;
+    }
+
+    .disconnect-hint {
+        text-align: left;
+    }
 }
 
 .connection-account {

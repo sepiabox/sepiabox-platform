@@ -273,11 +273,14 @@ public sealed class StoragePageTests : LocalizedContext
         Assert.Contains("4 items, 4.9 KB", several.TextContent, StringComparison.Ordinal);
         Assert.True(SearchQueryJson.TryDecode(several.QuerySelector("p a")!.GetAttribute("href")!["./?q=".Length..], out var severalQuery, out _));
         Assert.Equal(new SourceCountFilter { Gte = 2 }, severalQuery.Filters.SourceCount);
-        Assert.Equal("In: HD da Ana, Takeout 2026", several.QuerySelector(".storage-assets p")!.TextContent);
-        Assert.Equal("HD da Ana, Takeout 2026", several.QuerySelector(".storage-assets p")!.GetAttribute("title"));
         Assert.Equal("Show these items, in several sources", several.QuerySelector("p a")!.GetAttribute("aria-label"));
-        Assert.Equal($"photos/{Ids.Of(1)}", several.QuerySelector(".storage-assets a.thumb")!.GetAttribute("href"));
-        Assert.Contains("Showing the first 1 items.", several.TextContent, StringComparison.Ordinal);
+        // The two numbers are cards side by side above the totals; the previews are a panel of their own below.
+        Assert.Equal(["storage-one-source", "storage-several-sources"], page.FindAll(".stat-row > .stat-card").Select(c => c.ClassList.First(n => n.StartsWith("storage-", StringComparison.Ordinal))));
+        var previews = page.Find(".storage-previews");
+        Assert.Equal("In: HD da Ana, Takeout 2026", previews.QuerySelector(".storage-assets p")!.TextContent);
+        Assert.Equal("HD da Ana, Takeout 2026", previews.QuerySelector(".storage-assets p")!.GetAttribute("title"));
+        Assert.Equal($"photos/{Ids.Of(1)}", previews.QuerySelector(".storage-assets a.thumb")!.GetAttribute("href"));
+        Assert.Contains("Showing the first 1 items.", previews.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -299,6 +302,7 @@ public sealed class StoragePageTests : LocalizedContext
         Assert.Equal("No items are only in one source.", page.Find(".storage-one-source p").TextContent);
         Assert.Equal("No items are in several sources.", page.Find(".storage-several-sources p").TextContent);
         Assert.Equal("There are no videos yet.", page.Find(".storage-largest p").TextContent);
+        Assert.Empty(page.FindAll(".storage-previews"));
     }
 
     [Fact]
@@ -324,7 +328,7 @@ public sealed class StoragePageTests : LocalizedContext
         Assert.Equal("Mostrar esses itens", page.Find(".storage-one-source a").TextContent);
         Assert.Equal("Mostrar esses itens, em apenas uma origem", page.Find(".storage-one-source a").GetAttribute("aria-label"));
         Assert.Contains("15 itens, 19,5 KB", page.Find(".storage-one-source").TextContent, StringComparison.Ordinal);
-        Assert.Equal("Em: HD da Ana, Takeout 2026", page.Find(".storage-several-sources .storage-assets p").TextContent);
+        Assert.Equal("Em: HD da Ana, Takeout 2026", page.Find(".storage-previews .storage-assets p").TextContent);
         Assert.Equal("Os 20 maiores vídeos", page.Find(".storage-largest h2").TextContent);
         Assert.Equal("Sem data", page.Find(".storage-totals tbody tr:last-child th").TextContent.Trim());
     }

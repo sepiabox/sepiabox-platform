@@ -18,81 +18,101 @@
     <Notice Variant="@NoteVariant">@note</Notice>
 }
 
-<Panel Class="connection-service" Title="@Text["Sources_GoogleDrive"]">
-
-    @if (_sources is null)
-    {
-        <p class="muted">@Text["Timeline_Loading"]</p>
-    }
-    else if (_sources.Count == 0)
-    {
-        <p class="empty">@Text["Sources_None"]</p>
-    }
-    else
+@* One card for each connected account (S-076): the service's icon, the account with its status, the counts and when they were made,
+   and the actions on the right with what disconnecting does beside them. A service with no account has a card of its own with one
+   button. The 7-day expiry is said only for an account whose access has expired. *@
+@if (_sources is null)
+{
+    <p class="muted">@Text["Timeline_Loading"]</p>
+}
+else
+{
+    @if (_sources.Count > 0)
     {
         <ul class="connections">
             @foreach (var source in _sources)
             {
                 <li class="connection">
-                    <p class="connection-account"><strong>@source.AccountEmail</strong>
-                        <span class="status @(source.NeedsReconnecting ? "status-expired" : "status-ok")">@Text["Sources_Status_" + source.Status]</span></p>
+                    <svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 4h7l5.5 9.5-3.5 6h-11L3 13.5z" /><path d="M8.5 4L14 13.5M15.5 4L10 13.5M3 13.5h11M10 13.5l3.5 6" /></svg>
+                    <div class="connection-body">
+                        <p class="connection-account"><strong>@source.AccountEmail</strong>
+                            <span class="status @(source.NeedsReconnecting ? "status-expired" : "status-ok")">@Text["Sources_Status_" + source.Status]</span></p>
+                        <p class="muted small connection-service-name">@Text["Sources_GoogleDrive"]</p>
 
-                    @if (source.NeedsReconnecting)
-                    {
-                        <p class="muted">@Text["Sources_ExpiredHint"]</p>
-                    }
-
-                    @if (source is { PhotoCount: { } photos, VideoCount: { } videos })
-                    {
-                        <p class="counts">
-                            <span class="photos">@Text["Sources_Photos", photos.ToString("N0", CultureInfo.CurrentCulture)]</span>
-                            <span class="videos">@Text["Sources_Videos", videos.ToString("N0", CultureInfo.CurrentCulture)]</span>
-                            @if (source.CountedAt is { } counted)
-                            {
-                                <span class="muted small">@Text["Sources_CountedAt", Text.DateAndTime(counted.UtcDateTime)]</span>
-                            }
-                        </p>
-                    }
-                    else
-                    {
-                        <p class="muted">@Text["Sources_NotCounted"]</p>
-                    }
-
-                    <div class="connection-actions">
                         @if (source.NeedsReconnecting)
                         {
-                            <a class="button" href="@SourceEndpoints.ConnectPath.TrimStart('/')" aria-label="@Text["Sources_ReconnectAria", source.AccountEmail]">@Text["Sources_Reconnect"]</a>
+                            <p class="muted">@Text["Sources_ExpiredHint"]</p>
+                        }
+
+                        @if (source is { PhotoCount: { } photos, VideoCount: { } videos })
+                        {
+                            <p class="counts">
+                                <span class="photos">@Text["Sources_Photos", photos.ToString("N0", CultureInfo.CurrentCulture)]</span>
+                                <span class="videos">@Text["Sources_Videos", videos.ToString("N0", CultureInfo.CurrentCulture)]</span>
+                                @if (source.CountedAt is { } counted)
+                                {
+                                    <span class="muted small">@Text["Sources_CountedAt", Text.DateAndTime(counted.UtcDateTime)]</span>
+                                }
+                            </p>
                         }
                         else
                         {
-                            <form method="post" @formname="@("count-" + source.Id.ToString(CultureInfo.InvariantCulture))" @onsubmit="CountAsync">
+                            <p class="muted">@Text["Sources_NotCounted"]</p>
+                        }
+                    </div>
+
+                    <div class="connection-side">
+                        <div class="connection-actions">
+                            @if (source.NeedsReconnecting)
+                            {
+                                <a class="button" href="@SourceEndpoints.ConnectPath.TrimStart('/')" aria-label="@Text["Sources_ReconnectAria", source.AccountEmail]">@Text["Sources_Reconnect"]</a>
+                            }
+                            else
+                            {
+                                <form method="post" @formname="@("count-" + source.Id.ToString(CultureInfo.InvariantCulture))" @onsubmit="CountAsync">
+                                    <AntiforgeryToken />
+                                    <input type="hidden" name="SourceId" value="@source.Id.ToString(CultureInfo.InvariantCulture)" />
+                                    <button type="submit" class="button secondary" aria-label="@Text["Sources_CountAria", source.AccountEmail]">@Text["Sources_Count"]</button>
+                                </form>
+                            }
+
+                            <form method="post" @formname="@("disconnect-" + source.Id.ToString(CultureInfo.InvariantCulture))" @onsubmit="DisconnectAsync">
                                 <AntiforgeryToken />
                                 <input type="hidden" name="SourceId" value="@source.Id.ToString(CultureInfo.InvariantCulture)" />
-                                <button type="submit" class="button" aria-label="@Text["Sources_CountAria", source.AccountEmail]">@Text["Sources_Count"]</button>
+                                <button type="submit" class="button danger" aria-label="@Text["Sources_DisconnectAria", source.AccountEmail]">@Text["Sources_Disconnect"]</button>
                             </form>
-                        }
-
-                        <form method="post" @formname="@("disconnect-" + source.Id.ToString(CultureInfo.InvariantCulture))" @onsubmit="DisconnectAsync">
-                            <AntiforgeryToken />
-                            <input type="hidden" name="SourceId" value="@source.Id.ToString(CultureInfo.InvariantCulture)" />
-                            <button type="submit" class="button danger" aria-label="@Text["Sources_DisconnectAria", source.AccountEmail]">@Text["Sources_Disconnect"]</button>
-                        </form>
+                        </div>
+                        <p class="muted small disconnect-hint">@Text["Sources_DisconnectHint"]</p>
                     </div>
                 </li>
             }
         </ul>
-        <p class="muted small">@Text["Sources_DisconnectHint"]</p>
     }
 
     @if (Connections.CanConnectGoogleDrive)
     {
-        <p><a class="button connect" href="@SourceEndpoints.ConnectPath.TrimStart('/')">@Text["Sources_Connect"]</a></p>
+        @if (_sources.Count == 0)
+        {
+            @* The service is not connected: its own card with the one thing to do. *@
+            <section class="panel service-card not-connected" aria-labelledby="service-google-drive">
+                <svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 4h7l5.5 9.5-3.5 6h-11L3 13.5z" /><path d="M8.5 4L14 13.5M15.5 4L10 13.5M3 13.5h11M10 13.5l3.5 6" /></svg>
+                <div class="connection-body">
+                    <h2 id="service-google-drive">@Text["Sources_GoogleDrive"]</h2>
+                    <p class="muted">@Text["Sources_None"]</p>
+                </div>
+                <div class="connection-side"><a class="button connect" href="@SourceEndpoints.ConnectPath.TrimStart('/')">@Text["Sources_Connect"]</a></div>
+            </section>
+        }
+        else
+        {
+            <p class="connect-more"><a class="button connect secondary" href="@SourceEndpoints.ConnectPath.TrimStart('/')">@Text["Sources_Connect"]</a></p>
+        }
     }
     else
     {
-        <p class="note">@Text["Sources_NotConfigured"]</p>
+        <Notice Variant="@NoticeVariant.Warning">@Text["Sources_NotConfigured"]</Notice>
     }
-</Panel>
+}
 
 @code {
     // What a note in the address may say, and its text: nothing else from the address is shown.

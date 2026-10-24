@@ -21,6 +21,34 @@ else if (_report.Rows.Count == 0)
 }
 else
 {
+    @* Two numbers first (S-076): what is in only one source, which a lost drive would take, and what is in several, which is kept twice. *@
+    <div class="stat-row">
+        <section class="panel stat-card storage-one-source" aria-labelledby="storage-one-source-heading">
+            <h2 id="storage-one-source-heading">@Text["Storage_OneSource"]</h2>
+            @if (_report.OneSource == 0)
+            {
+                <p class="muted">@Text["Storage_NoneOneSource"]</p>
+            }
+            else
+            {
+                <p class="stat-line">@Summary(_report.OneSource, _report.OneSourceBytes)</p>
+                <p><a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Eq = 1 }))" aria-label="@Text["Storage_ShowOneSource"]">@Text["Storage_ShowThem"]</a></p>
+            }
+        </section>
+        <section class="panel stat-card storage-several-sources" aria-labelledby="storage-several-heading">
+            <h2 id="storage-several-heading">@Text["Storage_Several"]</h2>
+            @if (_report.SeveralSources == 0)
+            {
+                <p class="muted">@Text["Storage_NoneSeveral"]</p>
+            }
+            else
+            {
+                <p class="stat-line">@Summary(_report.SeveralSources, _report.SeveralSourcesBytes)</p>
+                <p><a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Gte = 2 }))" aria-label="@Text["Storage_ShowSeveral"]">@Text["Storage_ShowThem"]</a></p>
+            }
+        </section>
+    </div>
+
     <Panel Class="storage-totals" HeadingId="storage-totals-heading" Title="@Text["Storage_Totals"]">
         <table class="ranking">
             <thead>
@@ -67,25 +95,9 @@ else
         </table>
     </Panel>
 
-    <Panel Class="storage-one-source" HeadingId="storage-one-source-heading" Title="@Text["Storage_OneSource"]">
-        @if (_report.OneSource == 0)
-        {
-            <p class="muted">@Text["Storage_NoneOneSource"]</p>
-        }
-        else
-        {
-            <p>@Summary(_report.OneSource, _report.OneSourceBytes) <a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Eq = 1 }))" aria-label="@Text["Storage_ShowOneSource"]">@Text["Storage_ShowThem"]</a></p>
-        }
-    </Panel>
-
-    <Panel Class="storage-several-sources" HeadingId="storage-several-heading" Title="@Text["Storage_Several"]">
-        @if (_report.SeveralSources == 0)
-        {
-            <p class="muted">@Text["Storage_NoneSeveral"]</p>
-        }
-        else
-        {
-            <p>@Summary(_report.SeveralSources, _report.SeveralSourcesBytes) <a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Gte = 2 }))" aria-label="@Text["Storage_ShowSeveral"]">@Text["Storage_ShowThem"]</a></p>
+    @if (_report.SeveralSources > 0)
+    {
+        <Panel Class="storage-previews" HeadingId="storage-previews-heading" Title="@Text["Storage_Previews"]">
             <ul class="grid storage-assets">
                 @foreach (var asset in _report.InSeveralSources)
                 {
@@ -99,8 +111,8 @@ else
             {
                 <p class="muted small shown">@Text["Storage_FirstShown", _report.InSeveralSources.Count.ToString("N0", CultureInfo.CurrentCulture)]</p>
             }
-        }
-    </Panel>
+        </Panel>
+    }
 
     <Panel Class="storage-largest" HeadingId="storage-largest-heading" Title="@Text["Storage_Largest"]">
         @if (_report.LargestVideos.Count == 0)

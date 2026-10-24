@@ -1228,10 +1228,10 @@
     <value>Só as primeiras {0} fotos marcadas foram alteradas: marque as outras e aperte o botão de novo.</value>
   </data>
   <data name="Layout_Sources" xml:space="preserve">
-    <value>Origens</value>
+    <value>Contas conectadas</value>
   </data>
   <data name="Sources_Heading" xml:space="preserve">
-    <value>Origens</value>
+    <value>Contas conectadas</value>
   </data>
   <data name="Sources_Intro" xml:space="preserve">
     <value>Conecte as contas na nuvem onde a família guarda fotos. O Sepiabox apenas lê, e nunca altera.</value>
@@ -1629,5 +1629,8 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Precisa de um nome</value>
+  </data>
+  <data name="Storage_Previews" xml:space="preserve">
+    <value>Alguns dos itens em várias origens</value>
   </data>
 </root>

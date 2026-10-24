@@ -43,7 +43,7 @@ public sealed class HeaderMoreMenuTests : LocalizedContext
 
     [Theory]
     [InlineData(Cultures.English, "More", "Organize", "Places", "Sources", "Storage")]
-    [InlineData(Cultures.BrazilianPortuguese, "Mais", "Organizar", "Lugares", "Origens", "Armazenamento")]
+    [InlineData(Cultures.BrazilianPortuguese, "Mais", "Organizar", "Lugares", "Contas conectadas", "Armazenamento")]
     public void Names_the_disclosure_and_its_pages_in_the_culture(string culture, string more, string organize, string places, string sources, string storage)
     {
         using var _ = Cultures.Use(culture);

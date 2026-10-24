@@ -182,7 +182,41 @@ public sealed class SourcesPageTests : LocalizedContext
 
         Assert.Equal("Connect Google Drive", page.Find("a.connect").TextContent);
         Assert.Equal("sources/google-drive/connect", page.Find("a.connect").GetAttribute("href"));
-        Assert.Equal("No account is connected yet.", page.Find("p.empty").TextContent);
+        // The service has a card of its own with the one thing to do (S-076).
+        Assert.Equal("No account is connected yet.", page.Find(".service-card.not-connected .muted").TextContent);
+        Assert.Equal("Google Drive", page.Find(".service-card.not-connected h2").TextContent);
+        Assert.Single(page.FindAll("a.connect"));
+        Assert.NotNull(page.Find(".service-card .service-icon"));
+    }
+
+    [Fact]
+    public void Gives_each_account_a_card_with_its_icon_status_and_counts_date_and_the_actions_with_what_disconnecting_does_beside_them()
+    {
+        _sources.Sources.Add(Summary(1, photos: 12, videos: 3));
+
+        var page = Render<ConnectedAccounts>();
+
+        var card = page.Find("li.connection");
+        Assert.NotNull(card.QuerySelector(".service-icon"));
+        Assert.Equal("Connected", card.QuerySelector(".status")!.TextContent);
+        Assert.StartsWith("Counted ", card.QuerySelector(".counts .muted")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("Disconnecting deletes the stored access to the account. Nothing in Google Drive changes.", card.QuerySelector(".connection-side .disconnect-hint")!.TextContent);
+        Assert.NotNull(card.QuerySelector(".connection-side .connection-actions"));
+        // Another account is connected from a button right under the cards, not from a card of its own.
+        Assert.Empty(page.FindAll(".not-connected"));
+        Assert.Contains("secondary", page.Find("p.connect-more a.connect").ClassName, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_the_seven_day_expiry_only_for_an_account_whose_access_has_expired()
+    {
+        _sources.Sources.Add(Summary(1, photos: 1, videos: 1));
+        _sources.Sources.Add(Summary(2, status: ConnectedSourceStatuses.Reconnect));
+
+        var cards = Render<ConnectedAccounts>().FindAll("li.connection");
+
+        Assert.DoesNotContain("7 days", cards[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("7 days", cards[1].TextContent, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -213,7 +247,7 @@ public sealed class SourcesPageTests : LocalizedContext
 
         var page = Render<ConnectedAccounts>();
 
-        Assert.Equal("Origens", page.Find("h1").TextContent);
+        Assert.Equal("Contas conectadas", page.Find("h1").TextContent);
         Assert.Equal("Fotos: 1.200", page.Find(".counts .photos").TextContent);
         Assert.Equal("Vídeos: 3", page.Find(".counts .videos").TextContent);
         Assert.Equal(["Contar fotos e vídeos", "Desconectar"], page.FindAll(".connection-actions button").Select(b => b.TextContent));
@@ -222,7 +256,7 @@ public sealed class SourcesPageTests : LocalizedContext
 
     [Theory]
     [InlineData(Cultures.English, "Sources")]
-    [InlineData(Cultures.BrazilianPortuguese, "Origens")]
+    [InlineData(Cultures.BrazilianPortuguese, "Contas conectadas")]
     public void The_layout_links_to_the_sources(string culture, string text)
     {
         using var _ = Cultures.Use(culture);
