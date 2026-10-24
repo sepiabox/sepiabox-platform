@@ -1,11 +1,10 @@
-using ImageMagick;
 using Microsoft.Extensions.Logging;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Faces;
-using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Incoming;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
+using Sepiabox.Pipeline.Processing;
 using Sepiabox.Pipeline.Storage;
 using Sepiabox.Pipeline.Video;
 using Sepiabox.Storage;
@@ -263,111 +262,56 @@ public sealed class CloudFileProcessor(
         await upload.CommitAsync(contentType, storageClass, cancellationToken);
     }
 
-    private Manifest Describe(string sha256, MediaKind kind, IncomingFile incoming, BlobInfo info, string sourcePath, ManifestSource source, bool reference)
-    {
-        var metadata = MetadataReader.Read(sourcePath);
-        return new Manifest
-        {
-            Id = sha256,
-            Kind = kind,
-            SizeBytes = info.Length,
-            ContentType = MediaTypes.ContentType(incoming.Path),
-            // The file's own date when plausible, otherwise one from its path in the cloud source (D-046).
-            Captured = CaptureDate.Resolve(metadata.RawCapturedAt, incoming.Path, clock),
-            Location = metadata.Location,
-            Camera = metadata.Camera,
-            Width = metadata.Width,
-            Height = metadata.Height,
-            DurationSeconds = metadata.DurationSeconds,
-            Sources = [source],
-            // Written only when false, as the schema says (D-088).
-            OriginalStored = reference ? false : null,
-        };
-    }
+    private Manifest Describe(string sha256, MediaKind kind, IncomingFile incoming, BlobInfo info, string sourcePath, ManifestSource source, bool reference) =>
+        // The date is the file's own when plausible, otherwise one from its path in the cloud source (D-046); the description
+        // itself is shared with `process` (S-065, D-118).
+        ManifestDescriber.Describe(new ManifestDescriber.Request(
+            sha256, kind, info.Length, incoming.Path, MetadataReader.Read(sourcePath), source, IndexOnly: reference, clock));
 
-    // The same rules as `process` (AddDerivatives there): previews are larger when the original is not kept (D-088), and a
-    // file with a video extension that holds no video is left out (D-045).
+    // The derivatives are made by the code `process` shares (S-065): previews are larger when the original is not kept (D-088),
+    // and a file with a video extension that holds no video is left out (D-045).
     private (Manifest Manifest, CloudFileResult? Outcome) MakeDerivatives(
         Manifest manifest, string sourcePath, string work, bool reference, CancellationToken cancellationToken, out string? withoutSound)
     {
         withoutSound = null;
-        var folder = $"derivatives/{manifest.Id}";
-        try
+        var processor = manifest.Kind == MediaKind.Video && reference ? referenceVideo ?? video : video;
+        if (manifest.Kind == MediaKind.Video && !TrackerModule.IsTrackerModule(sourcePath) && processor is null)
         {
-            if (manifest.Kind == MediaKind.Photo)
-            {
-                var sizes = reference ? ThumbnailGenerator.IndexOnlyPhotoSizes : ThumbnailGenerator.PhotoSizes;
-                return (manifest with { Derivatives = ThumbnailGenerator.Generate(sourcePath, work, folder, sizes) }, null);
-            }
-
-            if (TrackerModule.IsTrackerModule(sourcePath))
-            {
-                return (manifest, new CloudFileResult(CloudFileStatus.LeftOut, "a tracker-music module, not a video"));
-            }
-
-            var processor = reference ? referenceVideo ?? video : video;
-            if (processor is null)
-            {
-                // The worker's image has FFmpeg; without it every video would fail the same way, so the message is not
-                // completed: it is delivered again and finally dead-lettered, where someone sees it.
-                throw new InvalidOperationException("FFmpeg is not available, so a video cannot be processed.");
-            }
-
-            var probe = processor.Probe(sourcePath, cancellationToken);
-            var generated = processor.Generate(sourcePath, work, folder, probe, cancellationToken);
-            withoutSound = generated.WithoutSoundBecause;
-            return (manifest with
-            {
-                Width = probe.Width,
-                Height = probe.Height,
-                DurationSeconds = probe.DurationSeconds ?? manifest.DurationSeconds,
-                Location = manifest.Location ?? probe.Location,
-                Derivatives = generated.Derivatives,
-            }, null);
+            // The worker's image has FFmpeg; without it every video would fail the same way, so the message is not
+            // completed: it is delivered again and finally dead-lettered, where someone sees it.
+            throw new InvalidOperationException("FFmpeg is not available, so a video cannot be processed.");
         }
-        catch (NoVideoStreamException ex)
+
+        var made = DerivativeMaker.Make(manifest, sourcePath, content: null, work, indexOnly: reference, processor, cancellationToken);
+        withoutSound = made.WithoutSound;
+        return made.Status switch
         {
-            return (manifest, new CloudFileResult(CloudFileStatus.LeftOut, $"no video in it ({ex.Reason})"));
-        }
-        catch (Exception ex) when (ex is MagickException or VideoProcessingException)
-        {
-            var what = manifest.Kind == MediaKind.Photo ? "thumbnails" : "the poster and video version";
-            return (manifest, new CloudFileResult(CloudFileStatus.Problem, $"Could not make {what}: {ex.Message}"));
-        }
+            DerivativeStatus.Done => (made.Manifest, null),
+            DerivativeStatus.NotVideo => (manifest, new CloudFileResult(
+                CloudFileStatus.LeftOut,
+                made.NoVideo == NoVideoReason.TrackerModule ? "a tracker-music module, not a video" : $"no video in it ({made.NoVideo})")),
+            // A damaged photo and one that could not be made are the same to the worker: a problem of the message.
+            _ => (manifest, new CloudFileResult(
+                CloudFileStatus.Problem,
+                $"Could not make {(manifest.Kind == MediaKind.Photo ? "thumbnails" : "the poster and video version")}: {made.Problem}")),
+        };
     }
 
-    // Embedding, sharpness and faces from the derivatives just made, as `process` does; a failure of one is logged and
-    // leaves it out, never the file.
-    private Manifest AddSteps(Manifest manifest, string work)
-    {
-        if (embedder is not null)
-        {
-            var outcome = ManifestEmbeddings.TryAdd(manifest, work, embedder);
-            manifest = Applied(manifest, outcome);
-        }
+    // Embedding, sharpness and faces from the derivatives just made, in the order `process` uses (S-065); a failure of one is
+    // logged and leaves it out, never the file.
+    private Manifest AddSteps(Manifest manifest, string work) =>
+        ManifestSteps.Add(
+            manifest, work, embedder, faces, clock,
+            (_, add) =>
+            {
+                var outcome = add();
+                if (outcome?.Problem is { } problem)
+                {
+                    Log.IncomingStepLeftOut(logger, manifest.Id, problem);
+                }
 
-        if (manifest.Kind == MediaKind.Photo)
-        {
-            manifest = Applied(manifest, ManifestQualityStep.TryAdd(manifest, work));
-        }
-
-        if (faces is not null)
-        {
-            manifest = Applied(manifest, ManifestFaces.TryAdd(manifest, work, faces, clock));
-        }
-
-        return manifest;
-    }
-
-    private Manifest Applied(Manifest manifest, EmbeddingOutcome? outcome)
-    {
-        if (outcome?.Problem is { } problem)
-        {
-            Log.IncomingStepLeftOut(logger, manifest.Id, problem);
-        }
-
-        return outcome?.Manifest ?? manifest;
-    }
+                return outcome;
+            });
 
     private async Task<Manifest?> ReadManifestAsync(string manifestBlob, CancellationToken cancellationToken)
     {

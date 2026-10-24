@@ -223,7 +223,6 @@ body {
     scroll-margin-top: calc(var(--header-h) + var(--s-3));
 }
 
-/* Every interactive element shows where the keyboard is. */
 /* A theme chosen on the page (S-070) also sets native controls and scrollbars, which otherwise follow the system. */
 :root[data-theme="light"] {
     color-scheme: light;
@@ -233,6 +232,7 @@ body {
     color-scheme: dark;
 }
 
+/* Every interactive element shows where the keyboard is. */
 :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -901,6 +901,7 @@ main {
 }
 
 .pill {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: var(--s-2);
@@ -961,12 +962,26 @@ main {
 
 .privacy {
     display: inline;
+    margin-left: 0.4em;
 }
 
 .privacy > summary {
     display: inline;
     cursor: pointer;
+    color: var(--accent, var(--cyanotype));
     text-decoration: underline;
+}
+
+.privacy > summary {
+    list-style: none;
+}
+
+.privacy > summary::before {
+    content: "\25B8  ";
+}
+
+.privacy[open] > summary::before {
+    content: "\25BE  ";
 }
 
 .privacy[open] > span {
@@ -2168,6 +2183,100 @@ button[data-close] {
     box-shadow: var(--shadow-sm);
 }
 
+/* A merge deletes a person for good (D-125, #125): the one that goes looks like it, the one that stays has a ring, and the warning
+   and the button are in the danger colour when the one that goes is named or is the user. */
+.merge-people {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+}
+
+.merge-people .person {
+    width: 160px;
+    padding: 8px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+}
+
+.merge-people .person.merge-leaves {
+    border-color: var(--danger, #a1301f);
+    background: color-mix(in srgb, var(--danger, #a1301f) 8%, transparent);
+}
+
+.merge-people .person.merge-leaves .face {
+    opacity: 0.6;
+}
+
+.merge-people .person.merge-stays {
+    border-color: var(--accent, var(--cyanotype));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--cyanotype)) 25%, transparent);
+}
+
+.merge-people .merge-badge {
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.merge-people .merge-leaves .merge-badge {
+    background: var(--danger, #a1301f);
+    color: #fff;
+}
+
+.merge-people .merge-stays .merge-badge {
+    background: var(--accent, var(--cyanotype));
+    color: var(--accent-contrast, #fff);
+}
+
+.merge-arrow {
+    font-size: 2rem;
+    color: var(--text-secondary);
+}
+
+/* Phones: the two cards and the arrow do not fit a row, so they stack and the arrow points down at the one that stays. */
+@media (max-width: 600px) {
+    .merge-people {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .merge-arrow {
+        align-self: center;
+        transform: rotate(90deg);
+    }
+}
+
+.note.danger {
+    border: 1px solid var(--danger, #a1301f);
+    border-left-width: 4px;
+    background: color-mix(in srgb, var(--danger, #a1301f) 10%, var(--white, transparent));
+}
+
+.note.danger strong {
+    font-weight: 800;
+}
+
+.merge-flow .confirm {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.merge-flow .button.danger {
+    background: var(--danger, #a1301f);
+    border-color: var(--danger, #a1301f);
+    color: #fff;
+}
+
+.merge-flow .button.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger, #a1301f) 85%, #000);
+    color: #fff;
+}
+
 /* After a correction on a person's page (#106) the page jumps to the next face, which would leave the note off screen: it
    stays in view while the page is scrolled, and a face card lands below the note. */
 .person-note {
@@ -2448,6 +2557,80 @@ button[data-close] {
     color: var(--accent);
 }
 
+/* Ignoring strangers' faces (#107): the confirmation says what is deleted, and the way out is the first thing in reach. */
+.button.danger {
+    background: #9b2c2c;
+    color: var(--white);
+}
+
+.button.danger:hover:not(:disabled) {
+    background: #7a2020;
+    color: var(--white);
+}
+
+.confirm .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    box-sizing: border-box;
+}
+
+.confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.ignore-warning {
+    font-size: 1.125rem;
+}
+
+.ignore-effects {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.ignore-cloud {
+    margin: 8px 0;
+}
+
+.ignore-cloud summary {
+    cursor: pointer;
+    min-height: 24px;
+}
+
+.ignore-crops {
+    margin: 12px 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 8px;
+}
+
+.ignore-more {
+    margin: 4px 0 12px;
+}
+
+.ignore-face,
+.ignore-faces a,
+.ignore-many a,
+.ignore-person a,
+.delete-face-data a {
+    display: inline-block;
+    min-height: 44px;
+    line-height: 44px;
+    padding: 0 8px;
+    box-sizing: border-box;
+}
+
+.ignore-many a.button {
+    line-height: normal;
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+
 /* A long album name must not widen the bar or the page (S-052): the select shrinks to its cell and shows an ellipsis. */
 .filters label {
     min-width: 0;
@@ -2723,4 +2906,13 @@ svg.icon {
 
 .empty-help {
     margin: 0;
+}
+/* Under the faces of a photo: a link to ignore each stranger's face (#107). */
+.ignore-faces-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-1, 4px) var(--s-4, 16px);
+    margin: var(--s-3, 12px) 0 0;
+    padding: 0;
+    list-style: none;
 }

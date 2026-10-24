@@ -4,6 +4,9 @@ using Npgsql;
 namespace Sepiabox.Catalog.People;
 
 /// <summary>What became of a change the family asked for (S-020).</summary>
+/// <summary>What the direction of a merge depends on: who a person is, and how many faces they have.</summary>
+public readonly record struct MergeSide(long Id, string? Name, string? UserEmail, int FaceCount);
+
 public enum CurationOutcome
 {
     Done,
@@ -143,12 +146,37 @@ public sealed class PeopleCuration(CatalogDbContext db)
         }, cancellationToken);
     }
 
+    /// <summary>The id of the one of two people that stays in a merge by default (D-125).</summary>
+    public static long KeeperOf(MergeSide a, MergeSide b)
+    {
+        // A person the user said is them stays; then a named one; then the one with more faces; then the older. Never the other way
+        // round by default: the owner's complaint was a named person of 1,500 faces deleted for an unnamed one of 100 (#125).
+        if ((a.UserEmail is null) != (b.UserEmail is null))
+        {
+            return a.UserEmail is not null ? a.Id : b.Id;
+        }
+
+        if ((a.Name is null) != (b.Name is null))
+        {
+            return a.Name is not null ? a.Id : b.Id;
+        }
+
+        if (a.FaceCount != b.FaceCount)
+        {
+            return a.FaceCount > b.FaceCount ? a.Id : b.Id;
+        }
+
+        return Math.Min(a.Id, b.Id);
+    }
+
+    private static MergeSide Side(Person person) => new(person.Id, person.Name, person.UserEmail, person.FaceCount);
+
     /// <summary>
-    /// Merges <paramref name="otherId"/> into <paramref name="personId"/>: every face of the other person (excluded ones
-    /// included, still excluded) moves to this one, the family's choice from now on (<c>manual</c>), the other person
+    /// Merges two people into the one <see cref="KeeperOf"/> says stays, or into the other when <paramref name="swap"/> (D-125): every
+    /// face of the one that goes (excluded ones included, still excluded) moves to the one that stays, the family's choice from now on (<c>manual</c>), the other person
     /// goes, and this one keeps its name, or takes the other's when it has none, and its user link, or the other's.
     /// </summary>
-    public Task<CurationOutcome> MergeAsync(long personId, long otherId, CancellationToken cancellationToken = default)
+    public Task<CurationOutcome> MergeAsync(long personId, long otherId, bool swap = false, CancellationToken cancellationToken = default)
     {
         if (personId == otherId)
         {
@@ -157,11 +185,17 @@ public sealed class PeopleCuration(CatalogDbContext db)
 
         return InTransactionAsync(async () =>
         {
-            if (await db.People.FindAsync([personId], cancellationToken) is not { } person
-                || await db.People.FindAsync([otherId], cancellationToken) is not { } other)
+            if (await db.People.FindAsync([personId], cancellationToken) is not { } first
+                || await db.People.FindAsync([otherId], cancellationToken) is not { } second)
             {
                 return CurationOutcome.NotFound;
             }
+
+            // Which of the two stays is decided here, from the people as they are now, and not by the order the caller gave them in:
+            // a stale page or a hand-made request must not delete a named or "me" person (D-125). Only an explicit swap reverses it.
+            var firstStays = (KeeperOf(Side(first), Side(second)) == first.Id) != swap;
+            var (person, other) = firstStays ? (first, second) : (second, first);
+            (personId, otherId) = (person.Id, other.Id);
 
             if (person.UserEmail is not null && other.UserEmail is not null && person.UserEmail != other.UserEmail)
             {

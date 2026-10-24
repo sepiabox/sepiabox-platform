@@ -41,7 +41,9 @@ public sealed record StorageReport(
 /// The original's address at its source, as the manifest gave it (S-063). Untrusted text: show it only through
 /// <see cref="SourceLinks.SafeUrl"/>.
 /// </param>
-public sealed record AssetSourceDetail(string Type, string Name, string Path, string? Url = null);
+/// <param name="Id">The source's row, which "Open original" of a Drive source names (S-038); 0 when unknown.</param>
+/// <param name="Removed">True when the sync found the file gone from its cloud source (S-038): the source is kept and marked.</param>
+public sealed record AssetSourceDetail(string Type, string Name, string Path, string? Url = null, long Id = 0, bool Removed = false);
 
 /// <summary>
 /// One asset for the detail page. <c>PreviewName</c> is the derivative shown large: the photo preview, or the
@@ -93,8 +95,8 @@ public sealed record AssetDetail(
     public string? ProxyName { get; init; }
 }
 
-/// <summary>A person in a photo; <see cref="Name"/> is null while they are unnamed.</summary>
-public sealed record AssetPerson(long Id, string? Name);
+/// <summary>A person in a photo, with the one face of them in it (#107: to ignore it); <see cref="Name"/> is null while they are unnamed.</summary>
+public sealed record AssetPerson(long Id, string? Name, long FaceId = 0, FaceCrop? Crop = null);
 
 /// <summary>
 /// One counted face of a photo, for its thumbnail on the detail page (S-068): the face's own id, the person it points to
@@ -467,7 +469,7 @@ public sealed class LibraryQueries(
             asset.Width,
             asset.Height,
             preview,
-            [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path, s.Url))],
+            [.. OrderSources(asset.Sources).Select(s => new AssetSourceDetail(s.Type, s.Name, s.Path, s.Url, s.Id, s.RemovedAt is not null))],
             asset.DurationSeconds,
             proxy is not null,
             PlaceNames.Format(asset.PlaceCity, asset.PlaceRegion, asset.PlaceCountry))
@@ -475,7 +477,10 @@ public sealed class LibraryQueries(
             Faces = [.. faceRows.OrderBy(f => f.Name is null).ThenBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ThenBy(f => f.Box.Length > 0 ? f.Box[0] : 0).ThenBy(f => f.Id)
                 .Select(f => new AssetFace(f.Id, f.PersonId, f.Name, Crop(id, f.Box, thumbnailSizes)))],
-            People = [.. faceRows.Select(f => new AssetPerson(f.PersonId, f.Name)).Distinct()
+            // One entry per person, with their first face in the photo (D-077 allows one; a data fix could leave two): its id and
+            // crop are for the page that asks before ignoring it (#107).
+            People = [.. faceRows.OrderBy(f => f.Id).DistinctBy(f => f.PersonId)
+                .Select(f => new AssetPerson(f.PersonId, f.Name, f.Id, Crop(id, f.Box, thumbnailSizes)))
                 .OrderBy(p => p.Name is null).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Id)],
             CapturedAtSource = asset.CapturedAtSource,
             Caption = TextSafety.WithoutBidiControls(asset.Caption),
