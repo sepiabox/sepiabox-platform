@@ -703,7 +703,7 @@
     <value>Apagar dados faciais</value>
   </data>
   <data name="Delete_Explain" xml:space="preserve">
-    <value>Esta pessoa, o nome e todos os rostos dela são apagados, e isso não pode ser desfeito. As fotos ficam, e os rostos dela não voltam quando as fotos forem importadas de novo. Para apagar todos os rostos também das cópias das informações guardadas na nuvem (manifestos), desligue o reconhecimento facial em Configurações. Os backups automáticos ainda mantêm os dados apagados por até 7 dias; depois disso, eles deixam de existir.</value>
+    <value>Esta pessoa, o nome e todos os rostos dela são apagados, e isso não pode ser desfeito. As fotos ficam, e os rostos dela não voltam quando as fotos forem importadas de novo. Para apagar todos os rostos também das cópias das informações guardadas na nuvem (manifestos), desative o reconhecimento facial em Configurações. Os backups automáticos ainda mantêm os dados apagados por até 7 dias; depois disso, eles deixam de existir.</value>
   </data>
   <data name="Delete_Confirm" xml:space="preserve">
     <value>Apagar</value>
@@ -1532,7 +1532,7 @@
     <value>E as cópias na nuvem?</value>
   </data>
   <data name="Ignore_Cloud" xml:space="preserve">
-    <value>As cópias das informações da biblioteca guardadas na nuvem (manifestos) mantêm os rostos apagados até o reconhecimento facial ser desligado em Configurações, e os backups automáticos os mantêm por até 7 dias.</value>
+    <value>As cópias das informações da biblioteca guardadas na nuvem (manifestos) mantêm os rostos apagados até o reconhecimento facial ser desativado em Configurações, e os backups automáticos os mantêm por até 7 dias.</value>
   </data>
   <data name="IgnoreMany_More" xml:space="preserve">
     <value>e mais {0} pessoas</value>
