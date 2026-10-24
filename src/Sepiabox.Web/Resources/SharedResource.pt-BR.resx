@@ -715,7 +715,7 @@
     <value>O reconhecimento facial está desativado, então não há pessoas.</value>
   </data>
   <data name="Settings_Faces_Backups" xml:space="preserve">
-    <value>Os backups automáticos (a restauração do banco de dados a um momento anterior, e os arquivos apagados ou substituídos guardados por 7 dias) ainda mantêm os dados faciais apagados por até 7 dias; depois disso, eles deixam de existir.</value>
+    <value>Os backups automáticos ainda podem guardar dados faciais apagados por até 7 dias; depois disso eles somem.</value>
   </data>
   <data name="Layout_Places" xml:space="preserve">
     <value>Lugares</value>

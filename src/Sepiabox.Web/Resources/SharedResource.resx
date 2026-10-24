@@ -762,7 +762,7 @@
     <value>Face recognition is off, so there are no people.</value>
   </data>
   <data name="Settings_Faces_Backups" xml:space="preserve">
-    <value>Automatic backups (the database's point-in-time restore, and deleted or overwritten files kept for 7 days) still hold deleted face data for up to 7 days; after that it is gone.</value>
+    <value>Automatic backups can still hold deleted face data for up to 7 days; after that it is gone.</value>
   </data>
   <data name="Layout_Places" xml:space="preserve">
     <value>Places</value>

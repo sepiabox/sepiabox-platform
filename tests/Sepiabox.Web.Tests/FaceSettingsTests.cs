@@ -45,7 +45,7 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         Assert.Equal("Sim, desativar e apagar", confirming.Find("form.confirm button").TextContent);
         Assert.Equal("settings", confirming.Find("form.confirm a").GetAttribute("href"));
         Assert.Contains("pasta de trabalho desse computador", confirming.Find(".work-folder").TextContent, StringComparison.Ordinal);
-        Assert.StartsWith("Os backups automáticos", confirming.Find(".backups").TextContent, StringComparison.Ordinal);
+        Assert.StartsWith("Os backups automáticos ainda podem guardar", confirming.Find(".backups").TextContent, StringComparison.Ordinal);
         Assert.Contains("das cópias das informações guardadas na nuvem (manifestos)", confirming.Find(".confirm-off .note").TextContent, StringComparison.Ordinal);
         Assert.Empty(_faces.Calls);
     }
