@@ -222,7 +222,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-069 | [Remaining pages on the shared components](S-069-remaining-pages-on-shared-components.md) | Visual design | S-066, S-067, S-068, S-037, S-039, S-040 | Medium | M | `doing` | A |
 | S-071 | [Places, on the shared components](S-071-places-on-shared-components.md) | Visual design | S-069 | Medium | M | `todo` | A |
 | S-072 | [Settings and Export, on the shared components](S-072-settings-and-export-on-shared-components.md) | Visual design | S-069 | Medium | M | `todo` | A |
-| S-073 | [Sign-in and No access, on the shared components](S-073-sign-in-and-no-access-on-shared-components.md) | Visual design | S-069 | Medium | S | `todo` | A |
+| S-073 | [Sign-in and No access, on the shared components](S-073-sign-in-and-no-access-on-shared-components.md) | Visual design | S-069 | Medium | S | `doing` | A |
 | S-074 | [Person, Merge and People, on the shared components](S-074-person-merge-and-people-on-shared-components.md) | Visual design | S-069 | Medium | M | `todo` | A |
 | S-075 | [Occasions and Organize, on the shared components](S-075-occasions-and-organize-on-shared-components.md) | Visual design | S-069 | Medium | M | `todo` | A |
 | S-076 | [Storage and Sources, on the shared components](S-076-storage-and-sources-on-shared-components.md) | Visual design | S-069 | Medium | S | `todo` | A |
