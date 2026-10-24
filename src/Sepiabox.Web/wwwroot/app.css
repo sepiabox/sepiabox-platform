@@ -2738,6 +2738,40 @@ svg.icon {
     }
 }
 
+/* An option card (S-069): a checkbox with a title and a line of help in one clickable card, for an option that needs explaining. */
+.option-card {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-3);
+    padding: var(--s-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--surface-2);
+    cursor: pointer;
+}
+
+.option-card:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.option-card:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.option-card input {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+}
+
+.option-text {
+    display: grid;
+    gap: var(--s-1);
+}
+
 .form-actions {
     display: flex;
     flex-wrap: wrap;
