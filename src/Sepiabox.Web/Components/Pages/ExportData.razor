@@ -20,7 +20,7 @@
 
 @if (NoteText is { } note)
 {
-    <Notice>@note</Notice>
+    <Notice Variant="@NoteVariant">@note</Notice>
 }
 
 <form method="post" @formname="request" @onsubmit="RequestAsync" class="export-request panel block">
@@ -34,7 +34,7 @@
         </label>
         <p class="hint muted">@Text["Export_IncludeFacesHint"]</p>
     }
-    <button type="submit" class="button">@Text["Export_Request"]</button>
+    <div class="form-actions"><button type="submit" class="button">@Text["Export_Request"]</button></div>
 </form>
 
 @if (_requests is { Count: > 0 } requests)
@@ -87,11 +87,11 @@
 
 @code {
     // What a note in the address may say, and its text: nothing else from the address is shown.
-    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string Key, string Variant)> s_notes = new(StringComparer.Ordinal)
     {
-        ["requested"] = "Export_Note_requested",
-        ["busy"] = "Export_Note_busy",
-        ["signed-out"] = "Settings_Error_NoEmail",
+        ["requested"] = ("Export_Note_requested", NoticeVariant.Success),
+        ["busy"] = ("Export_Note_busy", NoticeVariant.Warning),
+        ["signed-out"] = ("Settings_Error_NoEmail", NoticeVariant.Error),
     };
 
     [SupplyParameterFromQuery(Name = "note")]
@@ -111,7 +111,9 @@
 
     private string? Email => HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
 
-    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key) ? Text[key].Value : null;
+    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var known) ? Text[known.Key].Value : null;
+
+    private string NoteVariant => Note is not null && s_notes.TryGetValue(Note, out var known) ? known.Variant : NoticeVariant.Success;
 
     protected override async Task OnInitializedAsync()
     {

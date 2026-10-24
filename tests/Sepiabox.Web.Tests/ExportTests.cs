@@ -172,7 +172,7 @@ public sealed class ExportPageTests : LocalizedContext
         var page = Render<ExportData>();
 
         Assert.Single(page.FindAll("div.page-head h1.page-heading"));
-        Assert.NotEmpty(page.FindAll("div.page-head p.page-sub"));
+        Assert.NotEmpty(page.FindAll("div.page-head .page-sub"));
         Assert.NotEmpty(page.FindAll("form.export-request.panel"));
     }
 

@@ -117,7 +117,7 @@ public sealed class OrganizePageTests : LocalizedContext
         var page = Open("/organize");
 
         Assert.Equal("Organize", page.Find("div.page-head h1.page-heading").TextContent);
-        Assert.NotEmpty(page.FindAll("div.page-head p.page-sub"));
+        Assert.NotEmpty(page.FindAll("div.page-head .page-sub"));
         Assert.NotEmpty(page.FindAll("nav.organize-views a, nav.organize-views strong"));
     }
 

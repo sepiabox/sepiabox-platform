@@ -29,7 +29,7 @@ else
     <form method="post" @formname="confirm" @onsubmit="ConfirmAsync" class="confirm">
         <AntiforgeryToken />
         <input type="hidden" name="Confirmed" value="yes" />
-        <button type="submit">@Text["Merge_Confirm"]</button>
+        <button type="submit" class="button danger">@Text["Merge_Confirm"]</button>
         <a href="people/@_person.Id">@Text["Merge_Cancel"]</a>
     </form>
 }

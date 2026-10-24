@@ -1,0 +1,27 @@
+@* What happened after an action (S-069), as a banner under the header: success (the default), info, warning or error. An error is
+   announced at once (role alert), the others politely (role status). The variant is also drawn, as a coloured edge and an icon,
+   never colour alone. The tags sit on one line so the text of the note has no stray white space around it. *@
+
+<p class="@Classes" role="@(Variant == NoticeVariant.Error ? "alert" : "status")"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)IconPath)</svg><span>@ChildContent</span></p>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>One of the <see cref="NoticeVariant"/> constants: success (the default), info, warning or error.</summary>
+    [Parameter]
+    public string Variant { get; set; } = NoticeVariant.Success;
+
+    private string Classes => Class is null ? $"note note-{Variant}" : $"note note-{Variant} {Class}";
+
+    private string IconPath => Variant switch
+    {
+        NoticeVariant.Error => "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7.5v5.5M12 16.5v.01\"/>",
+        NoticeVariant.Warning => "<path d=\"M12 4l9 16H3z\"/><path d=\"M12 10v4.5M12 17.5v.01\"/>",
+        NoticeVariant.Info => "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 11v5.5M12 7.5v.01\"/>",
+        _ => "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M8 12.5l2.7 2.7L16 9.5\"/>",
+    };
+}

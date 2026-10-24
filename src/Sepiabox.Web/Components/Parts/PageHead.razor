@@ -10,7 +10,7 @@
         <h1 class="page-heading">@Title</h1>
         @if (Subtitle is not null)
         {
-            <p class="muted page-sub">@Subtitle</p>
+            <div class="muted page-sub">@Subtitle</div>
         }
     </div>
     @if (ChildContent is not null)
@@ -23,7 +23,7 @@
     [Parameter, EditorRequired]
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>The line under the title.</summary>
+    /// <summary>The line under the title, in a div; keep it to a sentence of inline markup.</summary>
     [Parameter]
     public RenderFragment? Subtitle { get; set; }
 

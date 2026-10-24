@@ -15,7 +15,7 @@
 
 @if (NoteText is { } note)
 {
-    <Notice>@note</Notice>
+    <Notice Variant="@NoteVariant">@note</Notice>
 }
 
 <Panel Class="connection-service" Title="@Text["Sources_GoogleDrive"]">
@@ -75,7 +75,7 @@
                         <form method="post" @formname="@("disconnect-" + source.Id.ToString(CultureInfo.InvariantCulture))" @onsubmit="DisconnectAsync">
                             <AntiforgeryToken />
                             <input type="hidden" name="SourceId" value="@source.Id.ToString(CultureInfo.InvariantCulture)" />
-                            <button type="submit" class="button secondary" aria-label="@Text["Sources_DisconnectAria", source.AccountEmail]">@Text["Sources_Disconnect"]</button>
+                            <button type="submit" class="button danger" aria-label="@Text["Sources_DisconnectAria", source.AccountEmail]">@Text["Sources_Disconnect"]</button>
                         </form>
                     </div>
                 </li>
@@ -96,18 +96,18 @@
 
 @code {
     // What a note in the address may say, and its text: nothing else from the address is shown.
-    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string Key, string Variant)> s_notes = new(StringComparer.Ordinal)
     {
-        ["connected"] = "Sources_Note_connected",
-        ["denied"] = "Sources_Note_denied",
-        ["state"] = "Sources_Note_state",
-        ["failed"] = "Sources_Note_failed",
-        ["not-configured"] = "Sources_NotConfigured",
-        ["counted"] = "Sources_Note_counted",
-        ["disconnected"] = "Sources_Note_disconnected",
-        ["reconnect"] = "Sources_Note_reconnect",
-        ["count-failed"] = "Sources_Note_countFailed",
-        ["not-found"] = "Sources_Note_notFound",
+        ["connected"] = ("Sources_Note_connected", NoticeVariant.Success),
+        ["denied"] = ("Sources_Note_denied", NoticeVariant.Error),
+        ["state"] = ("Sources_Note_state", NoticeVariant.Error),
+        ["failed"] = ("Sources_Note_failed", NoticeVariant.Error),
+        ["not-configured"] = ("Sources_NotConfigured", NoticeVariant.Error),
+        ["counted"] = ("Sources_Note_counted", NoticeVariant.Success),
+        ["disconnected"] = ("Sources_Note_disconnected", NoticeVariant.Success),
+        ["reconnect"] = ("Sources_Note_reconnect", NoticeVariant.Warning),
+        ["count-failed"] = ("Sources_Note_countFailed", NoticeVariant.Error),
+        ["not-found"] = ("Sources_Note_notFound", NoticeVariant.Error),
     };
 
     [SupplyParameterFromQuery(Name = SourceEndpoints.NoteParameter)]
@@ -119,7 +119,9 @@
 
     private IReadOnlyList<ConnectedSourceSummary>? _sources;
 
-    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key) ? Text[key].Value : null;
+    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var known) ? Text[known.Key].Value : null;
+
+    private string NoteVariant => Note is not null && s_notes.TryGetValue(Note, out var known) ? known.Variant : NoticeVariant.Success;
 
     protected override async Task OnInitializedAsync() => _sources = await Connections.ListAsync();
 
