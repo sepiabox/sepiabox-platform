@@ -1541,6 +1541,96 @@
   <data name="Detail_MoreAlbums_Other" xml:space="preserve">
     <value>{0} more albums</value>
   </data>
+  <data name="Detail_IgnoreFace" xml:space="preserve">
+    <value>Ignore and delete this face</value>
+  </data>
+  <data name="Detail_IgnoreUnnamed" xml:space="preserve">
+    <value>Ignore and delete the unnamed faces in this photo</value>
+  </data>
+  <data name="Detail_Done_Ignored" xml:space="preserve">
+    <value>The faces were ignored.</value>
+  </data>
+  <data name="Ignore_Title" xml:space="preserve">
+    <value>Ignore and delete faces</value>
+  </data>
+  <data name="Ignore_NothingTitle" xml:space="preserve">
+    <value>Nothing to ignore</value>
+  </data>
+  <data name="Ignore_Nothing" xml:space="preserve">
+    <value>There is no unnamed face here to ignore.</value>
+  </data>
+  <data name="Ignore_Faces_One" xml:space="preserve">
+    <value>1 unnamed face in this photo will be ignored.</value>
+  </data>
+  <data name="Ignore_Faces_Other" xml:space="preserve">
+    <value>{0} unnamed faces in this photo will be ignored.</value>
+  </data>
+  <data name="Ignore_Confirm" xml:space="preserve">
+    <value>Delete for good</value>
+  </data>
+  <data name="IgnorePerson_Title" xml:space="preserve">
+    <value>Ignore and delete this person</value>
+  </data>
+  <data name="IgnorePerson_Named" xml:space="preserve">
+    <value>Only an unnamed person can be ignored; people with a name are never deleted this way.</value>
+  </data>
+  <data name="Person_Ignore" xml:space="preserve">
+    <value>Ignore this person</value>
+  </data>
+  <data name="IgnoreMany_Title" xml:space="preserve">
+    <value>Ignore and delete the unnamed people with few faces</value>
+  </data>
+  <data name="IgnoreMany_None" xml:space="preserve">
+    <value>There are no unnamed people with one or two faces.</value>
+  </data>
+  <data name="IgnoreMany_One" xml:space="preserve">
+    <value>1 unnamed person with one or two faces will be ignored.</value>
+  </data>
+  <data name="IgnoreMany_Other" xml:space="preserve">
+    <value>{0} unnamed people with one or two faces will be ignored.</value>
+  </data>
+  <data name="IgnoreMany_Changed" xml:space="preserve">
+    <value>The people changed since you opened this page, so nothing was ignored. Check the number and confirm again.</value>
+  </data>
+  <data name="People_IgnoreMany_One" xml:space="preserve">
+    <value>Ignore the unnamed person with one or two faces (1)</value>
+  </data>
+  <data name="People_IgnoreMany_Other" xml:space="preserve">
+    <value>Ignore the unnamed people with one or two faces ({0})</value>
+  </data>
+  <data name="People_Done_Ignored" xml:space="preserve">
+    <value>The faces were ignored.</value>
+  </data>
+  <data name="Ignore_Irreversible" xml:space="preserve">
+    <value>This cannot be undone. The photos stay.</value>
+  </data>
+  <data name="Ignore_Effect_Gone" xml:space="preserve">
+    <value>The faces are deleted for good, and are not found again when the photos are imported again.</value>
+  </data>
+  <data name="Ignore_Effect_Named" xml:space="preserve">
+    <value>People with a name are never touched.</value>
+  </data>
+  <data name="Ignore_Cloud_Summary" xml:space="preserve">
+    <value>What about the cloud copies?</value>
+  </data>
+  <data name="Ignore_Cloud" xml:space="preserve">
+    <value>The copies of the library's information kept in the cloud (manifests) keep the deleted faces until face recognition is turned off in Settings, and automatic backups hold them for up to 7 days.</value>
+  </data>
+  <data name="IgnoreMany_More" xml:space="preserve">
+    <value>and {0} more people</value>
+  </data>
+  <data name="Detail_IgnoreFace_Named" xml:space="preserve">
+    <value>Ignore and delete this face, unnamed {0}</value>
+  </data>
+  <data name="Person_Delete_Hint" xml:space="preserve">
+    <value>Deletes this person, their name and all their faces.</value>
+  </data>
+  <data name="Person_Ignore_Hint" xml:space="preserve">
+    <value>For strangers (posters, crowds): deletes this unnamed person and their faces, so they do not come back.</value>
+  </data>
+  <data name="Settings_Faces_History_Ignore" xml:space="preserve">
+    <value>{0}, by {1}: unnamed faces deleted: {2}; people deleted: {3}.</value>
+  </data>
   <data name="Merge_Result" xml:space="preserve">
     <value>After merging: {2} ({3} faces) keeps the faces of {0} ({1} faces), and {0} no longer exists.</value>
   </data>

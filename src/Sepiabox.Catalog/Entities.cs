@@ -349,6 +349,9 @@ public static class FaceDataDeletionScopes
 
     /// <summary>"Delete face data" on one person: that person and their faces.</summary>
     public const string Person = "person";
+
+    /// <summary>Strangers' faces ignored (#107, D-117): <c>Faces</c> is how many faces, <c>People</c> how many people were removed.</summary>
+    public const string Ignore = "ignore";
 }
 
 /// <summary>
