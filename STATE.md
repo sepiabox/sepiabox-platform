@@ -40,3 +40,10 @@ The owner paused all development until the weekly session limits reset. Main is 
 
 ## Waiting on the owner
 - Nothing blocking. The owner's ingest was at 314 of 706 GB (44%) at about 21:30Z on 2026-10-22. When it ends: sepiabox-import-all, events rebuild, events classify, report.
+
+## Parked on 2026-10-24 (owner: UI and UX first, nothing else)
+- **#130 EXIF GPS (d9af658):** Atlas approved incl. the repair (MetadataVersion 3 drops off-globe locations once). Open: Atlas/Sherlock P4 that a corrupt work-folder manifest now throws in `Decide` (make it "no repair" + test); Sherlock's mutation run on the repair path not done.
+- **Occasion calendar fix (christmas in April):** not started; plan was a calendar gate (christmas 1 Dec - 6 Jan) plus clearing types that break it, D-128, branch fix/occasion-calendar.
+- **#120 strip faces (0f70024):** Spock half done (16/38 mutants), no bug; P3 survivors: `All` vs `Any` over several remembered boxes, the 0.5 IoU edge (add ~0.4), the full-pass decision (no checkpoint / no last-full / `>` vs `>=`), `ErasedAt > since` boundary. Not run: deadline D1-D4, counters, StripFaces/ManifestStore mutants.
+- **#128 S-039 OneDrive (b3bdc0a):** Atlas approved; Tesla removed the duplicate StagedBlockStream and merged main; Spock's re-check of the test fixes not started.
+- **Redesign plan (DaVinci audit, D-126 desktop first):** Tesla S-069 primitives, then S-071 Places, S-072 Settings+Export, S-073 Sign-in; Edison closes S-067/S-068 then S-074 Person/Merge/People, S-075 Occasions+Organize, S-076 Storage+Sources, theme switch.
