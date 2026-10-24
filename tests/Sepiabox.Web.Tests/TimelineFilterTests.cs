@@ -116,6 +116,20 @@ public sealed class TimelineFilterTests : LocalizedContext
     }
 
     [Fact]
+    public void Keeps_the_privacy_disclosure_out_of_a_paragraph()
+    {
+        Use(new FakeLibrary(LisbonInDecember));
+        Services.AddSingleton<Sepiabox.Search.Questions.IQuestionTranslator>(new FakeTranslator());
+
+        var page = Render<Timeline>();
+
+        // A details element is not allowed inside a p: the parser would close the p early and leave an empty one.
+        var hint = page.Find(".finder .hint");
+        Assert.NotEqual("P", hint.TagName);
+        Assert.NotNull(hint.QuerySelector("details.privacy"));
+    }
+
+    [Fact]
     public void Speaks_portuguese_in_pt_br()
     {
         using var culture = Cultures.Use(Cultures.BrazilianPortuguese);

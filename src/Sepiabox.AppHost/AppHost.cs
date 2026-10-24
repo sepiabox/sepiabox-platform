@@ -100,6 +100,9 @@ else
     // The faces job writes manifests (S-022): its own identity, so the import jobs stay readers.
     var facesIdentity = builder.AddAzureUserAssignedIdentity("faces-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    // The sync job stages files in incoming and unprotects the refresh tokens the web protected (S-038): its own identity.
+    var syncIdentity = builder.AddAzureUserAssignedIdentity("sync-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
     // The process job writes derivatives, originals and manifests and empties incoming (S-036): its own identity.
     var processIdentity = builder.AddAzureUserAssignedIdentity("process-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
@@ -257,8 +260,27 @@ else
         .WithParameter("facesPrincipalId", facesIdentity.Resource.PrincipalId)
         .WithParameter("exportPrincipalId", exportIdentity.Resource.PrincipalId)
         .WithParameter("processPrincipalId", processIdentity.Resource.PrincipalId)
+        .WithParameter("syncPrincipalId", syncIdentity.Resource.PrincipalId)
         .WithParameter("adminPrincipalId", adminIdentity.Resource.PrincipalId)
         .WithParameter("uploaderPrincipalIds", uploaders);
+
+    // Syncs the connected Google Drives into `incoming` every day (S-038, D-115). It connects as the application role, reads the
+    // Google OAuth client from the owner's Key Vault (two secrets, the same as the web's sign-in, and no other: its role on each is
+    // assigned by scripts/deploy.sh, and it loads only those two) and the token ring, read-only, to unprotect the refresh tokens;
+    // its storage roles (write incoming, read the token ring) and its use of the ring's key are in access.bicep.
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.SyncResourceName)
+        .WithArgs("sync", "google-drive")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(blobs)
+        // The vault's address only: a reference would also give the identity a role on the whole vault (see scripts/deploy.sh).
+        .WithEnvironment("ConnectionStrings__vault", vault.Resource.ConnectionStringExpression)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithEnvironment("DataProtection__TokenKeyUri", access.GetOutput("tokenRingKeyUri"))
+        .WithAzureUserAssignedIdentity(syncIdentity)
+        // No role on the vault, nor the default one that naming it would give.
+        .WithRoleAssignments(vault, [])
+        .WithRoleAssignments(storage, [])
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureSyncJob);
 
     web.WithReference(insights)
         .WithAzureUserAssignedIdentity(webIdentity)
@@ -269,6 +291,7 @@ else
         .WithRoleAssignments(vault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
         .WithEnvironment("DataProtection__KeyUri", access.GetOutput("dataProtectionKeyUri"))
+        .WithEnvironment("DataProtection__TokenKeyUri", access.GetOutput("tokenRingKeyUri"))
         .WithEnvironment("Search__TimeZone", AzureInfrastructure.SearchTimeZone)
         // The CLIP text model in the web's image (S-056): its base image sepiabox-web-models, built by scripts/web-models.sh.
         .WithEnvironment("Search__ModelFolder", AzureInfrastructure.WebModelFolder)

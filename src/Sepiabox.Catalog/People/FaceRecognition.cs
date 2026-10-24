@@ -38,6 +38,9 @@ public sealed record FaceRecognitionState(bool On, DateTimeOffset? ErasedAt, Dat
         && (EnabledAt is not { } enabled || (detectedAt is { } found && found > enabled - ClockMargin));
 }
 
+/// <summary>What "Ignore the unnamed people with few faces" did; <paramref name="Refused"/> when the number of people was not the one confirmed.</summary>
+public sealed record IgnoreResult(int Faces, int People, bool Refused = false);
+
 /// <summary>
 /// Turning face recognition off and on, and deleting one person's face data (S-022, D-081). Each change is one
 /// transaction under the people lock (<see cref="FaceAssigner.LockAsync"/>, D-077), so an import either finished
@@ -125,21 +128,32 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
     /// of their own faces (never the embeddings) so a re-import does not bring them back. The photos stay. Null when the
     /// person is not in the catalog.
     /// </summary>
-    public Task<FaceDataDeletion?> DeletePersonAsync(long personId, string deletedBy, CancellationToken cancellationToken = default)
+    public Task<FaceDataDeletion?> DeletePersonAsync(long personId, string deletedBy, CancellationToken cancellationToken = default) =>
+        DeleteOnePersonAsync(personId, deletedBy, ignoring: false, cancellationToken);
+
+    /// <summary>
+    /// "Ignore this person" (#107, D-117): the same erase as <see cref="DeletePersonAsync"/> for a stranger (a poster, a
+    /// celebrity, a face in a crowd), but only while the person is unnamed, and with every face row's box remembered, so
+    /// none comes back as a new person. Null when the person is not there or has a name or a link to a user.
+    /// </summary>
+    public Task<FaceDataDeletion?> IgnorePersonAsync(long personId, string deletedBy, CancellationToken cancellationToken = default) =>
+        DeleteOnePersonAsync(personId, deletedBy, ignoring: true, cancellationToken);
+
+    private Task<FaceDataDeletion?> DeleteOnePersonAsync(long personId, string deletedBy, bool ignoring, CancellationToken cancellationToken)
     {
         var by = NormalizeEmail(deletedBy);
         return InTransactionAsync<FaceDataDeletion?>(async () =>
         {
-            if (await db.People.FindAsync([personId], cancellationToken) is not { } person)
+            if (await db.People.FindAsync([personId], cancellationToken) is not { } person || (ignoring && !IsUnnamed(person)))
             {
                 return null;
             }
 
             var now = Seconds(clock.GetUtcNow());
             var faces = await db.Faces.Where(f => f.PersonId == personId).ToListAsync(cancellationToken);
-            // Excluded faces and "not a face" were never this person's: deleted with them, and found again as new faces
-            // by a later import.
-            db.ErasedFaces.AddRange(faces.Where(f => FaceAssignments.Counts(f.Assignment))
+            // Excluded faces and "not a face" were never this person's: deleted with them, and found again as new faces by a
+            // later import (unless the person is being ignored, when every box is remembered).
+            db.ErasedFaces.AddRange(faces.Where(f => ignoring || FaceAssignments.Counts(f.Assignment))
                 .Select(f => new ErasedFace { AssetId = f.AssetId, Box = f.Box, ErasedAt = now }));
             db.Faces.RemoveRange(faces);
             db.People.Remove(person);
@@ -147,7 +161,7 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
             {
                 DeletedAt = now,
                 DeletedBy = by,
-                Scope = FaceDataDeletionScopes.Person,
+                Scope = ignoring ? FaceDataDeletionScopes.Ignore : FaceDataDeletionScopes.Person,
                 Faces = faces.Count,
                 People = 1,
             };
@@ -155,6 +169,114 @@ public sealed class FaceRecognition(CatalogDbContext db, TimeProvider clock)
             await db.SaveChangesAsync(cancellationToken);
             return deletion;
         }, cancellationToken);
+    }
+
+    /// <summary>The most faces a person may have to be offered in "Ignore the unnamed people with few faces".</summary>
+    public const int FewFaces = 2;
+
+    /// <summary>Whether a person has neither a name nor a link to a user: the only people ever ignored (#107).</summary>
+    public static bool IsUnnamed(Person person) => person.Name is null && person.UserEmail is null;
+
+    /// <summary>The unnamed people with at least one and at most <paramref name="maxFaces"/> face rows, as the bulk action sees them.</summary>
+    public static IQueryable<Person> UnnamedWithFewFaces(CatalogDbContext db, int maxFaces)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.People.Where(p => p.Name == null && p.UserEmail == null
+            && db.Faces.Count(f => f.PersonId == p.Id) >= 1 && db.Faces.Count(f => f.PersonId == p.Id) <= maxFaces);
+    }
+
+    /// <summary>
+    /// "Ignore this face" and "Ignore the unnamed faces in this photo" (#107, D-117): deletes the faces of
+    /// <paramref name="assetId"/> that belong to an unnamed person (just <paramref name="faceId"/> when it is given) and
+    /// remembers their boxes, as <see cref="DeletePersonAsync"/> does, so a re-import does not find them again. Each person
+    /// they belonged to has their count and centroid recomputed, and an unnamed one left with no face is removed. A face of
+    /// a named person is never touched. Null when there was nothing to ignore.
+    /// </summary>
+    public Task<FaceDataDeletion?> IgnoreFacesAsync(string assetId, long? faceId, string deletedBy, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(assetId);
+        var by = NormalizeEmail(deletedBy);
+        return InTransactionAsync<FaceDataDeletion?>(async () =>
+        {
+            var faces = await db.Faces
+                .Where(f => f.AssetId == assetId && (faceId == null || f.Id == faceId) && f.Person != null && f.Person.Name == null && f.Person.UserEmail == null)
+                .ToListAsync(cancellationToken);
+            if (faces.Count == 0)
+            {
+                return null;
+            }
+
+            var now = Seconds(clock.GetUtcNow());
+            db.ErasedFaces.AddRange(faces.Select(f => new ErasedFace { AssetId = f.AssetId, Box = f.Box, ErasedAt = now }));
+            db.Faces.RemoveRange(faces);
+            await db.SaveChangesAsync(cancellationToken);
+            var removed = await RecomputeAsync(faces.Select(f => f.PersonId!.Value).Distinct().ToList(), cancellationToken);
+            var deletion = new FaceDataDeletion
+            {
+                DeletedAt = now,
+                DeletedBy = by,
+                Scope = FaceDataDeletionScopes.Ignore,
+                Faces = faces.Count,
+                People = removed,
+            };
+            db.FaceDataDeletions.Add(deletion);
+            await db.SaveChangesAsync(cancellationToken);
+            return deletion;
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// "Ignore the unnamed people with few faces" (#107, D-117): deletes every unnamed person with at most
+    /// <paramref name="maxFaces"/> faces and those faces, remembering their boxes. Nothing is changed (Refused) unless exactly
+    /// <paramref name="expected"/> people match, the number the person saw when they confirmed. A named person, or one linked to a user,
+    /// is never touched.
+    /// </summary>
+    public Task<IgnoreResult> IgnoreUnnamedPeopleAsync(int maxFaces, int expected, string deletedBy, CancellationToken cancellationToken = default)
+    {
+        var by = NormalizeEmail(deletedBy);
+        return InTransactionAsync(async () =>
+        {
+            var people = await UnnamedWithFewFaces(db, maxFaces).ToListAsync(cancellationToken);
+            if (people.Count != expected || people.Count == 0)
+            {
+                return new IgnoreResult(0, 0, Refused: true);
+            }
+
+            var ids = people.Select(p => p.Id).ToList();
+            var faces = await db.Faces.Where(f => f.PersonId != null && ids.Contains(f.PersonId.Value)).ToListAsync(cancellationToken);
+            var now = Seconds(clock.GetUtcNow());
+            db.ErasedFaces.AddRange(faces.Select(f => new ErasedFace { AssetId = f.AssetId, Box = f.Box, ErasedAt = now }));
+            db.Faces.RemoveRange(faces);
+            db.People.RemoveRange(people);
+            db.FaceDataDeletions.Add(new FaceDataDeletion
+            {
+                DeletedAt = now,
+                DeletedBy = by,
+                Scope = FaceDataDeletionScopes.Ignore,
+                Faces = faces.Count,
+                People = people.Count,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+            return new IgnoreResult(faces.Count, people.Count);
+        }, cancellationToken);
+    }
+
+    // The people's count and centroid again from the faces that are left; an unnamed one with none goes. How many went.
+    private async Task<int> RecomputeAsync(IReadOnlyList<long> personIds, CancellationToken cancellationToken)
+    {
+        var assigner = new FaceAssigner(db);
+        var removed = 0;
+        foreach (var person in await db.People.Where(p => personIds.Contains(p.Id)).ToListAsync(cancellationToken))
+        {
+            await assigner.RecomputeAsync(person, cancellationToken);
+            if (db.Entry(person).State == EntityState.Deleted)
+            {
+                removed++;
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return removed;
     }
 
     /// <summary>
