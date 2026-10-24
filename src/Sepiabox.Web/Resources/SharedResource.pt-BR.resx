@@ -1514,7 +1514,7 @@
     <value>Precisa de um nome</value>
   </data>
   <data name="Places_HomeHelp" xml:space="preserve">
-    <value>Perguntas como “fotos a mais de 300 km de casa” usam este lugar, e ele aparece primeiro.</value>
+    <value>Libera perguntas como “fotos a mais de 300 km de casa”, e o lugar aparece primeiro.</value>
   </data>
   <data name="Places_Edit" xml:space="preserve">
     <value>Editar</value>

@@ -1587,7 +1587,7 @@
     <value>Needs a name</value>
   </data>
   <data name="Places_HomeHelp" xml:space="preserve">
-    <value>Questions such as “photos more than 300 km from home” use this place, and it is listed first.</value>
+    <value>Unlocks questions such as “photos more than 300 km from home”, and the place is listed first.</value>
   </data>
   <data name="Places_Edit" xml:space="preserve">
     <value>Edit</value>

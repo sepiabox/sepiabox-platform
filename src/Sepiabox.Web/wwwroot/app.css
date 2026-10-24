@@ -2645,7 +2645,7 @@ svg.icon {
 /* Places (S-071): the home as an option card, a saved place as a card with its edit form folded away. */
 .option-card {
     display: flex;
-    align-items: flex-start;
+    align-items: baseline;
     gap: var(--s-3);
     padding: var(--s-4);
     border: 1px solid var(--border);
@@ -2665,7 +2665,7 @@ svg.icon {
 }
 
 .option-card input {
-    margin-top: 2px;
+    margin: 0;
 }
 
 .option-text {
