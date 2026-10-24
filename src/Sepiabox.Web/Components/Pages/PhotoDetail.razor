@@ -11,6 +11,11 @@
 
     <p class="back"><a href="@BackLink">@Text["Detail_Back"]</a></p>
 
+    @if (Note == "ignored")
+    {
+        <p class="note" role="status">@Text["Detail_Done_Ignored"]</p>
+    }
+
     <div class="detail">
         <figure class="preview">
             @if (AssetKinds.IsVideo(_asset.Kind))
@@ -114,6 +119,7 @@
                 <ul class="photo-people">
                     @foreach (var person in _asset.People)
                     {
+                        var unnamedNumber = person.Name is null ? _asset.People.Where(p => p.Name is null).ToList().IndexOf(person) + 1 : 0;
                         <li>
                             @if (person.Name is { } name)
                             {
@@ -122,10 +128,19 @@
                             else
                             {
                                 <a href="people/@person.Id">@Text["People_Unnamed"]</a>
+                                @if (person.FaceId != 0)
+                                {
+                                    @* Opens a confirmation; a stranger's face (a poster, a crowd) is deleted for good there (#107). *@
+                                    <a href="photos/@_asset.Id/ignore-faces?face=@person.FaceId" class="small ignore-face" data-enhance-nav="false" aria-label="@Text["Detail_IgnoreFace_Named", unnamedNumber]">@Text["Detail_IgnoreFace"]</a>
+                                }
                             }
                         </li>
                     }
                 </ul>
+                @if (_asset.People.Count(p => p.Name is null && p.FaceId != 0) > 1)
+                {
+                    <p class="ignore-faces"><a href="photos/@_asset.Id/ignore-faces" data-enhance-nav="false">@Text["Detail_IgnoreUnnamed"]</a></p>
+                }
             }
 
             @if (_asset.Albums.Count > 0)
@@ -169,6 +184,16 @@
                         {
                             <span class="source-name">@source.Name</span> <span class="mono">@source.Path</span>
                         }
+                        @if (SourceLinks.OriginalHref(_asset.Id, source, _asset.OriginalStored) is { } openOriginal)
+                        {
+                            @* The file is fetched from the Drive by the server (S-038): not a link to Google, and not kept. *@
+                            <a class="source-link" href="@openOriginal" data-enhance-nav="false">@Text["Source_OpenOriginal"]</a>
+                            <span class="muted small original-hint">@Text["Source_OpenOriginalHint"]</span>
+                        }
+                        @if (source.Removed)
+                        {
+                            <span class="source-removed muted">@Text["Source_Removed"]</span>
+                        }
                         @if (link is not null)
                         {
                             @* The address is untrusted text: only https is ever a link, in a new tab that gets nothing from this page. *@
@@ -200,6 +225,10 @@
     /// <summary>The timeline page the visitor came from, so "back" returns there.</summary>
     [SupplyParameterFromQuery(Name = "page")]
     public string? PageQuery { get; set; }
+
+    // Only "ignored" is shown; nothing else from the address.
+    [SupplyParameterFromQuery(Name = "note")]
+    public string? Note { get; set; }
 
     private const int VisibleAlbums = 5;
 

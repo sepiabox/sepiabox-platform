@@ -148,8 +148,8 @@ internal sealed class FakePeopleEditor : IPeopleEditor
     public Task<Sepiabox.Catalog.People.CurationOutcome> UnlinkUserAsync(long personId, string email, CancellationToken cancellationToken = default) =>
         Record($"unlink {personId} {email}");
 
-    public Task<Sepiabox.Catalog.People.CurationOutcome> MergeAsync(long personId, long otherId, CancellationToken cancellationToken = default) =>
-        Record($"merge {personId} {otherId}");
+    public Task<Sepiabox.Catalog.People.CurationOutcome> MergeAsync(long personId, long otherId, bool swap = false, CancellationToken cancellationToken = default) =>
+        Record($"merge {personId} {otherId}{(swap ? " swap" : string.Empty)}");
 
     public Task<Sepiabox.Catalog.People.CurationOutcome> NotThisPersonAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
         Record($"not-this-person {personId} {faceId}");
@@ -367,6 +367,38 @@ internal sealed class FakeFaceSettings : IFaceSettings
         Calls.Add($"delete {personId} {email}");
         return Task.FromResult(PersonFound);
     }
+
+    /// <summary>How many unnamed people with few faces the bulk action finds.</summary>
+    public int FewFaces { get; set; }
+
+    /// <summary>What the catalog answers to "ignore": nothing to ignore when false.</summary>
+    public bool CanIgnore { get; set; } = true;
+
+    public Task<bool> IgnoreFacesAsync(string assetId, long? faceId, string email, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"ignore-faces {assetId[..4]} {(faceId is { } id ? id.ToString(System.Globalization.CultureInfo.InvariantCulture) : "all")} {email}");
+        return Task.FromResult(CanIgnore);
+    }
+
+    public Task<bool> IgnorePersonAsync(long personId, string email, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"ignore-person {personId} {email}");
+        return Task.FromResult(CanIgnore);
+    }
+
+    public Task<int> CountUnnamedWithFewFacesAsync(CancellationToken cancellationToken = default) => Task.FromResult(FewFaces);
+
+    /// <summary>The crops the bulk confirmation shows (the first <c>take</c>).</summary>
+    public List<FaceCrop> FewFaceCrops { get; } = [];
+
+    public Task<FewFacesPreview> PreviewUnnamedWithFewFacesAsync(int take, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new FewFacesPreview(FewFaces, [.. FewFaceCrops.Take(take)]));
+
+    public Task<Sepiabox.Catalog.People.IgnoreResult> IgnoreUnnamedPeopleAsync(int expected, string email, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"ignore-many {expected} {email}");
+        return Task.FromResult(new Sepiabox.Catalog.People.IgnoreResult(expected * 2, expected, Refused: !CanIgnore));
+    }
 }
 
 internal sealed class FakeSavedPlaces : ISavedPlaces
@@ -483,5 +515,21 @@ internal sealed class FakeDrive : IDriveClient, IDriveAuthorization
     {
         TokensUsed.Add(refreshToken);
         return Failure?.Invoke() is { } failure ? Task.FromException<DriveMediaCount>(failure) : Task.FromResult(Media);
+    }
+
+    /// <summary>The content of each file by id, for "Open original" (S-038); a file not here is gone from the Drive.</summary>
+    public Dictionary<string, byte[]> Files { get; } = [];
+
+    public Task<DriveFileDownload?> OpenFileAsync(string refreshToken, string fileId, CancellationToken cancellationToken = default)
+    {
+        TokensUsed.Add(refreshToken);
+        if (Failure?.Invoke() is { } failure)
+        {
+            return Task.FromException<DriveFileDownload?>(failure);
+        }
+
+        return Task.FromResult<DriveFileDownload?>(Files.TryGetValue(fileId, out var bytes)
+            ? new DriveFileDownload(new MemoryStream(bytes), "Praia 2019.jpg", "image/jpeg", bytes.Length)
+            : null);
     }
 }

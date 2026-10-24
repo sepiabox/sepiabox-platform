@@ -1,0 +1,83 @@
+@page "/people/ignore"
+@inject IFaceSettings Faces
+@inject NavigationManager Navigation
+@* "Ignore the unnamed people with few faces" asks first (#107, D-117): strangers seen once or twice are deleted for good, only
+   while exactly the confirmed number of people match; named people are never touched. *@
+
+<PageTitle>@Text["IgnoreMany_Title"] · Sepiabox</PageTitle>
+
+<p class="back"><a href="people">@Text["Person_Back"]</a></p>
+<h1 class="page-heading">@Text["IgnoreMany_Title"]</h1>
+@if (Note == "IgnoreChanged")
+{
+    <p class="note" role="status">@Text["IgnoreMany_Changed"]</p>
+}
+
+@if (_count == 0)
+{
+    <p>@Text["IgnoreMany_None"]</p>
+}
+else
+{
+    <p>@(_count == 1 ? Text["IgnoreMany_One"] : Text["IgnoreMany_Other", _count])</p>
+    @* A strip of the faces that will be deleted, up to 24, then how many more. *@
+    <ul class="people ignore-crops">
+        @foreach (var crop in _crops)
+        {
+            <li class="person">
+                <span class="face"><img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" /></span>
+            </li>
+        }
+    </ul>
+    @if (_count > _crops.Count)
+    {
+        <p class="muted ignore-more">@Text["IgnoreMany_More", _count - _crops.Count]</p>
+    }
+    <p class="ignore-warning"><strong>@Text["Ignore_Irreversible"]</strong></p>
+    <ul class="ignore-effects">
+        <li>@Text["Ignore_Effect_Gone"]</li>
+        <li>@Text["Ignore_Effect_Named"]</li>
+    </ul>
+    <details class="ignore-cloud">
+        <summary>@Text["Ignore_Cloud_Summary"]</summary>
+        <p>@Text["Ignore_Cloud"]</p>
+    </details>
+    <form method="post" @formname="ignore-many" @onsubmit="ConfirmAsync" class="confirm">
+        <AntiforgeryToken />
+        <input type="hidden" name="Expected" value="@_count" />
+        <a href="people" class="button secondary" autofocus>@Text["Merge_Cancel"]</a>
+        <button type="submit" class="button danger">@Text["Ignore_Confirm"]</button>
+    </form>
+}
+
+@code {
+    [SupplyParameterFromForm(FormName = "ignore-many")]
+    public int? Expected { get; set; }
+
+    [SupplyParameterFromQuery(Name = PersonLinks.NoteParameter)]
+    public string? Note { get; set; }
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    private const int ShownCrops = 24;
+
+    private int _count;
+    private IReadOnlyList<FaceCrop> _crops = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var preview = await Faces.PreviewUnnamedWithFewFacesAsync(ShownCrops);
+        _count = preview.People;
+        _crops = preview.Crops;
+    }
+
+    private async Task ConfirmAsync()
+    {
+        var email = HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+        var result = email is not null && Expected is { } expected
+            ? await Faces.IgnoreUnnamedPeopleAsync(expected, email)
+            : new Sepiabox.Catalog.People.IgnoreResult(0, 0, Refused: true);
+        Navigation.NavigateTo(result.Refused ? $"people/ignore?{PersonLinks.NoteParameter}=IgnoreChanged" : $"people?{PersonLinks.NoteParameter}=ignored");
+    }
+}

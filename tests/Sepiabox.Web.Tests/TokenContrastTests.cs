@@ -14,8 +14,8 @@ public sealed partial class TokenContrastTests
     [
         ("text", "bg"), ("text", "surface"), ("text", "surface-2"),
         ("text-2", "bg"), ("text-2", "surface"), ("text-2", "surface-2"),
-        ("text-3", "bg"), ("text-3", "surface"),
-        ("accent", "bg"), ("accent", "surface"), ("accent", "accent-soft"), ("accent-hover", "surface"),
+        ("text-3", "bg"), ("text-3", "surface"), ("text-3", "surface-2"),
+        ("accent", "bg"), ("accent", "surface"), ("accent", "accent-soft"), ("accent-hover", "surface"), ("accent-hover", "accent-soft"),
         ("accent-contrast", "accent"), ("accent-contrast", "accent-hover"),
         ("brand-ink", "brand-soft"), ("brand", "surface"),
         ("danger", "surface"), ("danger", "bg"),

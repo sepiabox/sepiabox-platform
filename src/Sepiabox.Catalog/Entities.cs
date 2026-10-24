@@ -123,6 +123,12 @@ public sealed class AssetSource
 
     /// <summary>The original's address at its source (S-063), when the source gave one; <c>https://</c>.</summary>
     public string? Url { get; set; }
+
+    /// <summary>
+    /// When the sync of a cloud source found the file gone from its source (S-038, D-115): deleted, trashed or moved. The source is
+    /// kept (sources are only added to, D-032) and marked; the sync clears it when the file comes back.
+    /// </summary>
+    public DateTimeOffset? RemovedAt { get; set; }
 }
 
 /// <summary>A file generated for the web, stored in the <c>derivatives</c> container.</summary>
@@ -343,6 +349,9 @@ public static class FaceDataDeletionScopes
 
     /// <summary>"Delete face data" on one person: that person and their faces.</summary>
     public const string Person = "person";
+
+    /// <summary>Strangers' faces ignored (#107, D-117): <c>Faces</c> is how many faces, <c>People</c> how many people were removed.</summary>
+    public const string Ignore = "ignore";
 }
 
 /// <summary>
@@ -433,12 +442,76 @@ public sealed class ConnectedSource
     public int? VideoCount { get; set; }
 
     public DateTimeOffset? CountedAt { get; set; }
+
+    /// <summary>
+    /// The purpose the refresh token is protected under (S-037, D-097): the web protects it and the sync job unprotects it, both
+    /// with the same key ring, so both name this.
+    /// </summary>
+    public const string RefreshTokenPurpose = "Sepiabox.Web.ConnectedSources.RefreshToken.v1";
+
+    /// <summary>
+    /// Where the sync (S-038) is in the account's changes: the token the changes API goes on from. Set when the first scan begins,
+    /// before the listing, so what changes meanwhile is seen later. Null before the first sync.
+    /// </summary>
+    public string? SyncChangesToken { get; set; }
+
+    /// <summary>The page the first scan's listing goes on from; null at the start of a listing and once it is complete.</summary>
+    public string? SyncListToken { get; set; }
+
+    /// <summary>True while the first scan lists everything, a few files a run (<c>Sync:MaxFilesPerRun</c>).</summary>
+    public bool SyncListing { get; set; }
+}
+
+/// <summary>
+/// A file of a connected account that the sync has staged (S-038, D-115): its id in the cloud with the path it was given, so a file the
+/// changes API reports as removed (which comes with an id and nothing else) is found, and a file that has not changed is not staged again.
+/// </summary>
+public sealed class DriveFile
+{
+    public long ConnectedSourceId { get; set; }
+
+    /// <summary>The file's id in the cloud.</summary>
+    public required string FileId { get; set; }
+
+    /// <summary>The path of the source this file made: the folders and the name, with <c>/</c>.</summary>
+    public required string Path { get; set; }
+
+    /// <summary>The file's modification time in the cloud when it was staged.</summary>
+    public DateTimeOffset ModifiedAt { get; set; }
+
+    /// <summary>The cloud's checksum of the content, when it gives one.</summary>
+    public string? Checksum { get; set; }
+
+    /// <summary>
+    /// The file's size in bytes when it was staged. With the path and the modification time it tells apart two files of one name in one
+    /// folder (a Drive allows that), which the path alone cannot.
+    /// </summary>
+    public long? SizeBytes { get; set; }
 }
 
 /// <summary>The services a <see cref="ConnectedSource"/> can be.</summary>
 public static class ConnectedSourceTypes
 {
     public const string GoogleDrive = "google-drive";
+
+    /// <summary>
+    /// The name a cloud account's files have as a source (<c>asset_sources.name</c>, and so in the manifests, for good): the address and
+    /// the service, <c>ana@example.com (Google Drive)</c>, since one address may be connected to two services and would otherwise be one source.
+    /// </summary>
+    public static string SourceName(string type, string accountEmail) => $"{accountEmail} ({ServiceName(type)})";
+
+    /// <summary>The account address in a source name made by <see cref="SourceName"/> for that type; null when it is not one.</summary>
+    public static string? AccountOf(string type, string sourceName)
+    {
+        var suffix = $" ({ServiceName(type)})";
+        return sourceName.EndsWith(suffix, StringComparison.Ordinal) && sourceName.Length > suffix.Length ? sourceName[..^suffix.Length] : null;
+    }
+
+    private static string ServiceName(string type) => type switch
+    {
+        GoogleDrive => "Google Drive",
+        _ => type,
+    };
 }
 
 /// <summary>Whether a connection works.</summary>
