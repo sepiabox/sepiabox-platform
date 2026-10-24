@@ -127,6 +127,37 @@ public sealed class GoogleDrive(OAuthClient? client, HttpMessageHandler? handler
         return new DriveMediaCount(photos, videos);
     }
 
+    public async Task<DriveFileDownload?> OpenFileAsync(string refreshToken, string fileId, CancellationToken cancellationToken = default)
+    {
+        var drive = Service(refreshToken);
+        try
+        {
+            var info = drive.Files.Get(fileId);
+            info.Fields = "name,mimeType,size,trashed";
+            var file = await ExecuteAsync(() => info.ExecuteAsync(cancellationToken));
+            if (file.Trashed == true)
+            {
+                drive.Dispose();
+                return null;
+            }
+
+            var media = drive.Files.Get(fileId);
+            // The service stays alive with the stream: disposing the client would cut the content short.
+            var content = await ExecuteAsync(() => media.ExecuteAsStreamAsync(cancellationToken));
+            return new DriveFileDownload(content, file.Name ?? "original", file.MimeType ?? "application/octet-stream", file.Size, drive);
+        }
+        catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            drive.Dispose();
+            return null;
+        }
+        catch
+        {
+            drive.Dispose();
+            throw;
+        }
+    }
+
     private GoogleAuthorizationCodeFlow Flow()
     {
         var oauth = client ?? throw new InvalidOperationException("Auth:Google is not configured.");

@@ -45,6 +45,11 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
                 // The faces job rewrites manifests, and nothing else in storage (S-022).
                 "faces-identity: Storage Blob Data Contributor on containers manifests",
                 // The process job (S-036) reads and deletes incoming, copies originals, writes derivatives and manifests: those four containers.
+                // The sync job stages Drive files in incoming and reads the token ring with the key that wraps it (S-038, D-115): nothing on
+                // the cookie ring, and no role on the owner's vault (scripts/deploy.sh assigns one on each of two secrets).
+                "sync-identity: Key Vault Crypto User on keys tokenring",
+                "sync-identity: Storage Blob Data Contributor on containers incoming",
+                "sync-identity: Storage Blob Data Reader on containers tokenring",
                 "process-identity: Storage Blob Data Contributor on containers derivatives",
                 "process-identity: Storage Blob Data Contributor on containers incoming",
                 "process-identity: Storage Blob Data Contributor on containers manifests",
@@ -63,8 +68,10 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
                 "storageEvents.identity.principalId: Azure Service Bus Data Sender on queues incoming",
                 // The web reads blobs, writes only the key ring, reads the owner's secrets and uses one key.
                 "web-identity: Key Vault Crypto User on keys dataprotection",
+                "web-identity: Key Vault Crypto User on keys tokenring",
                 "web-identity: Key Vault Secrets User on vaults vault",
                 "web-identity: Storage Blob Data Contributor on containers dataprotection",
+                "web-identity: Storage Blob Data Contributor on containers tokenring",
                 "web-identity: Storage Blob Data Reader on storageAccounts storage",
             }.Order(StringComparer.Ordinal),
             assignments);
@@ -99,9 +106,13 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
         var webEnvironment = Environment("web");
         var jobKeys = new[] { "migrate", "import", "import-all", "geonames", "faces", "process", "admin", "export" }.SelectMany(job => Environment(job).Keys).ToList();
 
-        // Key Vault is the web's configuration source: Auth--Google--ClientId is Auth:Google:ClientId (D-051).
+        // Key Vault is the web's configuration source: Auth--Google--ClientId is Auth:Google:ClientId (D-051). The sync job knows the vault's
+        // address, to read the two secrets of the same OAuth client (S-038, D-115), but has no role on the vault itself (see the role
+        // list); no other job sees the vault.
         Assert.Equal("{vault.connectionString}", webEnvironment["ConnectionStrings__vault"]);
+        Assert.Equal("{vault.outputs.vaultUri}", Environment("sync")["ConnectionStrings__vault"]);
         Assert.DoesNotContain("ConnectionStrings__vault", jobKeys);
+        jobKeys.AddRange(Environment("sync").Keys);
         string[] ownerSecrets = ["Auth__", "Access__", "Anthropic__"];
         Assert.DoesNotContain(
             webEnvironment.Keys.Concat(jobKeys),
@@ -131,15 +142,22 @@ public sealed partial class AzureAccessTests(PublishedInfrastructure published) 
     public void Web_has_exactly_one_data_protection_key_ring_when_published()
     {
         var web = published.The("Microsoft.App/containerApps");
-        var key = published.The("Microsoft.KeyVault/vaults/keys");
+        // Two rings, each with a key of its own (D-062, D-115): the cookies' ring, and the ring that protects the cloud accounts' tokens, which
+        // the sync job reads and so must not be able to sign a session.
+        var keys = published.Declarations("Microsoft.KeyVault/vaults/keys").ToList();
+        Assert.Equal(["'dataprotection'", "'tokenring'"], keys.Select(k => k.Property("name")).Order(StringComparer.Ordinal));
 
         // Container Apps' managed data protection is off; the web's own ring in Blob Storage is on (D-062).
         Assert.Contains("autoConfigureDataProtection: false", web.Block("runtime"), StringComparison.Ordinal);
         Assert.Equal("{access.outputs.dataProtectionKeyUri}", Environment("web")["DataProtection__KeyUri"]);
-        Assert.Equal("'dataprotection'", key.Property("name"));
-        Assert.Equal("'RSA'", key.Property("kty"));
-        Assert.Matches(@"keyOps: \[\s+'wrapKey'\s+'unwrapKey'\s+\]", key.Body);
+        Assert.Equal("{access.outputs.tokenRingKeyUri}", Environment("web")["DataProtection__TokenKeyUri"]);
+        Assert.All(keys, key =>
+        {
+            Assert.Equal("'RSA'", key.Property("kty"));
+            Assert.Matches(@"keyOps: \[\s+'wrapKey'\s+'unwrapKey'\s+\]", key.Body);
+        });
         Assert.Contains("dataprotection", AzureInfrastructure.BlobContainers);
+        Assert.Contains("tokenring", AzureInfrastructure.BlobContainers);
     }
 
     [Fact]

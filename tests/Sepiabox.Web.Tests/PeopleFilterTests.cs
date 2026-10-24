@@ -146,7 +146,7 @@ public sealed class PeopleFilterPageTests : LocalizedContext
 
         var page = Render<PhotoDetail>(p => p.Add(d => d.Id, asset.Id));
 
-        var links = page.FindAll(".people-card .faces a");
+        var links = page.FindAll(".people-card .faces a.face");
         Assert.Equal(["Ana", "Add a name"], links.Select(a => a.QuerySelector(".name")!.TextContent));
         var ana = SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { People = new PeopleFilter { All = ["Ana"] } } });
         Assert.Equal([ana, "people/9"], links.Select(a => a.GetAttribute("href")));
