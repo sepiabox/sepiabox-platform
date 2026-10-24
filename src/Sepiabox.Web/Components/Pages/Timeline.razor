@@ -191,6 +191,9 @@ else
     [SupplyParameterFromQuery(Name = "source")]
     public string? Source { get; set; }
 
+    [SupplyParameterFromQuery(Name = "album")]
+    public string? Album { get; set; }
+
     [SupplyParameterFromQuery(Name = "text")]
     public string? Description { get; set; }
 
@@ -317,7 +320,7 @@ else
         {
             // One address per set of filters, so the URL can be copied and opened again.
             Navigation.NavigateTo(SearchLinks.Timeline(
-                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit, EventIds, SourceEq, SourceGte, RegionAsset, RegionBox, RegionLimit, Blurry, IncludeHidden)));
+                SearchLinks.FromFields(Year, Month, Kind, City, Source, Description, People, Me == "1", SavedPlaces, Similar, SimilarLimit, EventIds, SourceEq, SourceGte, RegionAsset, RegionBox, RegionLimit, Blurry, IncludeHidden, Album)));
             return;
         }
 

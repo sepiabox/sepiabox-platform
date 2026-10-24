@@ -24,6 +24,18 @@ public sealed class SasUrlFactoryTests
     }
 
     [Fact]
+    public async Task Export_link_is_for_the_exports_container_lasts_one_hour_and_names_the_zip()
+    {
+        var store = new RecordingStore();
+
+        await new SasUrlFactory(store, new FixedTime(s_now)).ForExportAsync("2026-10-19-1.zip", "sepiabox-export-2026-10-19.zip");
+
+        var signed = Assert.Single(store.Signed);
+        Assert.Equal(("exports", "2026-10-19-1.zip", s_now.AddHours(1)), (signed.Container, signed.Name, signed.ExpiresOn));
+        Assert.Equal(new BlobReadUrlOptions("sepiabox-export-2026-10-19.zip", "application/zip"), signed.Options);
+    }
+
+    [Fact]
     public async Task Derivative_links_signed_in_the_same_window_are_identical()
     {
         var store = new RecordingStore();

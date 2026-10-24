@@ -223,6 +223,109 @@ public sealed class PhotoDetailTests : LocalizedContext
         Assert.Equal("Parecidas", page.Find("p.similar a").TextContent);
     }
 
+    [Fact]
+    public void Shows_the_caption_as_written_and_each_album_linking_to_the_albums_filter()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Caption = "Praia <b>de</b> Matosinhos\nCom a avó", Albums = ["Verão 2019", "Wedding"] });
+
+        var caption = page.Find("dd.caption");
+        Assert.Equal("Praia <b>de</b> Matosinhos\nCom a avó", caption.TextContent);
+        Assert.Empty(caption.QuerySelectorAll("b"));
+        Assert.Equal("Caption", Assert.Single(page.FindAll("dl dt"), d => d.TextContent == "Caption").TextContent);
+        Assert.Contains("Albums", page.FindAll("h2").Select(h => h.TextContent));
+        var links = page.FindAll("ul.photo-albums a");
+        Assert.Equal(["Verão 2019", "Wedding"], links.Select(l => l.TextContent));
+        var first = SearchLinks.Timeline(new Sepiabox.Catalog.Search.SearchQuery { Filters = new Sepiabox.Catalog.Search.SearchFilters { Albums = ["Verão 2019"] } });
+        Assert.Equal(first, links[0].GetAttribute("href"));
+        Assert.StartsWith("./?q=", first, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Shows_the_caption_and_albums_with_brazilian_portuguese_labels()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Caption = "Férias na praia", Albums = ["Verão 2019"] });
+
+        Assert.Contains(page.FindAll("dl dt"), d => d.TextContent == "Legenda");
+        Assert.Equal("Férias na praia", page.Find("dd.caption").TextContent);
+        Assert.Contains("Álbuns", page.FindAll("h2").Select(h => h.TextContent));
+        Assert.Equal("Verão 2019", page.Find("ul.photo-albums a").TextContent);
+    }
+
+    [Fact]
+    public void Shows_the_first_five_albums_and_folds_the_rest_away()
+    {
+        var albums = Enumerable.Range(1, 12).Select(n => $"Album {n:00}").ToList();
+
+        var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Albums = albums });
+
+        Assert.Equal(albums.Take(5), page.FindAll("section.facts > ul.photo-albums a").Select(a => a.TextContent));
+        Assert.Equal("7 more albums", page.Find("details.more-albums summary").TextContent);
+        Assert.Equal(albums.Skip(5), page.FindAll("details.more-albums a").Select(a => a.TextContent));
+    }
+
+    [Fact]
+    public void Says_one_more_album_in_the_singular_in_both_languages()
+    {
+        var albums = Enumerable.Range(1, 6).Select(n => $"Album {n}").ToList();
+        Assert.Equal("1 more album", RenderDetail(Details.Photo(Ids.Of(1)) with { Albums = albums }).Find("details.more-albums summary").TextContent);
+    }
+
+    [Fact]
+    public void Says_one_more_album_in_the_singular_in_brazilian_portuguese()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+        var albums = Enumerable.Range(1, 6).Select(n => $"Álbum {n}").ToList();
+
+        Assert.Equal("Mais 1 álbum", RenderDetail(Details.Photo(Ids.Of(1)) with { Albums = albums }).Find("details.more-albums summary").TextContent);
+    }
+
+    [Fact]
+    public void Folds_nothing_away_for_five_albums()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(2)) with { Albums = [.. Enumerable.Range(1, 5).Select(n => $"Album {n}")] });
+
+        Assert.Equal(5, page.FindAll("ul.photo-albums a").Count);
+        Assert.Empty(page.FindAll("details.more-albums"));
+    }
+
+    [Fact]
+    public void Says_the_date_is_from_the_export_for_an_export_date()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(1), new DateTime(2019, 7, 14)) with { CapturedAtSource = "export" });
+
+        Assert.Equal("Export", page.FindAll("dl dt").Single(d => d.TextContent == "Date source").NextElementSibling!.TextContent);
+    }
+
+    [Fact]
+    public void Says_nothing_about_the_date_s_source_when_it_is_the_cameras()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(2), new DateTime(2019, 7, 14)) with { CapturedAtSource = "metadata" });
+
+        Assert.DoesNotContain(page.FindAll("dl dt"), d => d.TextContent == "Date source");
+    }
+
+    [Fact]
+    public void Says_the_date_is_from_the_export_in_brazilian_portuguese()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var page = RenderDetail(Details.Photo(Ids.Of(3), new DateTime(2019, 7, 14)) with { CapturedAtSource = "export" });
+
+        Assert.Equal("Exportação", page.FindAll("dl dt").Single(d => d.TextContent == "Origem da data").NextElementSibling!.TextContent);
+    }
+
+    [Fact]
+    public void Shows_no_caption_and_no_albums_for_a_photo_without_them()
+    {
+        var page = RenderDetail(Details.Photo(Ids.Of(1)));
+
+        Assert.Empty(page.FindAll("dd.caption"));
+        Assert.Empty(page.FindAll("ul.photo-albums"));
+        Assert.DoesNotContain("Albums", page.FindAll("h2").Select(h => h.TextContent));
+    }
+
     private IRenderedComponent<PhotoDetail> RenderDetail(AssetDetail asset, int? pageNumber = null, string? query = null)
     {
         var library = new FakeLibrary();

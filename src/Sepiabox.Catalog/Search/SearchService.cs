@@ -564,6 +564,12 @@ public sealed class SearchService(
                 && db.Occasions.Any(o => o.Id == l.EventId && o.Type != null && eventTypes.Contains(o.Type))));
         }
 
+        if (filters.Albums is { } albums)
+        {
+            var lowered = albums.Select(a => a.ToLowerInvariant()).ToList();
+            assets = assets.Where(a => db.AssetAlbums.Any(l => l.AssetId == a.Id && lowered.Contains(l.Name.ToLower())));
+        }
+
         if (filters.EventIds is { } eventIds)
         {
             assets = assets.Where(a => db.OccasionAssets.Any(l => l.AssetId == a.Id && eventIds.Contains(l.EventId)));

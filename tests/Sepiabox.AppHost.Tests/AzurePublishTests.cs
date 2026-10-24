@@ -92,16 +92,31 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
     }
 
     [Fact]
-    public void Storage_deletes_blobs_left_in_incoming_after_thirty_days_and_nothing_else_when_published()
+    public void Storage_has_one_lifecycle_policy_with_a_rule_for_incoming_after_thirty_days_and_one_for_exports_after_seven_when_published()
     {
-        var policy = published.The("Microsoft.Storage/storageAccounts/managementPolicies");
+        // One policy per account, always named default: a second resource would replace the first, so every story's rule is in this one.
+        var policy = Assert.Single(published.Declarations("Microsoft.Storage/storageAccounts/managementPolicies"));
 
         Assert.Equal("'default'", policy.Property("name"));
         Assert.Contains("'incoming/'", policy.Body, StringComparison.Ordinal);
+        Assert.Contains("'exports/'", policy.Body, StringComparison.Ordinal);
         Assert.DoesNotContain("'originals/'", policy.Body, StringComparison.Ordinal);
         Assert.Contains("daysAfterModificationGreaterThan: 30", policy.Body, StringComparison.Ordinal);
-        Assert.Single(System.Text.RegularExpressions.Regex.Matches(policy.Body, "delete:"));
+        Assert.Contains("daysAfterModificationGreaterThan: 7", policy.Body, StringComparison.Ordinal);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Count(policy.Body, "delete:"));
         Assert.Equal(30, AzureInfrastructure.IncomingRetentionDays);
+        Assert.Equal(7, AzureInfrastructure.ExportRetentionDays);
+    }
+
+    [Fact]
+    public void Storage_has_exactly_one_lifecycle_policy_and_it_keeps_the_incoming_rule_when_published()
+    {
+        // A second `managementPolicies` resource on the account replaces the first (one policy per account, always named default), so the
+        // rules of every story (incoming, S-036; others) must be in the one.
+        var policies = published.Declarations("Microsoft.Storage/storageAccounts/managementPolicies");
+
+        var policy = Assert.Single(policies);
+        Assert.Contains("'incoming/'", policy.Body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -113,7 +128,7 @@ public sealed class AzurePublishTests(PublishedInfrastructure published) : IClas
         Assert.Equal("false", account.Property("allowBlobPublicAccess"));
         Assert.Equal("'francecentral'", account.Property("location"));
         Assert.Equal(
-            ["dataprotection", "derivatives", "exports", "incoming", "manifests", "originals"],
+            ["dataprotection", "derivatives", "exports", "incoming", "manifests", "originals", "tokenring"],
             containers.Select(c => c.Property("name")!.Trim('\'')).Order(StringComparer.Ordinal));
         Assert.All(containers, c => Assert.Equal("'None'", c.Property("publicAccess")));
     }

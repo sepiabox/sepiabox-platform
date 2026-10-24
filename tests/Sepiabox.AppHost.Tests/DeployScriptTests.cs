@@ -18,9 +18,11 @@ public sealed class DeployScriptTests : IDisposable
     private const string DeployWeb = "azd deploy web --no-prompt";
     private const string DeployImport = "azd deploy import --no-prompt";
     private const string DeployImportAll = "azd deploy import-all --no-prompt";
+    private const string DeployExport = "azd deploy export --no-prompt";
     private const string DeployGeoNames = "azd deploy geonames --no-prompt";
     private const string DeployFaces = "azd deploy faces --no-prompt";
     private const string DeployProcess = "azd deploy process --no-prompt";
+    private const string DeploySync = "azd deploy sync --no-prompt";
     private const string PauseQueue =
         $"az servicebus queue update --resource-group {ShutdownRunbook.ResourceGroup} --namespace-name {ShutdownRunbook.ServiceBusNamespace} --name {ShutdownRunbook.Queue} --status ReceiveDisabled --output none";
     private const string ResumeQueue =
@@ -75,6 +77,17 @@ public sealed class DeployScriptTests : IDisposable
                 AZURE_ENV_NAME) echo "$STUB_ENV_NAME" ;;
                 AZURE_LOCATION) echo "$STUB_LOCATION" ;;
                 AZURE_CONTAINER_REGISTRY_ENDPOINT) echo "sepiaboxacr.azurecr.io" ;;
+                VAULT_VAULTURI|SYNC_IDENTITY_ID)
+                  if [ "$STUB_NO_OUTPUTS" = "1" ]; then
+                    echo "ERROR: key '$3' not found in the environment values" >&2
+                    exit 1
+                  fi
+                  # The forms azd writes for the AppHost's outputs: a vault's URI and an identity's resource id.
+                  if [ "$3" = "VAULT_VAULTURI" ]; then
+                    echo "https://sepiabox-kv.vault.azure.net/"
+                  else
+                    echo "/subscriptions/s/resourceGroups/rg-sepiabox/providers/Microsoft.ManagedIdentity/userAssignedIdentities/sync-identity-x"
+                  fi ;;
                 AZURE_RESOURCE_GROUP)
                   if [ -z "$STUB_RESOURCE_GROUP" ]; then
                     echo "ERROR: key not found" >&2
@@ -101,6 +114,19 @@ public sealed class DeployScriptTests : IDisposable
                   exit 1
                 fi
                 if [ "$STUB_PG_STATE" != "MISSING" ]; then echo "$STUB_PG_STATE"; fi ;;
+              "identity show --ids /subscriptions/s/resourceGroups/rg-sepiabox/providers/Microsoft.ManagedIdentity/userAssignedIdentities/sync-identity-x --query principalId"*)
+                echo "00000000-0000-0000-0000-0000000000aa" ;;
+              "keyvault show --name sepiabox-kv "*) echo "/subscriptions/s/resourceGroups/rg-sepiabox/providers/Microsoft.KeyVault/vaults/sepiabox-kv" ;;
+              "keyvault secret show"*)
+                # The owner has not set the client secret yet.
+                if [ "$STUB_SECRETS" = "MISSING" ] && echo "$*" | grep -q -- "--name Auth--Google--ClientSecret"; then
+                  echo "(SecretNotFound) A secret with (name/id) Auth--Google--ClientSecret was not found in this key vault." >&2
+                  exit 1
+                fi
+                if [ "$STUB_SECRETS" = "FORBIDDEN" ]; then
+                  echo "(Forbidden) Caller is not authorized to perform action on resource." >&2
+                  exit 1
+                fi ;;
               "containerapp job start"*) echo "$STUB_EXECUTION" ;;
               "containerapp hostname list"*)
                 if [ "$STUB_HOSTNAMES" = "FAIL" ]; then exit 1; fi
@@ -173,6 +199,10 @@ public sealed class DeployScriptTests : IDisposable
                 DeployFaces,
                 // The event-driven process job (S-036), from its own Dockerfile.
                 DeployProcess,
+                // The scheduled Drive sync (S-038) after the job that processes what it stages.
+                DeploySync,
+                // The scheduled export job (S-040) too.
+                DeployExport,
                 // The manual GeoNames job runs the new image too (S-059), before the queue receives again.
                 DeployGeoNames,
                 ResumeQueue,
@@ -180,11 +210,73 @@ public sealed class DeployScriptTests : IDisposable
             ],
             Calls().Where(call => !call.StartsWith("azd env", StringComparison.Ordinal)
                 && !call.StartsWith("az group", StringComparison.Ordinal)
+                && !call.StartsWith("az identity", StringComparison.Ordinal)
+                && !call.StartsWith("az keyvault", StringComparison.Ordinal)
+                && !call.StartsWith("az role assignment", StringComparison.Ordinal)
                 && !call.StartsWith("az postgres", StringComparison.Ordinal)));
         // What azure.yaml's predeploy hook checks, so that only this script deploys.
-        Assert.Equal(["1", "1", "1", "1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
+        Assert.Equal(["1", "1", "1", "1", "1", "1", "1", "1", "1"], File.ReadAllLines(_calls + ".guard"));
         Assert.Equal($"web sepiaboxacr.azurecr.io/sepiabox-web-models:{ModelsTag()}", File.ReadAllLines(_calls + ".base")[^1]);
         Assert.Contains("Migrations applied.", result.Output, StringComparison.Ordinal);
+    }
+
+    [UnixFact]
+    public async Task Deploy_gives_the_sync_job_a_role_on_each_google_secret_and_on_nothing_else_in_the_vault()
+    {
+        var result = await RunDeployAsync("Succeeded");
+
+        Assert.Equal(0, result.ExitCode);
+        var vault = "/subscriptions/s/resourceGroups/rg-sepiabox/providers/Microsoft.KeyVault/vaults/sepiabox-kv";
+        var assignments = Calls().Where(call => call.StartsWith("az role assignment create", StringComparison.Ordinal)).ToList();
+        Assert.Equal(
+            [
+                $"az role assignment create --assignee-object-id 00000000-0000-0000-0000-0000000000aa --assignee-principal-type ServicePrincipal --role Key Vault Secrets User --scope {vault}/secrets/Auth--Google--ClientId --output none",
+                $"az role assignment create --assignee-object-id 00000000-0000-0000-0000-0000000000aa --assignee-principal-type ServicePrincipal --role Key Vault Secrets User --scope {vault}/secrets/Auth--Google--ClientSecret --output none",
+            ],
+            assignments);
+        // The secrets exist already, so nothing is written to the owner's vault.
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("az keyvault secret set", StringComparison.Ordinal));
+        // Before the sync job is deployed, so the job never starts without its roles.
+        var calls = Calls().ToList();
+        Assert.True(calls.FindLastIndex(c => c.StartsWith("az role assignment", StringComparison.Ordinal)) < calls.IndexOf(DeploySync));
+    }
+
+    [UnixFact]
+    public async Task Deploy_never_creates_a_secret_and_gives_a_role_only_on_the_ones_that_exist_saying_so_for_the_rest()
+    {
+        var result = await RunDeployAsync("Succeeded", extra: new() { ["STUB_SECRETS"] = "MISSING" });
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("az keyvault secret set", StringComparison.Ordinal));
+        var assignments = Calls().Where(call => call.StartsWith("az role assignment create", StringComparison.Ordinal)).ToList();
+        Assert.Single(assignments);
+        Assert.Contains("/secrets/Auth--Google--ClientId", assignments[0], StringComparison.Ordinal);
+        Assert.Contains("Auth--Google--ClientSecret is not set yet; run deploy again after setting it.", result.Output, StringComparison.Ordinal);
+        // The deploy goes on: a secret that is not set yet does not stop it.
+        Assert.Contains(DeploySync, Calls());
+    }
+
+    [UnixFact]
+    public async Task Deploy_says_the_identity_cannot_read_the_vault_when_that_is_why_a_secret_could_not_be_checked()
+    {
+        var result = await RunDeployAsync("Succeeded", extra: new() { ["STUB_SECRETS"] = "FORBIDDEN" });
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("This identity cannot read the vault's secrets", result.Output, StringComparison.Ordinal);
+        Assert.Contains("az role assignment create --assignee-object-id 00000000-0000-0000-0000-0000000000aa", result.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("is not set yet", result.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("az role assignment create", StringComparison.Ordinal));
+        Assert.Contains(DeploySync, Calls());
+    }
+
+    [UnixFact]
+    public async Task Deploy_stops_with_a_message_when_the_azd_environment_lacks_the_vault_or_the_sync_identity()
+    {
+        var result = await RunDeployAsync("Succeeded", extra: new() { ["STUB_NO_OUTPUTS"] = "1" });
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("VAULT_VAULTURI or SYNC_IDENTITY_ID", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(Calls(), call => call.StartsWith("azd deploy", StringComparison.Ordinal));
     }
 
     [UnixTheory]
@@ -632,6 +724,8 @@ public sealed class DeployScriptTests : IDisposable
             ["STUB_CONFIG"] = config,
             ["STUB_DOTENV"] = dotenv,
             ["STUB_HOSTNAMES"] = hostnames,
+            ["STUB_SECRETS"] = "PRESENT",
+            ["STUB_NO_OUTPUTS"] = "0",
             ["STUB_EXECUTION"] = execution,
             ["STUB_STOP"] = stop,
             ["STUB_FAILING_DEPLOY"] = failingDeploy,

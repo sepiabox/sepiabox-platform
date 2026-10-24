@@ -57,14 +57,17 @@ builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 builder.Services.AddScoped<ILibraryQueries, LibraryQueries>();
 builder.Services.AddScoped<IPeopleEditor, PeopleEditor>();
 builder.Services.AddScoped<IFaceSettings, FaceSettings>();
+builder.Services.AddScoped<IExportRequests, ExportRequests>();
 builder.Services.AddScoped<ISavedPlaces, SavedPlaces>();
 builder.Services.AddScoped<IOrganization, Organization>();
 // Connected cloud accounts (S-037, D-097): Google Drive with the sign-in's OAuth client; tokens protected by Data Protection.
 builder.Services.AddSingleton(services => new GoogleDrive(services.GetRequiredService<SignInProviders>().Google));
 builder.Services.AddSingleton<IDriveClient>(services => services.GetRequiredService<GoogleDrive>());
 builder.Services.AddSingleton<IDriveAuthorization>(services => services.GetRequiredService<GoogleDrive>());
-builder.Services.AddSingleton<DriveTokenProtector>();
+builder.Services.AddSingleton(services => new DriveTokenProtector(
+    AzureSetup.TokenProtectionProvider(services, services.GetRequiredService<IConfiguration>())));
 builder.Services.AddScoped<IConnectedSources, ConnectedSources>();
+builder.Services.AddScoped<IDriveOriginals, DriveOriginals>();
 // Questions (S-025): Claude through the project's own interface (D-051), with a daily limit per person.
 builder.Services.AddSingleton<IQuestionTranslator, ConfiguredQuestionTranslator>();
 builder.Services.AddSingleton<IQuestionQuota, CatalogQuestionQuota>();
@@ -116,8 +119,10 @@ app.MapStaticAssets().AllowAnonymous();
 app.MapSepiaboxAuth();
 app.MapLanguageSwitch();
 app.MapMediaEndpoints();
+app.MapExportEndpoints();
 app.MapSearchEndpoints();
 app.MapSourceEndpoints();
+app.MapDriveOriginalEndpoint();
 app.MapQuestionEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

@@ -19,6 +19,9 @@ public interface ISasUrlFactory
 
     /// <summary>The original in the <c>originals</c> container, downloaded under its source file name.</summary>
     Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default);
+
+    /// <summary>A finished export's zip in the <c>exports</c> container, downloaded as <paramref name="fileName"/> (S-040).</summary>
+    Task<Uri> ForExportAsync(string blobName, string fileName, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -51,6 +54,9 @@ public sealed class SasUrlFactory(IBlobStore store, TimeProvider time) : ISasUrl
 
     public static readonly TimeSpan OriginalLifetime = TimeSpan.FromMinutes(5);
 
+    /// <summary>An export's download link works for an hour (S-040): long enough for a large zip on a slow line.</summary>
+    public static readonly TimeSpan ExportLifetime = TimeSpan.FromHours(1);
+
     public Task<Uri> ForDerivativeAsync(string blobPath, CancellationToken cancellationToken = default) =>
         store.CreateReadUrlAsync(BlobLayout.DerivativesContainer, blobPath, SigningWindowStart() + DerivativeLifetime, null, cancellationToken);
 
@@ -61,6 +67,10 @@ public sealed class SasUrlFactory(IBlobStore store, TimeProvider time) : ISasUrl
     public Task<Uri> ForOriginalAsync(string assetId, OriginalFile file, CancellationToken cancellationToken = default) =>
         store.CreateReadUrlAsync(
             BlobLayout.OriginalsContainer, assetId, time.GetUtcNow() + OriginalLifetime, new BlobReadUrlOptions(file.FileName, file.ContentType), cancellationToken);
+
+    public Task<Uri> ForExportAsync(string blobName, string fileName, CancellationToken cancellationToken = default) =>
+        store.CreateReadUrlAsync(
+            "exports", blobName, time.GetUtcNow() + ExportLifetime, new BlobReadUrlOptions(fileName, "application/zip"), cancellationToken);
 
     // Links signed in the same window are identical, so the browser cache can reuse them.
     private DateTimeOffset SigningWindowStart()

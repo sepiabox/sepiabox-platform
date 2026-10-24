@@ -108,6 +108,21 @@
         </select>
     </label>
 
+    @if (Albums.Any())
+    {
+        @* The albums exports put photos in (S-052): shown only when the catalog has some. *@
+        <label>
+            <span>@Text["Filter_Album"]</span>
+            <select name="album">
+                <option value="">@Text["Filter_Any"]</option>
+                @foreach (var album in Albums)
+                {
+                    <option value="@album" selected="@(string.Equals(Fields.Album, album, StringComparison.OrdinalIgnoreCase))">@album</option>
+                }
+            </select>
+        </label>
+    }
+
     @if (SavedPlaces.Any())
     {
         @* The family's places (S-014): taken in any of them. *@
@@ -184,6 +199,8 @@
     private IEnumerable<string> Cities => With(Options.Cities, Fields.City);
 
     private IEnumerable<string> Sources => With(Options.Sources, Fields.Source);
+
+    private IEnumerable<string> Albums => With(Options.Albums, Fields.Album).Order(StringComparer.CurrentCultureIgnoreCase);
 
     private IEnumerable<string> People => Fields.People.Aggregate((IEnumerable<string>)Options.People, (all, name) => With([.. all], name));
 

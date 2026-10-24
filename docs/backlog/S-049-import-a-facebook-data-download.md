@@ -18,10 +18,10 @@ Facebook's API does not expose a person's own photo archive, so photos and video
 - Photos of the family uploaded by other people (not in the download), Messenger media, tags of people.
 
 ### Acceptance criteria
-- [ ] Given a synthetic `album/0.json` named "Viagem a Paris" with one photo with `taken_timestamp`, then its manifest has that date (`capturedAtSource: export`), the album "Viagem a Paris" and "Facebook".
-- [ ] Given a photo without `taken_timestamp`, then `creation_timestamp` is the date.
-- [ ] Given a photo in an album and in a post, then its manifest has the album and the post's text as the caption when the media has no description.
-- [ ] Given both layouts (with and without the `your_facebook_activity/` prefix), then the same manifests are written.
+- [x] Given a synthetic `album/0.json` named "Viagem a Paris" with one photo with `taken_timestamp`, then its manifest has that date (`capturedAtSource: export`), the album "Viagem a Paris" and "Facebook".
+- [x] Given a photo without `taken_timestamp`, then `creation_timestamp` is the date.
+- [x] Given a photo in an album and in a post, then its manifest has the album and the post's text as the caption when the media has no description.
+- [x] Given both layouts (with and without the `your_facebook_activity/` prefix), then the same manifests are written.
 
 ### Technical notes
 - **Format confirmation first:** confirm the paths and fields against a small real download the owner provides before writing the reader, and record them in the PR. Fixtures stay synthetic, never real personal data.
@@ -31,3 +31,6 @@ Facebook's API does not expose a person's own photo archive, so photos and video
 ### Expected tests
 - Unit: album and post parsing, date and caption choice.
 - Integration: `process --export facebook` over a generated download.
+
+### Status
+- `doing` (2026-10-22): implemented against the Facebook layout and fields as believed (D-112), with synthetic fixtures and S-048's `MetaExport`; no source has a `url`. **The real-download confirmation the story asks for first has not been done** (no download was available): it is the owner check in `docs/operations.md`, and the story is not `done` until it passes or the owner waives it (D-054).

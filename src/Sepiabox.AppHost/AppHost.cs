@@ -94,8 +94,14 @@ else
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
     var importIdentity = builder.AddAzureUserAssignedIdentity("import-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    // The export job writes the exports container (S-040) and signs links to the originals.
+    var exportIdentity = builder.AddAzureUserAssignedIdentity("export-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
     // The faces job writes manifests (S-022): its own identity, so the import jobs stay readers.
     var facesIdentity = builder.AddAzureUserAssignedIdentity("faces-identity")
+        .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
+    // The sync job stages files in incoming and unprotects the refresh tokens the web protected (S-038): its own identity.
+    var syncIdentity = builder.AddAzureUserAssignedIdentity("sync-identity")
         .ConfigureInfrastructure(AzureInfrastructure.ConfigureIdentity);
     // The process job writes derivatives, originals and manifests and empties incoming (S-036): its own identity.
     var processIdentity = builder.AddAzureUserAssignedIdentity("process-identity")
@@ -189,6 +195,18 @@ else
         .WithRoleAssignments(storage, [])
         .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureFacesJob);
 
+    // Writes the exports people ask for (S-040, D-110), every 15 minutes. It connects as the application role. Its account-wide
+    // Storage Blob Delegator lets it ask for a user delegation key, with which it signs the 24 h links to the originals; its
+    // Data Reader role on the originals container and its Contributor role on the exports container are in access.bicep.
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.ExportResourceName)
+        .WithArgs("export")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(blobs)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithAzureUserAssignedIdentity(exportIdentity)
+        .WithRoleAssignments(storage, StorageBuiltInRole.StorageBlobDelegator)
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureExportJob);
+
     // Files that arrive in `incoming` from a cloud source (S-036, D-107): processed by the worker from the Dockerfile that
     // gives it FFmpeg and the models, an event-driven job like the import. Its storage roles are on the four containers
     // it touches, in access.bicep; it connects to the catalog as the application role (it only reads the face setting).
@@ -240,9 +258,29 @@ else
         .WithParameter("vaultName", vault.GetOutput("name"))
         .WithParameter("webPrincipalId", webIdentity.Resource.PrincipalId)
         .WithParameter("facesPrincipalId", facesIdentity.Resource.PrincipalId)
+        .WithParameter("exportPrincipalId", exportIdentity.Resource.PrincipalId)
         .WithParameter("processPrincipalId", processIdentity.Resource.PrincipalId)
+        .WithParameter("syncPrincipalId", syncIdentity.Resource.PrincipalId)
         .WithParameter("adminPrincipalId", adminIdentity.Resource.PrincipalId)
         .WithParameter("uploaderPrincipalIds", uploaders);
+
+    // Syncs the connected Google Drives into `incoming` every day (S-038, D-115). It connects as the application role, reads the
+    // Google OAuth client from the owner's Key Vault (two secrets, the same as the web's sign-in, and no other: its role on each is
+    // assigned by scripts/deploy.sh, and it loads only those two) and the token ring, read-only, to unprotect the refresh tokens;
+    // its storage roles (write incoming, read the token ring) and its use of the ring's key are in access.bicep.
+    builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.SyncResourceName)
+        .WithArgs("sync", "google-drive")
+        .WithReferenceEnvironment(ConnectionStringsOnly)
+        .WithReference(blobs)
+        // The vault's address only: a reference would also give the identity a role on the whole vault (see scripts/deploy.sh).
+        .WithEnvironment("ConnectionStrings__vault", vault.Resource.ConnectionStringExpression)
+        .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
+        .WithEnvironment("DataProtection__TokenKeyUri", access.GetOutput("tokenRingKeyUri"))
+        .WithAzureUserAssignedIdentity(syncIdentity)
+        // No role on the vault, nor the default one that naming it would give.
+        .WithRoleAssignments(vault, [])
+        .WithRoleAssignments(storage, [])
+        .PublishAsAzureContainerAppJob(AzureInfrastructure.ConfigureSyncJob);
 
     web.WithReference(insights)
         .WithAzureUserAssignedIdentity(webIdentity)
@@ -253,6 +291,7 @@ else
         .WithRoleAssignments(vault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
         .WithEnvironment("ConnectionStrings__catalog", appRoleConnection)
         .WithEnvironment("DataProtection__KeyUri", access.GetOutput("dataProtectionKeyUri"))
+        .WithEnvironment("DataProtection__TokenKeyUri", access.GetOutput("tokenRingKeyUri"))
         .WithEnvironment("Search__TimeZone", AzureInfrastructure.SearchTimeZone)
         // The CLIP text model in the web's image (S-056): its base image sepiabox-web-models, built by scripts/web-models.sh.
         .WithEnvironment("Search__ModelFolder", AzureInfrastructure.WebModelFolder)
