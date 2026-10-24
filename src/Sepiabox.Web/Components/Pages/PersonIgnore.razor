@@ -1,0 +1,69 @@
+@page "/people/{Id:long}/ignore"
+@inject ILibraryQueries Library
+@inject IFaceSettings Faces
+@inject NavigationManager Navigation
+@* "Ignore this person" asks first (#107, D-117): an unnamed stranger's faces are deleted for good; only this page's POST deletes. *@
+
+<PageTitle>@Text["IgnorePerson_Title"] · Sepiabox</PageTitle>
+
+@if (_person is null || _person.Name is not null || _person.UserEmail is not null)
+{
+    <p class="back"><a href="people">@Text["Person_Back"]</a></p>
+    <h1 class="page-heading">@Text["Ignore_NothingTitle"]</h1>
+    <p>@Text["IgnorePerson_Named"]</p>
+}
+else
+{
+    <p class="back"><a href="people/@_person.Id">@Text["People_Unnamed"]</a></p>
+    <h1 class="page-heading">@Text["IgnorePerson_Title"]</h1>
+    <ul class="people delete-people">
+        <li class="person"><PersonCard Person="Summary(_person)" /></li>
+    </ul>
+    <p class="ignore-warning"><strong>@Text["Ignore_Irreversible"]</strong></p>
+    <ul class="ignore-effects">
+        <li>@Text["Ignore_Effect_Gone"]</li>
+        <li>@Text["Ignore_Effect_Named"]</li>
+    </ul>
+    <details class="ignore-cloud">
+        <summary>@Text["Ignore_Cloud_Summary"]</summary>
+        <p>@Text["Ignore_Cloud"]</p>
+    </details>
+    <form method="post" @formname="ignore" @onsubmit="ConfirmAsync" class="confirm">
+        <AntiforgeryToken />
+        <input type="hidden" name="Confirmed" value="yes" />
+        <a href="people/@_person.Id" class="button secondary" autofocus>@Text["Merge_Cancel"]</a>
+        <button type="submit" class="button danger">@Text["Ignore_Confirm"]</button>
+    </form>
+}
+
+@code {
+    [Parameter]
+    public long Id { get; set; }
+
+    [SupplyParameterFromForm(FormName = "ignore")]
+    public string? Confirmed { get; set; }
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    private PersonDetail? _person;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _person = await Library.GetPersonAsync(Id);
+        if (_person is null && HttpContext is not null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+    }
+
+    private static PersonSummary Summary(PersonDetail person) =>
+        new(person.Id, person.Name, person.FaceCount, person.Faces.FirstOrDefault()?.Crop);
+
+    private async Task ConfirmAsync()
+    {
+        var email = HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+        var ignored = email is not null && await Faces.IgnorePersonAsync(Id, email);
+        Navigation.NavigateTo(ignored ? $"people?{PersonLinks.NoteParameter}=ignored" : $"people/{Id}?{PersonLinks.NoteParameter}=NotFound");
+    }
+}

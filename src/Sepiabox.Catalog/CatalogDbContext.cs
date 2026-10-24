@@ -280,7 +280,7 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             deletion.ToTable("face_data_deletions");
             deletion.Property(d => d.DeletedBy).HasMaxLength(320);
             deletion.Property(d => d.Scope).HasMaxLength(16);
-            deletion.ToTable(t => t.HasCheckConstraint("ck_face_data_deletions_scope", "scope IN ('library', 'person')"));
+            deletion.ToTable(t => t.HasCheckConstraint("ck_face_data_deletions_scope", "scope IN ('library', 'person', 'ignore')"));
         });
 
         modelBuilder.Entity<ExportRequest>(export =>
