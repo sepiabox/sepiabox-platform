@@ -83,6 +83,32 @@ public sealed class FaceSettingsPageTests : LocalizedContext
             page.FindAll(".face-deletions li").Select(li => li.TextContent));
     }
 
+    [Fact]
+    public void Words_ignored_faces_apart_from_one_persons_deleted_face_data()
+    {
+        _faces.History.Add(Deletion(FaceDataDeletionScopes.Ignore, 14, 6, new DateTimeOffset(2026, 10, 22, 9, 0, 0, TimeSpan.Zero)));
+        _faces.History.Add(Deletion(FaceDataDeletionScopes.Person, 3, 1, new DateTimeOffset(2026, 10, 21, 10, 5, 0, TimeSpan.Zero)));
+
+        var page = Render<Settings>();
+
+        var lines = page.FindAll(".face-deletions li").Select(li => li.TextContent).ToList();
+
+        // The time's own format varies with the runtime's culture data; the words are what is asserted.
+        Assert.EndsWith(", by ana@example.com: unnamed faces deleted: 14; people deleted: 6.", lines[0], StringComparison.Ordinal);
+        Assert.EndsWith(", by ana@example.com: one person's face data deleted; faces: 3.", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Words_ignored_faces_in_brazilian_portuguese()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+        _faces.History.Add(Deletion(FaceDataDeletionScopes.Ignore, 14, 6, new DateTimeOffset(2026, 10, 22, 9, 0, 0, TimeSpan.Zero)));
+
+        Assert.Equal(
+            "22/10/2026 09:00, por ana@example.com: rostos sem nome apagados: 14; pessoas apagadas: 6.",
+            Assert.Single(Render<Settings>().FindAll(".face-deletions li")).TextContent);
+    }
+
     [Theory]
     [InlineData("faces-off", "Face recognition is off and the face data was deleted.")]
     [InlineData("faces-pending", "Not yet: the faces are still being erased from the copies in the cloud.")]
@@ -107,6 +133,14 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         Assert.Equal("Ana", confirmation.Find(".delete-people .name").TextContent);
         Assert.StartsWith("Esta pessoa, o nome e todos os rostos dela são apagados", confirmation.Find(".note").TextContent, StringComparison.Ordinal);
         Assert.Equal(("post", "Apagar"), (confirmation.Find("form.confirm").GetAttribute("method"), confirmation.Find("form.confirm button").TextContent));
+        // The consequence is one bold line, Cancel comes first and has the focus, and the button is the danger one.
+        Assert.NotNull(confirmation.Find("p.note.danger strong"));
+        var actions = confirmation.Find("form.confirm").Children.Where(c => c.LocalName is "a" or "button").ToList();
+        Assert.Equal(["a", "button"], actions.Select(c => c.LocalName));
+        Assert.True(actions[0].HasAttribute("autofocus"));
+        Assert.Contains("secondary", actions[0].ClassName, StringComparison.Ordinal);
+        Assert.Equal("button danger", actions[1].ClassName);
+        Assert.NotNull(confirmation.Find(".confirm-panel"));
         Assert.Empty(_faces.Calls);
     }
 
@@ -265,6 +299,98 @@ public sealed class FaceSettingsCatalogTests(CatalogFixture catalog)
             }));
         Assert.Equal(["Ana"], unknown.Missing);
         Assert.True(unknown.MeMissing);
+    }
+
+    [Fact]
+    public async Task Crops_the_faces_a_photo_would_lose_and_previews_the_people_the_bulk_action_would_delete()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.Add(CatalogData.Photo(Ids.Of(1), new DateTime(2019, 7, 14)));
+        db.Assets.Add(CatalogData.Photo(Ids.Of(2), new DateTime(2019, 7, 15)));
+        var named = new Catalog.Person { Name = "Ana", FaceCount = 1 };
+        var strangerOne = new Catalog.Person { FaceCount = 1 };
+        var strangerTwo = new Catalog.Person { FaceCount = 1 };
+        db.Faces.Add(Face(named));
+        var one = Face(strangerOne);
+        one.Box = [0.5, 0.5, 0.2, 0.2];
+        db.Faces.Add(one);
+        var two = Face(strangerTwo);
+        two.AssetId = Ids.Of(2);
+        db.Faces.Add(two);
+        await db.SaveChangesAsync();
+        var contexts = new TestContexts(catalog.ConnectionStringFor(db));
+        var library = new LibraryQueries(contexts, TimeProvider.System, user: new SignedIn(Ana));
+
+        var detail = await library.GetAssetAsync(Ids.Of(1));
+        var preview = await new FaceSettings(contexts, TimeProvider.System).PreviewUnnamedWithFewFacesAsync(12);
+
+        var unnamed = Assert.Single(detail!.People, p => p.Name is null);
+        Assert.Equal((Ids.Of(1), 256, 192), (unnamed.Crop!.AssetId, unnamed.Crop.ThumbnailWidth, unnamed.Crop.ThumbnailHeight));
+        Assert.Equal([0.5, 0.5, 0.2, 0.2], unnamed.Crop.Box);
+        Assert.Equal(one.Id, unnamed.FaceId);
+        Assert.Equal(2, preview.People);
+        Assert.Equal([Ids.Of(1), Ids.Of(2)], preview.Crops.Select(c => c.AssetId));
+        // Only the first asked for are cropped, and the count is of all.
+        var one1 = await new FaceSettings(contexts, TimeProvider.System).PreviewUnnamedWithFewFacesAsync(1);
+        Assert.Equal((2, 1), (one1.People, one1.Crops.Count));
+    }
+
+    [Fact]
+    public async Task Previews_each_persons_best_scoring_face_and_skips_a_malformed_box_and_a_thumbnail_of_no_size()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.Add(CatalogData.Photo(Ids.Of(1), new DateTime(2019, 7, 14)));
+        db.Assets.Add(CatalogData.Photo(Ids.Of(2), new DateTime(2019, 7, 15)));
+        db.Assets.Add(CatalogData.Photo(Ids.Of(3), new DateTime(2019, 7, 16)));
+        var flat = CatalogData.Photo(Ids.Of(4), new DateTime(2019, 7, 17));
+        flat.Derivatives = [new Derivative { AssetId = Ids.Of(4), Name = "thumb-256", BlobPath = $"{Ids.Of(4)}/thumb-256.webp", Width = 0, Height = 0, ContentType = "image/webp" }];
+        db.Assets.Add(flat);
+        var two = new Catalog.Person { FaceCount = 2 };
+        var short_ = new Catalog.Person { FaceCount = 1 };
+        var noSize = new Catalog.Person { FaceCount = 1 };
+        Face OnAsset(int n, Catalog.Person person, double score, double[]? box = null)
+        {
+            var face = Face(person);
+            face.AssetId = Ids.Of(n);
+            face.Score = score;
+            face.Box = box ?? [0.1, 0.2, 0.3, 0.4];
+            return face;
+        }
+
+        db.Faces.AddRange(OnAsset(1, two, 0.5), OnAsset(2, two, 0.9), OnAsset(3, short_, 0.9, [0.1, 0.2, 0.3]), OnAsset(4, noSize, 0.9));
+        await db.SaveChangesAsync();
+        var contexts = new TestContexts(catalog.ConnectionStringFor(db));
+
+        var preview = await new FaceSettings(contexts, TimeProvider.System).PreviewUnnamedWithFewFacesAsync(12);
+
+        // Three people are counted; only the one with a usable face and thumbnail is shown, by its best face.
+        Assert.Equal(3, preview.People);
+        Assert.Equal([Ids.Of(2)], preview.Crops.Select(c => c.AssetId));
+    }
+
+    [Fact]
+    public async Task Lists_a_person_once_in_a_photo_and_gives_a_face_with_a_short_box_no_crop()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.Add(CatalogData.Photo(Ids.Of(1), new DateTime(2019, 7, 14)));
+        var twice = new Catalog.Person { FaceCount = 2 };
+        var broken = new Catalog.Person { FaceCount = 1 };
+        var first = Face(twice);
+        var second = Face(twice);
+        second.Box = [0.6, 0.6, 0.2, 0.2];
+        var shortBox = Face(broken);
+        shortBox.Box = [0.1, 0.2];
+        db.Faces.AddRange(first, second, shortBox);
+        await db.SaveChangesAsync();
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var people = (await queries.GetAssetAsync(Ids.Of(1)))!.People;
+
+        Assert.Equal(2, people.Count);
+        var listed = Assert.Single(people, p => p.Id == twice.Id);
+        Assert.Equal(first.Id, listed.FaceId);
+        Assert.NotNull(listed.Crop);
+        Assert.Null(Assert.Single(people, p => p.Id == broken.Id).Crop);
     }
 
     private static Face Face(Catalog.Person person)

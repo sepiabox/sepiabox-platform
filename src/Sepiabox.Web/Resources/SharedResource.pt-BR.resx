@@ -583,7 +583,7 @@
     <value>Cancelar</value>
   </data>
   <data name="Merge_Goes" xml:space="preserve">
-    <value>Deixa de existir</value>
+    <value>Será apagada</value>
   </data>
   <data name="Merge_Stays" xml:space="preserve">
     <value>Fica</value>
@@ -1363,6 +1363,15 @@
   <data name="Layout_MoreCurrentLabel" xml:space="preserve">
     <value>{0}: {1}, página atual</value>
   </data>
+  <data name="Source_OpenOriginal" xml:space="preserve">
+    <value>Abrir original</value>
+  </data>
+  <data name="Source_Removed" xml:space="preserve">
+    <value>Não está mais na origem</value>
+  </data>
+  <data name="Source_OpenOriginalHint" xml:space="preserve">
+    <value>Baixado do Drive pelo Sepiabox, de uma vez só; um vídeo muito grande pode não terminar.</value>
+  </data>
   <data name="Settings_Export_Link" xml:space="preserve">
     <value>Exportar todos os dados</value>
   </data>
@@ -1459,6 +1468,111 @@
   <data name="Detail_MoreAlbums_Other" xml:space="preserve">
     <value>Mais {0} álbuns</value>
   </data>
+  <data name="Detail_IgnoreShort" xml:space="preserve">
+    <value>Ignorar e apagar</value>
+  </data>
+  <data name="Detail_IgnoreUnnamed" xml:space="preserve">
+    <value>Ignorar e apagar os rostos sem nome desta foto</value>
+  </data>
+  <data name="Detail_Done_Ignored" xml:space="preserve">
+    <value>Os rostos foram ignorados.</value>
+  </data>
+  <data name="Ignore_Title" xml:space="preserve">
+    <value>Ignorar e apagar rostos</value>
+  </data>
+  <data name="Ignore_NothingTitle" xml:space="preserve">
+    <value>Nada para ignorar</value>
+  </data>
+  <data name="Ignore_Nothing" xml:space="preserve">
+    <value>Não há aqui nenhum rosto sem nome para ignorar.</value>
+  </data>
+  <data name="Ignore_Faces_One" xml:space="preserve">
+    <value>1 rosto sem nome desta foto será ignorado.</value>
+  </data>
+  <data name="Ignore_Faces_Other" xml:space="preserve">
+    <value>{0} rostos sem nome desta foto serão ignorados.</value>
+  </data>
+  <data name="Ignore_Confirm" xml:space="preserve">
+    <value>Apagar de vez</value>
+  </data>
+  <data name="IgnorePerson_Title" xml:space="preserve">
+    <value>Ignorar e apagar esta pessoa</value>
+  </data>
+  <data name="IgnorePerson_Named" xml:space="preserve">
+    <value>Só uma pessoa sem nome pode ser ignorada; pessoas com nome nunca são apagadas assim.</value>
+  </data>
+  <data name="Person_Ignore" xml:space="preserve">
+    <value>Ignorar esta pessoa</value>
+  </data>
+  <data name="IgnoreMany_Title" xml:space="preserve">
+    <value>Ignorar e apagar as pessoas sem nome com poucos rostos</value>
+  </data>
+  <data name="IgnoreMany_None" xml:space="preserve">
+    <value>Não há pessoas sem nome com um ou dois rostos.</value>
+  </data>
+  <data name="IgnoreMany_One" xml:space="preserve">
+    <value>1 pessoa sem nome com um ou dois rostos será ignorada.</value>
+  </data>
+  <data name="IgnoreMany_Other" xml:space="preserve">
+    <value>{0} pessoas sem nome com um ou dois rostos serão ignoradas.</value>
+  </data>
+  <data name="IgnoreMany_Changed" xml:space="preserve">
+    <value>As pessoas mudaram desde que você abriu esta página, então nada foi ignorado. Confira o número e confirme de novo.</value>
+  </data>
+  <data name="People_IgnoreMany_One" xml:space="preserve">
+    <value>Ignorar a pessoa sem nome com um ou dois rostos (1)</value>
+  </data>
+  <data name="People_IgnoreMany_Other" xml:space="preserve">
+    <value>Ignorar as pessoas sem nome com um ou dois rostos ({0})</value>
+  </data>
+  <data name="People_Done_Ignored" xml:space="preserve">
+    <value>Os rostos foram ignorados.</value>
+  </data>
+  <data name="Ignore_Irreversible" xml:space="preserve">
+    <value>Isso não pode ser desfeito. As fotos ficam.</value>
+  </data>
+  <data name="Ignore_Effect_Gone" xml:space="preserve">
+    <value>Os rostos são apagados de vez e não são encontrados de novo quando as fotos forem importadas outra vez.</value>
+  </data>
+  <data name="Ignore_Effect_Named" xml:space="preserve">
+    <value>Pessoas com nome nunca são tocadas.</value>
+  </data>
+  <data name="Ignore_Cloud_Summary" xml:space="preserve">
+    <value>E as cópias na nuvem?</value>
+  </data>
+  <data name="Ignore_Cloud" xml:space="preserve">
+    <value>As cópias das informações da biblioteca guardadas na nuvem (manifestos) mantêm os rostos apagados até o reconhecimento facial ser desligado em Configurações, e os backups automáticos os mantêm por até 7 dias.</value>
+  </data>
+  <data name="IgnoreMany_More" xml:space="preserve">
+    <value>e mais {0} pessoas</value>
+  </data>
+  <data name="Detail_IgnoreFaceUnnamed" xml:space="preserve">
+    <value>Ignorar e apagar o rosto sem nome {0}</value>
+  </data>
+  <data name="Person_Delete_Hint" xml:space="preserve">
+    <value>Apaga esta pessoa, o nome e todos os rostos dela.</value>
+  </data>
+  <data name="Person_Ignore_Hint" xml:space="preserve">
+    <value>Para desconhecidos (cartazes, multidões): apaga esta pessoa sem nome e os rostos dela, para que não voltem.</value>
+  </data>
+  <data name="Settings_Faces_History_Ignore" xml:space="preserve">
+    <value>{0}, por {1}: rostos sem nome apagados: {2}; pessoas apagadas: {3}.</value>
+  </data>
+  <data name="Merge_Result" xml:space="preserve">
+    <value>Depois de juntar: {2} ({3} rostos) fica com os rostos de {0} ({1} rostos), e {0} deixa de existir.</value>
+  </data>
+  <data name="Merge_LeavingNamed" xml:space="preserve">
+    <value>tem nome e será apagada de vez. Continue só se for isso que você quer; senão, use Trocar.</value>
+  </data>
+  <data name="Merge_LeavingLinked" xml:space="preserve">
+    <value>está ligada a você ("Esta sou eu") e será apagada de vez. Continue só se for isso que você quer; senão, use Trocar.</value>
+  </data>
+  <data name="Merge_Swap" xml:space="preserve">
+    <value>Trocar: manter a outra pessoa</value>
+  </data>
+  <data name="Merge_ConfirmInto" xml:space="preserve">
+    <value>Juntar em {0}</value>
+  </data>
   <data name="Filter_Selected" xml:space="preserve">
     <value>{0} selecionados</value>
   </data>
@@ -1515,5 +1629,14 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Precisa de um nome</value>
+  </data>
+  <data name="Person_Me_Label" xml:space="preserve">
+    <value>Esta sou eu</value>
+  </data>
+  <data name="Person_Me_Hint" xml:space="preserve">
+    <value>Liga esta pessoa ao seu login, para que "Comigo" a encontre.</value>
+  </data>
+  <data name="Person_Danger_Heading" xml:space="preserve">
+    <value>Remover</value>
   </data>
 </root>

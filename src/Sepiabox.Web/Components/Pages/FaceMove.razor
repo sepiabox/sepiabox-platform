@@ -18,31 +18,37 @@ else
     <PageHead Title="@Text["Move_Title"]">
         <Back><a href="people/@_person.Id">@(_person.Name ?? Text["People_Unnamed"])</a></Back>
     </PageHead>
-    <ul class="people">
-        <li class="person">
-            <a href="photos/@_face.AssetId" class="face">
-                @if (_face.Crop is { } crop)
-                {
-                    <img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" />
-                }
-            </a>
-        </li>
-    </ul>
-    <form method="post" @formname="move" @onsubmit="MoveAsync" class="move">
-        <AntiforgeryToken />
-        <label>
-            <span>@Text["Move_Label"]</span>
-            <select name="Target">
-                @foreach (var other in _person.Others)
-                {
-                    <option value="@other.Id">@(other.Name ?? Text["People_Unnamed"]) (@FaceCount(other.FaceCount))</option>
-                }
-                <option value="@NewPerson">@Text["Move_NewPerson"]</option>
-            </select>
-        </label>
-        <button type="submit">@Text["Move_Submit"]</button>
-        <a href="people/@_person.Id">@Text["Merge_Cancel"]</a>
-    </form>
+    <Panel Class="confirm-panel">
+        <ul class="people">
+            <li class="person">
+                <a href="photos/@_face.AssetId" class="face">
+                    @if (_face.Crop is { } crop)
+                    {
+                        <img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" />
+                    }
+                </a>
+            </li>
+        </ul>
+        <form method="post" @formname="move" @onsubmit="MoveAsync" class="move">
+            <AntiforgeryToken />
+            <div class="form-row">
+                <label class="form-label" for="move-target">@Text["Move_Label"]</label>
+                <div class="field">
+                    <select id="move-target" name="Target">
+                        @foreach (var other in _person.Others)
+                        {
+                            <option value="@other.Id">@(other.Name ?? Text["People_Unnamed"]) (@FaceCount(other.FaceCount))</option>
+                        }
+                        <option value="@NewPerson">@Text["Move_NewPerson"]</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-actions">
+                <a href="people/@_person.Id" class="button secondary">@Text["Merge_Cancel"]</a>
+                <button type="submit" class="button">@Text["Move_Submit"]</button>
+            </div>
+        </form>
+    </Panel>
 }
 
 @code {

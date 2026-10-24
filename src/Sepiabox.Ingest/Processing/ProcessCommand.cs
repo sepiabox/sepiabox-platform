@@ -4,7 +4,6 @@ using Sepiabox.Ingest.Scanning;
 using Sepiabox.Pipeline.Embeddings;
 using Sepiabox.Pipeline.Exports;
 using Sepiabox.Pipeline.Faces;
-using Sepiabox.Pipeline.Imaging;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
 using Sepiabox.Pipeline.Processing;
@@ -234,10 +233,10 @@ public static class ProcessCommand
         const string UpdateFailed = "Could not update its manifest";
 
         // For a new file: Added is counted by the caller once the manifest is written.
-        EmbeddingOutcome? AddEmbedding(FileOutcome o, string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
+        EmbeddingOutcome? AddEmbedding(FileOutcome o, string sourcePath, string assetId, Func<EmbeddingOutcome?> add) =>
             Record(o, sourcePath, assetId, Try(sourcePath, o.EmbeddingProblems, EmbeddingFailed, add), o.EmbeddingProblems, o.WithoutPreviewForEmbedding);
 
-        EmbeddingOutcome? AddFaces(FileOutcome o, string sourcePath, string assetId, Func<EmbeddingOutcome> add) =>
+        EmbeddingOutcome? AddFaces(FileOutcome o, string sourcePath, string assetId, Func<EmbeddingOutcome?> add) =>
             Record(o, sourcePath, assetId, Try(sourcePath, o.FaceProblems, FacesFailed, add), o.FaceProblems, o.WithoutPreviewForFaces);
 
         // An unchanged file: its manifest is read once, both are added in memory and it is written once.
@@ -254,7 +253,7 @@ public static class ProcessCommand
             CountFaces(o, Record(o, sourcePath, assetId, outcome?.Faces, o.FaceProblems, o.WithoutPreviewForFaces));
         }
 
-        T? Try<T>(string sourcePath, List<EmbeddingProblem> optionalProblems, string what, Func<T> add)
+        T? Try<T>(string sourcePath, List<EmbeddingProblem> optionalProblems, string what, Func<T?> add)
             where T : class
         {
             try
@@ -805,33 +804,23 @@ public static class ProcessCommand
                 }
                 else
                 {
-                    var embeddingAdded = false;
-                    if (embedder is not null && status == FileStatus.Done)
-                    {
-                        var withDerivatives = manifest;
-                        var outcome = AddEmbedding(o, file.Path, sha256, () => ManifestEmbeddings.TryAdd(withDerivatives, output, embedder));
-                        embeddingAdded = outcome?.Status == EmbeddingStatus.Added;
-                        manifest = outcome?.Manifest ?? manifest;
-                    }
-
-                    if (kind == MediaKind.Photo && status == FileStatus.Done)
-                    {
-                        var withEmbedding = manifest;
-                        var measured = Record(
-                            o, file.Path, sha256,
-                            Try(file.Path, o.EmbeddingProblems, QualityFailed, () => ManifestQualityStep.TryAdd(withEmbedding, output)),
-                            o.EmbeddingProblems, o.WithoutPreviewForEmbedding);
-                        manifest = measured?.Manifest ?? manifest;
-                    }
-
+                    EmbeddingOutcome? embeddingOutcome = null;
                     EmbeddingOutcome? facesOutcome = null;
-                    if (faces is not null && status == FileStatus.Done)
+                    if (status == FileStatus.Done)
                     {
-                        var withDerivatives = manifest;
-                        facesOutcome = AddFaces(o, file.Path, sha256, () => ManifestFaces.TryAdd(withDerivatives, output, faces, clock));
-                        manifest = facesOutcome?.Manifest ?? manifest;
+                        // The sequence is shared with the cloud worker (S-065); what each outcome means here is recorded below.
+                        manifest = ManifestSteps.Add(
+                            manifest, output, embedder, faces, clock,
+                            (step, add) => step switch
+                            {
+                                ManifestStep.Embedding => embeddingOutcome = AddEmbedding(o, file.Path, sha256, add),
+                                ManifestStep.Quality => Record(
+                                    o, file.Path, sha256, Try(file.Path, o.EmbeddingProblems, QualityFailed, add), o.EmbeddingProblems, o.WithoutPreviewForEmbedding),
+                                _ => facesOutcome = AddFaces(o, file.Path, sha256, add),
+                            });
                     }
 
+                    var embeddingAdded = embeddingOutcome?.Status == EmbeddingStatus.Added;
                     ManifestJson.WriteFile(ManifestPath(manifestFolder, sha256), manifest);
                     o.Embedded += embeddingAdded ? 1 : 0;
                     CountFaces(o, facesOutcome);
@@ -1013,25 +1002,9 @@ public static class ProcessCommand
             metadata = MetadataReader.Read(stream);
         }
 
-        return new Manifest
-        {
-            Id = sha256,
-            Kind = kind,
-            SizeBytes = file.Size,
-            ContentType = MediaTypes.ContentType(file.Path),
-            // The file's own date when plausible, otherwise one from its path (D-046).
-            Captured = CaptureDate.Resolve(metadata.RawCapturedAt, file.Path, clock, exportDate),
-            // The file's own place wins; the export's fills in only when the file has none (S-045, D-104).
-            Location = metadata.Location ?? exportLocation,
-            Caption = ExportFacts.Caption(export),
-            Albums = ExportFacts.Albums(export),
-            Camera = metadata.Camera,
-            Width = metadata.Width,
-            Height = metadata.Height,
-            DurationSeconds = metadata.DurationSeconds,
-            Sources = [source],
-            OriginalStored = originalStored,
-        };
+        // The description of a new file is shared with the cloud worker (S-065, D-118).
+        return ManifestDescriber.Describe(new ManifestDescriber.Request(
+            sha256, kind, file.Size, file.Path, metadata, source, indexOnly, clock, export, exportZone));
     }
 
     /// <summary>
@@ -1048,70 +1021,25 @@ public static class ProcessCommand
             return (manifest, FileStatus.Done, null, null, null, null);
         }
 
-        var folder = DerivativeFolder(manifest.Id);
-        try
+        var made = DerivativeMaker.Make(manifest, file.Path, content, output, indexOnly, video, cancellationToken);
+        return made.Status switch
         {
-            if (manifest.Kind == MediaKind.Photo)
-            {
-                IReadOnlyList<ManifestDerivative> thumbnails;
-                var sizes = indexOnly ? ThumbnailGenerator.IndexOnlyPhotoSizes : ThumbnailGenerator.PhotoSizes;
-                if (content is null)
-                {
-                    thumbnails = ThumbnailGenerator.Generate(file.Path, output, folder, sizes);
-                }
-                else
-                {
-                    using var stream = new MemoryStream(content, writable: false);
-                    thumbnails = ThumbnailGenerator.Generate(stream, output, folder, sizes);
-                }
-
-                return (manifest with { Derivatives = thumbnails }, FileStatus.Done, null, null, null, null);
-            }
-
-            // Checked without FFmpeg, whose module support depends on how it was built.
-            if (TrackerModule.IsTrackerModule(file.Path))
-            {
-                return (manifest, FileStatus.NotVideo, null, NoVideoReason.TrackerModule, null, null);
-            }
-
-            if (video is null)
-            {
-                return (manifest, FileStatus.Pending, null, null, null, null);
-            }
-
-            var probe = video.Probe(file.Path, cancellationToken);
-            var generated = video.Generate(file.Path, output, folder, probe, cancellationToken);
-            return (manifest with
-            {
-                Width = probe.Width,
-                Height = probe.Height,
-                DurationSeconds = probe.DurationSeconds ?? manifest.DurationSeconds,
-                // MetadataExtractor misses some containers' positions (an MP4's loci box), which ffprobe reads.
-                Location = manifest.Location ?? probe.Location,
-                Derivatives = generated.Derivatives,
-            }, FileStatus.Done, null, null, generated.WithoutSoundBecause, generated.Sound);
-        }
-        catch (NoVideoStreamException ex)
-        {
-            return (manifest, FileStatus.NotVideo, null, ex.Reason, null, null);
-        }
-        catch (MagickException ex) when (manifest.Kind == MediaKind.Photo && IsDamage(ex))
-        {
-            return (manifest, FileStatus.Damaged, $"Damaged file, its content cannot be decoded: {ex.Message}", null, null, null);
-        }
-        catch (Exception ex) when (ex is MagickException or VideoProcessingException)
-        {
-            var what = manifest.Kind == MediaKind.Photo ? "thumbnails" : indexOnly ? "the poster and 1080p version" : "the poster and 720p version";
-            return (manifest, FileStatus.Failed, $"Could not make {what}: {ex.Message}", null, null, null);
-        }
+            DerivativeStatus.Done => (made.Manifest, FileStatus.Done, null, null, made.WithoutSound, made.Sound),
+            DerivativeStatus.Pending => (manifest, FileStatus.Pending, null, null, null, null),
+            DerivativeStatus.NotVideo => (manifest, FileStatus.NotVideo, null, made.NoVideo, null, null),
+            DerivativeStatus.Damaged => (manifest, FileStatus.Damaged, $"Damaged file, its content cannot be decoded: {made.Problem}", null, null, null),
+            _ => (manifest, FileStatus.Failed, $"Could not make {WhatFailed(manifest.Kind, indexOnly)}: {made.Problem}", null, null, null),
+        };
     }
+
+    private static string WhatFailed(MediaKind kind, bool indexOnly) =>
+        kind == MediaKind.Photo ? "thumbnails" : indexOnly ? "the poster and 1080p version" : "the poster and 720p version";
 
     // Magick's errors that say the file's own content is bad: corrupt data, and a codec that read it and refused it (a
     // JPEG or TIFF marker that makes no sense is a coder error, as in a corrupt Canon CR2). Not a missing codec, a delegate
     // that failed or a blob that could not be read: those can come from the machine or a drive that dropped out, would
     // mark good files, and the sticky status would hide the cause. They stay failures, tried again on the next run.
-    internal static bool IsDamage(MagickException ex) => ex is
-        MagickCorruptImageErrorException or MagickCorruptImageWarningException or MagickCoderErrorException;
+    internal static bool IsDamage(MagickException ex) => DerivativeMaker.IsDamage(ex);
 
     private static void RemoveSource(string output, string sha256, ManifestSource source)
     {

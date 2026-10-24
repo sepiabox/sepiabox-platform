@@ -114,6 +114,15 @@ public static class AzureInfrastructure
     /// <summary>The AppHost resource behind <see cref="ProcessJobName"/>: a container built from <c>infra/worker/Dockerfile</c>.</summary>
     public const string ProcessResourceName = "process";
 
+    /// <summary>The scheduled job that syncs the connected Google Drives into <c>incoming</c> (S-038): <c>sync google-drive</c>.</summary>
+    public const string SyncJobName = "sepiabox-sync";
+
+    /// <summary>The AppHost resource behind <see cref="SyncJobName"/>.</summary>
+    public const string SyncResourceName = "sync";
+
+    /// <summary>When <see cref="SyncJobName"/> runs: once a day, at night in Lisbon. A run with nothing new is a few calls to the Drive API.</summary>
+    public const string SyncSchedule = "27 3 * * *";
+
     /// <summary>The queue Event Grid sends <c>incoming</c> events to (S-036).</summary>
     public const string IncomingQueueName = "incoming";
 
@@ -133,7 +142,7 @@ public static class AzureInfrastructure
     /// <c>BlobLayout</c> containers; <c>dataprotection</c> holds the web's key ring (S-058).
     /// </summary>
     public static readonly IReadOnlyList<string> BlobContainers =
-        ["originals", "derivatives", "manifests", "incoming", "exports", "dataprotection"];
+        ["originals", "derivatives", "manifests", "incoming", "exports", "dataprotection", "tokenring"];
 
     /// <summary>
     /// The least-privilege PostgreSQL role the web connects with; <c>sepiabox-worker migrate</c> creates it
@@ -221,6 +230,9 @@ public static class AzureInfrastructure
     // Downloading about 10 MB, loading about 200,000 cities and naming the assets without a place take
     // minutes; half an hour bounds a stuck run.
     private const int GeoNamesTimeoutSeconds = 1800;
+
+    // Listing and fetching a few hundred files a run (Sync:MaxFilesPerRun); a stuck run is cut after two hours.
+    private const int SyncTimeoutSeconds = 7200;
 
     // Every manifest of a family library read and, the first time after an erase, written once: well within half an hour.
     private const int FacesTimeoutSeconds = 1800;
@@ -645,6 +657,32 @@ public static class AzureInfrastructure
         // Reading and merging small JSON blobs one at a time.
         var container = job.Template.Containers.Single().Value
             ?? throw new InvalidOperationException("The faces job has no container.");
+        container.Resources = new AppContainerResources { Cpu = 0.5, Memory = "1Gi" };
+    }
+
+    /// <summary>
+    /// <c>sync google-drive</c> (S-038) once a day. A run that fails is not repeated: it goes on from the page it stopped at the next
+    /// day, and the execution ends <c>Failed</c> so that it shows.
+    /// </summary>
+    public static void ConfigureSyncJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        job.Name = SyncJobName;
+        job.Location = Region;
+
+        var configuration = job.Configuration;
+        configuration.TriggerType = ContainerAppJobTriggerType.Schedule;
+        configuration.ScheduleTriggerConfig = new JobConfigurationScheduleTriggerConfig
+        {
+            CronExpression = SyncSchedule,
+            Parallelism = 1,
+            ReplicaCompletionCount = 1,
+        };
+        configuration.ReplicaTimeout = SyncTimeoutSeconds;
+        configuration.ReplicaRetryLimit = 0;
+        // Files go from Google to the store a block at a time; nothing is held.
+        var container = job.Template.Containers.Single().Value
+            ?? throw new InvalidOperationException("The sync job has no container.");
         container.Resources = new AppContainerResources { Cpu = 0.5, Memory = "1Gi" };
     }
 

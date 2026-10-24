@@ -7,7 +7,7 @@
 
 <PageTitle>@Text["Merge_Title"] · Sepiabox</PageTitle>
 
-@if (_person is null || _other is null || _person.Id == _other.Id)
+@if (_person is null || _other is null || _stays is null || _leaves is null)
 {
     <PageHead Title="@Text["Person_Error_NotFound"]">
         <Back><a href="people/@Id">@Text["Person_Back"]</a></Back>
@@ -18,20 +18,30 @@ else
     <PageHead Title="@Text["Merge_Title"]">
         <Back><a href="people/@_person.Id">@NameOf(_person.Name)</a></Back>
     </PageHead>
+    <Panel Class="confirm-panel">
+    <div class="merge-flow">
     <ul class="people merge-people">
-        <li class="person"><span class="caption">@Text["Merge_Goes"]</span><PersonCard Person="Summary(_other)" /></li>
-        <li class="person"><span class="caption">@Text["Merge_Stays"]</span><PersonCard Person="Summary(_person)" /></li>
+        <li class="person merge-leaves"><span class="caption merge-badge">@Text["Merge_Goes"]</span><PersonCard Person="Summary(_leaves)" /></li>
+        <li class="merge-arrow" aria-hidden="true">&rarr;</li>
+        <li class="person merge-stays"><span class="caption merge-badge">@Text["Merge_Stays"]</span><PersonCard Person="Summary(_stays)" /></li>
     </ul>
-    @* The cards above: the one that goes on the left, the one that stays on the right. *@
-    <p class="note">@(_other.Name is null || _person.Name is null
-        ? Text["Merge_ExplainCards"]
-        : Text["Merge_Explain", _other.Name, _person.Name])</p>
+    @* The one that goes on the left, the one that stays on the right. By default the person with a name (or who is the user)
+       stays, else the one with more faces (D-125); "Swap" reverses it, on purpose. A named or linked person going is a danger. *@
+    @if (Dangerous)
+    {
+        <p class="note danger" role="alert"><span aria-hidden="true">&#9888;</span> <strong>@NameOf(_leaves.Name)</strong> @Text[_leaves.Name is not null ? "Merge_LeavingNamed" : "Merge_LeavingLinked"]</p>
+    }
+    <p class="note">@Text["Merge_Result", NameOf(_leaves.Name), _leaves.FaceCount, NameOf(_stays.Name), _stays.FaceCount]</p>
+    <p><a class="merge-swap" href="@SwapHref" data-enhance-nav="false">@Text["Merge_Swap"]</a></p>
     <form method="post" @formname="confirm" @onsubmit="ConfirmAsync" class="confirm">
         <AntiforgeryToken />
         <input type="hidden" name="Confirmed" value="yes" />
-        <button type="submit" class="button danger">@Text["Merge_Confirm"]</button>
-        <a href="people/@_person.Id">@Text["Merge_Cancel"]</a>
+        <input type="hidden" name="Swap" value="@(Swapped ? "1" : "0")" />
+        <a class="button secondary" href="people/@_person.Id">@Text["Merge_Cancel"]</a>
+        <button type="submit" class="@(Dangerous ? "button danger" : "button")">@Text["Merge_ConfirmInto", NameOf(_stays.Name)]</button>
     </form>
+    </div>
+    </Panel>
 }
 
 @code {
@@ -41,24 +51,48 @@ else
     [SupplyParameterFromQuery(Name = "other")]
     public long? OtherId { get; set; }
 
+    [SupplyParameterFromQuery(Name = "swap")]
+    public string? SwapQuery { get; set; }
+
     [SupplyParameterFromForm(FormName = "confirm")]
     public string? Confirmed { get; set; }
+
+    [SupplyParameterFromForm(Name = "Swap", FormName = "confirm")]
+    public string? SwapForm { get; set; }
 
     [CascadingParameter]
     public HttpContext? HttpContext { get; set; }
 
     private PersonDetail? _person;
     private PersonDetail? _other;
+    private PersonDetail? _stays;
+    private PersonDetail? _leaves;
+
+    // Explicit only: "1" in the address (the Swap link) or in the form the page wrote.
+    private bool Swapped => SwapForm == "1" || (SwapForm is null && SwapQuery == "1");
 
     protected override async Task OnParametersSetAsync()
     {
         _person = await Library.GetPersonAsync(Id);
         _other = OtherId is { } other ? await Library.GetPersonAsync(other) : null;
+        if (_person is not null && _other is not null && _person.Id != _other.Id)
+        {
+            var personStays = (PeopleCuration.KeeperOf(Side(_person), Side(_other)) == _person.Id) != Swapped;
+            (_stays, _leaves) = personStays ? (_person, _other) : (_other, _person);
+        }
+
         if ((_person is null || _other is null) && HttpContext is not null)
         {
             HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
         }
     }
+
+    // The person who goes has a name or is the user: nothing brings them back.
+    private bool Dangerous => _leaves is { } leaves && (leaves.Name is not null || leaves.UserEmail is not null);
+
+    private string SwapHref => $"people/{Id}/merge?other={OtherId}{(Swapped ? string.Empty : "&swap=1")}";
+
+    private static MergeSide Side(PersonDetail person) => new(person.Id, person.Name, person.UserEmail, person.FaceCount);
 
     private string NameOf(string? name) => name ?? Text["People_Unnamed"].Value;
 
@@ -68,7 +102,8 @@ else
 
     private async Task ConfirmAsync()
     {
-        var outcome = await Editor.MergeAsync(Id, OtherId ?? Id);
-        Navigation.NavigateTo(await PersonLinks.AfterAsync(Library, Id, outcome, "merged"));
+        // The server decides the direction again from the people as they are (D-125); this only says whether the swap was asked for.
+        var outcome = await Editor.MergeAsync(Id, OtherId ?? Id, Swapped);
+        Navigation.NavigateTo(await PersonLinks.AfterAsync(Library, _stays?.Id ?? Id, outcome, "merged"));
     }
 }
