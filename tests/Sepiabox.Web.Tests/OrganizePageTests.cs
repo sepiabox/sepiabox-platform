@@ -111,6 +111,16 @@ public sealed class OrganizePageTests : LocalizedContext
         Assert.StartsWith("Bring back", page.Find("label.check").TextContent.Trim(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Starts_with_the_shared_head_the_views_as_pills_and_the_intro_under_the_title()
+    {
+        var page = Open("/organize");
+
+        Assert.Equal("Organize", page.Find("div.page-head h1.page-heading").TextContent);
+        Assert.NotEmpty(page.FindAll("div.page-head .page-sub"));
+        Assert.NotEmpty(page.FindAll("nav.organize-views a, nav.organize-views strong"));
+    }
+
     private IRenderedComponent<Organize> Open(string address)
     {
         Services.GetRequiredService<NavigationManager>().NavigateTo(address);

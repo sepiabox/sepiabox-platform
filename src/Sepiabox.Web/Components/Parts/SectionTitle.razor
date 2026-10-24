@@ -1,0 +1,17 @@
+@* A heading for a part of a page, with the count of what is in it (S-069). *@
+
+<div class="section-title">
+    <h2>@Title</h2>
+    @if (Count is { } count)
+    {
+        <span class="n">@count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public int? Count { get; set; }
+}

@@ -1,0 +1,37 @@
+@* The head every page shares (S-069, D-119): an optional way back, the title, a line under it and the page's main actions on the right.
+   The heading keeps the page-heading class the pages and their tests already know. *@
+
+@if (Back is not null)
+{
+    <p class="back">@Back</p>
+}
+<div class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-heading">@Title</h1>
+        @if (Subtitle is not null)
+        {
+            <div class="muted page-sub">@Subtitle</div>
+        }
+    </div>
+    @if (ChildContent is not null)
+    {
+        <div class="page-head-actions">@ChildContent</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>The line under the title, in a div; keep it to a sentence of inline markup.</summary>
+    [Parameter]
+    public RenderFragment? Subtitle { get; set; }
+
+    /// <summary>A link to the page this one came from, drawn above the title.</summary>
+    [Parameter]
+    public RenderFragment? Back { get; set; }
+
+    /// <summary>The page's main actions, on the right of the title.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

@@ -103,6 +103,7 @@
 
     /* The sticky header's height, for anchored targets (#106): 0 where the header is not sticky (it wraps there, see .top). */
     --header-h: 0px;
+    --content-max: 1440px;
 
     /* light */
     --bg: #eeece7; /* silver paper */
@@ -121,6 +122,8 @@
     --brand-soft: #f2e6da;
     --brand-ink: #7a4520;
     --danger: #a1301f;
+    --success: #2d6a30;
+    --warning: #8a5300;
     --focus: #1f4c7466;
     --stage: #16110d; /* the dark stage a photo is shown on, in both themes */
     --shadow-sm: 0 1px 2px rgb(35 26 20 / 0.08);
@@ -157,6 +160,8 @@
         --brand-soft: #33261b;
         --brand-ink: #e8b887;
         --danger: #f0907f;
+        --success: #8bd48a;
+        --warning: #f2b84b;
         --focus: #8fbce399;
         --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
         --shadow-md: 0 4px 14px rgb(0 0 0 / 0.45);
@@ -181,13 +186,15 @@
     --brand-soft: #33261b;
     --brand-ink: #e8b887;
     --danger: #f0907f;
+    --success: #8bd48a;
+    --warning: #f2b84b;
     --focus: #8fbce399;
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-md: 0 4px 14px rgb(0 0 0 / 0.45);
     --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.6), 0 0 0 1px #352c24;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 960px) {
     :root {
         --header-h: 65px;
     }
@@ -367,15 +374,16 @@ h1:focus {
     flex-wrap: wrap;
     align-items: center;
     gap: var(--s-2) var(--s-4);
-    padding: var(--s-3) var(--s-5);
+    /* The header's row lines up with the content below it: the same maximum width and the same 24px gutter as main. */
+    padding: var(--s-3) max(var(--s-5), calc((100% - var(--content-max)) / 2 + 24px));
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: saturate(1.4) blur(8px);
     border-bottom: 1px solid var(--border);
 }
 
-/* Sticky only where the header is one row (1024 px and up): below that it wraps to two or three rows, and a sticky header of that height
+/* Sticky only where the header is one row (960 px and up): below that it wraps to two or three rows, and a sticky header of that height
    would cover a quarter of a phone's screen (and half of it with "More" open). There it scrolls away with the page. */
-@media (min-width: 1024px) {
+@media (min-width: 960px) {
     .top {
         position: sticky;
         top: 0;
@@ -427,7 +435,7 @@ h1:focus {
 }
 
 main {
-    max-width: 1440px;
+    max-width: var(--content-max);
     margin: 0 auto;
     padding: 16px 24px 48px;
 }
@@ -1907,14 +1915,91 @@ button[data-close] {
 
 /* The people page (S-019): one card per person, the face cropped from its thumbnail by an inline style. */
 .page-heading {
-    margin: 24px 0 16px;
-    font-size: 1.5rem;
+    margin: 0;
+    font-size: var(--text-2xl);
+}
+
+/* The shared page parts (S-069, D-119): the head with its actions, a callout, a section title, and a titled panel. */
+.page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: var(--s-3);
+    margin: var(--s-2) 0 var(--s-5);
+}
+
+.page-head-text {
+    min-width: 0;
+}
+
+.page-sub {
+    margin: var(--s-1) 0 0;
+}
+
+.page-head-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+}
+
+.callout {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    margin: 0 0 var(--s-5);
+    padding: var(--s-4);
+    border-radius: var(--r-md);
+    background: var(--brand-soft);
+    color: var(--text);
+}
+
+.section-title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-3);
+    margin: var(--s-6) 0 var(--s-4);
+}
+
+.section-title h2 {
+    margin: 0;
+    font-size: var(--text-xl);
+}
+
+.section-title .n {
+    color: var(--text-2);
+    font-size: var(--text-sm);
+}
+
+.block {
+    display: grid;
+    gap: var(--s-3);
+    margin: 0 0 var(--s-5);
+    padding: var(--s-5);
+    overflow-wrap: anywhere;
+}
+
+.block > h2,
+.block > p {
+    margin: 0;
+}
+
+.block > p {
+    max-width: 72ch;
+}
+
+.export-request {
+    justify-items: start;
+}
+
+.note {
+    margin: 0 0 var(--s-5);
 }
 
 .people {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: var(--s-4);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -1938,6 +2023,55 @@ button[data-close] {
 .person .face img {
     position: absolute;
     max-width: none;
+}
+
+/* A person's card on the people page (S-069): the avatar over the name and the count, the whole card one link. */
+.person .face.card-face {
+    display: grid;
+    position: static;
+    width: auto;
+    aspect-ratio: auto;
+    overflow: visible;
+    background: none;
+    border-radius: 0;
+    justify-items: center;
+}
+
+.person-link {
+    align-items: center;
+    padding: var(--s-5) var(--s-3) var(--s-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    text-align: center;
+    transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+.person-link:hover {
+    border-color: var(--control-border);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.person .name {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    overflow-wrap: anywhere;
+}
+
+.person.unnamed .name {
+    color: var(--accent);
+}
+
+.person .count {
+    color: var(--text-2);
+    font-size: var(--text-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .person-link:hover {
+        transform: none;
+    }
 }
 
 .person .name {
@@ -2078,17 +2212,6 @@ button[data-close] {
     align-items: center;
 }
 
-.merge-flow .button.danger {
-    background: var(--danger, #a1301f);
-    border-color: var(--danger, #a1301f);
-    color: #fff;
-}
-
-.merge-flow .button.danger:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--danger, #a1301f) 85%, #000);
-    color: #fff;
-}
-
 /* After a correction on a person's page (#106) the page jumps to the next face, which would leave the note off screen: it
    stays in view while the page is scrolled, and a face card lands below the note. */
 .person-note {
@@ -2216,8 +2339,32 @@ button[data-close] {
 
 .organize-views {
     display: flex;
-    gap: 16px;
-    margin: 12px 0;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    margin: 0 0 var(--s-5);
+}
+
+.organize-views a,
+.organize-views strong {
+    padding: var(--s-2) var(--s-4);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.organize-views a {
+    border-color: var(--control-border);
+    background: var(--surface);
+}
+
+.organize-views a:hover {
+    background: var(--accent-soft);
+}
+
+.organize-views strong {
+    background: var(--accent-soft);
+    color: var(--accent);
 }
 
 .organize-form .organize-submit {
@@ -2237,8 +2384,8 @@ button[data-close] {
 }
 
 .burst h2 {
-    margin: 24px 0 8px;
-    font-size: 1.1rem;
+    margin: 0;
+    font-size: var(--text-lg);
 }
 
 .organize-item {
@@ -2283,10 +2430,10 @@ button[data-close] {
 }
 
 .connection {
-    padding: 16px;
-    background: var(--white);
-    border: 1px solid var(--mat);
-    border-radius: 4px;
+    padding: var(--s-4);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
 }
 
 .connection p {
@@ -2302,14 +2449,14 @@ button[data-close] {
     padding: 1px 8px;
     border-radius: 999px;
     font-size: 0.8rem;
-    background: var(--chip);
-    color: var(--cyanotype);
+    background: var(--accent-soft);
+    color: var(--accent);
 }
 
 .connection-account .status-expired {
     background: transparent;
-    border: 1px solid var(--sepia);
-    color: var(--sepia);
+    border: 1px solid var(--danger);
+    color: var(--danger);
 }
 
 .connection .counts span {
@@ -2346,16 +2493,6 @@ button[data-close] {
 }
 
 /* Ignoring strangers' faces (#107): the confirmation says what is deleted, and the way out is the first thing in reach. */
-.button.danger {
-    background: #9b2c2c;
-    color: var(--white);
-}
-
-.button.danger:hover:not(:disabled) {
-    background: #7a2020;
-    color: var(--white);
-}
-
 .confirm .button {
     display: inline-flex;
     align-items: center;
@@ -2445,3 +2582,293 @@ button[data-close] {
     text-decoration: underline;
 }
 
+.block .note {
+    margin: 0;
+}
+
+/* Lists of things on the settings-like pages (S-069): saved places, exports, deletions and the sources, one small card each. */
+.saved-places,
+.exports,
+.face-deletions,
+.connections {
+    display: grid;
+    gap: var(--s-3);
+    margin: 0 0 var(--s-5);
+    padding: 0;
+    list-style: none;
+}
+
+.saved-place,
+.export {
+    padding: var(--s-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.saved-place {
+    display: grid;
+    gap: var(--s-2);
+    overflow-wrap: anywhere;
+}
+
+.saved-place h2 {
+    margin: 0;
+    font-size: var(--text-lg);
+}
+
+.export {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2) var(--s-4);
+}
+
+.block label:not(:has(input[type="checkbox"], input[type="radio"])) {
+    display: grid;
+    gap: var(--s-1);
+}
+
+.block form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--s-3);
+}
+
+.block table {
+    width: 100%;
+}
+
+@media (max-width: 600px) {
+    .block {
+        padding: var(--s-4);
+    }
+}
+
+svg.icon {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.callout .icon {
+    width: 20px;
+    height: 20px;
+    flex: none;
+}
+
+/* Wide screens (D-126): the content grows to 1760px from 1600px; text and forms keep a readable measure. */
+@media (min-width: 1600px) {
+    :root {
+        --content-max: 1760px;
+    }
+}
+
+.measure,
+.page-sub,
+.empty-help {
+    max-width: 72ch;
+}
+
+.form-col {
+    max-width: 720px;
+}
+
+/* Form primitives (S-069): a field is its label above, the control, a helper line and an error line; a row puts two or three side by side. */
+.field {
+    display: grid;
+    gap: var(--s-1);
+    min-width: 0;
+}
+
+.field > .field-label {
+    font-weight: 600;
+    font-size: var(--text-sm);
+}
+
+.field input:not([type="checkbox"], [type="radio"]),
+.field select {
+    width: 100%;
+    min-height: 40px;
+}
+
+.field-help {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+}
+
+.field-error {
+    margin: 0;
+    color: var(--danger);
+    font-size: var(--text-sm);
+    font-weight: 600;
+}
+
+.field:has(.field-error) input,
+.field:has(.field-error) select {
+    border-color: var(--danger);
+}
+
+.block form.form-stack {
+    display: grid;
+    align-items: start;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--s-3) var(--s-4);
+}
+
+@media (min-width: 700px) {
+    .form-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .form-row.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+/* An option card (S-069): a checkbox with a title and a line of help in one clickable card, for an option that needs explaining. */
+.option-card {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-3);
+    padding: var(--s-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--surface-2);
+    cursor: pointer;
+}
+
+.option-card:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.option-card:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.option-card input {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+}
+
+.option-text {
+    display: grid;
+    gap: var(--s-1);
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2) var(--s-3);
+    margin-top: var(--s-2);
+}
+
+/* The primary action is the first in the markup (so the first Tab stop and Enter), then the secondary ones, then a link. */
+.form-actions > .button:first-child {
+    order: -1;
+}
+
+.button.danger {
+    border-color: var(--danger);
+    background: var(--danger);
+    color: var(--surface);
+}
+
+.button.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 85%, black);
+    border-color: transparent;
+    color: var(--surface);
+}
+
+/* Notes in three kinds (S-069): a banner under the header with a coloured edge and an icon. */
+.note {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+}
+
+.note .icon {
+    flex: none;
+}
+
+/* A one-line note does not stretch across a wide screen: it keeps the text measure. */
+.note {
+    max-width: 72ch;
+}
+
+.note-success {
+    border-left-color: var(--success);
+}
+
+.note-success .icon {
+    color: var(--success);
+}
+
+.note-warning {
+    border-left-color: var(--warning);
+}
+
+.note-warning .icon {
+    color: var(--warning);
+}
+
+.note-info {
+    border-left-color: var(--accent);
+}
+
+.note-info .icon {
+    color: var(--accent);
+}
+
+.note-error {
+    border-left-color: var(--danger);
+    background: var(--surface);
+}
+
+.note-error .icon {
+    color: var(--danger);
+}
+
+/* An empty state (S-069; S-070 puts it on the pages). */
+.empty-state {
+    display: grid;
+    justify-items: center;
+    gap: var(--s-3);
+    margin: var(--s-7, 48px) auto;
+    max-width: 480px;
+    padding: var(--s-6);
+    text-align: center;
+}
+
+.empty-state .empty-icon {
+    width: 56px;
+    height: 56px;
+    stroke-width: 1.4;
+    color: var(--text-3);
+}
+
+.empty-title {
+    margin: 0;
+    font-size: var(--text-xl);
+}
+
+.empty-help {
+    margin: 0;
+}

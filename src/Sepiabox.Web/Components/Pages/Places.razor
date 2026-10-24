@@ -11,11 +11,11 @@
 
 <PageTitle>@Text["Places_Heading"] · Sepiabox</PageTitle>
 
-<h1 class="page-heading">@Text["Places_Heading"]</h1>
+<PageHead Title="@Text["Places_Heading"]" />
 
 @if (NoteText is { } note)
 {
-    <p class="note" role="status">@note</p>
+    <Notice Variant="@NoteVariant">@note</Notice>
 }
 
 @if (_deleting is { } deleting)
@@ -25,37 +25,40 @@
         <form method="post" @formname="delete" @onsubmit="DeleteAsync" class="confirm">
             <AntiforgeryToken />
             <input type="hidden" name="DeleteId" value="@deleting.Id.ToString(CultureInfo.InvariantCulture)" />
-            <button type="submit">@Text["Places_DeleteConfirm"]</button>
+            <button type="submit" class="button danger">@Text["Places_DeleteConfirm"]</button>
             <a href="places">@Text["Settings_Cancel"]</a>
         </form>
     </section>
 }
 
-<section class="new-place">
-    <h2>@Text["Places_New"]</h2>
-    <form method="post" @formname="create" @onsubmit="CreateAsync" class="create">
+<Panel Class="new-place" Title="@Text["Places_New"]">
+    <form method="post" @formname="create" @onsubmit="CreateAsync" class="create form-stack form-col">
         <AntiforgeryToken />
-        <label>
-            <span>@Text["Places_Name"]</span>
+        <label class="field">
+            <span class="field-label">@Text["Places_Name"]</span>
             <input type="text" name="NewName" value="@NewName" maxlength="@SavedPlaceEditor.MaxNameLength" required />
-            <span class="hint muted small name-hint">@Text["Places_NameHint"]</span>
+            <span class="field-help name-hint">@Text["Places_NameHint"]</span>
         </label>
-        <label>
-            <span>@Text["Places_CoordinatesLabel"]</span>
-            <input type="text" name="NewCoordinates" value="@(NewCoordinates ?? _photoCoordinates)" placeholder="38.72, -9.13" required />
-        </label>
-        <label>
-            <span>@Text["Places_Radius"]</span>
-            <input type="number" name="NewRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@(NewRadius ?? SavedPlaceEditor.DefaultRadiusM.ToString(CultureInfo.InvariantCulture))" />
-        </label>
+        <div class="form-row">
+            <label class="field">
+                <span class="field-label">@Text["Places_CoordinatesLabel"]</span>
+                <input type="text" name="NewCoordinates" value="@(NewCoordinates ?? _photoCoordinates)" placeholder="38.72, -9.13" required />
+            </label>
+            <label class="field">
+                <span class="field-label">@Text["Places_Radius"]</span>
+                <input type="number" name="NewRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@(NewRadius ?? SavedPlaceEditor.DefaultRadiusM.ToString(CultureInfo.InvariantCulture))" />
+            </label>
+        </div>
         <label class="home">
             <input type="checkbox" name="NewHome" value="1" checked="@(NewHome == "1")" />
             <span>@Text["Places_IsHome"]</span>
         </label>
-        <button type="submit">@Text["Places_Save"]</button>
+        <div class="form-actions">
+            <button type="submit" class="button">@Text["Places_Save"]</button>
+        </div>
     </form>
     <p class="hint muted">@Text["Places_Hint"]</p>
-</section>
+</Panel>
 
 @if (_places is { Count: > 0 } places)
 {
@@ -107,16 +110,16 @@ else
 
 @code {
     // What a note in the address may say, and its text: nothing else from the address is shown.
-    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string Key, string Variant)> s_notes = new(StringComparer.Ordinal)
     {
-        ["created"] = "Places_Done_Created",
-        ["updated"] = "Places_Done_Updated",
-        ["deleted"] = "Places_Done_Deleted",
-        [nameof(SavedPlaceOutcome.NotFound)] = "Places_Error_NotFound",
-        [nameof(SavedPlaceOutcome.NameTaken)] = "Places_Error_NameTaken",
-        [nameof(SavedPlaceOutcome.NameInvalid)] = "Places_Error_NameInvalid",
-        [nameof(SavedPlaceOutcome.LocationInvalid)] = "Places_Error_LocationInvalid",
-        [nameof(SavedPlaceOutcome.RadiusInvalid)] = "Places_Error_RadiusInvalid",
+        ["created"] = ("Places_Done_Created", NoticeVariant.Success),
+        ["updated"] = ("Places_Done_Updated", NoticeVariant.Success),
+        ["deleted"] = ("Places_Done_Deleted", NoticeVariant.Success),
+        [nameof(SavedPlaceOutcome.NotFound)] = ("Places_Error_NotFound", NoticeVariant.Error),
+        [nameof(SavedPlaceOutcome.NameTaken)] = ("Places_Error_NameTaken", NoticeVariant.Error),
+        [nameof(SavedPlaceOutcome.NameInvalid)] = ("Places_Error_NameInvalid", NoticeVariant.Error),
+        [nameof(SavedPlaceOutcome.LocationInvalid)] = ("Places_Error_LocationInvalid", NoticeVariant.Error),
+        [nameof(SavedPlaceOutcome.RadiusInvalid)] = ("Places_Error_RadiusInvalid", NoticeVariant.Error),
     };
 
     [SupplyParameterFromQuery(Name = PersonLinks.NoteParameter)]
@@ -161,11 +164,17 @@ else
     private SavedPlaceOutcome? _failure;
     private long? _failedEdit;
 
+    // A refusal wins over a note in the address.
+    private (string Key, string Variant)? KnownNote =>
+        _failure is { } failure ? s_notes[failure.ToString()] : Note is not null && s_notes.TryGetValue(Note, out var known) ? known : null;
+
+    private string NoteVariant => KnownNote?.Variant ?? NoticeVariant.Success;
+
     private string? NoteText
     {
         get
         {
-            var key = _failure is { } failure ? s_notes[failure.ToString()] : Note is not null && s_notes.TryGetValue(Note, out var known) ? known : null;
+            var key = KnownNote?.Key;
             return key switch
             {
                 null => null,

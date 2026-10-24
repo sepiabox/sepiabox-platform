@@ -6,24 +6,26 @@
 
 <PageTitle>@Title · Sepiabox</PageTitle>
 
-<p class="back"><a href="occasions">@Text["Occasion_Back"]</a></p>
-
 @if (_occasion is null)
 {
-    <h1 class="page-heading">@Text["Occasion_NotFound"]</h1>
+    <PageHead Title="@Text["Occasion_NotFound"]">
+        <Back><a href="occasions">@Text["Occasion_Back"]</a></Back>
+    </PageHead>
     <p class="muted">@Text["Occasion_NotFoundHint"] <a href="occasions">@Text["Occasion_SeeAll"]</a></p>
 }
 else
 {
-    <h1 class="page-heading">@Title</h1>
-    <p class="muted">
-        @(_occasion.Type is { } type ? Text.EventTypeLabel(type) + " · " : "")@Items(_occasion.AssetCount)
-        @if (_occasion.AssetCount <= SearchQuery.DefaultLimit)
-        {
-            @* The timeline shows 200 at a time: past that, the link would show fewer than this page does. *@
-            <text>· </text><a href="@SearchLinks.Timeline(Query)">@Text["Occasion_OpenOnTimeline"]</a>
-        }
-    </p>
+    <PageHead Title="@Title">
+        <Back><a href="occasions">@Text["Occasion_Back"]</a></Back>
+        <Subtitle>
+            @(_occasion.Type is { } type ? Text.EventTypeLabel(type) + " · " : "")@Items(_occasion.AssetCount)
+            @if (_occasion.AssetCount <= SearchQuery.DefaultLimit)
+            {
+                @* The timeline shows 200 at a time: past that, the link would show fewer than this page does. *@
+                <text>· </text><a href="@SearchLinks.Timeline(Query)">@Text["Occasion_OpenOnTimeline"]</a>
+            }
+        </Subtitle>
+    </PageHead>
 
     @if (_results is { Items.Count: > 0 } results)
     {

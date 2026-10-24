@@ -10,17 +10,16 @@
 
 <PageTitle>@Text["Settings_Heading"] · Sepiabox</PageTitle>
 
-<h1 class="page-heading">@Text["Settings_Heading"]</h1>
+<PageHead Title="@Text["Settings_Heading"]" />
 
 @if (NoteText is { } note)
 {
-    <p class="note" role="status">@note</p>
+    <Notice Variant="@NoteVariant">@note</Notice>
 }
 
 @if (_view is { } view)
 {
-    <section class="settings-faces">
-        <h2>@Text["Settings_Faces_Heading"]</h2>
+    <Panel Class="settings-faces" Title="@Text["Settings_Faces_Heading"]">
         @if (view.State.On)
         {
             <p class="faces-status">@Text["Settings_Faces_IsOn"]</p>
@@ -31,7 +30,7 @@
                     <form method="post" @formname="off" @onsubmit="TurnOffAsync" class="confirm">
                         <AntiforgeryToken />
                         <input type="hidden" name="Off" value="yes" />
-                        <button type="submit">@Text["Settings_Faces_OffConfirm"]</button>
+                        <button type="submit" class="button danger">@Text["Settings_Faces_OffConfirm"]</button>
                         <a href="settings">@Text["Settings_Cancel"]</a>
                     </form>
                 </div>
@@ -42,7 +41,7 @@
                 @* A GET form: it only opens the confirmation above, which turns recognition off on its own POST. *@
                 <form method="get" action="settings" class="ask-off">
                     <input type="hidden" name="confirm" value="@ConfirmOff" />
-                    <button type="submit">@Text["Settings_Faces_Off"]</button>
+                    <button type="submit" class="button danger">@Text["Settings_Faces_Off"]</button>
                 </form>
             }
         }
@@ -77,25 +76,24 @@
                 }
             </ul>
         }
-    </section>
+    </Panel>
 }
 
-<section class="settings-export">
-    <h2>@Text["Export_Heading"]</h2>
+<Panel Class="settings-export" Title="@Text["Export_Heading"]">
     <p class="muted">@Text["Export_Intro"]</p>
     <p><a class="button" href="settings/export">@Text["Settings_Export_Link"]</a></p>
-</section>
+</Panel>
 
 @code {
     private const string ConfirmOff = "faces-off";
 
     // What a note in the address may say, and its text: nothing else from the address is shown.
-    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string Key, string Variant)> s_notes = new(StringComparer.Ordinal)
     {
-        ["faces-off"] = "Settings_Done_Off",
-        ["faces-on"] = "Settings_Done_On",
-        ["faces-pending"] = "Settings_Error_Pending",
-        ["signed-out"] = "Settings_Error_NoEmail",
+        ["faces-off"] = ("Settings_Done_Off", NoticeVariant.Success),
+        ["faces-on"] = ("Settings_Done_On", NoticeVariant.Success),
+        ["faces-pending"] = ("Settings_Error_Pending", NoticeVariant.Error),
+        ["signed-out"] = ("Settings_Error_NoEmail", NoticeVariant.Error),
     };
 
     [SupplyParameterFromQuery(Name = "confirm")]
@@ -117,7 +115,9 @@
 
     private string? Email => HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
 
-    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key) ? Text[key].Value : null;
+    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var known) ? Text[known.Key].Value : null;
+
+    private string NoteVariant => Note is not null && s_notes.TryGetValue(Note, out var known) ? known.Variant : NoticeVariant.Success;
 
     protected override async Task OnInitializedAsync() => _view = await Faces.GetAsync();
 

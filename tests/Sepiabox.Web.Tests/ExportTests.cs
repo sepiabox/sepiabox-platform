@@ -167,6 +167,16 @@ public sealed class ExportPageTests : LocalizedContext
     }
 
     [Fact]
+    public void Starts_with_the_shared_head_and_puts_the_request_on_a_panel()
+    {
+        var page = Render<ExportData>();
+
+        Assert.Single(page.FindAll("div.page-head h1.page-heading"));
+        Assert.NotEmpty(page.FindAll("div.page-head .page-sub"));
+        Assert.NotEmpty(page.FindAll("form.export-request.panel"));
+    }
+
+    [Fact]
     public void Offers_the_face_data_option_only_while_face_recognition_is_on()
     {
         Assert.Single(Render<ExportData>().FindAll("input[name=IncludeFaceData]"));

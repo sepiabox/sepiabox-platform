@@ -98,10 +98,46 @@ public sealed class PeoplePageTests
         // Only the page's own markup: the header's sign-out and language forms carry a fresh antiforgery token (base64url,
         // about 150 characters) on every request, and a short name such as "Ana" turns up in one about once in a thousand.
         var main = html[html.IndexOf("<main", StringComparison.Ordinal)..];
-        var (unnamed, ana) = (main.IndexOf("Unnamed", StringComparison.Ordinal), main.IndexOf(">Ana<", StringComparison.Ordinal));
-        Assert.True(unnamed >= 0 && ana > unnamed, $"Unnamed at {unnamed}, Ana at {ana}.");
+        var (named, needsName, unnamed) = (main.IndexOf(">Ana<", StringComparison.Ordinal), main.IndexOf("Needs a name", StringComparison.Ordinal), main.IndexOf(">Unnamed<", StringComparison.Ordinal));
+        Assert.True(named >= 0 && needsName > named && unnamed > needsName, $"Ana at {named}, the section at {needsName}, Unnamed at {unnamed}.");
+        Assert.Contains("1 person still needs a name", main, StringComparison.Ordinal);
         Assert.Contains("3 faces", html, StringComparison.Ordinal);
         Assert.Contains("href=\"people\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Orders_each_group_by_faces_then_id_with_the_named_ones_before_the_unnamed()
+    {
+        await using var web = new WebFactory(new FakeLibrary
+        {
+            People =
+            [
+                new PersonSummary(5, "Bia", 2, null), new PersonSummary(1, null, 3, null), new PersonSummary(4, "Caio", 9, null),
+                new PersonSummary(3, null, 3, null), new PersonSummary(2, null, 8, null), new PersonSummary(6, "Duda", 2, null),
+            ],
+        });
+        using var http = web.CreateSignedInClient();
+
+        var html = await http.GetStringAsync(new Uri("/people", UriKind.Relative));
+
+        var lists = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html).QuerySelectorAll("main ul.people");
+        static string[] Hrefs(AngleSharp.Dom.IElement list) => list.QuerySelectorAll("a.person-link").Select(a => a.GetAttribute("href")!).ToArray();
+        Assert.Equal(2, lists.Length);
+        Assert.Equal(["people/4", "people/5", "people/6"], Hrefs(lists[0]));
+        Assert.Equal(["people/2", "people/1", "people/3"], Hrefs(lists[1]));
+    }
+
+    [Fact]
+    public async Task Leaves_out_the_callout_and_the_sections_when_every_person_has_a_name()
+    {
+        await using var web = new WebFactory(new FakeLibrary { People = [new PersonSummary(2, "Ana", 1, null)] });
+        using var http = web.CreateSignedInClient();
+
+        var html = await http.GetStringAsync(new Uri("/people", UriKind.Relative));
+
+        Assert.DoesNotContain("class=\"callout\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("section-title", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"person\"", html, StringComparison.Ordinal);
     }
 
     [Fact]

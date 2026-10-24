@@ -9,13 +9,15 @@
 
 @if (_person is null || _face is null)
 {
-    <p class="back"><a href="people/@Id">@Text["Person_Back"]</a></p>
-    <h1 class="page-heading">@Text["Person_Error_NotFound"]</h1>
+    <PageHead Title="@Text["Person_Error_NotFound"]">
+        <Back><a href="people/@Id">@Text["Person_Back"]</a></Back>
+    </PageHead>
 }
 else
 {
-    <p class="back"><a href="people/@_person.Id">@(_person.Name ?? Text["People_Unnamed"])</a></p>
-    <h1 class="page-heading">@Text["Move_Title"]</h1>
+    <PageHead Title="@Text["Move_Title"]">
+        <Back><a href="people/@_person.Id">@(_person.Name ?? Text["People_Unnamed"])</a></Back>
+    </PageHead>
     <ul class="people">
         <li class="person">
             <a href="photos/@_face.AssetId" class="face">

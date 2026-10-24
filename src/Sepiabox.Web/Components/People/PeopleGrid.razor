@@ -3,7 +3,7 @@
 <ul class="people">
     @foreach (var person in Ordered)
     {
-        <li class="person">
+        <li class="person@(person.Name is null ? " unnamed" : "")">
             <a href="people/@person.Id" class="person-link">
                 <PersonCard Person="person" />
             </a>

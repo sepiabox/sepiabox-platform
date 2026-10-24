@@ -8,23 +8,25 @@
 
 <PageTitle>@Title · Sepiabox</PageTitle>
 
-<p class="back"><a href="people">@Text["Person_Back"]</a></p>
-
 @if (_person is null)
 {
-    <h1 class="page-heading">@Text["Person_NotFound"]</h1>
+    <PageHead Title="@Text["Person_NotFound"]">
+        <Back><a href="people">@Text["Person_Back"]</a></Back>
+    </PageHead>
 }
 else
 {
-    <h1 class="page-heading">@Title</h1>
-    <p class="muted">@FaceCount(_person.FaceCount)</p>
+    <PageHead Title="@Title">
+        <Back><a href="people">@Text["Person_Back"]</a></Back>
+        <Subtitle>@FaceCount(_person.FaceCount)</Subtitle>
+    </PageHead>
 
     @if (NoteText is { } note)
     {
-        <p class="note person-note" role="status">@note</p>
+        <Notice Class="person-note" Variant="@NoteVariant">@note</Notice>
     }
 
-    <section class="person-edit">
+    <Panel Class="person-edit">
         <form method="post" @formname="rename" @onsubmit="RenameAsync" class="rename">
             <AntiforgeryToken />
             <label>
@@ -75,9 +77,9 @@ else
             @* A stranger (a poster, a face in a crowd): opens a confirmation, which deletes the faces for good (#107). *@
             <p class="ignore-person"><a href="people/@_person.Id/ignore" data-enhance-nav="false">@Text["Person_Ignore"]</a><br /><span class="muted small">@Text["Person_Ignore_Hint"]</span></p>
         }
-    </section>
+    </Panel>
 
-    <h2>@Text["Person_Faces_Heading"]</h2>
+    <SectionTitle Title="@Text["Person_Faces_Heading"]" Count="_person.Faces.Count" />
     <form method="post" @formname="faces" @onsubmit="FaceAsync">
         <AntiforgeryToken />
         <ul class="people person-faces">
@@ -99,7 +101,7 @@ else
 
         @if (_person.ExcludedFaces.Count > 0)
         {
-            <h2>@Text["Person_Excluded_Heading"]</h2>
+            <SectionTitle Title="@Text["Person_Excluded_Heading"]" Count="_person.ExcludedFaces.Count" />
             <p class="hint muted">@Text["Person_Excluded_Hint"]</p>
             <ul class="people person-faces excluded-faces">
                 @foreach (var face in _person.ExcludedFaces)
@@ -130,25 +132,25 @@ else
     private const string GiveBack = "give-back";
 
     // What a note in the address may say, and its text: nothing else from the address is shown.
-    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string Key, string Variant)> s_notes = new(StringComparer.Ordinal)
     {
-        ["renamed"] = "Person_Done_Renamed",
-        ["linked"] = "Person_Done_Linked",
-        ["unlinked"] = "Person_Done_Unlinked",
-        ["merged"] = "Person_Done_Merged",
-        ["removed"] = "Person_Done_Removed",
-        ["not-a-face"] = "Person_Done_NotAFace",
-        ["given-back"] = "Person_Done_GivenBack",
-        ["moved"] = "Person_Done_Moved",
-        [nameof(CurationOutcome.PhotoTaken)] = "Person_Error_PhotoTaken",
-        [nameof(CurationOutcome.NameInvalid)] = "Person_Error_NameInvalid",
-        [nameof(CurationOutcome.NotFound)] = "Person_Error_NotFound",
-        [nameof(CurationOutcome.NameTaken)] = "Person_Error_NameTaken",
-        [nameof(CurationOutcome.NameTooLong)] = "Person_Error_NameTooLong",
-        [nameof(CurationOutcome.ClaimedByAnother)] = "Person_Error_ClaimedByAnother",
-        [nameof(CurationOutcome.AlreadyLinked)] = "Person_Error_AlreadyLinked",
-        [nameof(CurationOutcome.SamePerson)] = "Person_Error_SamePerson",
-        [nameof(CurationOutcome.DifferentUsers)] = "Person_Error_DifferentUsers",
+        ["renamed"] = ("Person_Done_Renamed", NoticeVariant.Success),
+        ["linked"] = ("Person_Done_Linked", NoticeVariant.Success),
+        ["unlinked"] = ("Person_Done_Unlinked", NoticeVariant.Success),
+        ["merged"] = ("Person_Done_Merged", NoticeVariant.Success),
+        ["removed"] = ("Person_Done_Removed", NoticeVariant.Success),
+        ["not-a-face"] = ("Person_Done_NotAFace", NoticeVariant.Success),
+        ["given-back"] = ("Person_Done_GivenBack", NoticeVariant.Success),
+        ["moved"] = ("Person_Done_Moved", NoticeVariant.Success),
+        [nameof(CurationOutcome.PhotoTaken)] = ("Person_Error_PhotoTaken", NoticeVariant.Error),
+        [nameof(CurationOutcome.NameInvalid)] = ("Person_Error_NameInvalid", NoticeVariant.Error),
+        [nameof(CurationOutcome.NotFound)] = ("Person_Error_NotFound", NoticeVariant.Error),
+        [nameof(CurationOutcome.NameTaken)] = ("Person_Error_NameTaken", NoticeVariant.Error),
+        [nameof(CurationOutcome.NameTooLong)] = ("Person_Error_NameTooLong", NoticeVariant.Error),
+        [nameof(CurationOutcome.ClaimedByAnother)] = ("Person_Error_ClaimedByAnother", NoticeVariant.Error),
+        [nameof(CurationOutcome.AlreadyLinked)] = ("Person_Error_AlreadyLinked", NoticeVariant.Error),
+        [nameof(CurationOutcome.SamePerson)] = ("Person_Error_SamePerson", NoticeVariant.Error),
+        [nameof(CurationOutcome.DifferentUsers)] = ("Person_Error_DifferentUsers", NoticeVariant.Error),
     };
 
     [Parameter]
@@ -180,9 +182,11 @@ else
 
     private bool IsMe => _person?.UserEmail is { } linked && string.Equals(linked, Email?.Trim(), StringComparison.OrdinalIgnoreCase);
 
-    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key)
-        ? (key == "Person_Error_NameTooLong" ? Text[key, PeopleCuration.MaxNameLength].Value : Text[key].Value)
+    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var known)
+        ? (known.Key == "Person_Error_NameTooLong" ? Text[known.Key, PeopleCuration.MaxNameLength].Value : Text[known.Key].Value)
         : null;
+
+    private string NoteVariant => Note is not null && s_notes.TryGetValue(Note, out var known) ? known.Variant : NoticeVariant.Success;
 
     protected override async Task OnParametersSetAsync()
     {

@@ -22,6 +22,19 @@ public sealed class PersonPageFormTests : LocalizedContext
     }
 
     [Fact]
+    public void Uses_the_shared_parts_the_head_with_the_way_back_a_panel_for_the_corrections_and_counted_section_titles()
+    {
+        var page = Render<Person>(p => p.Add(x => x.Id, 7L));
+
+        Assert.Equal("people", page.Find("p.back a").GetAttribute("href"));
+        Assert.Equal("Ana", page.Find("div.page-head h1.page-heading").TextContent);
+        Assert.NotEmpty(page.FindAll("div.page-head .page-sub"));
+        Assert.NotEmpty(page.FindAll("section.panel.block.person-edit"));
+        var counts = page.FindAll(".section-title .n").Select(n => n.TextContent).ToList();
+        Assert.Equal(["2", "2"], counts);
+    }
+
+    [Fact]
     public void Offers_rename_this_is_me_merge_and_the_face_corrections()
     {
         var page = Render<Person>(p => p.Add(x => x.Id, 7L));
@@ -119,6 +132,20 @@ public sealed class PersonPageFormTests : LocalizedContext
         var page = Render<Person>(p => p.Add(x => x.Id, 7L));
 
         Assert.Equal(expected, page.Find(".note").TextContent);
+    }
+
+    [Theory]
+    [InlineData("NameTaken", "error", "alert")]
+    [InlineData("DifferentUsers", "error", "alert")]
+    [InlineData("renamed", "success", "status")]
+    [InlineData("merged", "success", "status")]
+    public void Draws_a_refusal_as_an_error_that_is_announced_at_once_and_a_done_as_a_success(string note, string variant, string role)
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"people/7?note={note}");
+
+        var page = Render<Person>(p => p.Add(x => x.Id, 7L));
+
+        Assert.Equal(role, page.Find($"p.note.note-{variant}").GetAttribute("role"));
     }
 
     [Fact]

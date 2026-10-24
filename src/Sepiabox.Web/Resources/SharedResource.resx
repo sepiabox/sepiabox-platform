@@ -696,7 +696,7 @@
     <value>Face recognition</value>
   </data>
   <data name="Settings_Faces_IsOn" xml:space="preserve">
-    <value>Face recognition is on: the faces in photos processed with --faces are grouped into people.</value>
+    <value>Face recognition is on. Faces found in your photos are grouped into people.</value>
   </data>
   <data name="Settings_Faces_OffHint" xml:space="preserve">
     <value>Turning it off deletes every face and every person, with their names, from the library. The photos stay.</value>
@@ -1687,5 +1687,20 @@
   </data>
   <data name="Detail_AddNameFace" xml:space="preserve">
     <value>Add a name, unnamed face {0}</value>
+  </data>
+  <data name="People_Subtitle" xml:space="preserve">
+    <value>People found in your photos by face.</value>
+  </data>
+  <data name="People_NeedName_One" xml:space="preserve">
+    <value>1 person still needs a name. Naming people makes searching by person work.</value>
+  </data>
+  <data name="People_NeedName_Other" xml:space="preserve">
+    <value>{0} people still need a name. Naming people makes searching by person work.</value>
+  </data>
+  <data name="People_Named" xml:space="preserve">
+    <value>Named</value>
+  </data>
+  <data name="People_NeedsName" xml:space="preserve">
+    <value>Needs a name</value>
   </data>
 </root>

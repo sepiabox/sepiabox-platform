@@ -219,8 +219,14 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | S-066 | [Design tokens, base controls and the header](S-066-design-tokens-and-base-controls.md) | Visual design | S-013 | High | M | `done` | A |
 | S-067 | [Timeline filters and the question box, redesigned](S-067-timeline-filters-and-search.md) | Visual design | S-066, S-052 | High | M | `done` | A |
 | S-068 | [Photo grid and photo detail, redesigned](S-068-photo-grid-and-detail.md) | Visual design | S-066, S-041, S-052, S-064 | Medium | M | `done` | A |
-| S-069 | [Remaining pages on the shared components](S-069-remaining-pages-on-shared-components.md) | Visual design | S-066, S-067, S-068, S-037, S-039, S-040 | Medium | M | `todo` | A |
-| S-070 | [Empty states, notes and a theme switch](S-070-empty-states-and-theme-switch.md) | Visual design | S-069 | Low | S | `todo` | A |
+| S-069 | [Remaining pages on the shared components](S-069-remaining-pages-on-shared-components.md) | Visual design | S-066, S-067, S-068, S-037, S-039, S-040 | Medium | M | `done` | A |
+| S-071 | [Places, on the shared components](S-071-places-on-shared-components.md) | Visual design | S-069 | Medium | M | `todo` | A |
+| S-072 | [Settings and Export, on the shared components](S-072-settings-and-export-on-shared-components.md) | Visual design | S-069 | Medium | M | `todo` | A |
+| S-073 | [Sign-in and No access, on the shared components](S-073-sign-in-and-no-access-on-shared-components.md) | Visual design | S-069 | Medium | S | `todo` | A |
+| S-074 | [Person, Merge and People, on the shared components](S-074-person-merge-and-people-on-shared-components.md) | Visual design | S-069 | Medium | M | `todo` | A |
+| S-075 | [Occasions and Organize, on the shared components](S-075-occasions-and-organize-on-shared-components.md) | Visual design | S-069 | Medium | M | `todo` | A |
+| S-076 | [Storage and Sources, on the shared components](S-076-storage-and-sources-on-shared-components.md) | Visual design | S-069 | Medium | S | `todo` | A |
+| S-070 | [Empty states, notes and a theme switch](S-070-empty-states-and-theme-switch.md) | Visual design | S-069, S-071, S-072, S-073, S-074, S-075, S-076 | Low | S | `todo` | A |
 
 ## Epics
 
@@ -240,7 +246,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Privacy | S-040 |
 | Site | S-042 |
 | Import exports | S-045, S-046, S-047, S-048, S-049, S-052 |
-| Visual design | S-066, S-067, S-068, S-069, S-070 |
+| Visual design | S-066, S-067, S-068, S-069, S-071, S-072, S-073, S-074, S-075, S-076, S-070 |
 
 ## Validation
 

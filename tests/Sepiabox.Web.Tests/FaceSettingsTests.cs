@@ -32,17 +32,17 @@ public sealed class FaceSettingsPageTests : LocalizedContext
 
         var page = Render<Settings>();
         Assert.Equal("Configurações", page.Find("h1").TextContent);
-        Assert.StartsWith("O reconhecimento facial está ligado", page.Find(".faces-status").TextContent, StringComparison.Ordinal);
+        Assert.StartsWith("O reconhecimento facial está ativado", page.Find(".faces-status").TextContent, StringComparison.Ordinal);
         Assert.Equal(("get", "settings"), (page.Find("form.ask-off").GetAttribute("method"), page.Find("form.ask-off").GetAttribute("action")));
-        Assert.Equal("Desligar e apagar os dados faciais", page.Find("form.ask-off button").TextContent);
+        Assert.Equal("Desativar e apagar os dados faciais", page.Find("form.ask-off button").TextContent);
         Assert.Empty(page.FindAll("form.confirm"));
 
         Services.GetRequiredService<NavigationManager>().NavigateTo("settings?confirm=faces-off");
         var confirming = Render<Settings>();
 
-        Assert.StartsWith("Desligar o reconhecimento facial? Todos os rostos e todas as pessoas", confirming.Find(".confirm-off .note").TextContent, StringComparison.Ordinal);
+        Assert.StartsWith("Desativar o reconhecimento facial? Todos os rostos e todas as pessoas", confirming.Find(".confirm-off .note").TextContent, StringComparison.Ordinal);
         Assert.Equal("post", confirming.Find("form.confirm").GetAttribute("method"));
-        Assert.Equal("Sim, desligar e apagar", confirming.Find("form.confirm button").TextContent);
+        Assert.Equal("Sim, desativar e apagar", confirming.Find("form.confirm button").TextContent);
         Assert.Equal("settings", confirming.Find("form.confirm a").GetAttribute("href"));
         Assert.Contains("process --faces", confirming.Find(".work-folder").TextContent, StringComparison.Ordinal);
         Assert.StartsWith("Os backups automáticos", confirming.Find(".backups").TextContent, StringComparison.Ordinal);
@@ -78,7 +78,7 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         Assert.Equal(
             [
                 "21/10/2026 10:05, por ana@example.com: dados faciais de uma pessoa apagados; rostos: 3.",
-                "20/10/2026 08:00, por ana@example.com: reconhecimento desligado; rostos apagados: 120, pessoas apagadas: 9.",
+                "20/10/2026 08:00, por ana@example.com: reconhecimento desativado; rostos apagados: 120, pessoas apagadas: 9.",
             ],
             page.FindAll(".face-deletions li").Select(li => li.TextContent));
     }

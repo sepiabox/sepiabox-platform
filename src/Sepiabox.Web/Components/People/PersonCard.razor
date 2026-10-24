@@ -1,13 +1,8 @@
 @* One person: their best face cropped from its thumbnail, their name and how many faces they have (S-019, S-020). *@
 
-<span class="face">
-    @if (Person.Cover is { } cover)
-    {
-        <img src="photos/@cover.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@cover.ImageStyle()" />
-    }
-</span>
+<span class="face card-face"><PersonAvatar PersonId="Person.Id" Name="Person.Name" Size="lg" Crop="Person.Cover" /></span>
 <span class="name">@(Person.Name ?? Text["People_Unnamed"])</span>
-<span class="count muted small">@FaceCount(Person.FaceCount)</span>
+<span class="count">@FaceCount(Person.FaceCount)</span>
 
 @code {
     [Parameter, EditorRequired]

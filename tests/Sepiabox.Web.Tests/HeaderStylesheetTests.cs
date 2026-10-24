@@ -15,7 +15,7 @@ public sealed partial class HeaderStylesheetTests
     {
         var topRules = TopRule().Matches(Css).Select(m => (m.Index, Body: m.Groups[1].Value)).ToList();
         var wide = WideBlock().Match(Css);
-        Assert.True(wide.Success, "no (min-width: 1024px) block that sets .top");
+        Assert.True(wide.Success, "no (min-width: 960px) block that sets .top");
 
         // The rule that sticks is inside the wide block; the plain .top rule is relative with a z-index, so the "More" popover paints
         // above positioned page content where the header is not sticky.
@@ -29,7 +29,7 @@ public sealed partial class HeaderStylesheetTests
     public void The_height_anchored_targets_leave_for_the_header_is_nothing_except_where_it_sticks()
     {
         Assert.Matches(@":root\s*\{[^}]*--header-h:\s*0px", Css);
-        var wide = Regex.Match(Css, @"@media \(min-width: 1024px\)\s*\{\s*:root\s*\{\s*--header-h:\s*(\d+)px", RegexOptions.None, TimeSpan.FromSeconds(5));
+        var wide = Regex.Match(Css, @"@media \(min-width: 960px\)\s*\{\s*:root\s*\{\s*--header-h:\s*(\d+)px", RegexOptions.None, TimeSpan.FromSeconds(5));
         Assert.True(wide.Success);
         Assert.InRange(int.Parse(wide.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture), 60, 70);
         Assert.DoesNotContain("--header-h: 112px", Css, StringComparison.Ordinal);
@@ -48,6 +48,6 @@ public sealed partial class HeaderStylesheetTests
     [GeneratedRegex(@"\n\s*\.top\s*\{([^}]*)\}", RegexOptions.None, 5000)]
     private static partial Regex TopRule();
 
-    [GeneratedRegex(@"@media \(min-width: 1024px\)\s*\{\s*\.top\s*\{[^}]*\}\s*\}", RegexOptions.None, 5000)]
+    [GeneratedRegex(@"@media \(min-width: 960px\)\s*\{\s*\.top\s*\{[^}]*\}\s*\}", RegexOptions.None, 5000)]
     private static partial Regex WideBlock();
 }
