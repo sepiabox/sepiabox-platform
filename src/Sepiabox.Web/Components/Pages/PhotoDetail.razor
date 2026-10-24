@@ -143,38 +143,32 @@
 
         @if (_asset.Faces.Count > 0)
         {
-            @* One thumbnail for each counted face (S-068): a named person's links to their photos, an unnamed one's to their page, to be named (S-021). *@
+            @* One row for each counted face (S-068), in display order: a named person's links to their photos, an unnamed one's to their page,
+               to be named (S-021). An unnamed face has its own "Ignore and delete" beside it: it opens a confirmation, where a stranger's
+               face (a poster, a crowd) is deleted for good (#107). The numbers in the accessible names come from one counter. *@
             <section class="card people-card">
                 <h2>@Text["Detail_People"]</h2>
-                <div class="faces">
+                <ul class="faces">
                     @{ var unnamedNumber = 0; }
                     @foreach (var face in _asset.Faces)
                     {
-                        @* Unnamed faces are all "Add a name": the accessible name says which one, in display order, the visible text first. *@
-                        <a class="face@(face.Name is null ? " unnamed" : " named")" href="@FaceHref(face)" aria-label="@(face.Name is null ? Text["Detail_AddNameFace", ++unnamedNumber].Value : null)">
-                            <PersonAvatar Name="@face.Name" PersonId="@face.PersonId" Size="md" Crop="@face.Crop" />
-                            <span class="name">@(face.Name ?? Text["Detail_AddName"])</span>
-                        </a>
+                        var number = face.Name is null ? ++unnamedNumber : 0;
+                        <li class="face-row">
+                            <a class="face@(face.Name is null ? " unnamed" : " named")" href="@FaceHref(face)" aria-label="@(face.Name is null ? Text["Detail_AddNameFace", number].Value : null)">
+                                <PersonAvatar Name="@face.Name" PersonId="@face.PersonId" Size="md" Crop="@face.Crop" />
+                                <span class="name">@(face.Name ?? Text["Detail_AddName"])</span>
+                            </a>
+                            @if (face.Name is null)
+                            {
+                                <a class="face-ignore" href="photos/@_asset.Id/ignore-faces?face=@face.FaceId" data-enhance-nav="false" aria-label="@Text["Detail_IgnoreFaceUnnamed", number]">@Text["Detail_IgnoreShort"]</a>
+                            }
+                        </li>
                     }
-                </div>
-            </section>
-        }
-
-        @if (_asset.People.Any(p => p.Name is null && p.FaceId != 0))
-        {
-            @* Opens a confirmation; a stranger's face (a poster, a crowd) is deleted for good there (#107): one link for each unnamed person, with their first face. *@
-            var strangerNumber = 0;
-            <section class="card ignore-card">
-            <ul class="ignore-faces-list">
-                @foreach (var person in _asset.People.Where(p => p.Name is null && p.FaceId != 0))
+                </ul>
+                @if (_asset.Faces.Count(f => f.Name is null) > 1)
                 {
-                    <li><a href="photos/@_asset.Id/ignore-faces?face=@person.FaceId" class="small ignore-face" data-enhance-nav="false" aria-label="@Text["Detail_IgnoreFace_Named", ++strangerNumber]">@Text["Detail_IgnoreFace"]</a></li>
+                    <p class="ignore-faces"><a href="photos/@_asset.Id/ignore-faces" data-enhance-nav="false">@Text["Detail_IgnoreUnnamed"]</a></p>
                 }
-            </ul>
-            @if (_asset.People.Count(p => p.Name is null && p.FaceId != 0) > 1)
-            {
-                <p class="ignore-faces"><a href="photos/@_asset.Id/ignore-faces" data-enhance-nav="false">@Text["Detail_IgnoreUnnamed"]</a></p>
-            }
             </section>
         }
 

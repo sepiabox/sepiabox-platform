@@ -1468,8 +1468,8 @@
   <data name="Detail_MoreAlbums_Other" xml:space="preserve">
     <value>Mais {0} álbuns</value>
   </data>
-  <data name="Detail_IgnoreFace" xml:space="preserve">
-    <value>Ignorar e apagar este rosto</value>
+  <data name="Detail_IgnoreShort" xml:space="preserve">
+    <value>Ignorar e apagar</value>
   </data>
   <data name="Detail_IgnoreUnnamed" xml:space="preserve">
     <value>Ignorar e apagar os rostos sem nome desta foto</value>
@@ -1546,8 +1546,8 @@
   <data name="IgnoreMany_More" xml:space="preserve">
     <value>e mais {0} pessoas</value>
   </data>
-  <data name="Detail_IgnoreFace_Named" xml:space="preserve">
-    <value>Ignorar e apagar este rosto, sem nome {0}</value>
+  <data name="Detail_IgnoreFaceUnnamed" xml:space="preserve">
+    <value>Ignorar e apagar o rosto sem nome {0}</value>
   </data>
   <data name="Person_Delete_Hint" xml:space="preserve">
     <value>Apaga esta pessoa, o nome e todos os rostos dela.</value>

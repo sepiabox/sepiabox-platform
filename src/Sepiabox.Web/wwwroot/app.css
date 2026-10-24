@@ -1357,9 +1357,28 @@ button[data-close] {
 
 /* The faces of the people in a photo (S-068): a round thumbnail for each, named ones ringed, unnamed ones dashed. */
 .faces {
+    display: grid;
+    gap: var(--s-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* A face of the photo: its avatar and name, and for a stranger's the way to ignore it, on the right (S-068, #107). */
+.face-row {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--s-3);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-4);
+}
+
+.face-ignore {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 var(--s-2);
+    color: var(--danger);
+    font-size: var(--text-sm);
 }
 
 .face {
@@ -1392,6 +1411,16 @@ button[data-close] {
 .face.unnamed .name {
     color: var(--accent);
     font-weight: 600;
+}
+
+.people-card .face {
+    display: flex;
+    align-items: center;
+    justify-items: start;
+    gap: var(--s-3);
+    width: auto;
+    min-height: 56px;
+    text-align: left;
 }
 
 .face .name {
@@ -2613,14 +2642,13 @@ button[data-close] {
     margin: 4px 0 12px;
 }
 
-.ignore-face,
 .ignore-faces a,
 .ignore-many a,
 .ignore-person a,
 .delete-face-data a {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     min-height: 44px;
-    line-height: 44px;
     padding: 0 8px;
     box-sizing: border-box;
 }
