@@ -85,6 +85,8 @@ public class MetadataReaderTests
     [Theory]
     [InlineData(436774u, "S", 436774u, "W")]
     [InlineData(91u, "N", 10u, "E")]
+    [InlineData(91u, "S", 10u, "E")]
+    [InlineData(0u, "N", 0u, "E")]
     [InlineData(10u, "N", 181u, "W")]
     [InlineData(90u, "S", 181u, "E")]
     public void Keeps_the_photo_with_no_location_when_the_camera_wrote_coordinates_outside_the_globe(uint latitude, string latitudeRef, uint longitude, string longitudeRef)
