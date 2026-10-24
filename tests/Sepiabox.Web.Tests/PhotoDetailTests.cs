@@ -260,7 +260,7 @@ public sealed class PhotoDetailTests : LocalizedContext
 
         var page = RenderDetail(Details.Photo(Ids.Of(1)) with { Albums = albums });
 
-        Assert.Equal(albums.Take(5), page.FindAll("section.facts > ul.photo-albums a").Select(a => a.TextContent));
+        Assert.Equal(albums.Take(5), page.FindAll("section.albums-card > ul.photo-albums a").Select(a => a.TextContent));
         Assert.Equal("7 more albums", page.Find("details.more-albums summary").TextContent);
         Assert.Equal(albums.Skip(5), page.FindAll("details.more-albums a").Select(a => a.TextContent));
     }

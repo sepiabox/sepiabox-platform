@@ -27,35 +27,66 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         return asset;
     }
 
-    [Fact]
-    public void Offers_to_ignore_each_unnamed_face_of_a_photo_and_never_a_named_one()
+    private AssetDetail PhotoWithFaces(params AssetFace[] faces)
     {
-        var asset = PhotoWith(new AssetPerson(1, "Ana", 10), new AssetPerson(2, null, 20), new AssetPerson(3, null, 30));
+        var asset = Details.Photo(Ids.Of(1), new DateTime(2019, 7, 14, 10, 32, 0)) with { };
+        asset = asset with { Faces = faces, People = [.. faces.Select(f => new AssetPerson(f.PersonId, f.Name, f.FaceId))] };
+        _library.Assets[asset.Id] = asset;
+        return asset;
+    }
+
+    [Fact]
+    public void Gives_each_unnamed_face_its_own_ignore_link_in_its_row_with_the_right_face_and_never_a_named_one()
+    {
+        var asset = PhotoWithFaces(new AssetFace(10, 1, "Ana", null), new AssetFace(20, 2, null, null), new AssetFace(30, 3, null, null));
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}");
 
         var page = Render<PhotoDetail>(p => p.Add(d => d.Id, asset.Id));
 
-        Assert.Equal(
-            [$"photos/{asset.Id}/ignore-faces?face=20", $"photos/{asset.Id}/ignore-faces?face=30"],
-            page.FindAll("a.ignore-face").Select(a => a.GetAttribute("href")));
-        Assert.Equal("Ignore and delete this face", page.Find("a.ignore-face").TextContent);
-        // Each link has a name of its own, visible text first.
-        Assert.Equal(["Ignore and delete this face, unnamed 1", "Ignore and delete this face, unnamed 2"], page.FindAll("a.ignore-face").Select(a => a.GetAttribute("aria-label")));
+        var rows = page.FindAll(".people-card li.face-row");
+        Assert.Equal(3, rows.Count);
+        // Ana's row has none; each stranger's has one, to its own face, beside its own "Add a name" link.
+        Assert.Empty(rows[0].QuerySelectorAll("a.face-ignore"));
+        Assert.Equal($"photos/{asset.Id}/ignore-faces?face=20", rows[1].QuerySelector("a.face-ignore")!.GetAttribute("href"));
+        Assert.Equal($"photos/{asset.Id}/ignore-faces?face=30", rows[2].QuerySelector("a.face-ignore")!.GetAttribute("href"));
+        Assert.Equal("people/2", rows[1].QuerySelector("a.face")!.GetAttribute("href"));
+        Assert.Equal("people/3", rows[2].QuerySelector("a.face")!.GetAttribute("href"));
+        Assert.Equal("Ignore and delete", rows[1].QuerySelector("a.face-ignore")!.TextContent);
+        // Both labels of a stranger's row carry the same number, from one counter.
+        Assert.Equal("Add a name, unnamed face 1", rows[1].QuerySelector("a.face")!.GetAttribute("aria-label"));
+        Assert.Equal("Ignore and delete unnamed face 1", rows[1].QuerySelector("a.face-ignore")!.GetAttribute("aria-label"));
+        Assert.Equal("Add a name, unnamed face 2", rows[2].QuerySelector("a.face")!.GetAttribute("aria-label"));
+        Assert.Equal("Ignore and delete unnamed face 2", rows[2].QuerySelector("a.face-ignore")!.GetAttribute("aria-label"));
         Assert.Equal($"photos/{asset.Id}/ignore-faces", page.Find("p.ignore-faces a").GetAttribute("href"));
         Assert.Equal("Ignore and delete the unnamed faces in this photo", page.Find("p.ignore-faces a").TextContent);
         // Enhanced navigation would keep the focus where it was, not on the way out of the confirmation.
-        Assert.All(page.FindAll("a.ignore-face, p.ignore-faces a"), a => Assert.Equal("false", a.GetAttribute("data-enhance-nav")));
+        Assert.All(page.FindAll("a.face-ignore, p.ignore-faces a"), a => Assert.Equal("false", a.GetAttribute("data-enhance-nav")));
+        Assert.Empty(page.FindAll(".ignore-card"));
     }
 
     [Fact]
-    public void Offers_only_the_one_link_for_a_photo_with_one_unnamed_face_and_none_for_named_people()
+    public void Says_the_ignore_links_in_brazilian_portuguese()
     {
-        var one = PhotoWith(new AssetPerson(1, "Ana", 10), new AssetPerson(2, null, 20));
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+        var asset = PhotoWithFaces(new AssetFace(20, 2, null, null), new AssetFace(30, 3, null, null));
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}");
+
+        var page = Render<PhotoDetail>(p => p.Add(d => d.Id, asset.Id));
+
+        var link = page.FindAll("a.face-ignore")[1];
+        Assert.Equal("Ignorar e apagar", link.TextContent);
+        Assert.Equal("Ignorar e apagar o rosto sem nome 2", link.GetAttribute("aria-label"));
+    }
+
+    [Fact]
+    public void Offers_only_the_row_s_link_for_a_photo_with_one_unnamed_face_and_none_for_named_people()
+    {
+        var one = PhotoWithFaces(new AssetFace(10, 1, "Ana", null), new AssetFace(20, 2, null, null));
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{one.Id}");
 
         var page = Render<PhotoDetail>(p => p.Add(d => d.Id, one.Id));
 
-        Assert.Single(page.FindAll("a.ignore-face"));
+        Assert.Single(page.FindAll("a.face-ignore"));
         Assert.Empty(page.FindAll("p.ignore-faces"));
     }
 

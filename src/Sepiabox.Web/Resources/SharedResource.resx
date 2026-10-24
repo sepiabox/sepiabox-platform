@@ -1541,8 +1541,8 @@
   <data name="Detail_MoreAlbums_Other" xml:space="preserve">
     <value>{0} more albums</value>
   </data>
-  <data name="Detail_IgnoreFace" xml:space="preserve">
-    <value>Ignore and delete this face</value>
+  <data name="Detail_IgnoreShort" xml:space="preserve">
+    <value>Ignore and delete</value>
   </data>
   <data name="Detail_IgnoreUnnamed" xml:space="preserve">
     <value>Ignore and delete the unnamed faces in this photo</value>
@@ -1619,8 +1619,8 @@
   <data name="IgnoreMany_More" xml:space="preserve">
     <value>and {0} more people</value>
   </data>
-  <data name="Detail_IgnoreFace_Named" xml:space="preserve">
-    <value>Ignore and delete this face, unnamed {0}</value>
+  <data name="Detail_IgnoreFaceUnnamed" xml:space="preserve">
+    <value>Ignore and delete unnamed face {0}</value>
   </data>
   <data name="Person_Delete_Hint" xml:space="preserve">
     <value>Deletes this person, their name and all their faces.</value>
@@ -1669,5 +1669,23 @@
   </data>
   <data name="Filter_NoMatch" xml:space="preserve">
     <value>No one matches</value>
+  </data>
+  <data name="Detail_Panel" xml:space="preserve">
+    <value>Details of this photo</value>
+  </data>
+  <data name="Detail_Previous" xml:space="preserve">
+    <value>Previous photo</value>
+  </data>
+  <data name="Detail_Next" xml:space="preserve">
+    <value>Next photo</value>
+  </data>
+  <data name="Detail_AddName" xml:space="preserve">
+    <value>Add a name</value>
+  </data>
+  <data name="Detail_ShowFullPath" xml:space="preserve">
+    <value>Show full path</value>
+  </data>
+  <data name="Detail_AddNameFace" xml:space="preserve">
+    <value>Add a name, unnamed face {0}</value>
   </data>
 </root>

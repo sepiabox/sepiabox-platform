@@ -432,9 +432,22 @@ main {
     padding: 16px 24px 48px;
 }
 
+.month-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-3);
+    margin: var(--s-6) 0 var(--s-3);
+}
+
 .month h2 {
-    margin: 32px 0 12px;
-    font-size: 1.25rem;
+    margin: 0;
+    font-size: var(--text-xl);
+}
+
+/* The number of photos under a month's heading (S-068). */
+.month-head .n {
+    color: var(--text-2);
+    font-size: var(--text-sm);
 }
 
 /* The occasions of a search by part of a photo are headed like months; the heading above them is quieter. */
@@ -453,20 +466,22 @@ main {
 
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 6px;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: var(--s-2);
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
+/* A tile (S-068): rounded, the thumbnail zooms a little on hover, and a shade with the date comes up on hover and keyboard focus. */
 .thumb {
     position: relative;
     display: block;
     aspect-ratio: 1;
     overflow: hidden;
-    background: var(--mat);
-    border-radius: 2px;
+    background: var(--surface-2);
+    border-radius: var(--r-md);
+    isolation: isolate;
 }
 
 .thumb img {
@@ -474,11 +489,66 @@ main {
     height: 100%;
     object-fit: cover;
     display: block;
+    transition: transform 0.25s ease;
+}
+
+.thumb::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 55%, rgb(0 0 0 / 0.55));
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+}
+
+.thumb .meta {
+    position: absolute;
+    right: var(--s-3);
+    bottom: var(--s-2);
+    left: var(--s-3);
+    z-index: 2;
+    color: #fff;
+    font: 500 var(--text-xs) var(--font-mono);
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.15s, transform 0.15s;
+}
+
+.thumb:hover img {
+    transform: scale(1.04);
+}
+
+.thumb:hover::after,
+.thumb:focus-visible::after,
+.thumb:hover .meta,
+.thumb:focus-visible .meta {
+    opacity: 1;
+    transform: none;
 }
 
 .thumb:focus-visible {
-    outline: 3px solid var(--cyanotype);
+    outline: 3px solid var(--accent);
     outline-offset: 2px;
+}
+
+/* A finger has no hover: the date is not shown over the tile on a touch screen. */
+@media (hover: none) {
+    .thumb::after,
+    .thumb .meta {
+        opacity: 0;
+    }
+}
+
+@media (max-width: 600px) {
+    .grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 3px;
+    }
+
+    .thumb {
+        border-radius: var(--r-sm);
+    }
 }
 
 .placeholder {
@@ -1193,16 +1263,234 @@ button[data-close] {
 
 .detail {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
-    gap: 32px;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: var(--s-5);
     align-items: start;
 }
 
+/* The photo on a dark stage, in both themes, with the arrows to the photos before and after it (S-068). */
 .preview {
+    position: relative;
     margin: 0;
-    background: var(--white);
-    border: 1px solid var(--mat);
-    min-height: 240px;
+    background: var(--stage);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    min-height: 320px;
+    color: #fff;
+}
+
+.nav-arrow {
+    position: absolute;
+    top: 50%;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    transform: translateY(-50%);
+    border-radius: 50%;
+    background: rgb(0 0 0 / 0.5);
+    color: #fff;
+}
+
+.nav-arrow:hover {
+    background: rgb(0 0 0 / 0.75);
+    color: #fff;
+}
+
+/* On the dark stage the ring is light: the accent of the page would not show against it. */
+.nav-arrow:focus-visible {
+    outline: 3px solid #fff;
+    outline-offset: 2px;
+}
+
+.nav-arrow.prev {
+    left: var(--s-3);
+}
+
+.nav-arrow.next {
+    right: var(--s-3);
+}
+
+.nav-arrow .icon {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* The side panel: a card for each part, the facts first. */
+.side {
+    display: grid;
+    gap: var(--s-4);
+}
+
+.eyebrow {
+    margin: 0 0 var(--s-1);
+    color: var(--text-2);
+    font: 500 var(--text-xs) var(--font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.card h2 {
+    margin: 0 0 var(--s-3);
+    font-size: var(--text-lg);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    margin: var(--s-4) 0 0;
+}
+
+/* The faces of the people in a photo (S-068): a round thumbnail for each, named ones ringed, unnamed ones dashed. */
+.faces {
+    display: grid;
+    gap: var(--s-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* A face of the photo: its avatar and name, and for a stranger's the way to ignore it, on the right (S-068, #107). */
+.face-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-4);
+}
+
+.face-ignore {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 var(--s-2);
+    color: var(--danger);
+    font-size: var(--text-sm);
+}
+
+.face {
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+    width: 76px;
+    color: var(--text);
+    font-size: var(--text-sm);
+    text-align: center;
+    text-decoration: none;
+}
+
+.face .avatar {
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--border);
+}
+
+.face.named:hover .avatar,
+.face:focus-visible .avatar {
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
+
+.face.unnamed .avatar {
+    background: none;
+    border: 2px dashed var(--control-border);
+    color: var(--text-2);
+    box-shadow: none;
+}
+
+.face.unnamed .name {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.people-card .face {
+    display: flex;
+    align-items: center;
+    justify-items: start;
+    gap: var(--s-3);
+    width: auto;
+    min-height: 56px;
+    text-align: left;
+}
+
+.face .name {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.photo-albums {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* A source (S-068): its name, and its path cut short with the whole of it under "Show full path". */
+.src {
+    display: grid;
+    gap: var(--s-2);
+    padding: var(--s-3);
+    background: var(--surface-2);
+    border-radius: var(--r-md);
+}
+
+.src .path {
+    overflow: hidden;
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.src .path-full {
+    display: block;
+    margin-top: var(--s-2);
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    overflow-wrap: anywhere;
+}
+
+.src summary {
+    color: var(--accent);
+    cursor: pointer;
+    font-size: var(--text-sm);
+}
+
+/* The region tools sit on the dark stage: the page's muted grey (about 2:1 there) is replaced by a light one (about 11:1). */
+.stage .muted,
+.stage .region-status {
+    color: #cfc6b9;
+}
+
+/* In the dark theme the stage is nearly the page's own colour: a hairline keeps it a frame, not a gap. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .stage {
+        border: 1px solid var(--border);
+    }
+}
+
+:root[data-theme="dark"] .stage {
+    border: 1px solid var(--border);
+}
+
+@media (max-width: 600px) {
+    .preview {
+        min-height: 240px;
+    }
+}
+
+@media (max-width: 900px) {
+    .detail {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .preview {
+        border-radius: var(--r-md);
+    }
 }
 
 .preview img,
@@ -1304,12 +1592,7 @@ button[data-close] {
 
 .facts h1 {
     margin-top: 0;
-    font-size: 1.5rem;
-}
-
-.facts h2 {
-    font-size: 1.05rem;
-    margin-top: 24px;
+    font-size: var(--text-xl);
 }
 
 .facts dl {
@@ -1337,14 +1620,13 @@ button[data-close] {
     overflow-wrap: anywhere;
 }
 
-.photo-albums {
-    padding-left: 18px;
-    overflow-wrap: anywhere;
-}
-
 /* Names and paths may break anywhere, but only when they do not fit (not mid-word in a sentence that does). */
 .sources {
-    padding-left: 18px;
+    display: grid;
+    gap: var(--s-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
     overflow-wrap: anywhere;
 }
 
@@ -2119,16 +2401,21 @@ button[data-close] {
     margin: 4px 0 12px;
 }
 
-.ignore-face,
 .ignore-faces a,
 .ignore-many a,
 .ignore-person a,
 .delete-face-data a {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     min-height: 44px;
-    line-height: 44px;
     padding: 0 8px;
     box-sizing: border-box;
+}
+
+/* Ignoring the unnamed faces of a photo deletes data too, so it is drawn as the rows' own ignore links are (S-068). */
+.people-card .ignore-faces a {
+    padding-left: 0;
+    color: var(--danger);
 }
 
 .ignore-many a.button {
@@ -2157,3 +2444,4 @@ button[data-close] {
     color: var(--cyanotype);
     text-decoration: underline;
 }
+

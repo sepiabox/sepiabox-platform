@@ -77,6 +77,52 @@ public sealed class PeopleQueryTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Gives_a_photo_its_counted_faces_named_first_by_name_ignoring_case_then_left_to_right_and_the_people_once_each()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Assets.AddRange(CatalogData.Photo(Ids.Of(1), null), CatalogData.Photo(Ids.Of(2), null, withDerivatives: false));
+        var ana = new Person { Name = "Ana", FaceCount = 2 };
+        var bruno = new Person { Name = "bruno", FaceCount = 1 };
+        var carla = new Person { Name = "Carla", FaceCount = 2 };
+        var stranger = new Person { FaceCount = 1 };
+        db.People.AddRange(ana, bruno, carla, stranger);
+        db.Faces.AddRange(
+            // Ana twice, the right one added first; Carla twice at the same left edge, so their ids decide.
+            Face(Ids.Of(1), ana, 0.9, [0.5, 0.1, 0.2, 0.2]),
+            Face(Ids.Of(1), ana, 0.9, [0.1, 0.1, 0.2, 0.2]),
+            Face(Ids.Of(1), carla, 0.9, [0.3, 0.1, 0.2, 0.2]),
+            Face(Ids.Of(1), carla, 0.9, [0.3, 0.5, 0.2, 0.2], FaceAssignments.Manual),
+            Face(Ids.Of(1), bruno, 0.9, [0.7, 0.1, 0.2, 0.2]),
+            Face(Ids.Of(1), stranger, 0.9, [0.05, 0.1, 0.2, 0.2]),
+            // Not counted: excluded by the family, and said not to be a face.
+            Face(Ids.Of(1), ana, 0.9, [0.0, 0.1, 0.2, 0.2], FaceAssignments.Excluded),
+            Face(Ids.Of(1), bruno, 0.9, [0.01, 0.1, 0.2, 0.2], FaceAssignments.NotFace),
+            // A photo with no thumbnail.
+            Face(Ids.Of(2), ana, 0.9, [0.1, 0.1, 0.2, 0.2]));
+        await db.SaveChangesAsync();
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var detail = (await queries.GetAssetAsync(Ids.Of(1)))!;
+
+        Assert.Equal(["Ana", "Ana", "bruno", "Carla", "Carla", null], detail.Faces.Select(f => f.Name));
+        Assert.Equal([0.1, 0.5], detail.Faces.Where(f => f.Name == "Ana").Select(f => f.Crop!.Box[0]));
+        var carlas = detail.Faces.Where(f => f.Name == "Carla").ToList();
+        Assert.Equal(2, carlas.Count);
+        Assert.True(carlas[0].FaceId < carlas[1].FaceId);
+        Assert.All(detail.Faces, f => Assert.NotNull(f.Crop));
+        Assert.Equal(2, detail.Faces.Count(f => f.PersonId == ana.Id));
+        Assert.DoesNotContain(detail.Faces, f => f.Crop!.Box[0] is 0.0 or 0.01);
+        // The people are those the counted faces point to, once each, named ones first by name.
+        Assert.Equal(["Ana", "bruno", "Carla", null], detail.People.Select(p => p.Name));
+        Assert.Equal(detail.People.Count, detail.People.Select(p => p.Id).Distinct().Count());
+
+        var withoutThumbnail = (await queries.GetAssetAsync(Ids.Of(2)))!;
+
+        Assert.Equal("Ana", Assert.Single(withoutThumbnail.Faces).Name);
+        Assert.Null(withoutThumbnail.Faces[0].Crop);
+    }
+
+    [Fact]
     public async Task Shows_a_person_s_faces_best_first_without_the_excluded_ones_and_who_they_can_be_merged_with()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();

@@ -140,14 +140,14 @@ public sealed class PeopleFilterPageTests : LocalizedContext
     {
         var asset = Details.Photo(Ids.Of(5), new DateTime(2019, 12, 1));
         var library = new FakeLibrary();
-        library.Assets[asset.Id] = asset with { People = [new AssetPerson(3, "Ana"), new AssetPerson(9, null)] };
+        library.Assets[asset.Id] = asset with { Faces = [new AssetFace(1, 3, "Ana", null), new AssetFace(2, 9, null, null)] };
         Services.AddSingleton<ILibraryQueries>(library);
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}");
 
         var page = Render<PhotoDetail>(p => p.Add(d => d.Id, asset.Id));
 
-        var links = page.FindAll(".photo-people a");
-        Assert.Equal(["Ana", "Unnamed"], links.Select(a => a.TextContent));
+        var links = page.FindAll(".people-card .faces a.face");
+        Assert.Equal(["Ana", "Add a name"], links.Select(a => a.QuerySelector(".name")!.TextContent));
         var ana = SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { People = new PeopleFilter { All = ["Ana"] } } });
         Assert.Equal([ana, "people/9"], links.Select(a => a.GetAttribute("href")));
     }

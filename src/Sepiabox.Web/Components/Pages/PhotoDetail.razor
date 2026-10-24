@@ -3,6 +3,7 @@
 @inject ILibraryQueries Library
 @inject NavigationManager Navigation
 @inject IServiceProvider Services
+@inject ILogger<PhotoDetail> Log
 @* Static server rendering (no @rendermode): the page is plain HTML with links, nothing interactive. *@
 
 @if (_asset is not null)
@@ -17,7 +18,7 @@
     }
 
     <div class="detail">
-        <figure class="preview">
+        <figure class="preview stage">
             @if (AssetKinds.IsVideo(_asset.Kind))
             {
                 <VideoPlayer AssetId="@_asset.Id" Label="@VideoLabel" PosterName="@_asset.PreviewName" HasProxy="_asset.HasProxy" ProxyName="@_asset.ProxyName" />
@@ -55,9 +56,24 @@
             {
                 <span class="placeholder">@Text["Detail_NoPreview"]</span>
             }
+            @* Previous and next in the order of the listing the visitor came from (S-068): plain links, so the keyboard reaches them. *@
+            @if (_previous is not null)
+            {
+                <a class="nav-arrow prev" href="@NeighbourLink(_previous)" aria-label="@Text["Detail_Previous"]" rel="prev">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m15 5-7 7 7 7" /></svg>
+                </a>
+            }
+            @if (_next is not null)
+            {
+                <a class="nav-arrow next" href="@NeighbourLink(_next)" aria-label="@Text["Detail_Next"]" rel="next">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 5 7 7-7 7" /></svg>
+                </a>
+            }
         </figure>
 
-        <section class="facts">
+        <aside class="side" aria-label="@Text["Detail_Panel"]">
+        <section class="card facts">
+            <p class="eyebrow">@Text.KindLabel(_asset.Kind)</p>
             <h1>@Title</h1>
             <dl>
                 @if (_asset.Place is { } place)
@@ -105,52 +121,65 @@
             @* "More photos similar to this one" (S-017) compares the photo's own embedding: until it has one, say so. *@
             @if (_asset.HasEmbedding)
             {
-                <p class="similar"><a href="@SearchLinks.Timeline(SearchLinks.Similar(_asset.Id))">@Text["Detail_Similar"]</a></p>
+                <p class="similar actions"><a class="button secondary" href="@SearchLinks.Timeline(SearchLinks.Similar(_asset.Id))">@Text["Detail_Similar"]</a></p>
             }
             else
             {
                 <p class="similar muted" role="status">@SimilarSearch.NotAnalysed(_asset.Kind, Text)</p>
             }
 
-            @if (_asset.People.Count > 0)
+            @* Not an enhanced navigation: Blazor would fetch the redirect itself, fail on CORS and read the original twice.
+               No `download` attribute: Content-Disposition names the file, and a failure message must stay visible. *@
+            @if (_asset.OriginalStored)
             {
-                @* A named person links to their photos; an unnamed one to their page, to be named (S-021). *@
+                <p class="actions"><a class="button" href="photos/@_asset.Id/original" data-enhance-nav="false">@Text["Detail_DownloadOriginal"]</a></p>
+            }
+            else
+            {
+                @* Where the button would be: say why there is none (S-064). *@
+                <p class="muted kept-at-source">@Text["Download_KeptAtSource"]</p>
+            }
+        </section>
+
+        @if (_asset.Faces.Count > 0)
+        {
+            @* One row for each counted face (S-068), in display order: a named person's links to their photos, an unnamed one's to their page,
+               to be named (S-021). An unnamed face has its own "Ignore and delete" beside it: it opens a confirmation, where a stranger's
+               face (a poster, a crowd) is deleted for good (#107). The numbers in the accessible names come from one counter. *@
+            <section class="card people-card">
                 <h2>@Text["Detail_People"]</h2>
-                <ul class="photo-people">
-                    @foreach (var person in _asset.People)
+                <ul class="faces">
+                    @{ var unnamedNumber = 0; }
+                    @foreach (var face in _asset.Faces)
                     {
-                        var unnamedNumber = person.Name is null ? _asset.People.Where(p => p.Name is null).ToList().IndexOf(person) + 1 : 0;
-                        <li>
-                            @if (person.Name is { } name)
+                        var number = face.Name is null ? ++unnamedNumber : 0;
+                        <li class="face-row">
+                            <a class="face@(face.Name is null ? " unnamed" : " named")" href="@FaceHref(face)" aria-label="@(face.Name is null ? Text["Detail_AddNameFace", number].Value : null)">
+                                <PersonAvatar Name="@face.Name" PersonId="@face.PersonId" Size="md" Crop="@face.Crop" />
+                                <span class="name">@(face.Name ?? Text["Detail_AddName"])</span>
+                            </a>
+                            @if (face.Name is null)
                             {
-                                <a href="@SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { People = new PeopleFilter { All = [name] } } })">@name</a>
-                            }
-                            else
-                            {
-                                <a href="people/@person.Id">@Text["People_Unnamed"]</a>
-                                @if (person.FaceId != 0)
-                                {
-                                    @* Opens a confirmation; a stranger's face (a poster, a crowd) is deleted for good there (#107). *@
-                                    <a href="photos/@_asset.Id/ignore-faces?face=@person.FaceId" class="small ignore-face" data-enhance-nav="false" aria-label="@Text["Detail_IgnoreFace_Named", unnamedNumber]">@Text["Detail_IgnoreFace"]</a>
-                                }
+                                <a class="face-ignore" href="photos/@_asset.Id/ignore-faces?face=@face.FaceId" data-enhance-nav="false" aria-label="@Text["Detail_IgnoreFaceUnnamed", number]">@Text["Detail_IgnoreShort"]</a>
                             }
                         </li>
                     }
                 </ul>
-                @if (_asset.People.Count(p => p.Name is null && p.FaceId != 0) > 1)
+                @if (_asset.Faces.Count(f => f.Name is null) > 1)
                 {
                     <p class="ignore-faces"><a href="photos/@_asset.Id/ignore-faces" data-enhance-nav="false">@Text["Detail_IgnoreUnnamed"]</a></p>
                 }
-            }
+            </section>
+        }
 
             @if (_asset.Albums.Count > 0)
             {
                 @* Each album links to the photos in it (S-052). *@
-                <h2>@Text["Detail_Albums"]</h2>
+                <section class="card albums-card"><h2>@Text["Detail_Albums"]</h2>
                 <ul class="photo-albums">
                     @foreach (var album in _asset.Albums.Take(VisibleAlbums))
                     {
-                        <li><a href="@SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { Albums = [album] } })">@album</a></li>
+                        <li><a class="pill" href="@SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { Albums = [album] } })">@album</a></li>
                     }
                 </ul>
                 @if (_asset.Albums.Count > VisibleAlbums)
@@ -161,28 +190,39 @@
                         <ul class="photo-albums">
                             @foreach (var album in _asset.Albums.Skip(VisibleAlbums))
                             {
-                                <li><a href="@SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { Albums = [album] } })">@album</a></li>
+                                <li><a class="pill" href="@SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { Albums = [album] } })">@album</a></li>
                             }
                         </ul>
                     </details>
                 }
+                </section>
             }
 
+        <section class="card source-card">
             <h2>@Text["Detail_Sources"]</h2>
             <ul class="sources">
                 @foreach (var source in _asset.Sources)
                 {
                     var link = SourceLinks.SafeUrl(source.Url);
                     var line = link is null && !_asset.OriginalStored ? SourceLinks.StoredLine(source, Text) : null;
-                    <li>
+                    <li class="src">
                         @if (line is not null)
                         {
                             @* An original Sepiabox does not keep, with no address: say where it is (S-064). *@
-                            <span class="source-line">@line.Text@if (line.Path is { } path){@(" ")<span class="mono">@path</span>}</span>
+                            <span class="source-line">@line.Text@if (line.Path is { } path){@(" ")<span class="mono path" title="@path">@path</span>}</span>
                         }
                         else
                         {
-                            <span class="source-name">@source.Name</span> <span class="mono">@source.Path</span>
+                            <strong class="source-name">@source.Name</strong>
+                            <span class="mono path" title="@source.Path">@source.Path</span>
+                            @if (source.Path.Length > LongPath)
+                            {
+                                @* The path is cut short in the card; the whole of it is a click away, with no script. *@
+                                <details class="full-path">
+                                    <summary>@Text["Detail_ShowFullPath"]</summary>
+                                    <span class="mono path-full">@source.Path</span>
+                                </details>
+                            }
                         }
                         @if (SourceLinks.OriginalHref(_asset.Id, source, _asset.OriginalStored) is { } openOriginal)
                         {
@@ -202,19 +242,8 @@
                     </li>
                 }
             </ul>
-
-            @* Not an enhanced navigation: Blazor would fetch the redirect itself, fail on CORS and read the original twice.
-               No `download` attribute: Content-Disposition names the file, and a failure message must stay visible. *@
-            @if (_asset.OriginalStored)
-            {
-                <p><a class="button" href="photos/@_asset.Id/original" data-enhance-nav="false">@Text["Detail_DownloadOriginal"]</a></p>
-            }
-            else
-            {
-                @* Where the button would be: say why there is none (S-064). *@
-                <p class="muted kept-at-source">@Text["Download_KeptAtSource"]</p>
-            }
         </section>
+        </aside>
     </div>
 }
 
@@ -232,6 +261,12 @@
 
     private const int VisibleAlbums = 5;
 
+    // A path longer than this is cut short in the card and offered whole under "Show full path" (S-068).
+    private const int LongPath = 36;
+
+    private TimelineItem? _previous;
+    private TimelineItem? _next;
+
     private AssetDetail? _asset;
 
     // Without the image model nothing is offered, as the description box is hidden without the text model (S-016).
@@ -246,8 +281,74 @@
         if (asset is null)
         {
             Navigation.NotFound();
+            return;
+        }
+
+        try
+        {
+            await FindNeighboursAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The arrows are a convenience: a failing listing must not take the photo with it.
+            (_previous, _next) = (null, null);
+            Log.LogWarning(ex, "The photos before and after {AssetId} could not be found; the page has no arrows.", Id);
         }
     }
+
+    // The photo before and after this one in the listing the visitor came from: the filtered search or the timeline page, both newest first.
+    // A ranking (similar photos, a region) has no such order, so it has no arrows; neither has a photo at the edge of its page.
+    private async Task FindNeighboursAsync()
+    {
+        (_previous, _next) = (null, null);
+        IReadOnlyList<TimelineItem>? listing = null;
+        if (SearchQueryParameter is not null)
+        {
+            if (SearchQueryJson.TryDecode(SearchQueryParameter, out var query, out _)
+                && query.Filters.SimilarTo is null && query.Filters.SimilarToRegion is null && query.Filters.Visual is null)
+            {
+                listing = (await Library.SearchAsync(query)).Items;
+            }
+        }
+        else if (PageQuery is not null)
+        {
+            // Only a visitor who came from a listing has an order to move in: one who came from a person's or an occasion's page,
+            // or by an address typed or shared, has no page in it, and the timeline's first page would be the wrong context.
+            listing = (await Library.GetTimelinePageAsync(LibraryQueries.ParsePage(PageQuery))).Items;
+        }
+
+        if (listing is null)
+        {
+            return;
+        }
+
+        var index = -1;
+        for (var i = 0; i < listing.Count; i++)
+        {
+            if (listing[i].Id == Id)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        if (index >= 0)
+        {
+            _previous = index > 0 ? listing[index - 1] : null;
+            _next = index < listing.Count - 1 ? listing[index + 1] : null;
+        }
+    }
+
+    // The same query or page as this one, so the arrows keep the way back and the order.
+    private string NeighbourLink(TimelineItem item) =>
+        SearchQueryParameter is not null ? $"photos/{item.Id}?{SearchLinks.QueryParameter}={Uri.EscapeDataString(SearchQueryParameter)}"
+        : $"photos/{item.Id}?page={LibraryQueries.ParsePage(PageQuery)}";
+
+    // A named person's face goes to their photos; an unnamed one's to their page, to be named (S-021).
+    private static string FaceHref(AssetFace face) =>
+        face.Name is { } name
+            ? SearchLinks.Timeline(new SearchQuery { Filters = new SearchFilters { People = new PeopleFilter { All = [name] } } })
+            : $"people/{face.PersonId}";
 
     private string Title => Text.DateOrNoDate(_asset?.CapturedAt);
 

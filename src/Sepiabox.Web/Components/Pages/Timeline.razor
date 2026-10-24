@@ -423,6 +423,6 @@ else
     // the address) or the same page.
     private string DetailLink(TimelineItem item) =>
         _filtered ? $"photos/{item.Id}?{SearchLinks.QueryParameter}={SearchQueryJson.Encode(_query!)}"
-        : _page is { Page: > 1 } page ? $"photos/{item.Id}?page={page.Page}"
+        : _page is { } page ? $"photos/{item.Id}?page={page.Page}"
         : $"photos/{item.Id}";
 }
