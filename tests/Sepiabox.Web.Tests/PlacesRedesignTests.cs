@@ -140,6 +140,8 @@ public sealed class PlacesRedesignTests : LocalizedContext
         await page.InvokeAsync(() => page.Find("#place-2 form.edit").Submit());
 
         Assert.Single(page.FindAll(".note"));
+        // Only the refused place opens its edit form; the other stays folded.
+        Assert.Equal(["place-2"], page.FindAll("details.place-edit[open]").Select(d => d.ParentElement!.Id));
         var refusal = page.Find("#place-2 details.place-edit[open] .edit-refusal");
         Assert.Equal("alert", refusal.GetAttribute("role"));
         Assert.Equal("places#place-2", page.Find("#place-2 form.edit").GetAttribute("action"));
@@ -159,5 +161,21 @@ public sealed class PlacesRedesignTests : LocalizedContext
         var hints = page.FindAll("li.saved-place .option-card .field-help").Select(h => h.TextContent).ToList();
         Assert.Contains("Unlocks", hints[0], StringComparison.Ordinal);
         Assert.Equal("Make this place your home.", hints[1]);
+    }
+
+    [Fact]
+    public void Names_the_fields_the_server_binds_in_the_create_form_and_in_each_edit_form()
+    {
+        _places.Places.Add(new SavedPlaceSummary(1, "Casa", 38.74, -9.16, 300, IsHome: true));
+        _places.Places.Add(new SavedPlaceSummary(2, "Praia", 38.96, -9.41, 500, IsHome: false));
+
+        var page = Render<Places>();
+
+        static string[] Names(AngleSharp.Dom.IElement form) =>
+            form.QuerySelectorAll("input[name]").Select(i => i.GetAttribute("name")!).Where(n => n != "__RequestVerificationToken").ToArray();
+        Assert.Equal(["NewName", "NewCoordinates", "NewRadius", "NewHome"], Names(page.Find("form.create")));
+        Assert.All(page.FindAll("form.edit"), form => Assert.Equal(["EditName", "EditRadius", "EditHome"], Names(form)));
+        Assert.Equal(["number", "checkbox"], page.Find("#place-2 form.edit").QuerySelectorAll("input[name=EditRadius], input[name=EditHome]").Select(i => i.GetAttribute("type")!));
+        Assert.Equal("500", page.Find("#place-2 input[name=EditRadius]").GetAttribute("value"));
     }
 }
