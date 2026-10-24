@@ -216,7 +216,6 @@ body {
     scroll-margin-top: calc(var(--header-h) + var(--s-3));
 }
 
-/* Every interactive element shows where the keyboard is. */
 /* A theme chosen on the page (S-070) also sets native controls and scrollbars, which otherwise follow the system. */
 :root[data-theme="light"] {
     color-scheme: light;
@@ -226,6 +225,7 @@ body {
     color-scheme: dark;
 }
 
+/* Every interactive element shows where the keyboard is. */
 :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
