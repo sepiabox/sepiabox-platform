@@ -15,7 +15,7 @@
 
     @if (Error is not null)
     {
-        <p class="error" role="alert">@Text["SignIn_Failed"]</p>
+        <Notice Variant="@NoticeVariant.Error">@Text["SignIn_Failed"]</Notice>
     }
 
     @if (Providers.Any)

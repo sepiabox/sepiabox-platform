@@ -2875,7 +2875,37 @@ svg.icon {
 
 /* Sign-in and No access (S-073): the brand card, centred on a calm sepia ground, with the provider buttons and the privacy line. */
 body:has(.auth-main) {
-    background: radial-gradient(ellipse at top, var(--brand-soft), var(--bg) 70%);
+    min-height: 100vh;
+    background: radial-gradient(ellipse at top, var(--brand-soft), var(--bg) 70%) no-repeat fixed;
+}
+
+/* The card carries the brand on these pages, so the header does not repeat it. */
+.top-bare .brand {
+    display: none;
+}
+
+/* The mark is dark brown on a transparent ground: on the dark card it sits on a light rounded square, as in the header. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .auth-brand img {
+        padding: 6px;
+        background: #f2ede5;
+        border-radius: var(--r-md);
+        box-sizing: content-box;
+    }
+}
+
+:root[data-theme="dark"] .auth-brand img {
+    padding: 6px;
+    background: #f2ede5;
+    border-radius: var(--r-md);
+    box-sizing: content-box;
+}
+
+/* A long label such as "Sign out and sign in with another account" wraps instead of widening the page. */
+.auth .sign-out button {
+    width: 100%;
+    min-height: 44px;
+    white-space: normal;
 }
 
 .auth-main {

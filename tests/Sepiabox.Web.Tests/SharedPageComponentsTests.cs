@@ -209,3 +209,24 @@ public sealed class DangerButtonTests
         Assert.Contains("button danger", button, StringComparison.Ordinal);
     }
 }
+
+/// <summary>The sign-in card's stylesheet rules (S-073).</summary>
+public sealed class AuthCardStylesheetTests
+{
+    private static string Css { get; } = File.ReadAllText(Path.Combine(SourceTree.WebProject, "wwwroot", "app.css"));
+
+    [Fact]
+    public void Puts_the_dark_mark_on_a_light_tile_in_both_dark_themes()
+    {
+        Assert.Matches(@"prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme=""light""\]\) \.auth-brand img\s*\{\s*padding:\s*6px;\s*background:\s*#f2ede5", Css);
+        Assert.Matches(@":root\[data-theme=""dark""\] \.auth-brand img\s*\{\s*padding:\s*6px;\s*background:\s*#f2ede5", Css);
+    }
+
+    [Fact]
+    public void Lets_the_sign_out_label_wrap_and_does_not_tile_the_background()
+    {
+        Assert.Matches(@"\.auth \.sign-out button\s*\{\s*width:\s*100%;\s*min-height:\s*44px;\s*white-space:\s*normal", Css);
+        Assert.Contains("no-repeat fixed", Css, StringComparison.Ordinal);
+        Assert.Matches(@"\.top-bare \.brand\s*\{\s*display:\s*none", Css);
+    }
+}

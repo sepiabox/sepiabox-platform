@@ -33,7 +33,7 @@ public sealed class AuthPagesTests : LocalizedContext
         Assert.Equal(heading, page.Find("h1").TextContent);
         Assert.StartsWith(intro, page.Find("section.auth p").TextContent, StringComparison.Ordinal);
         Assert.Equal([google, microsoft], page.FindAll(".providers a.button").Select(a => a.TextContent));
-        Assert.Empty(page.FindAll("p.error"));
+        Assert.Empty(page.FindAll("p.note-error"));
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public sealed class AuthPagesTests : LocalizedContext
 
         var page = RenderSignIn(Both, "Production", query: $"?{AuthSetup.SignInErrorQuery}=1");
 
-        Assert.Equal(expected, page.Find("p.error").TextContent);
+        Assert.Equal(expected, page.Find("p.note-error[role=alert]").TextContent);
     }
 
     [Theory]
