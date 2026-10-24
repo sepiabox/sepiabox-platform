@@ -1630,4 +1630,7 @@
   <data name="People_NeedsName" xml:space="preserve">
     <value>Precisa de um nome</value>
   </data>
+  <data name="SignIn_Privacy" xml:space="preserve">
+    <value>Nada aqui é público: só entra quem o dono autorizou.</value>
+  </data>
 </root>

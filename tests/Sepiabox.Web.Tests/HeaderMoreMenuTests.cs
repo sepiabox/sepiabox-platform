@@ -139,6 +139,31 @@ public sealed class HeaderMoreMenuTests : LocalizedContext
         Assert.Empty(Open("/peoples").FindAll("header a[aria-current]"));
     }
 
+    [Theory]
+    [InlineData("/sign-in")]
+    [InlineData("/no-access")]
+    public void Shows_only_the_brand_and_the_language_switch_in_the_header_of_the_sign_in_and_no_access_pages(string address)
+    {
+        var layout = Open(address);
+
+        Assert.NotNull(layout.Find("header.top.top-bare a.brand"));
+        Assert.NotNull(layout.Find("header form.language"));
+        Assert.Empty(layout.FindAll("header .nav-link"));
+        Assert.Empty(layout.FindAll("header .user"));
+        Assert.Empty(layout.FindAll("header .sign-out"));
+        Assert.Equal("auth-main", layout.Find("main").ClassName);
+    }
+
+    [Fact]
+    public void Keeps_the_navigation_on_the_other_pages()
+    {
+        var layout = Open("/people");
+
+        Assert.NotEmpty(layout.FindAll("header .nav-link"));
+        Assert.DoesNotContain("top-bare", layout.Find("header").ClassName, StringComparison.Ordinal);
+        Assert.True(string.IsNullOrEmpty(layout.Find("main").ClassName));
+    }
+
     private IRenderedComponent<MainLayout> Open(string address)
     {
         Services.GetRequiredService<NavigationManager>().NavigateTo(address);

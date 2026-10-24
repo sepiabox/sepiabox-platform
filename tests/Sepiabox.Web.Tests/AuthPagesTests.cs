@@ -36,6 +36,39 @@ public sealed class AuthPagesTests : LocalizedContext
         Assert.Empty(page.FindAll("p.error"));
     }
 
+    [Fact]
+    public void The_sign_in_page_is_a_brand_card_with_an_icon_on_each_provider_and_the_privacy_line()
+    {
+        var page = RenderSignIn(Both, "Production");
+
+        var card = page.Find("section.auth.auth-card");
+        Assert.Equal("symbol.svg", card.QuerySelector(".auth-brand img")!.GetAttribute("src"));
+        Assert.Equal("sepiabox", card.QuerySelector(".auth-brand .wordmark")!.TextContent);
+        Assert.Equal(2, card.QuerySelectorAll(".providers a.button.provider svg.provider-icon[aria-hidden=true]").Length);
+        Assert.Contains("Nothing here is public", card.QuerySelector("p.auth-privacy")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_privacy_line_is_in_brazilian_portuguese_too()
+    {
+        using var scope = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var page = RenderSignIn(Both, "Production");
+
+        Assert.StartsWith("Nada aqui é público", page.Find("p.auth-privacy").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_no_access_page_sits_on_the_same_card()
+    {
+        var auth = AddAuthorization();
+        auth.SetAuthorized(TestUsers.Stranger);
+
+        var page = Render<NoAccess>();
+
+        Assert.NotNull(page.Find("section.auth.auth-card .auth-brand"));
+    }
+
     [Theory]
     [InlineData(Cultures.English, "Couldn't sign in. Please try again.")]
     [InlineData(Cultures.BrazilianPortuguese, "Não foi possível entrar. Tente novamente.")]

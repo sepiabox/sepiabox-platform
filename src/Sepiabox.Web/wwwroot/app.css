@@ -2832,3 +2832,68 @@ svg.icon {
 .empty-help {
     margin: 0;
 }
+
+/* Sign-in and No access (S-073): the brand card, centred on a calm sepia ground, with the provider buttons and the privacy line. */
+body:has(.auth-main) {
+    background: radial-gradient(ellipse at top, var(--brand-soft), var(--bg) 70%);
+}
+
+.auth-main {
+    display: grid;
+    align-content: start;
+    justify-items: center;
+    min-height: calc(100vh - 120px);
+    padding-top: var(--s-7, 48px);
+}
+
+.auth-card {
+    display: grid;
+    gap: var(--s-4);
+    width: 100%;
+    max-width: 440px;
+    margin: 0;
+    padding: var(--s-6);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-md);
+    text-align: center;
+}
+
+.auth-card > h1,
+.auth-card > p {
+    margin: 0;
+}
+
+.auth-card h1 {
+    font-size: var(--text-2xl);
+}
+
+.auth-brand {
+    display: grid;
+    justify-items: center;
+    gap: var(--s-2);
+}
+
+.auth-wordmark {
+    font-size: var(--text-xl);
+}
+
+.auth-card .providers {
+    display: grid;
+    gap: var(--s-3);
+}
+
+.button.provider {
+    justify-content: center;
+}
+
+.provider-icon {
+    width: 20px;
+    height: 20px;
+}
+
+.auth-privacy {
+    padding-top: var(--s-3);
+    border-top: 1px solid var(--border);
+}

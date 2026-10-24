@@ -1,12 +1,14 @@
 @inherits LayoutComponentBase
 @inject NavigationManager Navigation
 
-<header class="top">
+<header class="top@(IsAuthPage ? " top-bare" : "")">
     <a href="./" class="brand">
         <img src="symbol.svg" alt="" width="28" height="28" />
         <span class="wordmark"><span class="wordmark-sepia">sepia</span>box</span>
     </a>
     <div class="top-end">
+        @if (!IsAuthPage)
+        {
         <AuthorizeView>
             <Authorized>
                 <a href="occasions" class="nav-link" aria-current="@Current("occasions")">@Text["Layout_Occasions"]</a>
@@ -27,11 +29,12 @@
                 <SignOutButton />
             </Authorized>
         </AuthorizeView>
+        }
         <LanguageSwitch />
     </div>
 </header>
 
-<main>
+<main class="@(IsAuthPage ? "auth-main" : null)">
     @Body
 </main>
 
@@ -61,6 +64,9 @@
             return end < 0 ? relative : relative[..end];
         }
     }
+
+    // The sign-in and no-access pages: their header is the brand and the language switch, nothing else (S-073).
+    private bool IsAuthPage => Path is "sign-in" or "no-access";
 
     // "page" for the link of the page being shown (and of the pages below it), nothing for the others.
     private string? Current(string href) => string.Equals(Path, href, StringComparison.OrdinalIgnoreCase) || Path.StartsWith(href + "/", StringComparison.OrdinalIgnoreCase) ? "page" : null;

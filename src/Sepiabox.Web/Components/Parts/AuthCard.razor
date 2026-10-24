@@ -1,0 +1,15 @@
+@* The card the sign-in and no-access pages sit on (S-073): the brand over a calm sepia ground, centred. The header of these pages
+   shows only the brand and the language switch (MainLayout), so the card carries the welcome. *@
+
+<section class="auth auth-card">
+    <div class="auth-brand" aria-hidden="true">
+        <img src="symbol.svg" alt="" width="48" height="48" />
+        <span class="wordmark auth-wordmark"><span class="wordmark-sepia">sepia</span>box</span>
+    </div>
+    @ChildContent
+</section>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}
