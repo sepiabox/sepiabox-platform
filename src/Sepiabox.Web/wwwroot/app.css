@@ -2658,6 +2658,7 @@ button[data-close] {
     display: inline-flex;
     align-items: center;
     min-height: 40px;
+}
 
 /* A long album name must not widen the bar or the page (S-052): the select shrinks to its cell and shows an ellipsis. */
 .filters label {
