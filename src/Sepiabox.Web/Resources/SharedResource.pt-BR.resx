@@ -679,16 +679,10 @@
     <value>Ativar o reconhecimento facial</value>
   </data>
   <data name="Settings_Faces_WorkFolder" xml:space="preserve">
-    <value>Os rostos também ficam em cada computador que rodou process --faces, na pasta de trabalho. Enviá-la de novo não os traz de volta, mas para apagá-los também lá, apague a pasta de trabalho ou rode process numa pasta nova sem --faces.</value>
+    <value>Os dados faciais também ficam em cada computador que processou suas fotos com reconhecimento facial. Enviar de novo não os traz de volta; para removê-los de lá também, apague a pasta de trabalho desse computador.</value>
   </data>
   <data name="Settings_Faces_History" xml:space="preserve">
     <value>Dados faciais apagados</value>
-  </data>
-  <data name="Settings_Faces_History_Library" xml:space="preserve">
-    <value>{0}, por {1}: reconhecimento desativado; rostos apagados: {2}, pessoas apagadas: {3}.</value>
-  </data>
-  <data name="Settings_Faces_History_Person" xml:space="preserve">
-    <value>{0}, por {1}: dados faciais de uma pessoa apagados; rostos: {2}.</value>
   </data>
   <data name="Settings_Done_Off" xml:space="preserve">
     <value>O reconhecimento facial foi desativado e os dados faciais foram apagados.</value>
@@ -721,7 +715,7 @@
     <value>O reconhecimento facial está desativado, então não há pessoas.</value>
   </data>
   <data name="Settings_Faces_Backups" xml:space="preserve">
-    <value>Os backups automáticos (a restauração do banco de dados a um momento anterior, e os arquivos apagados ou substituídos guardados por 7 dias) ainda mantêm os dados faciais apagados por até 7 dias; depois disso, eles deixam de existir.</value>
+    <value>Os backups automáticos ainda podem guardar dados faciais apagados por até 7 dias; depois disso eles somem.</value>
   </data>
   <data name="Layout_Places" xml:space="preserve">
     <value>Lugares</value>
@@ -1411,9 +1405,6 @@
   <data name="Export_WithFaces" xml:space="preserve">
     <value>com dados de rostos</value>
   </data>
-  <data name="Export_Done" xml:space="preserve">
-    <value>{0} itens, {1}</value>
-  </data>
   <data name="Export_Download" xml:space="preserve">
     <value>Baixar</value>
   </data>
@@ -1555,9 +1546,6 @@
   <data name="Person_Ignore_Hint" xml:space="preserve">
     <value>Para desconhecidos (cartazes, multidões): apaga esta pessoa sem nome e os rostos dela, para que não voltem.</value>
   </data>
-  <data name="Settings_Faces_History_Ignore" xml:space="preserve">
-    <value>{0}, por {1}: rostos sem nome apagados: {2}; pessoas apagadas: {3}.</value>
-  </data>
   <data name="Merge_Result" xml:space="preserve">
     <value>Depois de juntar: {2} ({3} rostos) fica com os rostos de {0} ({1} rostos), e {0} deixa de existir.</value>
   </data>
@@ -1629,5 +1617,53 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Precisa de um nome</value>
+  </data>
+  <data name="Settings_Nav_Label" xml:space="preserve">
+    <value>Seções das configurações</value>
+  </data>
+  <data name="Settings_Danger_Heading" xml:space="preserve">
+    <value>Zona de perigo</value>
+  </data>
+  <data name="Settings_Danger_Intro" xml:space="preserve">
+    <value>Estas ações apagam dados e não podem ser desfeitas.</value>
+  </data>
+  <data name="Settings_Faces_History_When" xml:space="preserve">
+    <value>Quando</value>
+  </data>
+  <data name="Settings_Faces_History_Who" xml:space="preserve">
+    <value>Quem</value>
+  </data>
+  <data name="Settings_Faces_History_What" xml:space="preserve">
+    <value>O quê</value>
+  </data>
+  <data name="Settings_Faces_History_WhatLibrary" xml:space="preserve">
+    <value>Reconhecimento desativado; rostos apagados: {0}, pessoas apagadas: {1}</value>
+  </data>
+  <data name="Settings_Faces_History_WhatPerson" xml:space="preserve">
+    <value>Dados faciais de uma pessoa apagados; rostos: {0}</value>
+  </data>
+  <data name="Export_Col_When" xml:space="preserve">
+    <value>Pedido</value>
+  </data>
+  <data name="Export_Col_Status" xml:space="preserve">
+    <value>Situação</value>
+  </data>
+  <data name="Export_Col_Contents" xml:space="preserve">
+    <value>Conteúdo</value>
+  </data>
+  <data name="Export_Col_Size" xml:space="preserve">
+    <value>Tamanho</value>
+  </data>
+  <data name="Export_Col_Action" xml:space="preserve">
+    <value>Baixar</value>
+  </data>
+  <data name="Export_Items" xml:space="preserve">
+    <value>{0} itens</value>
+  </data>
+  <data name="Export_Sensitive" xml:space="preserve">
+    <value>Dados biométricos</value>
+  </data>
+  <data name="Settings_Faces_History_WhatIgnore" xml:space="preserve">
+    <value>Rostos sem nome apagados: {0}; pessoas apagadas: {1}</value>
   </data>
 </root>

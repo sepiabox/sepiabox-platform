@@ -44,8 +44,8 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         Assert.Equal("post", confirming.Find("form.confirm").GetAttribute("method"));
         Assert.Equal("Sim, desativar e apagar", confirming.Find("form.confirm button").TextContent);
         Assert.Equal("settings", confirming.Find("form.confirm a").GetAttribute("href"));
-        Assert.Contains("process --faces", confirming.Find(".work-folder").TextContent, StringComparison.Ordinal);
-        Assert.StartsWith("Os backups automáticos", confirming.Find(".backups").TextContent, StringComparison.Ordinal);
+        Assert.Contains("pasta de trabalho desse computador", confirming.Find(".work-folder").TextContent, StringComparison.Ordinal);
+        Assert.StartsWith("Os backups automáticos ainda podem guardar", confirming.Find(".backups").TextContent, StringComparison.Ordinal);
         Assert.Contains("das cópias das informações guardadas na nuvem (manifestos)", confirming.Find(".confirm-off .note").TextContent, StringComparison.Ordinal);
         Assert.Empty(_faces.Calls);
     }
@@ -67,6 +67,23 @@ public sealed class FaceSettingsPageTests : LocalizedContext
     }
 
     [Fact]
+    public void Has_section_navigation_and_a_danger_zone_with_the_turn_off_only_while_recognition_is_on()
+    {
+        var on = Render<Settings>();
+
+        Assert.Equal(["#settings-faces-heading", "#settings-export-heading", "#settings-danger-heading"], on.FindAll("nav.settings-nav a").Select(a => a.GetAttribute("href")!["settings".Length..]));
+        Assert.Equal("Danger zone", on.Find("section.danger-zone h2").TextContent);
+        Assert.NotNull(on.Find("section.danger-zone form.ask-off button.button.danger"));
+        Assert.Empty(on.FindAll("section.settings-faces form.ask-off"));
+
+        _faces.State = _faces.State with { On = false };
+        var off = Render<Settings>();
+
+        Assert.Empty(off.FindAll("section.danger-zone"));
+        Assert.Equal(2, off.FindAll("nav.settings-nav a").Count);
+    }
+
+    [Fact]
     public void Lists_who_deleted_face_data_and_how_much_in_brazilian_portuguese()
     {
         using var language = Cultures.Use(Cultures.BrazilianPortuguese);
@@ -75,12 +92,10 @@ public sealed class FaceSettingsPageTests : LocalizedContext
 
         var page = Render<Settings>();
 
-        Assert.Equal(
-            [
-                "21/10/2026 10:05, por ana@example.com: dados faciais de uma pessoa apagados; rostos: 3.",
-                "20/10/2026 08:00, por ana@example.com: reconhecimento desativado; rostos apagados: 120, pessoas apagadas: 9.",
-            ],
-            page.FindAll(".face-deletions li").Select(li => li.TextContent));
+        var rows = page.FindAll("table.face-deletions tbody tr").Select(tr => tr.QuerySelectorAll("td").Select(td => td.TextContent).ToArray()).ToList();
+        Assert.Equal(["21/10/2026 10:05", "ana@example.com", "Dados faciais de uma pessoa apagados; rostos: 3"], rows[0]);
+        Assert.Equal(["20/10/2026 08:00", "ana@example.com", "Reconhecimento desativado; rostos apagados: 120, pessoas apagadas: 9"], rows[1]);
+        Assert.Equal(["Quando", "Quem", "O quê"], page.FindAll("table.face-deletions th").Select(th => th.TextContent));
     }
 
     [Fact]
@@ -91,11 +106,10 @@ public sealed class FaceSettingsPageTests : LocalizedContext
 
         var page = Render<Settings>();
 
-        var lines = page.FindAll(".face-deletions li").Select(li => li.TextContent).ToList();
-
         // The time's own format varies with the runtime's culture data; the words are what is asserted.
-        Assert.EndsWith(", by ana@example.com: unnamed faces deleted: 14; people deleted: 6.", lines[0], StringComparison.Ordinal);
-        Assert.EndsWith(", by ana@example.com: one person's face data deleted; faces: 3.", lines[1], StringComparison.Ordinal);
+        var rows = page.FindAll("table.face-deletions tbody tr").Select(tr => tr.QuerySelectorAll("td").Select(td => td.TextContent).ToArray()).ToList();
+        Assert.Equal(["ana@example.com", "Unnamed faces deleted: 14; people deleted: 6"], [rows[0][1], rows[0][2]]);
+        Assert.Equal(["ana@example.com", "One person's face data deleted; faces: 3"], [rows[1][1], rows[1][2]]);
     }
 
     [Fact]
@@ -104,9 +118,9 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         using var language = Cultures.Use(Cultures.BrazilianPortuguese);
         _faces.History.Add(Deletion(FaceDataDeletionScopes.Ignore, 14, 6, new DateTimeOffset(2026, 10, 22, 9, 0, 0, TimeSpan.Zero)));
 
-        Assert.Equal(
-            "22/10/2026 09:00, por ana@example.com: rostos sem nome apagados: 14; pessoas apagadas: 6.",
-            Assert.Single(Render<Settings>().FindAll(".face-deletions li")).TextContent);
+        var cells = Assert.Single(Render<Settings>().FindAll("table.face-deletions tbody tr")).QuerySelectorAll("td").Select(td => td.TextContent).ToArray();
+
+        Assert.Equal(["22/10/2026 09:00", "ana@example.com", "Rostos sem nome apagados: 14; pessoas apagadas: 6"], cells);
     }
 
     [Theory]

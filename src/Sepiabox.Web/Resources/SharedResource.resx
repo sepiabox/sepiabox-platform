@@ -726,16 +726,10 @@
     <value>Turn face recognition on</value>
   </data>
   <data name="Settings_Faces_WorkFolder" xml:space="preserve">
-    <value>Faces are also kept on each computer that ran process --faces, in its work folder. Uploading it again does not bring them back, but to delete them there too, delete the work folder, or run process into a new one without --faces.</value>
+    <value>Face data is also kept on each computer that processed your photos with face recognition. Uploading again does not bring it back; to remove it there too, delete that computer's work folder.</value>
   </data>
   <data name="Settings_Faces_History" xml:space="preserve">
     <value>Face data deleted</value>
-  </data>
-  <data name="Settings_Faces_History_Library" xml:space="preserve">
-    <value>{0}, by {1}: recognition turned off; faces deleted: {2}, people deleted: {3}.</value>
-  </data>
-  <data name="Settings_Faces_History_Person" xml:space="preserve">
-    <value>{0}, by {1}: one person's face data deleted; faces: {2}.</value>
   </data>
   <data name="Settings_Done_Off" xml:space="preserve">
     <value>Face recognition is off and the face data was deleted.</value>
@@ -768,7 +762,7 @@
     <value>Face recognition is off, so there are no people.</value>
   </data>
   <data name="Settings_Faces_Backups" xml:space="preserve">
-    <value>Automatic backups (the database's point-in-time restore, and deleted or overwritten files kept for 7 days) still hold deleted face data for up to 7 days; after that it is gone.</value>
+    <value>Automatic backups can still hold deleted face data for up to 7 days; after that it is gone.</value>
   </data>
   <data name="Layout_Places" xml:space="preserve">
     <value>Places</value>
@@ -1480,9 +1474,6 @@
   <data name="Export_WithFaces" xml:space="preserve">
     <value>with face data</value>
   </data>
-  <data name="Export_Done" xml:space="preserve">
-    <value>{0} items, {1}</value>
-  </data>
   <data name="Export_Download" xml:space="preserve">
     <value>Download</value>
   </data>
@@ -1628,9 +1619,6 @@
   <data name="Person_Ignore_Hint" xml:space="preserve">
     <value>For strangers (posters, crowds): deletes this unnamed person and their faces, so they do not come back.</value>
   </data>
-  <data name="Settings_Faces_History_Ignore" xml:space="preserve">
-    <value>{0}, by {1}: unnamed faces deleted: {2}; people deleted: {3}.</value>
-  </data>
   <data name="Merge_Result" xml:space="preserve">
     <value>After merging: {2} ({3} faces) keeps the faces of {0} ({1} faces), and {0} no longer exists.</value>
   </data>
@@ -1702,5 +1690,53 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Needs a name</value>
+  </data>
+  <data name="Settings_Nav_Label" xml:space="preserve">
+    <value>Settings sections</value>
+  </data>
+  <data name="Settings_Danger_Heading" xml:space="preserve">
+    <value>Danger zone</value>
+  </data>
+  <data name="Settings_Danger_Intro" xml:space="preserve">
+    <value>These actions delete data and cannot be undone.</value>
+  </data>
+  <data name="Settings_Faces_History_When" xml:space="preserve">
+    <value>When</value>
+  </data>
+  <data name="Settings_Faces_History_Who" xml:space="preserve">
+    <value>Who</value>
+  </data>
+  <data name="Settings_Faces_History_What" xml:space="preserve">
+    <value>What</value>
+  </data>
+  <data name="Settings_Faces_History_WhatLibrary" xml:space="preserve">
+    <value>Recognition turned off; faces deleted: {0}, people deleted: {1}</value>
+  </data>
+  <data name="Settings_Faces_History_WhatPerson" xml:space="preserve">
+    <value>One person's face data deleted; faces: {0}</value>
+  </data>
+  <data name="Export_Col_When" xml:space="preserve">
+    <value>Requested</value>
+  </data>
+  <data name="Export_Col_Status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="Export_Col_Contents" xml:space="preserve">
+    <value>Contents</value>
+  </data>
+  <data name="Export_Col_Size" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="Export_Col_Action" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="Export_Items" xml:space="preserve">
+    <value>{0} items</value>
+  </data>
+  <data name="Export_Sensitive" xml:space="preserve">
+    <value>Biometric data</value>
+  </data>
+  <data name="Settings_Faces_History_WhatIgnore" xml:space="preserve">
+    <value>Unnamed faces deleted: {0}; people deleted: {1}</value>
   </data>
 </root>

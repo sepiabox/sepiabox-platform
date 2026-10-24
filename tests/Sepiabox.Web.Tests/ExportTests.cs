@@ -163,7 +163,7 @@ public sealed class ExportPageTests : LocalizedContext
         Assert.Equal("post", page.Find("form.export-request").GetAttribute("method"));
         Assert.Null(page.Find("input[name=IncludeFaceData]").GetAttribute("checked"));
         Assert.Contains("Include face data", page.Find("form.export-request label").TextContent, StringComparison.Ordinal);
-        Assert.Empty(page.FindAll("ul.exports"));
+        Assert.Empty(page.FindAll("table.exports"));
     }
 
     [Fact]
@@ -174,6 +174,43 @@ public sealed class ExportPageTests : LocalizedContext
         Assert.Single(page.FindAll("div.page-head h1.page-heading"));
         Assert.NotEmpty(page.FindAll("div.page-head .page-sub"));
         Assert.NotEmpty(page.FindAll("form.export-request.panel"));
+    }
+
+    [Fact]
+    public void Puts_the_face_data_option_in_a_card_with_its_biometric_warning()
+    {
+        var card = Render<ExportData>().Find("form.export-request label.option-card.sensitive");
+
+        Assert.Equal("Include face data", card.QuerySelector("strong")!.TextContent);
+        Assert.Equal("Biometric data", card.QuerySelector(".sensitive-tag")!.TextContent);
+        Assert.Contains("biometric", card.QuerySelector(".hint")!.TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(card.QuerySelector("input[name=IncludeFaceData]"));
+    }
+
+    [Fact]
+    public void Lists_the_history_as_a_table_with_a_status_badge_the_contents_the_size_and_the_action()
+    {
+        _exports.Recent =
+        [
+            new ExportRequest { RequestedBy = "a@b.c", Id = 2, RequestedAt = DateTimeOffset.UtcNow, FinishedAt = DateTimeOffset.UtcNow, Status = ExportStatuses.Done, BlobName = "x.zip", Assets = 12, SizeBytes = 2048, IncludeFaceData = true },
+            new ExportRequest { RequestedBy = "a@b.c", Id = 1, RequestedAt = DateTimeOffset.UnixEpoch, Status = ExportStatuses.Failed, Error = "No." },
+        ];
+
+        var page = Render<ExportData>();
+
+        Assert.Equal(["Requested", "Status", "Contents", "Size", "Download"], page.FindAll("table.exports th").Select(th => th.TextContent));
+        var rows = page.FindAll("table.exports tbody tr");
+        Assert.Equal("Ready", rows[0].QuerySelector(".status-badge.status-done")!.TextContent);
+        Assert.Contains("12 items", rows[0].QuerySelector(".contents")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("with face data", rows[0].QuerySelector(".contents")!.TextContent, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(rows[0].QuerySelector(".size")!.TextContent));
+        Assert.NotNull(rows[0].QuerySelector(".action a.button"));
+        Assert.Equal("Failed", rows[1].QuerySelector(".status-badge.status-failed")!.TextContent);
+        Assert.Equal("No.", rows[1].QuerySelector(".action .error")!.TextContent);
+        Assert.Empty(rows[1].QuerySelector(".size")!.TextContent);
+        // The grid is on a wrapper inside the cell, so the cell stays a table cell and the row lines run through.
+        Assert.NotNull(rows[0].QuerySelector("td.action > div.action-stack a.button"));
+        Assert.NotNull(page.Find("p.measure"));
     }
 
     [Fact]
@@ -198,7 +235,7 @@ public sealed class ExportPageTests : LocalizedContext
 
         var page = Render<ExportData>();
 
-        var items = page.FindAll("ul.exports li");
+        var items = page.FindAll("table.exports tbody tr");
         Assert.Equal(3, items.Count);
         Assert.Empty(items[0].QuerySelectorAll("a"));
         Assert.Equal("settings/export/2/download", items[1].QuerySelector("a")!.GetAttribute("href"));
@@ -223,7 +260,7 @@ public sealed class ExportPageTests : LocalizedContext
 
         var page = Render<ExportData>();
 
-        var items = page.FindAll("ul.exports li");
+        var items = page.FindAll("table.exports tbody tr");
         Assert.Equal("settings/export/4/download", items[0].QuerySelector("a")!.GetAttribute("href"));
         Assert.Contains("Available until", items[0].TextContent, StringComparison.Ordinal);
         Assert.Contains("Links to the originals inside work until", items[0].TextContent, StringComparison.Ordinal);
