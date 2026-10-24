@@ -135,6 +135,29 @@ public sealed class DerivativeMakerTests : IDisposable
         Assert.Equal(new GeoPoint(1, 2), filled.Manifest.Location);
     }
 
+    [Fact]
+    public void Keeps_the_duration_the_file_had_when_the_processor_finds_none()
+    {
+        var path = _folder.Write("clip.mp4", [1, 2, 3]);
+        var processor = new StubVideo { OnProbe = () => new VideoProbe(1920, 1080, null) };
+
+        var result = Make(Undescribed(MediaKind.Video) with { DurationSeconds = 7.5 }, path, processor);
+
+        Assert.Equal(7.5, result.Manifest.DurationSeconds);
+    }
+
+    [Fact]
+    public void Reads_a_photo_from_memory_when_its_content_is_given()
+    {
+        var bytes = TestPhotos.Porto();
+        var gone = Path.Combine(_folder.Path, "not-there.jpg");
+
+        var result = Make(Undescribed(MediaKind.Photo), gone, content: bytes);
+
+        Assert.Equal(DerivativeStatus.Done, result.Status);
+        Assert.NotEmpty(result.Manifest.Derivatives);
+    }
+
     private sealed class StubVideo : IVideoProcessor
     {
         public Func<VideoProbe> OnProbe { get; set; } = () => new VideoProbe(640, 480, 1);
