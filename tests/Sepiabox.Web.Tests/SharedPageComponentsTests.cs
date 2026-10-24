@@ -147,6 +147,8 @@ public sealed class SharedStylesheetTests
     [InlineData(".field-error {")]
     [InlineData(".form-row {")]
     [InlineData(".form-actions {")]
+    [InlineData(".option-card {")]
+    [InlineData(".option-text {")]
     [InlineData(".button.danger {")]
     [InlineData(".empty-state {")]
     [InlineData(".note-error {")]
