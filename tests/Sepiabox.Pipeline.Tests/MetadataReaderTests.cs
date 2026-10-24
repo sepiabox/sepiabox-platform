@@ -82,6 +82,34 @@ public class MetadataReaderTests
         Assert.Null(MetadataReader.Read(path).Location);
     }
 
+    [Theory]
+    [InlineData(436774u, "S", 436774u, "W")]
+    [InlineData(91u, "N", 10u, "E")]
+    [InlineData(10u, "N", 181u, "W")]
+    [InlineData(90u, "S", 181u, "E")]
+    public void Keeps_the_photo_with_no_location_when_the_camera_wrote_coordinates_outside_the_globe(uint latitude, string latitudeRef, uint longitude, string longitudeRef)
+    {
+        using var folder = new TempFolder();
+        var path = folder.Write("garbage-gps.jpg", TestPhotos.WithGps(latitude, latitudeRef, longitude, longitudeRef));
+
+        var metadata = MetadataReader.Read(path);
+
+        Assert.Null(metadata.Location);
+        Assert.Equal(64, metadata.Width);
+    }
+
+    [Theory]
+    [InlineData(90u, "N", 180u, "E", 90.0, 180.0)]
+    [InlineData(90u, "S", 180u, "W", -90.0, -180.0)]
+    [InlineData(89u, "N", 179u, "W", 89.0, -179.0)]
+    public void Keeps_a_location_on_the_edge_of_the_globe(uint latitude, string latitudeRef, uint longitude, string longitudeRef, double expectedLatitude, double expectedLongitude)
+    {
+        using var folder = new TempFolder();
+        var path = folder.Write("edge-gps.jpg", TestPhotos.WithGps(latitude, latitudeRef, longitude, longitudeRef));
+
+        Assert.Equal(new GeoPoint(expectedLatitude, expectedLongitude), MetadataReader.Read(path).Location);
+    }
+
     [Fact]
     public void Returns_empty_metadata_when_a_video_has_a_malformed_keys_atom()
     {

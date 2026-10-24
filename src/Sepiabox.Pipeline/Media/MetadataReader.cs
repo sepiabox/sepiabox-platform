@@ -78,7 +78,11 @@ public static class MetadataReader
     private static GeoPoint? ReadLocation(IReadOnlyList<MetadataExtractor.Directory> directories)
     {
         var gps = directories.OfType<GpsDirectory>().FirstOrDefault();
-        if (gps is not null && gps.TryGetGeoLocation(out var location) && !location.IsZero)
+        // A camera can write any number in the GPS block (latitude and longitude around -436774 were seen), and the manifest schema
+        // refuses a place outside the globe: such a value is no place, and the photo goes on without one (D-127).
+        if (gps is not null && gps.TryGetGeoLocation(out var location) && !location.IsZero
+            && double.IsFinite(location.Latitude) && double.IsFinite(location.Longitude)
+            && Math.Abs(location.Latitude) <= 90 && Math.Abs(location.Longitude) <= 180)
         {
             return new GeoPoint(Math.Round(location.Latitude, 6), Math.Round(location.Longitude, 6));
         }
