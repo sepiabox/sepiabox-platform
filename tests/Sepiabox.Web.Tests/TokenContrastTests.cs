@@ -18,7 +18,7 @@ public sealed partial class TokenContrastTests
         ("accent", "bg"), ("accent", "surface"), ("accent", "accent-soft"), ("accent-hover", "surface"),
         ("accent-contrast", "accent"), ("accent-contrast", "accent-hover"),
         ("brand-ink", "brand-soft"), ("brand", "surface"),
-        ("danger", "surface"), ("danger", "bg"),
+        ("danger", "surface"), ("surface", "danger"), ("danger", "bg"),
     ];
 
     // Control borders against what they sit on: a control must be told from its surroundings (WCAG 1.4.11).

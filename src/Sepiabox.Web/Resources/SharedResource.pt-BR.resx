@@ -649,7 +649,7 @@
     <value>Reconhecimento facial</value>
   </data>
   <data name="Settings_Faces_IsOn" xml:space="preserve">
-    <value>O reconhecimento facial está ligado: os rostos das fotos processadas com --faces são agrupados em pessoas.</value>
+    <value>O reconhecimento facial está ativado. Os rostos encontrados nas suas fotos são agrupados em pessoas.</value>
   </data>
   <data name="Settings_Faces_OffHint" xml:space="preserve">
     <value>Desligar apaga da biblioteca todos os rostos e todas as pessoas, com os nomes. As fotos ficam.</value>
@@ -1379,7 +1379,7 @@
     <value>Incluir dados de rostos</value>
   </data>
   <data name="Export_IncludeFacesHint" xml:space="preserve">
-    <value>As caixas dos rostos e os números com que a app compara rostos. São dados biométricos: deixe de fora se não precisar. Os nomes das pessoas em cada foto vão sempre.</value>
+    <value>As caixas dos rostos e os números com que o app compara rostos. São dados biométricos: deixe de fora se não precisar. Os nomes das pessoas em cada foto vão sempre.</value>
   </data>
   <data name="Export_Request" xml:space="preserve">
     <value>Pedir uma exportação</value>

@@ -1,0 +1,41 @@
+@* A page or a part of one with nothing to show (S-069 provides it, S-070 puts it on the pages): an icon, what is missing, a line of
+   help and the one thing to do about it. The icon is drawn, never a picture of people. *@
+
+<div class="empty-state">
+    <svg class="icon empty-icon" viewBox="0 0 24 24" aria-hidden="true">
+        @if (Icon is not null)
+        {
+            @Icon
+        }
+        else
+        {
+            <rect x="3.5" y="5" width="17" height="14" rx="2.5" /><circle cx="9" cy="10.5" r="1.6" /><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4" />
+        }
+    </svg>
+    <h2 class="empty-title">@Title</h2>
+    @if (ChildContent is not null)
+    {
+        <p class="empty-help muted">@ChildContent</p>
+    }
+    @if (Action is not null)
+    {
+        <div class="empty-action">@Action</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>The line of help under the title.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>The primary action, usually a <c>.button</c> link.</summary>
+    [Parameter]
+    public RenderFragment? Action { get; set; }
+
+    /// <summary>SVG shapes for the icon (24 by 24, stroked); a picture frame when left out.</summary>
+    [Parameter]
+    public RenderFragment? Icon { get; set; }
+}

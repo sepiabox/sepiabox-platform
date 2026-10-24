@@ -15,7 +15,7 @@
 
 @if (NoteText is { } note)
 {
-    <Notice>@note</Notice>
+    <Notice Variant="@(Note is "connected" or "counted" or "disconnected" ? NoticeVariant.Success : Note is "reconnect" ? NoticeVariant.Warning : NoticeVariant.Error)">@note</Notice>
 }
 
 <Panel Class="connection-service" Title="@Text["Sources_GoogleDrive"]">
@@ -75,7 +75,7 @@
                         <form method="post" @formname="@("disconnect-" + source.Id.ToString(CultureInfo.InvariantCulture))" @onsubmit="DisconnectAsync">
                             <AntiforgeryToken />
                             <input type="hidden" name="SourceId" value="@source.Id.ToString(CultureInfo.InvariantCulture)" />
-                            <button type="submit" class="button secondary" aria-label="@Text["Sources_DisconnectAria", source.AccountEmail]">@Text["Sources_Disconnect"]</button>
+                            <button type="submit" class="button danger" aria-label="@Text["Sources_DisconnectAria", source.AccountEmail]">@Text["Sources_Disconnect"]</button>
                         </form>
                     </div>
                 </li>

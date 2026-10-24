@@ -32,7 +32,7 @@ public sealed class FaceSettingsPageTests : LocalizedContext
 
         var page = Render<Settings>();
         Assert.Equal("Configurações", page.Find("h1").TextContent);
-        Assert.StartsWith("O reconhecimento facial está ligado", page.Find(".faces-status").TextContent, StringComparison.Ordinal);
+        Assert.StartsWith("O reconhecimento facial está ativado", page.Find(".faces-status").TextContent, StringComparison.Ordinal);
         Assert.Equal(("get", "settings"), (page.Find("form.ask-off").GetAttribute("method"), page.Find("form.ask-off").GetAttribute("action")));
         Assert.Equal("Desligar e apagar os dados faciais", page.Find("form.ask-off button").TextContent);
         Assert.Empty(page.FindAll("form.confirm"));

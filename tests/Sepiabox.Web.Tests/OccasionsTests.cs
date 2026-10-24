@@ -138,7 +138,7 @@ public sealed class OccasionsPageTests : LocalizedContext
         var cards = RenderPage().FindAll("li.occasion .count");
 
         Assert.Equal(["Casamento · 3 itens", "1 item"], cards.Select(c => c.TextContent));
-        Assert.Contains("Casamento · 3 itens", Render<Occasion>(p => p.Add(o => o.Id, 7)).Find("p.muted").TextContent, StringComparison.Ordinal);
+        Assert.Contains("Casamento · 3 itens", Render<Occasion>(p => p.Add(o => o.Id, 7)).Find(".page-sub").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -239,7 +239,7 @@ public sealed class OccasionsPageTests : LocalizedContext
         Assert.Equal([7L], asked.Filters.EventIds);
         Assert.Equal((SearchSort.CapturedAtAsc, SearchQuery.MaxLimit), (asked.Sort, asked.Limit));
         var timeline = new SearchQuery { Filters = new SearchFilters { EventIds = [7] }, Sort = SearchSort.CapturedAtAsc };
-        Assert.Equal(SearchLinks.Timeline(timeline), page.Find("p.muted a").GetAttribute("href"));
+        Assert.Equal(SearchLinks.Timeline(timeline), page.Find(".page-sub a").GetAttribute("href"));
         Assert.Equal("All occasions", page.Find("p.back a").TextContent);
     }
 
@@ -277,7 +277,7 @@ public sealed class OccasionsPageTests : LocalizedContext
 
         var page = Render<Occasion>(p => p.Add(o => o.Id, 7));
 
-        Assert.Equal(offered, page.FindAll("p.muted a").Count == 1);
+        Assert.Equal(offered, page.FindAll(".page-sub a").Count == 1);
     }
 
     [Fact]

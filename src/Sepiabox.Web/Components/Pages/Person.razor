@@ -23,7 +23,7 @@ else
 
     @if (NoteText is { } note)
     {
-        <Notice Class="person-note">@note</Notice>
+        <Notice Class="person-note" Variant="@NoteKind">@note</Notice>
     }
 
     <Panel Class="person-edit">
@@ -180,6 +180,8 @@ else
     private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key)
         ? (key == "Person_Error_NameTooLong" ? Text[key, PeopleCuration.MaxNameLength].Value : Text[key].Value)
         : null;
+
+    private string NoteKind => NoticeVariant.ForKey(Note is not null && s_notes.TryGetValue(Note, out var key) ? key : null);
 
     protected override async Task OnParametersSetAsync()
     {

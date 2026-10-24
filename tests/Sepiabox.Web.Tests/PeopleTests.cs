@@ -106,6 +106,28 @@ public sealed class PeoplePageTests
     }
 
     [Fact]
+    public async Task Orders_each_group_by_faces_then_id_with_the_named_ones_before_the_unnamed()
+    {
+        await using var web = new WebFactory(new FakeLibrary
+        {
+            People =
+            [
+                new PersonSummary(5, "Bia", 2, null), new PersonSummary(1, null, 3, null), new PersonSummary(4, "Caio", 9, null),
+                new PersonSummary(3, null, 3, null), new PersonSummary(2, null, 8, null), new PersonSummary(6, "Duda", 2, null),
+            ],
+        });
+        using var http = web.CreateSignedInClient();
+
+        var html = await http.GetStringAsync(new Uri("/people", UriKind.Relative));
+
+        var lists = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html).QuerySelectorAll("main ul.people");
+        static string[] Hrefs(AngleSharp.Dom.IElement list) => list.QuerySelectorAll("a.person-link").Select(a => a.GetAttribute("href")!).ToArray();
+        Assert.Equal(2, lists.Length);
+        Assert.Equal(["people/4", "people/5", "people/6"], Hrefs(lists[0]));
+        Assert.Equal(["people/2", "people/1", "people/3"], Hrefs(lists[1]));
+    }
+
+    [Fact]
     public async Task Leaves_out_the_callout_and_the_sections_when_every_person_has_a_name()
     {
         await using var web = new WebFactory(new FakeLibrary { People = [new PersonSummary(2, "Ana", 1, null)] });

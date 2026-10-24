@@ -103,6 +103,7 @@
 
     /* The sticky header's height, for anchored targets (#106): 0 where the header is not sticky (it wraps there, see .top). */
     --header-h: 0px;
+    --content-max: 1440px;
 
     /* light */
     --bg: #eeece7; /* silver paper */
@@ -187,7 +188,7 @@
     --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.6), 0 0 0 1px #352c24;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 960px) {
     :root {
         --header-h: 65px;
     }
@@ -367,7 +368,8 @@ h1:focus {
     flex-wrap: wrap;
     align-items: center;
     gap: var(--s-2) var(--s-4);
-    padding: var(--s-3) var(--s-5);
+    /* The header's row lines up with the content below it: the same maximum width and the same 24px gutter as main. */
+    padding: var(--s-3) max(var(--s-5), calc((100% - var(--content-max)) / 2 + 24px));
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: saturate(1.4) blur(8px);
     border-bottom: 1px solid var(--border);
@@ -375,7 +377,7 @@ h1:focus {
 
 /* Sticky only where the header is one row (1024 px and up): below that it wraps to two or three rows, and a sticky header of that height
    would cover a quarter of a phone's screen (and half of it with "More" open). There it scrolls away with the page. */
-@media (min-width: 1024px) {
+@media (min-width: 960px) {
     .top {
         position: sticky;
         top: 0;
@@ -427,7 +429,7 @@ h1:focus {
 }
 
 main {
-    max-width: 1440px;
+    max-width: var(--content-max);
     margin: 0 auto;
     padding: 16px 24px 48px;
 }
@@ -1932,6 +1934,14 @@ button[data-close] {
     margin: 0;
 }
 
+.block > p {
+    max-width: 72ch;
+}
+
+.export-request {
+    justify-items: start;
+}
+
 .note {
     margin: 0 0 var(--s-5);
 }
@@ -2432,4 +2442,186 @@ button[data-close] {
     .block {
         padding: var(--s-4);
     }
+}
+
+svg.icon {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.callout .icon {
+    width: 20px;
+    height: 20px;
+    flex: none;
+}
+
+/* Wide screens (D-126): the content grows to 1760px from 1600px; text and forms keep a readable measure. */
+@media (min-width: 1600px) {
+    :root {
+        --content-max: 1760px;
+    }
+}
+
+.measure,
+.page-sub,
+.empty-help {
+    max-width: 72ch;
+}
+
+.form-col {
+    max-width: 720px;
+}
+
+/* Form primitives (S-069): a field is its label above, the control, a helper line and an error line; a row puts two or three side by side. */
+.field {
+    display: grid;
+    gap: var(--s-1);
+    min-width: 0;
+}
+
+.field > .field-label {
+    font-weight: 600;
+    font-size: var(--text-sm);
+}
+
+.field input:not([type="checkbox"], [type="radio"]),
+.field select {
+    width: 100%;
+    min-height: 40px;
+}
+
+.field-help {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+}
+
+.field-error {
+    margin: 0;
+    color: var(--danger);
+    font-size: var(--text-sm);
+    font-weight: 600;
+}
+
+.field:has(.field-error) input,
+.field:has(.field-error) select {
+    border-color: var(--danger);
+}
+
+.block form.form-stack {
+    display: grid;
+    align-items: start;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--s-3) var(--s-4);
+}
+
+@media (min-width: 700px) {
+    .form-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .form-row.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2) var(--s-3);
+    margin-top: var(--s-2);
+}
+
+/* The primary action is the first in the markup (so the first Tab stop and Enter), then the secondary ones, then a link. */
+.form-actions > .button:first-child {
+    order: -1;
+}
+
+.button.danger {
+    border-color: var(--danger);
+    background: var(--danger);
+    color: var(--surface);
+}
+
+.button.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 85%, black);
+    border-color: transparent;
+    color: var(--surface);
+}
+
+/* Notes in three kinds (S-069): a banner under the header with a coloured edge and an icon. */
+.note {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+}
+
+.note .icon {
+    flex: none;
+}
+
+.note-success {
+    border-left-color: var(--accent);
+}
+
+.note-success .icon {
+    color: var(--accent);
+}
+
+.note-warning {
+    border-left-color: var(--sepia);
+}
+
+.note-warning .icon {
+    color: var(--sepia);
+}
+
+.note-info {
+    border-left-color: var(--brand-ink);
+}
+
+.note-error {
+    border-left-color: var(--danger);
+    background: var(--surface);
+}
+
+.note-error .icon {
+    color: var(--danger);
+}
+
+/* An empty state (S-069; S-070 puts it on the pages). */
+.empty-state {
+    display: grid;
+    justify-items: center;
+    gap: var(--s-3);
+    margin: var(--s-7, 48px) auto;
+    max-width: 480px;
+    padding: var(--s-6);
+    text-align: center;
+}
+
+.empty-icon {
+    width: 56px;
+    height: 56px;
+    color: var(--text-3);
+}
+
+.empty-title {
+    margin: 0;
+    font-size: var(--text-xl);
+}
+
+.empty-help {
+    margin: 0;
 }

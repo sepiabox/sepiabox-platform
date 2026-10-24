@@ -28,7 +28,7 @@ public sealed class PersonPageFormTests : LocalizedContext
 
         Assert.Equal("people", page.Find("p.back a").GetAttribute("href"));
         Assert.Equal("Ana", page.Find("div.page-head h1.page-heading").TextContent);
-        Assert.NotEmpty(page.FindAll("div.page-head p.page-sub"));
+        Assert.NotEmpty(page.FindAll("div.page-head .page-sub"));
         Assert.NotEmpty(page.FindAll("section.panel.block.person-edit"));
         var counts = page.FindAll(".section-title .n").Select(n => n.TextContent).ToList();
         Assert.Equal(["2", "2"], counts);
