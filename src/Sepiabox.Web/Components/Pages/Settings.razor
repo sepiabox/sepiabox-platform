@@ -14,7 +14,7 @@
 
 @if (NoteText is { } note)
 {
-    <Notice>@note</Notice>
+    <Notice Variant="@NoteVariant">@note</Notice>
 }
 
 @if (_view is { } view)
@@ -88,12 +88,12 @@
     private const string ConfirmOff = "faces-off";
 
     // What a note in the address may say, and its text: nothing else from the address is shown.
-    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string Key, string Variant)> s_notes = new(StringComparer.Ordinal)
     {
-        ["faces-off"] = "Settings_Done_Off",
-        ["faces-on"] = "Settings_Done_On",
-        ["faces-pending"] = "Settings_Error_Pending",
-        ["signed-out"] = "Settings_Error_NoEmail",
+        ["faces-off"] = ("Settings_Done_Off", NoticeVariant.Success),
+        ["faces-on"] = ("Settings_Done_On", NoticeVariant.Success),
+        ["faces-pending"] = ("Settings_Error_Pending", NoticeVariant.Error),
+        ["signed-out"] = ("Settings_Error_NoEmail", NoticeVariant.Error),
     };
 
     [SupplyParameterFromQuery(Name = "confirm")]
@@ -115,7 +115,9 @@
 
     private string? Email => HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
 
-    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var key) ? Text[key].Value : null;
+    private string? NoteText => Note is not null && s_notes.TryGetValue(Note, out var known) ? Text[known.Key].Value : null;
+
+    private string NoteVariant => Note is not null && s_notes.TryGetValue(Note, out var known) ? known.Variant : NoticeVariant.Success;
 
     protected override async Task OnInitializedAsync() => _view = await Faces.GetAsync();
 

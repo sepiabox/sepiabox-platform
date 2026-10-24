@@ -134,6 +134,20 @@ public sealed class PersonPageFormTests : LocalizedContext
         Assert.Equal(expected, page.Find(".note").TextContent);
     }
 
+    [Theory]
+    [InlineData("NameTaken", "error", "alert")]
+    [InlineData("DifferentUsers", "error", "alert")]
+    [InlineData("renamed", "success", "status")]
+    [InlineData("merged", "success", "status")]
+    public void Draws_a_refusal_as_an_error_that_is_announced_at_once_and_a_done_as_a_success(string note, string variant, string role)
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"people/7?note={note}");
+
+        var page = Render<Person>(p => p.Add(x => x.Id, 7L));
+
+        Assert.Equal(role, page.Find($"p.note.note-{variant}").GetAttribute("role"));
+    }
+
     [Fact]
     public void Shows_both_people_and_which_one_stays_before_a_merge_in_brazilian_portuguese()
     {
