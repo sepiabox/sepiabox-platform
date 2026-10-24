@@ -115,12 +115,16 @@ azd provision --no-prompt
 # each of the four secrets, not on the vault, and the job reads them by name. Bicep cannot name a secret that may not exist yet, so the
 # role is assigned here, only for a secret that exists: they are the sign-in's own secrets, which the owner sets before any Drive is
 # connected (docs/operations.md), and this script never creates or writes a secret. Run deploy again after setting one.
-vault_name=$(azd env get-value VAULT_NAME 2>/dev/null) || vault_name=""
-sync_principal=$(azd env get-value SYNC_IDENTITY_PRINCIPALID 2>/dev/null) || sync_principal=""
-if [[ -z "$vault_name" || -z "$sync_principal" ]]; then
-  echo "The azd environment has no VAULT_NAME or SYNC_IDENTITY_PRINCIPALID (the AppHost's outputs): run azd provision again." >&2
+# The AppHost's outputs give a vault's URI and an identity's resource id, not the vault's name or the identity's principal id.
+vault_uri=$(azd env get-value VAULT_VAULTURI 2>/dev/null) || vault_uri=""
+sync_identity=$(azd env get-value SYNC_IDENTITY_ID 2>/dev/null) || sync_identity=""
+if [[ -z "$vault_uri" || -z "$sync_identity" ]]; then
+  echo "The azd environment has no VAULT_VAULTURI or SYNC_IDENTITY_ID (the AppHost's outputs): run azd provision again." >&2
   exit 1
 fi
+vault_name=${vault_uri#https://}
+vault_name=${vault_name%%.*}
+sync_principal=$(az identity show --ids "$sync_identity" --query principalId --output tsv)
 vault_id=$(az keyvault show --name "$vault_name" --query id --output tsv)
 for secret in Auth--Google--ClientId Auth--Google--ClientSecret OneDrive--ClientId OneDrive--ClientSecret; do
   # A data-plane read: an identity with Owner on the resource group but no data access is refused even when the secret exists, which is

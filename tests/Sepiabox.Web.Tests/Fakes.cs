@@ -149,8 +149,8 @@ internal sealed class FakePeopleEditor : IPeopleEditor
     public Task<Sepiabox.Catalog.People.CurationOutcome> UnlinkUserAsync(long personId, string email, CancellationToken cancellationToken = default) =>
         Record($"unlink {personId} {email}");
 
-    public Task<Sepiabox.Catalog.People.CurationOutcome> MergeAsync(long personId, long otherId, CancellationToken cancellationToken = default) =>
-        Record($"merge {personId} {otherId}");
+    public Task<Sepiabox.Catalog.People.CurationOutcome> MergeAsync(long personId, long otherId, bool swap = false, CancellationToken cancellationToken = default) =>
+        Record($"merge {personId} {otherId}{(swap ? " swap" : string.Empty)}");
 
     public Task<Sepiabox.Catalog.People.CurationOutcome> NotThisPersonAsync(long personId, long faceId, CancellationToken cancellationToken = default) =>
         Record($"not-this-person {personId} {faceId}");

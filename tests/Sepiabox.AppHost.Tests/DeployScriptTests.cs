@@ -77,12 +77,17 @@ public sealed class DeployScriptTests : IDisposable
                 AZURE_ENV_NAME) echo "$STUB_ENV_NAME" ;;
                 AZURE_LOCATION) echo "$STUB_LOCATION" ;;
                 AZURE_CONTAINER_REGISTRY_ENDPOINT) echo "sepiaboxacr.azurecr.io" ;;
-                VAULT_NAME|SYNC_IDENTITY_PRINCIPALID)
+                VAULT_VAULTURI|SYNC_IDENTITY_ID)
                   if [ "$STUB_NO_OUTPUTS" = "1" ]; then
                     echo "ERROR: key '$3' not found in the environment values" >&2
                     exit 1
                   fi
-                  if [ "$3" = "VAULT_NAME" ]; then echo "sepiabox-kv"; else echo "00000000-0000-0000-0000-0000000000aa"; fi ;;
+                  # The forms azd writes for the AppHost's outputs: a vault's URI and an identity's resource id.
+                  if [ "$3" = "VAULT_VAULTURI" ]; then
+                    echo "https://sepiabox-kv.vault.azure.net/"
+                  else
+                    echo "/subscriptions/s/resourceGroups/rg-sepiabox/providers/Microsoft.ManagedIdentity/userAssignedIdentities/sync-identity-x"
+                  fi ;;
                 AZURE_RESOURCE_GROUP)
                   if [ -z "$STUB_RESOURCE_GROUP" ]; then
                     echo "ERROR: key not found" >&2
@@ -109,7 +114,9 @@ public sealed class DeployScriptTests : IDisposable
                   exit 1
                 fi
                 if [ "$STUB_PG_STATE" != "MISSING" ]; then echo "$STUB_PG_STATE"; fi ;;
-              "keyvault show"*) echo "/subscriptions/s/resourceGroups/rg-sepiabox/providers/Microsoft.KeyVault/vaults/sepiabox-kv" ;;
+              "identity show --ids /subscriptions/s/resourceGroups/rg-sepiabox/providers/Microsoft.ManagedIdentity/userAssignedIdentities/sync-identity-x --query principalId"*)
+                echo "00000000-0000-0000-0000-0000000000aa" ;;
+              "keyvault show --name sepiabox-kv "*) echo "/subscriptions/s/resourceGroups/rg-sepiabox/providers/Microsoft.KeyVault/vaults/sepiabox-kv" ;;
               "keyvault secret show"*)
                 # The owner has not set the client secret yet.
                 if [ "$STUB_SECRETS" = "MISSING" ] && echo "$*" | grep -q -- "--name Auth--Google--ClientSecret"; then
@@ -203,6 +210,7 @@ public sealed class DeployScriptTests : IDisposable
             ],
             Calls().Where(call => !call.StartsWith("azd env", StringComparison.Ordinal)
                 && !call.StartsWith("az group", StringComparison.Ordinal)
+                && !call.StartsWith("az identity", StringComparison.Ordinal)
                 && !call.StartsWith("az keyvault", StringComparison.Ordinal)
                 && !call.StartsWith("az role assignment", StringComparison.Ordinal)
                 && !call.StartsWith("az postgres", StringComparison.Ordinal)));
@@ -270,7 +278,7 @@ public sealed class DeployScriptTests : IDisposable
         var result = await RunDeployAsync("Succeeded", extra: new() { ["STUB_NO_OUTPUTS"] = "1" });
 
         Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("VAULT_NAME or SYNC_IDENTITY_PRINCIPALID", result.Error, StringComparison.Ordinal);
+        Assert.Contains("VAULT_VAULTURI or SYNC_IDENTITY_ID", result.Error, StringComparison.Ordinal);
         Assert.DoesNotContain(Calls(), call => call.StartsWith("azd deploy", StringComparison.Ordinal));
     }
 
