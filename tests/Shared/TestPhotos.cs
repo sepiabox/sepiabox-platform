@@ -24,6 +24,22 @@ internal static class TestPhotos
         return image.ToByteArray(MagickFormat.Jpeg);
     }
 
+    /// <summary>
+    /// A 64×48 JPEG whose EXIF GPS block holds exactly these whole degrees and references (a camera can write any number there), built
+    /// with no real data.
+    /// </summary>
+    public static byte[] WithGps(uint latitudeDegrees, string latitudeRef, uint longitudeDegrees, string longitudeRef)
+    {
+        using var image = new MagickImage(MagickColors.Khaki, 64, 48);
+        var exif = new ExifProfile();
+        exif.SetValue(ExifTag.GPSLatitudeRef, latitudeRef);
+        exif.SetValue(ExifTag.GPSLatitude, [new Rational(latitudeDegrees, 1), new Rational(0, 1), new Rational(0, 1)]);
+        exif.SetValue(ExifTag.GPSLongitudeRef, longitudeRef);
+        exif.SetValue(ExifTag.GPSLongitude, [new Rational(longitudeDegrees, 1), new Rational(0, 1), new Rational(0, 1)]);
+        image.SetProfile(exif);
+        return image.ToByteArray(MagickFormat.Jpeg);
+    }
+
     /// <summary>A 64×48 JPEG whose EXIF says it was taken at <paramref name="dateTimeOriginal"/> ("yyyy:MM:dd HH:mm:ss").</summary>
     public static byte[] Taken(string dateTimeOriginal, string color = "khaki")
     {

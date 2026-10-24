@@ -56,6 +56,9 @@ public sealed record ProcessResult(
     /// <summary>Of <see cref="Refreshed"/>, the videos whose manifest gained a location (most gain nothing).</summary>
     public int LocationsAdded { get; init; }
 
+    /// <summary>Unchanged files whose manifest had a place outside the globe, which was dropped (D-127).</summary>
+    public int LocationsDropped { get; init; }
+
     /// <summary>
     /// Damaged photos that an earlier run reported, unchanged since, which this run did not read again (D-105); a damaged
     /// photo found in this run is among <see cref="Problems"/>.
@@ -95,9 +98,10 @@ public static class ProcessCommand
     /// <summary>
     /// What <c>process</c> reads from each file's metadata, recorded per file in its state (S-060, D-089), so a newer
     /// version reads again only what it adds. 1: everything until S-053 (rows without a version). 2: a video's location
-    /// in its container's tags (S-053, D-060).
+    /// in its container's tags (S-053, D-060). 3: a manifest's location outside the globe, written by a build that did not check
+    /// the range of an EXIF place, is dropped (D-127).
     /// </summary>
-    public const int MetadataVersion = 2;
+    public const int MetadataVersion = 3;
 
     // The containers whose tags can hold a video's location (QuickTime and MP4: the Apple key, ©xyz, the 3GPP loci box).
     private static readonly HashSet<string> LocationContainers =
@@ -460,24 +464,32 @@ public static class ProcessCommand
                 // the file's header, never re-hashed and with no derivative made again; a file with nothing to read
                 // again is just recorded as current.
                 var refresh = false;
+                var repair = false;
+                var later = false;
                 if (done.MetadataVersion is null or < MetadataVersion)
                 {
-                    switch (MetadataRefresh(kind, doneSha256))
+                    // A place outside the globe in the manifest (D-127) is dropped once, whatever the kind of file; the version is
+                    // recorded after it is done.
+                    repair = HasPlaceOutsideTheGlobe(doneSha256);
+                    switch (MetadataRefresh(kind, doneSha256, done.MetadataVersion))
                     {
                         case Refresh.Read:
                             refresh = true;
                             break;
-                        case Refresh.Nothing:
+                        case Refresh.Nothing when !repair:
                             done = done with { MetadataVersion = MetadataVersion };
+                            break;
+                        case Refresh.Later:
+                            later = true;
                             break;
                     }
                 }
 
                 SaveIfChanged(previous, done);
                 o.Skipped++;
-                if (refresh)
+                if (refresh || repair)
                 {
-                    return new Plan(file, kind, done, null, null, doneSha256) { RefreshMetadata = true };
+                    return new Plan(file, kind, done, null, null, doneSha256) { RefreshMetadata = refresh, RepairLocation = repair, RecordVersionAfterRepair = !later };
                 }
 
                 // The model may have been downloaded, or --faces given, after this file was processed: both come
@@ -499,9 +511,10 @@ public static class ProcessCommand
             // What version 2 reads that version 1 did not: a video's location in its container's tags (S-053, D-060),
             // which only MP4-family containers hold. Read again only when the manifest has no location and FFmpeg is
             // there to read it; without FFmpeg nothing is recorded, so a later run with it reads it.
-            Refresh MetadataRefresh(MediaKind kind, string sha256)
+            Refresh MetadataRefresh(MediaKind kind, string sha256, int? version)
             {
-                if (kind != MediaKind.Video)
+                // Version 2 already read the video's tags: later versions add nothing there.
+                if (kind != MediaKind.Video || version >= 2)
                 {
                     return Refresh.Nothing;
                 }
@@ -514,6 +527,9 @@ public static class ProcessCommand
 
                 return video is null ? Refresh.Later : Refresh.Read;
             }
+
+            bool HasPlaceOutsideTheGlobe(string sha256) =>
+                ManifestJson.Deserialize(File.ReadAllText(ManifestPath(manifestFolder, sha256))).Location is { IsOnTheGlobe: false };
 
             // Checked once: what is found is recorded, so it is not checked again. The source is only read when its 720p
             // version has no sound: its header, and up to its first sound frame (to its end only when no frame decodes).
@@ -702,6 +718,18 @@ public static class ProcessCommand
 
                 void Unchanged()
                 {
+                    if (plan.RepairLocation)
+                    {
+                        // Written through the work folder's manifest, as a refresh is (the next upload merges it, D-036).
+                        var path = ManifestPath(manifestFolder, doneSha256);
+                        ManifestJson.WriteFile(path, ManifestJson.Deserialize(File.ReadAllText(path)) with { Location = null });
+                        o.LocationsDropped++;
+                        if (!plan.RefreshMetadata && plan.RecordVersionAfterRepair)
+                        {
+                            SaveState(plan.Previous! with { MetadataVersion = MetadataVersion });
+                        }
+                    }
+
                     if (plan.RefreshMetadata)
                     {
                         RefreshMetadata(o, file, doneSha256, plan.Previous!);
@@ -936,6 +964,7 @@ public static class ProcessCommand
             DamagedEarlier = outcomes.Sum(o => o.DamagedEarlier),
             Refreshed = outcomes.Sum(o => o.Refreshed),
             LocationsAdded = outcomes.Sum(o => o.LocationsAdded),
+            LocationsDropped = outcomes.Sum(o => o.LocationsDropped),
         };
     }
 
@@ -1192,6 +1221,12 @@ public static class ProcessCommand
 
         /// <summary>An unchanged video whose header is read again for what a newer metadata version reads (D-089).</summary>
         public bool RefreshMetadata { get; init; }
+
+        /// <summary>An unchanged file whose manifest has a place outside the globe, which is dropped (D-127).</summary>
+        public bool RepairLocation { get; init; }
+
+        /// <summary>False when a video still waits for FFmpeg to be read again: the version is then not recorded by the repair.</summary>
+        public bool RecordVersionAfterRepair { get; init; }
     }
 
     /// <summary>What an unchanged file's metadata needs under the current <see cref="MetadataVersion"/>.</summary>
@@ -1223,6 +1258,8 @@ public static class ProcessCommand
         public int DamagedEarlier { get; set; }
 
         public int LocationsAdded { get; set; }
+
+        public int LocationsDropped { get; set; }
 
         public int FacesChecked { get; set; }
 
