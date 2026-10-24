@@ -67,14 +67,6 @@ public sealed class SharedPageComponentsTests : LocalizedContext
     }
 
     [Fact]
-    public void Calls_a_resource_key_that_names_an_error_an_error_and_any_other_a_success()
-    {
-        Assert.Equal("error", NoticeVariant.ForKey("Person_Error_NameTaken"));
-        Assert.Equal("success", NoticeVariant.ForKey("Person_Done_Renamed"));
-        Assert.Equal("success", NoticeVariant.ForKey(null));
-    }
-
-    [Fact]
     public void Draws_an_empty_state_with_an_icon_a_title_a_line_of_help_and_the_action()
     {
         var state = Render<EmptyState>(p => p

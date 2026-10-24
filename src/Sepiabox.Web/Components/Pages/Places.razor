@@ -15,7 +15,7 @@
 
 @if (NoteText is { } note)
 {
-    <Notice Variant="@(_failure is not null || (Note is not null && s_notes.TryGetValue(Note, out var noted) && NoticeVariant.ForKey(noted) == NoticeVariant.Error) ? NoticeVariant.Error : NoticeVariant.Success)">@note</Notice>
+    <Notice Variant="@NoteVariant">@note</Notice>
 }
 
 @if (_deleting is { } deleting)
@@ -110,16 +110,16 @@ else
 
 @code {
     // What a note in the address may say, and its text: nothing else from the address is shown.
-    private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string Key, string Variant)> s_notes = new(StringComparer.Ordinal)
     {
-        ["created"] = "Places_Done_Created",
-        ["updated"] = "Places_Done_Updated",
-        ["deleted"] = "Places_Done_Deleted",
-        [nameof(SavedPlaceOutcome.NotFound)] = "Places_Error_NotFound",
-        [nameof(SavedPlaceOutcome.NameTaken)] = "Places_Error_NameTaken",
-        [nameof(SavedPlaceOutcome.NameInvalid)] = "Places_Error_NameInvalid",
-        [nameof(SavedPlaceOutcome.LocationInvalid)] = "Places_Error_LocationInvalid",
-        [nameof(SavedPlaceOutcome.RadiusInvalid)] = "Places_Error_RadiusInvalid",
+        ["created"] = ("Places_Done_Created", NoticeVariant.Success),
+        ["updated"] = ("Places_Done_Updated", NoticeVariant.Success),
+        ["deleted"] = ("Places_Done_Deleted", NoticeVariant.Success),
+        [nameof(SavedPlaceOutcome.NotFound)] = ("Places_Error_NotFound", NoticeVariant.Error),
+        [nameof(SavedPlaceOutcome.NameTaken)] = ("Places_Error_NameTaken", NoticeVariant.Error),
+        [nameof(SavedPlaceOutcome.NameInvalid)] = ("Places_Error_NameInvalid", NoticeVariant.Error),
+        [nameof(SavedPlaceOutcome.LocationInvalid)] = ("Places_Error_LocationInvalid", NoticeVariant.Error),
+        [nameof(SavedPlaceOutcome.RadiusInvalid)] = ("Places_Error_RadiusInvalid", NoticeVariant.Error),
     };
 
     [SupplyParameterFromQuery(Name = PersonLinks.NoteParameter)]
@@ -164,11 +164,17 @@ else
     private SavedPlaceOutcome? _failure;
     private long? _failedEdit;
 
+    // A refusal wins over a note in the address.
+    private (string Key, string Variant)? KnownNote =>
+        _failure is { } failure ? s_notes[failure.ToString()] : Note is not null && s_notes.TryGetValue(Note, out var known) ? known : null;
+
+    private string NoteVariant => KnownNote?.Variant ?? NoticeVariant.Success;
+
     private string? NoteText
     {
         get
         {
-            var key = _failure is { } failure ? s_notes[failure.ToString()] : Note is not null && s_notes.TryGetValue(Note, out var known) ? known : null;
+            var key = KnownNote?.Key;
             return key switch
             {
                 null => null,
