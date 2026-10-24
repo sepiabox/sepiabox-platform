@@ -1550,10 +1550,10 @@
     <value>Ignorar e apagar o rosto sem nome {0}</value>
   </data>
   <data name="Person_Delete_Hint" xml:space="preserve">
-    <value>Apaga esta pessoa, o nome e todos os rostos dela. Os rostos não voltam quando as fotos forem importadas de novo.</value>
+    <value>Apaga esta pessoa, o nome e os rostos dela. Os rostos dela não voltam quando as fotos forem importadas de novo; os que você tinha separado dela podem voltar como novas pessoas.</value>
   </data>
   <data name="Person_Ignore_Hint" xml:space="preserve">
-    <value>Para desconhecidos (cartazes, multidões): a mesma exclusão de uma pessoa sem nome e dos rostos dela, para que não voltem. Uma pessoa com nome não pode ser ignorada.</value>
+    <value>Para desconhecidos (cartazes, multidões): a mesma exclusão de uma pessoa sem nome, lembrando todos os rostos dela, para que nenhum volte. Uma pessoa com nome não pode ser ignorada.</value>
   </data>
   <data name="Settings_Faces_History_Ignore" xml:space="preserve">
     <value>{0}, por {1}: rostos sem nome apagados: {2}; pessoas apagadas: {3}.</value>
