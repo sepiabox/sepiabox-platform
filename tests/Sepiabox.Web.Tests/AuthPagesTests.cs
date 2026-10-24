@@ -133,9 +133,9 @@ public sealed class AuthPagesTests : LocalizedContext
         // Each language is named in itself, whatever the page's language.
         Assert.Equal(["English", "Português (Brasil)"], buttons.Select(b => b.TextContent));
         Assert.Equal([englishPressed, portuguesePressed], buttons.Select(b => b.GetAttribute("aria-pressed")));
-        // The stylesheet shows EN and PT where the header is tight, and the full name stays the accessible name.
+        // The stylesheet shows EN and PT where the header is tight, so the accessible name holds both forms (WCAG 2.5.3).
         Assert.Equal(["EN", "PT"], buttons.Select(b => b.GetAttribute("data-short")));
-        Assert.Equal(["English", "Português (Brasil)"], buttons.Select(b => b.GetAttribute("aria-label")));
+        Assert.Equal(["English (EN)", "Português (Brasil) (PT)"], buttons.Select(b => b.GetAttribute("aria-label")));
     }
 
     private IRenderedComponent<SignIn> RenderSignIn(SignInProviders providers, string environment, string query = "")

@@ -217,10 +217,18 @@ body {
 }
 
 /* Every interactive element shows where the keyboard is. */
+/* A theme chosen on the page (S-070) also sets native controls and scrollbars, which otherwise follow the system. */
+:root[data-theme="light"] {
+    color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+}
+
 :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    border-radius: var(--r-sm);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -352,7 +360,8 @@ h1:focus {
 
 /* The header (S-066): sticky, one row where it fits, pill links with the current page marked. */
 .top {
-    position: static;
+    /* Relative, not static, so z-index applies: the "More" popover must paint above positioned page content (face circles, badges). */
+    position: relative;
     z-index: 30;
     display: flex;
     flex-wrap: wrap;
@@ -942,7 +951,7 @@ main {
     margin-left: auto;
 }
 
-/* Where the header has no room for the address (601 to 1100 px) it is the first line of the "More" list, read only. */
+/* Where the header has no room for the address (601 to 1180 px) it is the first line of the "More" list, read only. */
 .user-in-more {
     display: none;
     padding: var(--s-2) var(--s-3);
@@ -950,7 +959,7 @@ main {
     max-width: none;
 }
 
-@media (max-width: 1100px) and (min-width: 601px) {
+@media (max-width: 1180px) and (min-width: 601px) {
     .top-end > .user {
         display: none;
     }
@@ -998,8 +1007,8 @@ main {
     cursor: pointer;
 }
 
-/* Up to 1100 px the switch says EN and PT; the button keeps the full name as its accessible name (aria-label). */
-@media (max-width: 1100px) {
+/* Up to 1180 px the switch says EN and PT; the button keeps the full name as its accessible name (aria-label). */
+@media (max-width: 1180px) {
     .language button {
         font-size: 0;
     }
