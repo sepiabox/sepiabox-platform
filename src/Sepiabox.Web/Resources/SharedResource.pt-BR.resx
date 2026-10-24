@@ -748,7 +748,7 @@
     <value>Em uma foto com localização, “Salvar este lugar” preenche as coordenadas.</value>
   </data>
   <data name="Places_HomeMark" xml:space="preserve">
-    <value>(casa)</value>
+    <value>Casa</value>
   </data>
   <data name="Places_Coordinates" xml:space="preserve">
     <value>{0}, {1} · raio de {2} m</value>
@@ -767,9 +767,6 @@
   </data>
   <data name="Places_DeleteExplain" xml:space="preserve">
     <value>Apagar {0}? As fotos e os vídeos tirados lá ficam; só o lugar é apagado.</value>
-  </data>
-  <data name="Places_DeleteConfirm" xml:space="preserve">
-    <value>Apagar</value>
   </data>
   <data name="Places_Done_Created" xml:space="preserve">
     <value>O lugar foi salvo.</value>
@@ -1533,5 +1530,11 @@
   </data>
   <data name="Places_Saved" xml:space="preserve">
     <value>Lugares salvos</value>
+  </data>
+  <data name="Places_DeleteNamed" xml:space="preserve">
+    <value>Apagar {0}</value>
+  </data>
+  <data name="Places_HomeHelpShort" xml:space="preserve">
+    <value>Fazer deste lugar a sua casa.</value>
   </data>
 </root>

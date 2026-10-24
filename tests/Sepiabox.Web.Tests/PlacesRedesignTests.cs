@@ -97,6 +97,67 @@ public sealed class PlacesRedesignTests : LocalizedContext
         var page = Render<Places>();
 
         Assert.Contains("Praia", page.Find(".confirm-delete .note-warning").TextContent, StringComparison.Ordinal);
-        Assert.Equal("Delete", page.Find(".confirm-delete button.button.danger").TextContent);
+        Assert.Equal("Delete Praia", page.Find(".confirm-delete .form-actions button.button.danger").TextContent);
+    }
+
+    [Fact]
+    public void Puts_the_empty_state_before_the_form_and_focuses_the_coordinates_for_the_home()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("places?home=1");
+
+        var page = Render<Places>();
+
+        var markup = page.Markup;
+        Assert.True(markup.IndexOf("empty-state", StringComparison.Ordinal) < markup.IndexOf("new-place", StringComparison.Ordinal));
+        Assert.True(page.Find("input[name=NewCoordinates]").HasAttribute("autofocus"));
+        Assert.False(page.Find("input[name=NewName]").HasAttribute("autofocus"));
+    }
+
+    [Fact]
+    public void Does_not_fill_the_form_in_again_once_it_was_sent_with_the_home_still_in_the_address()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("places?home=1");
+        var http = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        http.Request.Method = "POST";
+        http.Request.ContentType = "application/x-www-form-urlencoded";
+
+        var page = Render<Places>(p => p.AddCascadingValue<Microsoft.AspNetCore.Http.HttpContext>(http));
+
+        Assert.Null(page.Find("input[name=NewName]").GetAttribute("value"));
+        Assert.False(page.Find("input[name=NewHome]").HasAttribute("checked"));
+        Assert.False(page.Find("input[name=NewCoordinates]").HasAttribute("autofocus"));
+    }
+
+    [Fact]
+    public async Task Shows_a_refused_edit_inside_its_own_card_as_an_alert_and_not_at_the_top()
+    {
+        _places.Places.Add(new SavedPlaceSummary(1, "Casa", 38.74, -9.16, 300, IsHome: true));
+        _places.Places.Add(new SavedPlaceSummary(2, "Praia", 38.96, -9.41, 500, IsHome: false));
+        _places.Outcome = Sepiabox.Catalog.SavedPlaces.SavedPlaceOutcome.NameTaken;
+        var page = Render<Places>();
+        page.Instance.EditName = "Casa";
+
+        await page.InvokeAsync(() => page.Find("#place-2 form.edit").Submit());
+
+        Assert.Single(page.FindAll(".note"));
+        var refusal = page.Find("#place-2 details.place-edit[open] .edit-refusal");
+        Assert.Equal("alert", refusal.GetAttribute("role"));
+        Assert.Equal("places#place-2", page.Find("#place-2 form.edit").GetAttribute("action"));
+        Assert.Empty(page.FindAll("#place-1 .note"));
+    }
+
+    [Fact]
+    public void Names_the_places_with_h3_and_shows_the_home_once_as_a_chip_with_the_long_hint_only_there()
+    {
+        _places.Places.Add(new SavedPlaceSummary(1, "Casa", 38.74, -9.16, 300, IsHome: true));
+        _places.Places.Add(new SavedPlaceSummary(2, "Praia", 38.96, -9.41, 500, IsHome: false));
+
+        var page = Render<Places>();
+
+        Assert.Equal(["Casa", "Praia"], page.FindAll("li.saved-place > h3").Select(h => h.FirstChild!.TextContent.Trim()));
+        Assert.Equal("Home", Assert.Single(page.FindAll(".chip")).TextContent);
+        var hints = page.FindAll("li.saved-place .option-card .field-help").Select(h => h.TextContent).ToList();
+        Assert.Contains("Unlocks", hints[0], StringComparison.Ordinal);
+        Assert.Equal("Make this place your home.", hints[1]);
     }
 }

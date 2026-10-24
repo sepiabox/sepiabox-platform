@@ -147,7 +147,7 @@ public sealed class SavedPlacesPageTests : LocalizedContext
     {
         var page = Render<Places>();
 
-        Assert.Equal(["Casa (home)", "Casa da praia"], page.FindAll(".saved-place h2").Select(h => Collapse(h.TextContent)));
+        Assert.Equal(["Casa Home", "Casa da praia"], page.FindAll(".saved-place h3").Select(h => Collapse(h.TextContent)));
         Assert.Equal("38.74, -9.16 · radius 300 m", page.Find(".saved-place .coordinates").TextContent);
         var years = SearchLinks.Timeline(new SearchQuery
         {

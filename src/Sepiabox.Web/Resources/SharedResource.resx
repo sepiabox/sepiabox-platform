@@ -795,7 +795,7 @@
     <value>On a photo with a location, “Save this place” fills in its coordinates.</value>
   </data>
   <data name="Places_HomeMark" xml:space="preserve">
-    <value>(home)</value>
+    <value>Home</value>
   </data>
   <data name="Places_Coordinates" xml:space="preserve">
     <value>{0}, {1} · radius {2} m</value>
@@ -814,9 +814,6 @@
   </data>
   <data name="Places_DeleteExplain" xml:space="preserve">
     <value>Delete {0}? The photos and videos taken there stay; only the place goes.</value>
-  </data>
-  <data name="Places_DeleteConfirm" xml:space="preserve">
-    <value>Delete</value>
   </data>
   <data name="Places_Done_Created" xml:space="preserve">
     <value>The place was saved.</value>
@@ -1606,5 +1603,11 @@
   </data>
   <data name="Places_Saved" xml:space="preserve">
     <value>Saved places</value>
+  </data>
+  <data name="Places_DeleteNamed" xml:space="preserve">
+    <value>Delete {0}</value>
+  </data>
+  <data name="Places_HomeHelpShort" xml:space="preserve">
+    <value>Make this place your home.</value>
   </data>
 </root>
