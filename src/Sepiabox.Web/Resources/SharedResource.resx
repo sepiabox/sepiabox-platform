@@ -1013,11 +1013,11 @@
     <value>There are no occasions yet.</value>
   </data>
   <data name="Occasions_Items_One" xml:space="preserve">
-    <value>1 item</value>
+    <value>1 photo or video</value>
     <comment>One photo or video.</comment>
   </data>
   <data name="Occasions_Items_Other" xml:space="preserve">
-    <value>{0} items</value>
+    <value>{0} photos and videos</value>
   </data>
   <data name="Occasion_Back" xml:space="preserve">
     <value>All occasions</value>
@@ -1588,5 +1588,17 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Needs a name</value>
+  </data>
+  <data name="Organize_HideSelected_One" xml:space="preserve">
+    <value>Set aside 1 checked photo</value>
+  </data>
+  <data name="Organize_HideSelected_Other" xml:space="preserve">
+    <value>Set aside {0} checked photos</value>
+  </data>
+  <data name="Organize_UnhideSelected_One" xml:space="preserve">
+    <value>Bring back 1 checked photo</value>
+  </data>
+  <data name="Organize_UnhideSelected_Other" xml:space="preserve">
+    <value>Bring back {0} checked photos</value>
   </data>
 </root>

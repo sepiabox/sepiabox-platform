@@ -130,6 +130,9 @@ public sealed record FilterOptions(
     /// <summary>The types the catalog's occasions have (S-024), in the order of <c>OccasionTypes.All</c>; read on every request, since a classify changes them.</summary>
     public IReadOnlyList<string> EventTypes { get; init; } = [];
 
+    /// <summary>How many occasions have each type (S-075), for the counts in the type filter; read on every request with <see cref="EventTypes"/>.</summary>
+    public IReadOnlyDictionary<string, int> EventTypeCounts { get; init; } = new Dictionary<string, int>();
+
     /// <summary>The albums the catalog has (S-052), in display order: those an export put assets in.</summary>
     public IReadOnlyList<string> Albums { get; init; } = [];
 }
@@ -187,7 +190,14 @@ public sealed record OccasionSummary(
 }
 
 /// <summary>A page of the occasions, newest first; <see cref="HasMore"/> says whether an older page exists.</summary>
-public sealed record OccasionsPage(int Page, IReadOnlyList<OccasionSummary> Items, bool HasMore);
+public sealed record OccasionsPage(int Page, IReadOnlyList<OccasionSummary> Items, bool HasMore)
+{
+    /// <summary>
+    /// How many occasions each year has among all those the page's filter matches (S-075), for the year headings; a year on this page
+    /// that is not here is counted from the page.
+    /// </summary>
+    public IReadOnlyDictionary<int, int> YearCounts { get; init; } = new Dictionary<int, int>();
+}
 
 public interface ILibraryQueries
 {
@@ -360,10 +370,14 @@ public sealed class LibraryQueries(
         var ids = shown.Select(o => o.Id).ToArray();
         var thumbnails = await OccasionThumbnailsAsync(db, ids, cancellationToken);
         var hidden = await HiddenCountsAsync(db, ids, cancellationToken);
+        var years = await occasions.GroupBy(o => o.StartsAt.Year).Select(g => new { Year = g.Key, Count = g.Count() }).ToListAsync(cancellationToken);
         return new OccasionsPage(
             page,
             [.. shown.Select(o => Summary(o, thumbnails, hidden))],
-            rows.Count > OccasionsPageSize && page < MaxPage);
+            rows.Count > OccasionsPageSize && page < MaxPage)
+        {
+            YearCounts = years.ToDictionary(y => y.Year, y => y.Count),
+        };
     }
 
     public async Task<OccasionSummary?> GetOccasionAsync(long id, CancellationToken cancellationToken = default)
@@ -700,10 +714,13 @@ public sealed class LibraryQueries(
         var meLinked = me is not null && await db.People.AsNoTracking().AnyAsync(p => p.UserEmail == me, cancellationToken);
         // The family's places change at any time too (S-014).
         var places = await db.SavedPlaces.AsNoTracking().Select(p => new { p.Name, p.IsHome }).ToListAsync(cancellationToken);
-        var typesPresent = await db.Occasions.AsNoTracking().Where(o => o.Type != null).Select(o => o.Type!).Distinct().ToListAsync(cancellationToken);
+        var typeCounts = (await db.Occasions.AsNoTracking().Where(o => o.Type != null).GroupBy(o => o.Type!)
+            .Select(g => new { Type = g.Key, Count = g.Count() }).ToListAsync(cancellationToken)).ToDictionary(g => g.Type, g => g.Count);
+        var typesPresent = typeCounts.Keys.ToList();
         return options with
         {
             EventTypes = [.. Sepiabox.Catalog.Events.OccasionTypes.All.Where(typesPresent.Contains)],
+            EventTypeCounts = typeCounts,
             Cities = [.. options.Cities.Order(byName)],
             Sources = [.. options.Sources.Order(byName)],
             Albums = [.. options.Albums.Order(byName)],

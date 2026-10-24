@@ -82,6 +82,33 @@ public sealed class OccasionsCatalogTests(CatalogFixture catalog)
     }
 
     [Fact]
+    public async Task Counts_the_occasions_of_each_year_and_of_each_type_over_all_pages_and_for_the_type_chosen()
+    {
+        await using var db = await catalog.CreateMigratedDatabaseAsync();
+        db.Occasions.AddRange(Enumerable.Range(1, 30).Select(n => new Occasion
+        {
+            StartsAt = new DateTime(n <= 25 ? 2024 : 2023, 3, 1).AddDays(n),
+            EndsAt = new DateTime(n <= 25 ? 2024 : 2023, 3, 1).AddDays(n),
+            AssetCount = 1,
+            Type = n % 10 == 0 ? "wedding" : n % 7 == 0 ? "trip" : null,
+        }));
+        await db.SaveChangesAsync();
+        var queries = new LibraryQueries(new TestContexts(catalog.ConnectionStringFor(db)));
+
+        var all = await queries.GetOccasionsPageAsync(1);
+        var weddings = await queries.GetOccasionsPageAsync(1, "wedding");
+        var options = await queries.GetFilterOptionsAsync();
+
+        // 24 on the page, but the headings count them all: 25 in 2024 and 5 in 2023.
+        Assert.Equal(24, all.Items.Count);
+        Assert.Equal((25, 5), (all.YearCounts[2024], all.YearCounts[2023]));
+        // Weddings are 10, 20 and 30; trips 7, 14, 21 and 28.
+        Assert.Equal((2, 1), (weddings.YearCounts[2024], weddings.YearCounts[2023]));
+        Assert.Equal((3, 4), (options.EventTypeCounts["wedding"], options.EventTypeCounts["trip"]));
+        Assert.Equal(["wedding", "trip"], options.EventTypes);
+    }
+
+    [Fact]
     public async Task Pages_hold_24_occasions_and_a_page_beyond_the_end_is_empty()
     {
         await using var db = await catalog.CreateMigratedDatabaseAsync();

@@ -1516,4 +1516,16 @@
   <data name="People_NeedsName" xml:space="preserve">
     <value>Precisa de um nome</value>
   </data>
+  <data name="Organize_HideSelected_One" xml:space="preserve">
+    <value>Ocultar 1 foto marcada</value>
+  </data>
+  <data name="Organize_HideSelected_Other" xml:space="preserve">
+    <value>Ocultar {0} fotos marcadas</value>
+  </data>
+  <data name="Organize_UnhideSelected_One" xml:space="preserve">
+    <value>Trazer de volta 1 foto marcada</value>
+  </data>
+  <data name="Organize_UnhideSelected_Other" xml:space="preserve">
+    <value>Trazer de volta {0} fotos marcadas</value>
+  </data>
 </root>
