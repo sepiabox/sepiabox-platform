@@ -652,31 +652,31 @@
     <value>O reconhecimento facial está ativado. Os rostos encontrados nas suas fotos são agrupados em pessoas.</value>
   </data>
   <data name="Settings_Faces_OffHint" xml:space="preserve">
-    <value>Desligar apaga da biblioteca todos os rostos e todas as pessoas, com os nomes. As fotos ficam.</value>
+    <value>Desativar apaga da biblioteca todos os rostos e todas as pessoas, com os nomes. As fotos ficam.</value>
   </data>
   <data name="Settings_Faces_Off" xml:space="preserve">
-    <value>Desligar e apagar os dados faciais</value>
+    <value>Desativar e apagar os dados faciais</value>
   </data>
   <data name="Settings_Faces_OffExplain" xml:space="preserve">
-    <value>Desligar o reconhecimento facial? Todos os rostos e todas as pessoas, com os nomes e o “Sou eu”, são apagados agora, e isso não pode ser desfeito. As fotos e os vídeos ficam. Depois, os rostos também são apagados das cópias das informações guardadas na nuvem (manifestos), em algumas horas numa biblioteca grande, e nenhum rosto é importado até o reconhecimento ser religado.</value>
+    <value>Desativar o reconhecimento facial? Todos os rostos e todas as pessoas, com os nomes e o “Sou eu”, são apagados agora, e isso não pode ser desfeito. As fotos e os vídeos ficam. Depois, os rostos também são apagados das cópias das informações guardadas na nuvem (manifestos), em algumas horas numa biblioteca grande, e nenhum rosto é importado até o reconhecimento ser reativado.</value>
   </data>
   <data name="Settings_Faces_OffConfirm" xml:space="preserve">
-    <value>Sim, desligar e apagar</value>
+    <value>Sim, desativar e apagar</value>
   </data>
   <data name="Settings_Cancel" xml:space="preserve">
     <value>Cancelar</value>
   </data>
   <data name="Settings_Faces_IsOff" xml:space="preserve">
-    <value>O reconhecimento facial está desligado: nenhum rosto é importado.</value>
+    <value>O reconhecimento facial está desativado: nenhum rosto é importado.</value>
   </data>
   <data name="Settings_Faces_Pending" xml:space="preserve">
-    <value>Os rostos estão sendo apagados também das cópias das informações guardadas na nuvem (manifestos), em algumas horas numa biblioteca grande. O reconhecimento pode ser religado quando isso terminar.</value>
+    <value>Os rostos estão sendo apagados também das cópias das informações guardadas na nuvem (manifestos), em algumas horas numa biblioteca grande. O reconhecimento pode ser reativado quando isso terminar.</value>
   </data>
   <data name="Settings_Faces_Swept" xml:space="preserve">
     <value>Os rostos também foram apagados das cópias das informações guardadas na nuvem (manifestos).</value>
   </data>
   <data name="Settings_Faces_On" xml:space="preserve">
-    <value>Ligar o reconhecimento facial</value>
+    <value>Ativar o reconhecimento facial</value>
   </data>
   <data name="Settings_Faces_WorkFolder" xml:space="preserve">
     <value>Os rostos também ficam em cada computador que rodou process --faces, na pasta de trabalho. Enviá-la de novo não os traz de volta, mas para apagá-los também lá, apague a pasta de trabalho ou rode process numa pasta nova sem --faces.</value>
@@ -685,16 +685,16 @@
     <value>Dados faciais apagados</value>
   </data>
   <data name="Settings_Faces_History_Library" xml:space="preserve">
-    <value>{0}, por {1}: reconhecimento desligado; rostos apagados: {2}, pessoas apagadas: {3}.</value>
+    <value>{0}, por {1}: reconhecimento desativado; rostos apagados: {2}, pessoas apagadas: {3}.</value>
   </data>
   <data name="Settings_Faces_History_Person" xml:space="preserve">
     <value>{0}, por {1}: dados faciais de uma pessoa apagados; rostos: {2}.</value>
   </data>
   <data name="Settings_Done_Off" xml:space="preserve">
-    <value>O reconhecimento facial foi desligado e os dados faciais foram apagados.</value>
+    <value>O reconhecimento facial foi desativado e os dados faciais foram apagados.</value>
   </data>
   <data name="Settings_Done_On" xml:space="preserve">
-    <value>O reconhecimento facial foi ligado: os rostos encontrados a partir de agora são importados.</value>
+    <value>O reconhecimento facial foi ativado: os rostos encontrados a partir de agora são importados.</value>
   </data>
   <data name="Settings_Error_Pending" xml:space="preserve">
     <value>Ainda não: os rostos ainda estão sendo apagados das cópias na nuvem.</value>
@@ -718,7 +718,7 @@
     <value>Os dados faciais da pessoa foram apagados. As fotos ficam.</value>
   </data>
   <data name="People_FacesOff" xml:space="preserve">
-    <value>O reconhecimento facial está desligado, então não há pessoas.</value>
+    <value>O reconhecimento facial está desativado, então não há pessoas.</value>
   </data>
   <data name="Settings_Faces_Backups" xml:space="preserve">
     <value>Os backups automáticos (a restauração do banco de dados a um momento anterior, e os arquivos apagados ou substituídos guardados por 7 dias) ainda mantêm os dados faciais apagados por até 7 dias; depois disso, eles deixam de existir.</value>
@@ -1421,7 +1421,7 @@
     <value>Já há uma exportação em espera ou a ser escrita; espere terminar.</value>
   </data>
   <data name="Export_Erased" xml:space="preserve">
-    <value>Apagada: o reconhecimento facial foi desligado</value>
+    <value>Apagada: o reconhecimento facial foi desativado</value>
   </data>
   <data name="Export_Expired" xml:space="preserve">
     <value>Apagada depois de {0} dias</value>
