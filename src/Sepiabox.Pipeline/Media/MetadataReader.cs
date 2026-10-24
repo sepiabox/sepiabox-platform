@@ -6,7 +6,13 @@ using MetadataExtractor.Formats.QuickTime;
 
 namespace Sepiabox.Pipeline.Media;
 
-public sealed record GeoPoint(double Latitude, double Longitude);
+public sealed record GeoPoint(double Latitude, double Longitude)
+{
+    /// <summary>A place on the globe: finite, within -90..90 and -180..180. The manifest's schema refuses any other (D-127).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsOnTheGlobe =>
+        double.IsFinite(Latitude) && double.IsFinite(Longitude) && Math.Abs(Latitude) <= 90 && Math.Abs(Longitude) <= 180;
+}
 
 public sealed record CameraInfo(string? Make, string? Model);
 
@@ -81,8 +87,7 @@ public static class MetadataReader
         // A camera can write any number in the GPS block (latitude and longitude around -436774 were seen), and the manifest schema
         // refuses a place outside the globe: such a value is no place, and the photo goes on without one (D-127).
         if (gps is not null && gps.TryGetGeoLocation(out var location) && !location.IsZero
-            && double.IsFinite(location.Latitude) && double.IsFinite(location.Longitude)
-            && Math.Abs(location.Latitude) <= 90 && Math.Abs(location.Longitude) <= 180)
+            && new GeoPoint(location.Latitude, location.Longitude).IsOnTheGlobe)
         {
             return new GeoPoint(Math.Round(location.Latitude, 6), Math.Round(location.Longitude, 6));
         }

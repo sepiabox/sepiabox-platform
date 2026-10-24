@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using ImageMagick;
 using Json.Schema;
+using Microsoft.Data.Sqlite;
 using Sepiabox.Ingest.Processing;
 using Sepiabox.Pipeline.Manifests;
 using Sepiabox.Pipeline.Media;
@@ -325,6 +326,71 @@ public class ProcessCommandTests
         Process(drive, work);
 
         Assert.False(Directory.Exists(oldFolder));
+    }
+
+    [Fact]
+    public void Writes_a_photo_whose_camera_gave_a_place_outside_the_globe_with_no_location_and_a_manifest_the_schema_takes()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        drive.Write("garbage.jpg", TestPhotos.WithGps(436774, "S", 436774, "W"));
+
+        var result = Process(drive, work);
+
+        Assert.Equal((1, 0), (result.Processed, result.Problems.Count));
+        var path = Assert.Single(Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json"));
+        Assert.Null(ManifestJson.Deserialize(File.ReadAllText(path)).Location);
+        Assert.True(new ManifestValidator().TryValidate(File.ReadAllText(path), out _, out var problem), problem);
+    }
+
+    [Theory]
+    [InlineData(-436774.0, -436774.0)]
+    [InlineData(90.5, 10.0)]
+    [InlineData(-90.5, 10.0)]
+    [InlineData(10.0, 180.5)]
+    [InlineData(10.0, -180.5)]
+    public void Drops_a_place_outside_the_globe_from_the_manifest_of_a_photo_an_older_build_processed_and_does_it_once(double latitude, double longitude)
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var path = drive.Write("praia.jpg", TestPhotos.Porto());
+        Process(drive, work);
+        var manifestPath = Assert.Single(Directory.GetFiles(Path.Combine(work.Path, "manifests"), "*.json"));
+        ManifestJson.WriteFile(manifestPath, ManifestJson.Deserialize(File.ReadAllText(manifestPath)) with { Location = new GeoPoint(latitude, longitude) });
+        AsProcessedByVersion(work, 2);
+
+        var repaired = Process(drive, work);
+        var again = Process(drive, work);
+
+        Assert.Equal((0, 1, 1), (repaired.Processed, repaired.Skipped, repaired.LocationsDropped));
+        Assert.Null(Assert.Single(ReadManifests(work)).Location);
+        Assert.Equal(ProcessCommand.MetadataVersion, StateOf(work, path).MetadataVersion);
+        Assert.Equal((1, 0), (again.Skipped, again.LocationsDropped));
+    }
+
+    [Fact]
+    public void Keeps_a_place_on_the_globe_when_an_older_build_processed_the_photo()
+    {
+        using var drive = new TempFolder();
+        using var work = new TempFolder();
+        var path = drive.Write("praia.jpg", TestPhotos.Porto());
+        Process(drive, work);
+        AsProcessedByVersion(work, 2);
+
+        var result = Process(drive, work);
+
+        Assert.Equal((1, 0), (result.Skipped, result.LocationsDropped));
+        Assert.Equal(new GeoPoint(41.18, -8.69), Assert.Single(ReadManifests(work)).Location);
+        Assert.Equal(ProcessCommand.MetadataVersion, StateOf(work, path).MetadataVersion);
+    }
+
+    private static void AsProcessedByVersion(TempFolder work, int version)
+    {
+        using var state = new SqliteConnection($"Data Source={Path.Combine(work.Path, "state.db")};Pooling=False");
+        state.Open();
+        using var set = state.CreateCommand();
+        set.CommandText = $"UPDATE files SET metadata_version = {version}";
+        set.ExecuteNonQuery();
     }
 
     // Unit tests must behave the same with or without FFmpeg installed, so they point at a folder without it.
