@@ -13,7 +13,7 @@
 
 <PageHead Title="@Text["Places_Heading"]" />
 
-@if (NoteText is { } note)
+@if (NoteText is { } note && _failedEdit is null)
 {
     <Notice Variant="@NoteVariant">@note</Notice>
 }
@@ -21,37 +21,51 @@
 @if (_deleting is { } deleting)
 {
     <section class="confirm-delete">
-        <p class="note">@Text["Places_DeleteExplain", deleting.Name]</p>
+        <Notice Variant="@NoticeVariant.Warning">@Text["Places_DeleteExplain", deleting.Name]</Notice>
         <form method="post" @formname="delete" @onsubmit="DeleteAsync" class="confirm">
             <AntiforgeryToken />
             <input type="hidden" name="DeleteId" value="@deleting.Id.ToString(CultureInfo.InvariantCulture)" />
-            <button type="submit" class="button danger">@Text["Places_DeleteConfirm"]</button>
-            <a href="places">@Text["Settings_Cancel"]</a>
+            <div class="form-actions">
+                <button type="submit" class="button danger">@Text["Places_DeleteNamed", deleting.Name]</button>
+                <a href="places">@Text["Settings_Cancel"]</a>
+            </div>
         </form>
     </section>
 }
 
-<Panel Class="new-place" Title="@Text["Places_New"]">
+@if (_places is not { Count: > 0 })
+{
+    <EmptyState Title="@Text["Places_EmptyTitle"]">
+        <Icon><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.4" /></Icon>
+        <ChildContent>@Text["Places_EmptyHelp"]</ChildContent>
+        <Action><a class="button" href="places?home=1#new-place-heading">@Text["Places_AddHome"]</a></Action>
+    </EmptyState>
+}
+
+<Panel Class="new-place" HeadingId="new-place-heading" Title="@Text["Places_New"]">
     <form method="post" @formname="create" @onsubmit="CreateAsync" class="create form-stack form-col">
         <AntiforgeryToken />
         <label class="field">
             <span class="field-label">@Text["Places_Name"]</span>
-            <input type="text" name="NewName" value="@NewName" maxlength="@SavedPlaceEditor.MaxNameLength" required />
+            <input type="text" name="NewName" value="@(NewName ?? (Prefill ? Text["Places_HomeName"].Value : null))" maxlength="@SavedPlaceEditor.MaxNameLength" required />
             <span class="field-help name-hint">@Text["Places_NameHint"]</span>
         </label>
         <div class="form-row">
             <label class="field">
                 <span class="field-label">@Text["Places_CoordinatesLabel"]</span>
-                <input type="text" name="NewCoordinates" value="@(NewCoordinates ?? _photoCoordinates)" placeholder="38.72, -9.13" required />
+                <input type="text" name="NewCoordinates" value="@(NewCoordinates ?? _photoCoordinates)" placeholder="38.72, -9.13" required autofocus="@(Prefill)" />
             </label>
             <label class="field">
                 <span class="field-label">@Text["Places_Radius"]</span>
                 <input type="number" name="NewRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@(NewRadius ?? SavedPlaceEditor.DefaultRadiusM.ToString(CultureInfo.InvariantCulture))" />
             </label>
         </div>
-        <label class="home">
-            <input type="checkbox" name="NewHome" value="1" checked="@(NewHome == "1")" />
-            <span>@Text["Places_IsHome"]</span>
+        <label class="option-card home">
+            <input type="checkbox" name="NewHome" value="1" checked="@(NewHome == "1" || (NewHome is null && Prefill))" />
+            <span class="option-text">
+                <strong>@Text["Places_IsHome"]</strong>
+                <span class="field-help">@Text["Places_HomeHelp"]</span>
+            </span>
         </label>
         <div class="form-actions">
             <button type="submit" class="button">@Text["Places_Save"]</button>
@@ -62,50 +76,61 @@
 
 @if (_places is { Count: > 0 } places)
 {
+    <SectionTitle Title="@Text["Places_Saved"]" Count="places.Count" />
     <p class="hint muted cannot-move">@Text["Places_CannotMove"]</p>
     <ul class="saved-places">
         @foreach (var place in places)
         {
             var failed = _failedEdit == place.Id;
-            <li class="saved-place">
-                <h2>
+            <li class="saved-place@(place.IsHome ? " is-home" : "")" id="place-@place.Id.ToString(CultureInfo.InvariantCulture)">
+                <h3>
                     @place.Name
                     @if (place.IsHome)
                     {
-                        @(" ")<span class="home-mark">@Text["Places_HomeMark"]</span>
+                        @(" ")<span class="chip home-mark">@Text["Places_HomeMark"]</span>
                     }
-                </h2>
+                </h3>
                 <p class="muted small coordinates">@Coordinates(place)</p>
                 <p class="links">
-                    <a href="@SearchLinks.Timeline(Photos(place))">@Text["Places_Photos"]</a>
-                    <a href="@SearchLinks.Timeline(OverTheYears(place))" class="over-the-years">@Text["Places_OverTheYears"]</a>
+                    <a class="button secondary" href="@SearchLinks.Timeline(Photos(place))">@Text["Places_Photos"]</a>
+                    <a class="button secondary over-the-years" href="@SearchLinks.Timeline(OverTheYears(place))">@Text["Places_OverTheYears"]</a>
                 </p>
-                @* One form name per place: a page's forms must have different names. *@
-                <form method="post" @formname="@($"edit-{place.Id.ToString(CultureInfo.InvariantCulture)}")" @onsubmit="() => UpdateAsync(place.Id)" class="edit">
-                    <AntiforgeryToken />
-                    <label>
-                        <span>@Text["Places_Name"]</span>
-                        <input type="text" name="EditName" value="@(failed ? EditName : place.Name)" maxlength="@SavedPlaceEditor.MaxNameLength" required />
-                        <span class="hint muted small name-hint">@Text["Places_NameHint"]</span>
-                    </label>
-                    <label>
-                        <span>@Text["Places_Radius"]</span>
-                        <input type="number" name="EditRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@(failed ? EditRadius : place.RadiusM.ToString(CultureInfo.InvariantCulture))" />
-                    </label>
-                    <label class="home">
-                        <input type="checkbox" name="EditHome" value="1" checked="@(failed ? EditHome == "1" : place.IsHome)" />
-                        <span>@Text["Places_IsHome"]</span>
-                    </label>
-                    <button type="submit">@Text["Places_Update"]</button>
-                    <a href="places?delete=@place.Id.ToString(CultureInfo.InvariantCulture)" class="small delete">@Text["Places_Delete"]</a>
-                </form>
+                <details class="place-edit" open="@failed">
+                    <summary>@Text["Places_Edit"]</summary>
+                    @if (failed && NoteText is { } refusal)
+                    {
+                        <Notice Variant="@NoteVariant" Class="edit-refusal">@refusal</Notice>
+                    }
+                    @* One form name per place: a page's forms must have different names. The address names the card, so the page comes back to it. *@
+                    <form method="post" action="places#place-@place.Id.ToString(CultureInfo.InvariantCulture)" @formname="@($"edit-{place.Id.ToString(CultureInfo.InvariantCulture)}")" @onsubmit="() => UpdateAsync(place.Id)" class="edit form-stack form-col">
+                        <AntiforgeryToken />
+                        <div class="form-row">
+                            <label class="field">
+                                <span class="field-label">@Text["Places_Name"]</span>
+                                <input type="text" name="EditName" value="@(failed ? EditName : place.Name)" maxlength="@SavedPlaceEditor.MaxNameLength" required />
+                                <span class="field-help name-hint">@Text["Places_NameHint"]</span>
+                            </label>
+                            <label class="field">
+                                <span class="field-label">@Text["Places_Radius"]</span>
+                                <input type="number" name="EditRadius" min="@SavedPlaceEditor.MinRadiusM" max="@SavedPlaceEditor.MaxRadiusM" value="@(failed ? EditRadius : place.RadiusM.ToString(CultureInfo.InvariantCulture))" />
+                            </label>
+                        </div>
+                        <label class="option-card home">
+                            <input type="checkbox" name="EditHome" value="1" checked="@(failed ? EditHome == "1" : place.IsHome)" />
+                            <span class="option-text">
+                                <strong>@Text["Places_IsHome"]</strong>
+                                <span class="field-help">@(place.IsHome ? Text["Places_HomeHelp"] : Text["Places_HomeHelpShort"])</span>
+                            </span>
+                        </label>
+                        <div class="form-actions">
+                            <button type="submit" class="button">@Text["Places_Update"]</button>
+                            <a href="places?delete=@place.Id.ToString(CultureInfo.InvariantCulture)" class="button danger delete">@Text["Places_Delete"]</a>
+                        </div>
+                    </form>
+                </details>
             </li>
         }
     </ul>
-}
-else
-{
-    <p class="empty">@Text["Places_None"]</p>
 }
 
 @code {
@@ -132,6 +157,17 @@ else
     /// <summary>The place whose deletion is asked: a confirmation shows first.</summary>
     [SupplyParameterFromQuery(Name = "delete")]
     public long? Delete { get; set; }
+
+    /// <summary>From the empty state's "Add your home": the form opens as the home, named "Home".</summary>
+    [SupplyParameterFromQuery(Name = "home")]
+    public string? Home { get; set; }
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    // The empty state's "Add your home" opens the form as the home, but only until it is sent: the form posts to this same address, and
+    // a name the person emptied or a box they unticked must come back as they left it.
+    private bool Prefill => Home == "1" && HttpContext?.Request.HasFormContentType != true;
 
     [SupplyParameterFromForm(FormName = "create")]
     public string? NewName { get; set; }

@@ -2717,13 +2717,19 @@ svg.icon {
     border-color: var(--danger);
 }
 
+.form-stack {
+    display: grid;
+    gap: var(--s-4);
+    align-items: start;
+}
+
 .block form.form-stack {
     display: grid;
-    align-items: start;
 }
 
 .form-row {
     display: grid;
+    align-items: start;
     grid-template-columns: 1fr;
     gap: var(--s-3) var(--s-4);
 }
@@ -2871,4 +2877,68 @@ svg.icon {
 
 .empty-help {
     margin: 0;
+}
+
+/* Places (S-071): a saved place as a card with its edit form folded away. */
+.saved-place .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    margin: 0;
+}
+
+.saved-place.is-home {
+    border-color: var(--accent);
+}
+
+.home-mark {
+    color: var(--accent);
+    font-size: var(--text-sm);
+    font-weight: 600;
+}
+
+.place-edit > summary {
+    width: fit-content;
+    color: var(--accent);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.place-edit[open] > summary {
+    margin-bottom: var(--s-3);
+}
+
+.chip {
+    display: inline-block;
+    padding: 0 var(--s-2);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+.saved-place h3 {
+    margin: 0;
+    font-size: var(--text-lg);
+}
+
+.confirm-delete {
+    margin: 0 0 var(--s-5);
+}
+
+.confirm-delete .confirm {
+    margin-top: var(--s-3);
+}
+
+.edit-refusal {
+    margin: 0 0 var(--s-3);
+}
+
+@media (min-width: 1280px) {
+    .saved-places {
+        grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+        align-items: start;
+    }
 }

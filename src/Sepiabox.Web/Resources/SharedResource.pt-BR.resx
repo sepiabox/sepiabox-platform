@@ -748,7 +748,7 @@
     <value>Em uma foto com localização, “Salvar este lugar” preenche as coordenadas.</value>
   </data>
   <data name="Places_HomeMark" xml:space="preserve">
-    <value>(casa)</value>
+    <value>Casa</value>
   </data>
   <data name="Places_Coordinates" xml:space="preserve">
     <value>{0}, {1} · raio de {2} m</value>
@@ -767,12 +767,6 @@
   </data>
   <data name="Places_DeleteExplain" xml:space="preserve">
     <value>Apagar {0}? As fotos e os vídeos tirados lá ficam; só o lugar é apagado.</value>
-  </data>
-  <data name="Places_DeleteConfirm" xml:space="preserve">
-    <value>Apagar</value>
-  </data>
-  <data name="Places_None" xml:space="preserve">
-    <value>Ainda não há lugares. Salve um a partir de uma foto com localização, ou com a latitude e a longitude.</value>
   </data>
   <data name="Places_Done_Created" xml:space="preserve">
     <value>O lugar foi salvo.</value>
@@ -1629,5 +1623,32 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Precisa de um nome</value>
+  </data>
+  <data name="Places_HomeHelp" xml:space="preserve">
+    <value>Libera perguntas como “fotos a mais de 300 km de casa”, e o lugar aparece primeiro.</value>
+  </data>
+  <data name="Places_Edit" xml:space="preserve">
+    <value>Editar</value>
+  </data>
+  <data name="Places_EmptyTitle" xml:space="preserve">
+    <value>Nenhum lugar ainda</value>
+  </data>
+  <data name="Places_EmptyHelp" xml:space="preserve">
+    <value>Salve os lugares aonde você volta, como sua casa ou a casa dos avós, e peça as fotos tiradas lá ou longe de lá. Também dá para salvar um a partir de uma foto com localização.</value>
+  </data>
+  <data name="Places_AddHome" xml:space="preserve">
+    <value>Adicionar sua casa</value>
+  </data>
+  <data name="Places_HomeName" xml:space="preserve">
+    <value>Casa</value>
+  </data>
+  <data name="Places_Saved" xml:space="preserve">
+    <value>Lugares salvos</value>
+  </data>
+  <data name="Places_DeleteNamed" xml:space="preserve">
+    <value>Apagar {0}</value>
+  </data>
+  <data name="Places_HomeHelpShort" xml:space="preserve">
+    <value>Fazer deste lugar a sua casa.</value>
   </data>
 </root>

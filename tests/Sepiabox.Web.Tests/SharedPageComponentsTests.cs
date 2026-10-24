@@ -196,7 +196,7 @@ public sealed class DangerButtonTests
     [Theory]
     [InlineData("Pages/PersonDelete.razor", "Delete_Confirm")]
     [InlineData("Pages/PersonMerge.razor", "Merge_Confirm")]
-    [InlineData("Pages/Places.razor", "Places_DeleteConfirm")]
+    [InlineData("Pages/Places.razor", "Places_DeleteNamed")]
     [InlineData("Pages/Settings.razor", "Settings_Faces_OffConfirm")]
     [InlineData("Pages/Settings.razor", "Settings_Faces_Off\"]")]
     [InlineData("Pages/ConnectedAccounts.razor", "Sources_Disconnect\"]")]
