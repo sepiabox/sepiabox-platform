@@ -1303,6 +1303,80 @@ main {
     color: var(--cyanotype-hover);
 }
 
+/* Ignoring strangers' faces (#107): the confirmation says what is deleted, and the way out is the first thing in reach. */
+.button.danger {
+    background: #9b2c2c;
+    color: var(--white);
+}
+
+.button.danger:hover:not(:disabled) {
+    background: #7a2020;
+    color: var(--white);
+}
+
+.confirm .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    box-sizing: border-box;
+}
+
+.confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.ignore-warning {
+    font-size: 1.125rem;
+}
+
+.ignore-effects {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.ignore-cloud {
+    margin: 8px 0;
+}
+
+.ignore-cloud summary {
+    cursor: pointer;
+    min-height: 24px;
+}
+
+.ignore-crops {
+    margin: 12px 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 8px;
+}
+
+.ignore-more {
+    margin: 4px 0 12px;
+}
+
+.ignore-face,
+.ignore-faces a,
+.ignore-many a,
+.ignore-person a,
+.delete-face-data a {
+    display: inline-block;
+    min-height: 44px;
+    line-height: 44px;
+    padding: 0 8px;
+    box-sizing: border-box;
+}
+
+.ignore-many a.button {
+    line-height: normal;
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+
 /* A long album name must not widen the bar or the page (S-052): the select shrinks to its cell and shows an ellipsis. */
 .filters label {
     min-width: 0;
