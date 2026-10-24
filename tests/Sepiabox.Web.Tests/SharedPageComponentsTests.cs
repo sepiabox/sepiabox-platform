@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AngleSharp.Html.Parser;
 using Sepiabox.Web.Components.Parts;
 
@@ -173,6 +174,18 @@ public sealed class SharedStylesheetTests
     {
         Assert.Matches(@"svg\.icon\s*\{\s*width:\s*20px;\s*height:\s*20px", Css);
         Assert.Matches(@"\.callout \.icon\s*\{\s*width:\s*20px;\s*height:\s*20px;\s*flex:\s*none", Css);
+    }
+
+    [Fact]
+    public void Sizes_the_empty_state_icon_above_the_general_icon_rule_and_gives_the_four_notes_four_colours()
+    {
+        Assert.Matches(@"\.empty-state \.empty-icon\s*\{\s*width:\s*56px;\s*height:\s*56px", Css);
+        var edges = new[] { "success", "warning", "info", "error" }
+            .Select(v => Regex.Match(Css, @"\.note-" + v + @"\s*\{\s*border-left-color:\s*var\((--[a-z]+)\)").Groups[1].Value)
+            .ToArray();
+        Assert.Equal(4, edges.Distinct().Count());
+        Assert.All(edges, e => Assert.NotEqual(string.Empty, e));
+        Assert.Matches(@"\.note-info \.icon\s*\{\s*color:", Css);
     }
 
     [Fact]
