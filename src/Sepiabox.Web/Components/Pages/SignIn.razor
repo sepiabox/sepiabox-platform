@@ -9,13 +9,13 @@
 
 <PageTitle>@Text["SignIn_Title"] · Sepiabox</PageTitle>
 
-<section class="auth">
+<AuthCard>
     <h1>@Text["SignIn_Title"]</h1>
     <p>@Text["SignIn_Text"]</p>
 
     @if (Error is not null)
     {
-        <p class="error" role="alert">@Text["SignIn_Failed"]</p>
+        <Notice Variant="@NoticeVariant.Error">@Text["SignIn_Failed"]</Notice>
     }
 
     @if (Providers.Any)
@@ -23,11 +23,11 @@
         <div class="providers">
             @if (Providers.Google is not null)
             {
-                <a class="button" href="@ProviderLink(SignInProviders.GoogleRoute)" data-enhance-nav="false">@Text["SignIn_WithGoogle"]</a>
+                <a class="button secondary provider" href="@ProviderLink(SignInProviders.GoogleRoute)" data-enhance-nav="false"><svg class="icon provider-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.35 11.1H12v2.9h5.35c-.5 2.4-2.6 3.7-5.35 3.7a6 6 0 1 1 0-12c1.5 0 2.8.5 3.8 1.4l2.1-2.1A9 9 0 1 0 12 21c5.2 0 8.6-3.6 8.6-8.8 0-.4 0-.8-.1-1.1z" fill="currentColor" stroke="none" /></svg><span>@Text["SignIn_WithGoogle"]</span></a>
             }
             @if (Providers.Microsoft is not null)
             {
-                <a class="button" href="@ProviderLink(SignInProviders.MicrosoftRoute)" data-enhance-nav="false">@Text["SignIn_WithMicrosoft"]</a>
+                <a class="button secondary provider" href="@ProviderLink(SignInProviders.MicrosoftRoute)" data-enhance-nav="false"><svg class="icon provider-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z" fill="currentColor" stroke="none" /></svg><span>@Text["SignIn_WithMicrosoft"]</span></a>
             }
         </div>
     }
@@ -45,7 +45,9 @@
     {
         <p class="empty">@Text["SignIn_NotConfigured"]</p>
     }
-</section>
+
+    <p class="auth-privacy muted small">@Text["SignIn_Privacy"]</p>
+</AuthCard>
 
 @code {
     // The page is rendered statically on the server (no @rendermode), so the request is always there.

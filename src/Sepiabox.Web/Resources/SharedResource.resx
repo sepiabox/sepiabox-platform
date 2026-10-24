@@ -1703,4 +1703,7 @@
   <data name="People_NeedsName" xml:space="preserve">
     <value>Needs a name</value>
   </data>
+  <data name="SignIn_Privacy" xml:space="preserve">
+    <value>Nothing here is public: only the people the owner lets in can see the library.</value>
+  </data>
 </root>
