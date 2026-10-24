@@ -2549,6 +2549,12 @@ button[data-close] {
     box-sizing: border-box;
 }
 
+/* Ignoring the unnamed faces of a photo deletes data too, so it is drawn as the rows' own ignore links are (S-068). */
+.people-card .ignore-faces a {
+    padding-left: 0;
+    color: var(--danger);
+}
+
 .ignore-many a.button {
     line-height: normal;
     display: inline-flex;
