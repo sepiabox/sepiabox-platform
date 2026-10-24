@@ -180,8 +180,10 @@
         return TimeZoneInfo.ConvertTime(deletion.DeletedAt, zone).ToString("g", System.Globalization.CultureInfo.CurrentCulture);
     }
 
-    private string What(FaceDataDeletion deletion) =>
-        deletion.Scope == FaceDataDeletionScopes.Library
-            ? Text["Settings_Faces_History_WhatLibrary", deletion.Faces, deletion.People].Value
-            : Text["Settings_Faces_History_WhatPerson", deletion.Faces].Value;
+    private string What(FaceDataDeletion deletion) => deletion.Scope switch
+    {
+        FaceDataDeletionScopes.Library => Text["Settings_Faces_History_WhatLibrary", deletion.Faces, deletion.People].Value,
+        FaceDataDeletionScopes.Ignore => Text["Settings_Faces_History_WhatIgnore", deletion.Faces, deletion.People].Value,
+        _ => Text["Settings_Faces_History_WhatPerson", deletion.Faces].Value,
+    };
 }

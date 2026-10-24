@@ -13,5 +13,8 @@
 - No change to what either writes: the manifests, derivatives and exit codes stay as they are.
 
 ### Acceptance criteria
-- `ProcessCommand` and `CloudFileProcessor` contain no copy of the describe or derivative logic.
-- `ProcessParityTests` and the existing tests of both pass unchanged.
+- [x] `ProcessCommand` and `CloudFileProcessor` contain no copy of the describe or derivative logic.
+- [x] `ProcessParityTests` and the existing tests of both pass unchanged.
+
+### Status
+- `doing` (2026-10-22): `ManifestDescriber`, `DerivativeMaker` and `ManifestSteps` in `Sepiabox.Pipeline/Processing` (D-118); both callers use them, and the existing Ingest, Pipeline and Cloud tests pass unchanged.

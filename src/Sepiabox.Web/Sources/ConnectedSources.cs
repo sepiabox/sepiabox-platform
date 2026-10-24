@@ -68,7 +68,7 @@ public interface IConnectedSources
 public sealed class DriveTokenProtector(IDataProtectionProvider provider)
 {
     /// <summary>The purpose, so no other protector of the app can read or forge a token.</summary>
-    public const string Purpose = "Sepiabox.Web.ConnectedSources.RefreshToken.v1";
+    public const string Purpose = ConnectedSource.RefreshTokenPurpose;
 
     private readonly IDataProtector _protector = provider.CreateProtector(Purpose);
 

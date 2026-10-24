@@ -1,0 +1,88 @@
+@page "/photos/{Id}/ignore-faces"
+@inject ILibraryQueries Library
+@inject IFaceSettings Faces
+@inject NavigationManager Navigation
+@* "Ignore this face" and "Ignore the unnamed faces in this photo" ask first (#107, D-117): the faces of strangers are deleted for good; only this page's POST deletes. *@
+
+<PageTitle>@Text["Ignore_Title"] · Sepiabox</PageTitle>
+
+@if (_asset is null || _count == 0)
+{
+    <p class="back"><a href="photos/@Id">@Text["Detail_Back"]</a></p>
+    <h1 class="page-heading">@Text["Ignore_NothingTitle"]</h1>
+    <p>@Text["Ignore_Nothing"]</p>
+}
+else
+{
+    <p class="back"><a href="photos/@Id">@Text["Detail_Back"]</a></p>
+    <h1 class="page-heading">@Text["Ignore_Title"]</h1>
+    <p class="ignore-warning"><strong>@Text["Ignore_Irreversible"]</strong></p>
+    <p>@(_count == 1 ? Text["Ignore_Faces_One"] : Text["Ignore_Faces_Other", _count])</p>
+    @* The faces that will be deleted, as cropped on the photo's thumbnail. *@
+    <ul class="people ignore-crops">
+        @foreach (var person in _selected)
+        {
+            <li class="person">
+                <span class="face">
+                    @if (person.Crop is { } crop)
+                    {
+                        <img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" />
+                    }
+                </span>
+            </li>
+        }
+    </ul>
+    <ul class="ignore-effects">
+        <li>@Text["Ignore_Effect_Gone"]</li>
+        <li>@Text["Ignore_Effect_Named"]</li>
+    </ul>
+    <details class="ignore-cloud">
+        <summary>@Text["Ignore_Cloud_Summary"]</summary>
+        <p>@Text["Ignore_Cloud"]</p>
+    </details>
+    <form method="post" @formname="ignore" @onsubmit="ConfirmAsync" class="confirm">
+        <AntiforgeryToken />
+        <input type="hidden" name="Confirmed" value="yes" />
+        <a href="photos/@Id" class="button secondary" autofocus>@Text["Merge_Cancel"]</a>
+        <button type="submit" class="button danger">@Text["Ignore_Confirm"]</button>
+    </form>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    // One face when given, every unnamed face of the photo otherwise.
+    [SupplyParameterFromQuery(Name = "face")]
+    public long? FaceId { get; set; }
+
+    [SupplyParameterFromForm(FormName = "ignore")]
+    public string? Confirmed { get; set; }
+
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    private AssetDetail? _asset;
+    private IReadOnlyList<AssetPerson> _selected = [];
+    private int _count;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _asset = AssetIds.IsValid(Id) ? await Library.GetAssetAsync(Id) : null;
+        _selected = _asset?.People.Where(p => p.Name is null && p.FaceId != 0 && (FaceId is null || p.FaceId == FaceId)).ToList() ?? [];
+        // The count is of the faces the photo shows (counted ones); the erase also takes an unnamed person's excluded and
+        // "not a face" rows in this photo, so it may delete more rows than this says.
+        _count = _selected.Count;
+        if (_asset is null && HttpContext is not null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        var email = HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+        var ignored = email is not null && AssetIds.IsValid(Id) && await Faces.IgnoreFacesAsync(Id, FaceId, email);
+        Navigation.NavigateTo(ignored ? $"photos/{Id}?note=ignored" : $"photos/{Id}");
+    }
+}

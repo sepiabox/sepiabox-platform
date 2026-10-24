@@ -14,6 +14,10 @@
 {
     <Notice>@Text["People_Done_Deleted"]</Notice>
 }
+else if (Note == "ignored")
+{
+    <p class="note" role="status">@Text["People_Done_Ignored"]</p>
+}
 
 @if (_off)
 {
@@ -21,6 +25,12 @@
 }
 else if (_people is { Count: > 0 })
 {
+    @if (_fewFaces > 0)
+    {
+        @* Opens a confirmation; strangers (posters, crowds) seen once or twice are deleted for good there (#107). *@
+        <p class="ignore-many"><a href="people/ignore" class="button secondary" data-enhance-nav="false">@(_fewFaces == 1 ? Text["People_IgnoreMany_One"] : Text["People_IgnoreMany_Other", _fewFaces])</a></p>
+    }
+
     @if (_unnamed.Count > 0)
     {
         <Callout>@(_unnamed.Count == 1 ? Text["People_NeedName_One"] : Text["People_NeedName_Other", _unnamed.Count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)])</Callout>
@@ -51,6 +61,7 @@ else
     private IReadOnlyList<PersonSummary> _named = [];
     private IReadOnlyList<PersonSummary> _unnamed = [];
     private bool _off;
+    private int _fewFaces;
 
     // Only "deleted" is shown; nothing else from the address.
     [SupplyParameterFromQuery(Name = PersonLinks.NoteParameter)]
@@ -62,5 +73,6 @@ else
         _people = _off ? [] : await Library.GetPeopleAsync();
         _named = _people.Where(p => p.Name is not null).ToList();
         _unnamed = _people.Where(p => p.Name is null).ToList();
+        _fewFaces = _off ? 0 : await Faces.CountUnnamedWithFewFacesAsync();
     }
 }
