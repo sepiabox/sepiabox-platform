@@ -23,16 +23,19 @@
     <Notice>@note</Notice>
 }
 
-<form method="post" @formname="request" @onsubmit="RequestAsync" class="export-request panel block">
+<form method="post" @formname="request" @onsubmit="RequestAsync" class="export-request panel block form-col">
     <AntiforgeryToken />
     @if (_faceRecognitionOn)
     {
         @* With recognition off there are no faces to export, and a face-data zip would be erased at once (D-110). *@
-        <label>
+        <label class="option-card sensitive">
             <input type="checkbox" name="IncludeFaceData" value="yes" />
-            @Text["Export_IncludeFaces"]
+            <span class="option-text">
+                <strong>@Text["Export_IncludeFaces"]</strong>
+                <span class="sensitive-tag">@Text["Export_Sensitive"]</span>
+                <span class="field-help hint">@Text["Export_IncludeFacesHint"]</span>
+            </span>
         </label>
-        <p class="hint muted">@Text["Export_IncludeFacesHint"]</p>
     }
     <div class="form-actions"><button type="submit" class="button">@Text["Export_Request"]</button></div>
 </form>
@@ -40,46 +43,66 @@
 @if (_requests is { Count: > 0 } requests)
 {
     <SectionTitle Title="@Text["Export_History"]" Count="requests.Count" />
-    <ul class="exports">
-        @foreach (var request in requests)
-        {
-            <li class="export export-@request.Status">
-                <span class="when">@When(request.RequestedAt)</span>
-                <span class="status">@Text["Export_Status_" + request.Status]</span>
-                @if (request.IncludeFaceData)
+    <div class="table-wrap">
+        <table class="exports">
+            <thead>
+                <tr>
+                    <th scope="col">@Text["Export_Col_When"]</th>
+                    <th scope="col">@Text["Export_Col_Status"]</th>
+                    <th scope="col">@Text["Export_Col_Contents"]</th>
+                    <th scope="col">@Text["Export_Col_Size"]</th>
+                    <th scope="col">@Text["Export_Col_Action"]</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var request in requests)
                 {
-                    <span class="faces muted">@Text["Export_WithFaces"]</span>
+                    <tr class="export export-@request.Status">
+                        <td class="when">@When(request.RequestedAt)</td>
+                        <td class="status"><span class="status-badge status-@request.Status">@Text["Export_Status_" + request.Status]</span></td>
+                        <td class="contents">
+                            @if (request.Status == ExportStatuses.Done)
+                            {
+                                <span>@Text["Export_Items", (request.Assets ?? 0).ToString("N0", System.Globalization.CultureInfo.CurrentCulture)]</span>
+                            }
+                            @if (request.IncludeFaceData)
+                            {
+                                <span class="faces muted">@Text["Export_WithFaces"]</span>
+                            }
+                        </td>
+                        <td class="size">@(request.Status == ExportStatuses.Done ? ByteSizes.Format(request.SizeBytes ?? 0) : null)</td>
+                        <td class="action">
+                            @if (request.Status == ExportStatuses.Done)
+                            {
+                                @if (request.BlobName is null)
+                                {
+                                    @* The export job deleted a zip with face data when face recognition was turned off (D-110). *@
+                                    <span class="removed muted">@Text["Export_Erased"]</span>
+                                }
+                                else if (ExportRequests.Expired(request, Clock.GetUtcNow()))
+                                {
+                                    <span class="removed muted">@Text["Export_Expired", ExportRequest.RetentionDays]</span>
+                                }
+                                else
+                                {
+                                    <a class="button" href="settings/export/@request.Id/download" aria-label="@Text["Export_DownloadAria", When(request.RequestedAt)]">@Text["Export_Download"]</a>
+                                    <span class="kept muted small">@Text["Export_KeptUntil", When(ExportRequests.KeptUntil(request))]</span>
+                                    @if (request.FinishedAt is { } finished && finished.Add(ExportLinkHours) is var linksEnd && linksEnd > Clock.GetUtcNow())
+                                    {
+                                        <span class="links muted small">@Text["Export_LinksUntil", When(linksEnd)]</span>
+                                    }
+                                }
+                            }
+                            else if (request.Status == ExportStatuses.Failed)
+                            {
+                                <span class="error">@request.Error</span>
+                            }
+                        </td>
+                    </tr>
                 }
-
-                @if (request.Status == ExportStatuses.Done)
-                {
-                    <span class="size muted">@Text["Export_Done", request.Assets ?? 0, ByteSizes.Format(request.SizeBytes ?? 0)]</span>
-                    @if (request.BlobName is null)
-                    {
-                        @* The export job deleted a zip with face data when face recognition was turned off (D-110). *@
-                        <span class="removed muted">@Text["Export_Erased"]</span>
-                    }
-                    else if (ExportRequests.Expired(request, Clock.GetUtcNow()))
-                    {
-                        <span class="removed muted">@Text["Export_Expired", ExportRequest.RetentionDays]</span>
-                    }
-                    else
-                    {
-                        <a class="button" href="settings/export/@request.Id/download" aria-label="@Text["Export_DownloadAria", When(request.RequestedAt)]">@Text["Export_Download"]</a>
-                        <span class="kept muted">@Text["Export_KeptUntil", When(ExportRequests.KeptUntil(request))]</span>
-                        @if (request.FinishedAt is { } finished && finished.Add(ExportLinkHours) is var linksEnd && linksEnd > Clock.GetUtcNow())
-                        {
-                            <span class="links muted">@Text["Export_LinksUntil", When(linksEnd)]</span>
-                        }
-                    }
-                }
-                else if (request.Status == ExportStatuses.Failed)
-                {
-                    <span class="error">@request.Error</span>
-                }
-            </li>
-        }
-    </ul>
+            </tbody>
+        </table>
+    </div>
     <p class="muted small">@Text["Export_LinkHint"]</p>
 }
 

@@ -17,72 +17,109 @@
     <Notice>@note</Notice>
 }
 
-@if (_view is { } view)
-{
-    <Panel Class="settings-faces" Title="@Text["Settings_Faces_Heading"]">
-        @if (view.State.On)
+<div class="settings-layout">
+    <nav class="settings-nav" aria-label="@Text["Settings_Nav_Label"]">
+        <a href="settings#settings-faces-heading">@Text["Settings_Faces_Heading"]</a>
+        <a href="settings#settings-export-heading">@Text["Export_Heading"]</a>
+        @if (_view is { State.On: true })
         {
-            <p class="faces-status">@Text["Settings_Faces_IsOn"]</p>
-            @if (Confirm == ConfirmOff)
-            {
-                <div class="confirm-off">
-                    <p class="note">@Text["Settings_Faces_OffExplain"]</p>
-                    <form method="post" @formname="off" @onsubmit="TurnOffAsync" class="confirm">
-                        <AntiforgeryToken />
-                        <input type="hidden" name="Off" value="yes" />
-                        <button type="submit" class="button danger">@Text["Settings_Faces_OffConfirm"]</button>
-                        <a href="settings">@Text["Settings_Cancel"]</a>
-                    </form>
-                </div>
-            }
-            else
-            {
-                <p class="hint muted">@Text["Settings_Faces_OffHint"]</p>
-                @* A GET form: it only opens the confirmation above, which turns recognition off on its own POST. *@
-                <form method="get" action="settings" class="ask-off">
-                    <input type="hidden" name="confirm" value="@ConfirmOff" />
-                    <button type="submit" class="button danger">@Text["Settings_Faces_Off"]</button>
-                </form>
-            }
+            <a href="settings#settings-danger-heading" class="danger-link">@Text["Settings_Danger_Heading"]</a>
         }
-        else
-        {
-            <p class="faces-status">@Text["Settings_Faces_IsOff"]</p>
-            @if (view.State.ManifestsPending)
-            {
-                <p class="faces-sweep muted">@Text["Settings_Faces_Pending"]</p>
-            }
-            else
-            {
-                <p class="faces-sweep muted">@Text["Settings_Faces_Swept"]</p>
-                <form method="post" @formname="on" @onsubmit="TurnOnAsync" class="turn-on">
-                    <AntiforgeryToken />
-                    <input type="hidden" name="On" value="yes" />
-                    <button type="submit">@Text["Settings_Faces_On"]</button>
-                </form>
-            }
-        }
+    </nav>
 
-        <p class="hint muted work-folder">@Text["Settings_Faces_WorkFolder"]</p>
-        <p class="hint muted backups">@Text["Settings_Faces_Backups"]</p>
-
-        @if (view.History.Count > 0)
+    <div class="settings-sections form-col">
+        @if (_view is { } view)
         {
-            <h3>@Text["Settings_Faces_History"]</h3>
-            <ul class="face-deletions">
-                @foreach (var deletion in view.History)
+            <Panel Class="settings-faces" HeadingId="settings-faces-heading" Title="@Text["Settings_Faces_Heading"]">
+                @if (view.State.On)
                 {
-                    <li>@Describe(deletion)</li>
+                    <p class="faces-status">@Text["Settings_Faces_IsOn"]</p>
                 }
-            </ul>
-        }
-    </Panel>
-}
+                else
+                {
+                    <p class="faces-status">@Text["Settings_Faces_IsOff"]</p>
+                    @if (view.State.ManifestsPending)
+                    {
+                        <p class="faces-sweep muted">@Text["Settings_Faces_Pending"]</p>
+                    }
+                    else
+                    {
+                        <p class="faces-sweep muted">@Text["Settings_Faces_Swept"]</p>
+                        <form method="post" @formname="on" @onsubmit="TurnOnAsync" class="turn-on">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="On" value="yes" />
+                            <div class="form-actions"><button type="submit" class="button">@Text["Settings_Faces_On"]</button></div>
+                        </form>
+                    }
+                }
 
-<Panel Class="settings-export" Title="@Text["Export_Heading"]">
-    <p class="muted">@Text["Export_Intro"]</p>
-    <p><a class="button" href="settings/export">@Text["Settings_Export_Link"]</a></p>
-</Panel>
+                <p class="hint muted work-folder">@Text["Settings_Faces_WorkFolder"]</p>
+                <p class="hint muted backups">@Text["Settings_Faces_Backups"]</p>
+
+                @if (view.History.Count > 0)
+                {
+                    <h3>@Text["Settings_Faces_History"]</h3>
+                    <div class="table-wrap">
+                        <table class="face-deletions">
+                            <thead>
+                                <tr>
+                                    <th scope="col">@Text["Settings_Faces_History_When"]</th>
+                                    <th scope="col">@Text["Settings_Faces_History_Who"]</th>
+                                    <th scope="col">@Text["Settings_Faces_History_What"]</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var deletion in view.History)
+                                {
+                                    <tr>
+                                        <td class="when">@When(deletion)</td>
+                                        <td class="who">@deletion.DeletedBy</td>
+                                        <td class="what">@What(deletion)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </Panel>
+        }
+
+        <Panel Class="settings-export" HeadingId="settings-export-heading" Title="@Text["Export_Heading"]">
+            <p class="muted">@Text["Export_Intro"]</p>
+            <p><a class="button" href="settings/export">@Text["Settings_Export_Link"]</a></p>
+        </Panel>
+
+        @if (_view is { State.On: true })
+        {
+            <Panel Class="danger-zone" HeadingId="settings-danger-heading" Title="@Text["Settings_Danger_Heading"]">
+                <p class="muted">@Text["Settings_Danger_Intro"]</p>
+                @if (Confirm == ConfirmOff)
+                {
+                    <div class="confirm-off">
+                        <Notice Variant="@NoticeVariant.Warning" Class="confirm-explain">@Text["Settings_Faces_OffExplain"]</Notice>
+                        <form method="post" @formname="off" @onsubmit="TurnOffAsync" class="confirm">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="Off" value="yes" />
+                            <div class="form-actions">
+                                <button type="submit" class="button danger">@Text["Settings_Faces_OffConfirm"]</button>
+                                <a href="settings">@Text["Settings_Cancel"]</a>
+                            </div>
+                        </form>
+                    </div>
+                }
+                else
+                {
+                    <p class="hint muted">@Text["Settings_Faces_OffHint"]</p>
+                    @* A GET form: it only opens the confirmation above, which turns recognition off on its own POST. *@
+                    <form method="get" action="settings" class="ask-off">
+                        <input type="hidden" name="confirm" value="@ConfirmOff" />
+                        <div class="form-actions"><button type="submit" class="button danger">@Text["Settings_Faces_Off"]</button></div>
+                    </form>
+                }
+            </Panel>
+        }
+    </div>
+</div>
 
 @code {
     private const string ConfirmOff = "faces-off";
@@ -135,11 +172,14 @@
         Navigation.NavigateTo($"settings?{PersonLinks.NoteParameter}={(await Faces.TurnOnAsync() ? "faces-on" : "faces-pending")}");
 
     // In the library's time zone (Search:TimeZone), as "today" is for questions.
-    private string Describe(FaceDataDeletion deletion)
+    private string When(FaceDataDeletion deletion)
     {
         var zone = Services.GetService<SearchOptions>()?.TimeZone ?? TimeZoneInfo.Utc;
-        var when = TimeZoneInfo.ConvertTime(deletion.DeletedAt, zone).ToString("g", System.Globalization.CultureInfo.CurrentCulture);
-        var key = deletion.Scope == FaceDataDeletionScopes.Library ? "Settings_Faces_History_Library" : "Settings_Faces_History_Person";
-        return Text[key, when, deletion.DeletedBy, deletion.Faces, deletion.People].Value;
+        return TimeZoneInfo.ConvertTime(deletion.DeletedAt, zone).ToString("g", System.Globalization.CultureInfo.CurrentCulture);
     }
+
+    private string What(FaceDataDeletion deletion) =>
+        deletion.Scope == FaceDataDeletionScopes.Library
+            ? Text["Settings_Faces_History_WhatLibrary", deletion.Faces, deletion.People].Value
+            : Text["Settings_Faces_History_WhatPerson", deletion.Faces].Value;
 }
