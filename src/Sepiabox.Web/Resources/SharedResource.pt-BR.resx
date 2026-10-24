@@ -954,13 +954,13 @@
     <value>Ocasiões</value>
   </data>
   <data name="Occasions_None" xml:space="preserve">
-    <value>Ainda não há ocasiões.</value>
+    <value>Ainda não há ocasiões</value>
   </data>
   <data name="Occasions_Items_One" xml:space="preserve">
-    <value>1 item</value>
+    <value>1 foto ou vídeo</value>
   </data>
   <data name="Occasions_Items_Other" xml:space="preserve">
-    <value>{0} itens</value>
+    <value>{0} fotos e vídeos</value>
   </data>
   <data name="Occasion_Back" xml:space="preserve">
     <value>Todas as ocasiões</value>
@@ -976,12 +976,6 @@
   </data>
   <data name="Chip_Occasion_Other" xml:space="preserve">
     <value>Em {0} ocasiões</value>
-  </data>
-  <data name="Occasions_NoneBefore" xml:space="preserve">
-    <value>Fotos tiradas em datas e lugares próximos são agrupadas em ocasiões quando o responsável pela biblioteca executa</value>
-  </data>
-  <data name="Occasions_NoneAfter" xml:space="preserve">
-    <value>.</value>
   </data>
   <data name="Occasion_Empty" xml:space="preserve">
     <value>Esta ocasião não tem fotos nem vídeos.</value>
@@ -1053,7 +1047,7 @@
     <value>Tipo</value>
   </data>
   <data name="Occasions_NoneOfType" xml:space="preserve">
-    <value>Não há ocasiões deste tipo.</value>
+    <value>Não há ocasiões deste tipo</value>
   </data>
   <data name="Storage_ShowOneSource" xml:space="preserve">
     <value>Mostrar esses itens, em apenas uma origem</value>
@@ -1147,13 +1141,13 @@
     <value>Ocultas</value>
   </data>
   <data name="Organize_NoBursts" xml:space="preserve">
-    <value>Nenhuma rajada encontrada. Uma rajada são fotos tiradas com até dois segundos de intervalo e parecidas entre si.</value>
+    <value>Nenhuma rajada encontrada</value>
   </data>
   <data name="Organize_NoBlurry" xml:space="preserve">
-    <value>Nenhuma foto desfocada encontrada.</value>
+    <value>Nenhuma foto desfocada encontrada</value>
   </data>
   <data name="Organize_NoHidden" xml:space="preserve">
-    <value>Nada está oculto.</value>
+    <value>Nada está oculto</value>
   </data>
   <data name="Organize_BurstsCount" xml:space="preserve">
     <value>Rajadas: {0}. A foto mais nítida de cada uma fica desmarcada.</value>
@@ -1527,5 +1521,23 @@
   </data>
   <data name="Organize_UnhideSelected_Other" xml:space="preserve">
     <value>Trazer de volta {0} fotos marcadas</value>
+  </data>
+  <data name="Occasions_NoneHelp" xml:space="preserve">
+    <value>Fotos tiradas em datas e lugares próximos são agrupadas em ocasiões depois que a biblioteca é processada.</value>
+  </data>
+  <data name="Organize_NoBurstsHelp" xml:space="preserve">
+    <value>Uma rajada são fotos tiradas com até dois segundos de intervalo e parecidas entre si.</value>
+  </data>
+  <data name="Organize_NoBlurryHelp" xml:space="preserve">
+    <value>Fotos que parecem nítidas são deixadas em paz.</value>
+  </data>
+  <data name="Organize_NoHiddenHelp" xml:space="preserve">
+    <value>As fotos que você ocultar aparecem aqui, e você pode trazê-las de volta.</value>
+  </data>
+  <data name="Organize_HideSelected_None" xml:space="preserve">
+    <value>Marque fotos para ocultá-las</value>
+  </data>
+  <data name="Organize_UnhideSelected_None" xml:space="preserve">
+    <value>Marque fotos para trazê-las de volta</value>
   </data>
 </root>

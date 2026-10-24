@@ -23,9 +23,6 @@ public sealed record OrganizePage<T>(int Page, IReadOnlyList<T> Items, bool HasM
 /// The organize page's lists and its one action (S-027, D-098): bursts, blurry photos, what was set aside, and setting
 /// aside or bringing back. Nothing is deleted, and an original is never touched.
 /// </summary>
-/// <summary>The numbers on the organize tabs that are cheap to count (S-075).</summary>
-public sealed record OrganizeCounts(int Blurry, int Hidden);
-
 public interface IOrganization
 {
     /// <summary>The sharpness below which a photo is blurry (<c>Search:BlurryBelow</c>).</summary>
@@ -39,12 +36,6 @@ public interface IOrganization
 
     /// <summary>What was set aside, the newest capture first.</summary>
     Task<OrganizePage<OrganizeItem>> GetHiddenAsync(int page, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// How many photos are blurry and how many are set aside (S-075), for the numbers on the tabs. The bursts are not counted here: finding
-    /// them reads every measured photo, so their number is shown when that list is (<see cref="OrganizePage{T}.Total"/>).
-    /// </summary>
-    Task<OrganizeCounts> GetCountsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Sets these assets aside (hidden); returns how many changed.</summary>
     Task<int> HideAsync(IReadOnlyCollection<string> ids, CancellationToken cancellationToken = default);
@@ -109,15 +100,6 @@ public sealed class Organization(IDbContextFactory<CatalogDbContext> contexts, S
             db.Assets.AsNoTracking().Where(a => a.Hidden),
             ordered => ordered.OrderBy(a => a.CapturedAt == null).ThenByDescending(a => a.CapturedAt).ThenBy(a => a.Id),
             cancellationToken);
-    }
-
-    public async Task<OrganizeCounts> GetCountsAsync(CancellationToken cancellationToken = default)
-    {
-        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        var below = BlurryBelow;
-        var blurry = await db.Assets.AsNoTracking().CountAsync(a => !a.Hidden && a.Sharpness != null && a.Sharpness < below, cancellationToken);
-        var hidden = await db.Assets.AsNoTracking().CountAsync(a => a.Hidden, cancellationToken);
-        return new OrganizeCounts(blurry, hidden);
     }
 
     public Task<int> HideAsync(IReadOnlyCollection<string> ids, CancellationToken cancellationToken = default) => SetAsync(ids, true, cancellationToken);

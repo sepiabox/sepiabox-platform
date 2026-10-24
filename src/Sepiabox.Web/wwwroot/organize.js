@@ -26,7 +26,7 @@
         }
 
         const count = form.querySelectorAll("input[type=checkbox][name=Ids]:checked").length;
-        const pattern = count === 0 ? button.dataset.zero : count === 1 ? button.dataset.one : button.dataset.other;
+        const pattern = count === 0 ? button.dataset.none : count === 1 ? button.dataset.one : button.dataset.other;
         button.textContent = (pattern ?? "").replace("{0}", count.toLocaleString());
         button.disabled = count === 0;
     }

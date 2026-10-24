@@ -95,7 +95,7 @@ public sealed class OccasionsPageTests : LocalizedContext
         var page = RenderPage();
 
         Assert.Equal("Lisbon · 14–16 dez 2024", page.Find(".occasion-title").TextContent);
-        Assert.Equal("1.200 itens", page.Find(".count").TextContent);
+        Assert.Equal("1.200 fotos e vídeos", page.Find(".count").TextContent);
         Assert.Equal("Ocasiões", page.Find("h1").TextContent);
     }
 
@@ -104,11 +104,13 @@ public sealed class OccasionsPageTests : LocalizedContext
     {
         var page = RenderPage();
 
-        Assert.Equal("There are no occasions yet.", page.Find("p.empty").TextContent);
-        Assert.Equal("sepiabox-worker events rebuild", page.Find("p.muted code").TextContent);
+        // An empty state in the person's words: no command to run, and no button (there is nothing to do from here).
+        Assert.Equal("No occasions yet", page.Find(".empty-state .empty-title").TextContent);
         Assert.Equal(
-            "Photos taken close together in time and place are grouped into occasions when the library owner runs sepiabox-worker events rebuild.",
-            page.Find("p.muted").TextContent);
+            "Photos taken close together in time and place are grouped into occasions once the library has been processed.",
+            page.Find(".empty-state .empty-help").TextContent);
+        Assert.DoesNotContain("sepiabox-worker", page.Markup, StringComparison.Ordinal);
+        Assert.Empty(page.FindAll(".empty-state .empty-action"));
     }
 
     [Fact]
@@ -137,10 +139,10 @@ public sealed class OccasionsPageTests : LocalizedContext
 
         var cards = RenderPage().FindAll("li.occasion .count");
 
-        Assert.Equal(["3 itens", "1 item"], cards.Select(c => c.TextContent));
+        Assert.Equal(["3 fotos e vídeos", "1 foto ou vídeo"], cards.Select(c => c.TextContent));
         // The type is a badge of its own on the card that has one.
         Assert.Equal(["Casamento"], RenderPage().FindAll("li.occasion .occasion-type").Select(b => b.TextContent));
-        Assert.Contains("Casamento · 3 itens", Render<Occasion>(p => p.Add(o => o.Id, 7)).Find(".page-sub").TextContent, StringComparison.Ordinal);
+        Assert.Contains("Casamento · 3 fotos e vídeos", Render<Occasion>(p => p.Add(o => o.Id, 7)).Find(".page-sub").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -199,7 +201,8 @@ public sealed class OccasionsPageTests : LocalizedContext
 
         navigation.NavigateTo("/occasions?type=party");
         var none = Render<Occasions>();
-        Assert.Equal("There are no occasions of this type. Show all occasions", none.Find("p.empty").TextContent);
+        Assert.Equal("There are no occasions of this type", none.Find(".empty-state .empty-title").TextContent);
+        Assert.Equal(("occasions", "Show all occasions"), (none.Find(".empty-state .empty-action a.button").GetAttribute("href"), none.Find(".empty-state .empty-action a.button").TextContent));
     }
 
     [Fact]

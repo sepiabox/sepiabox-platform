@@ -2248,7 +2248,7 @@ button[data-close] {
     display: inline-flex;
     flex-wrap: wrap;
     gap: 2px;
-    margin: 0 0 var(--s-5);
+    margin: 0 0 var(--s-3);
     padding: 3px;
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -2290,8 +2290,8 @@ button[data-close] {
     z-index: 5;
     display: flex;
     justify-content: flex-end;
-    margin: var(--s-5) calc(var(--s-5) * -1) 0;
-    padding: var(--s-3) var(--s-5);
+    margin: var(--s-5) 0 0;
+    padding: var(--s-3) var(--s-4);
     background: var(--surface);
     border-top: 1px solid var(--border);
     box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);

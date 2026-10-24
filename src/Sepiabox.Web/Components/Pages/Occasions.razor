@@ -34,12 +34,13 @@
 }
 else if (_page.Items.Count == 0 && _page.Page == 1 && _type is not null)
 {
-    <p class="empty">@Text["Occasions_NoneOfType"] <a href="occasions">@Text["Occasions_ShowAll"]</a></p>
+    <EmptyState Title="@Text["Occasions_NoneOfType"]">
+        <Action><a class="button secondary" href="occasions">@Text["Occasions_ShowAll"]</a></Action>
+    </EmptyState>
 }
 else if (_page.Items.Count == 0 && _page.Page == 1)
 {
-    <p class="empty">@Text["Occasions_None"]</p>
-    <p class="muted">@Text["Occasions_NoneBefore"] <code>sepiabox-worker events rebuild</code>@Text["Occasions_NoneAfter"]</p>
+    <EmptyState Title="@Text["Occasions_None"]">@Text["Occasions_NoneHelp"]</EmptyState>
 }
 else if (_page.Items.Count == 0)
 {
