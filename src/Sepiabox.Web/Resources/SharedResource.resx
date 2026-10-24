@@ -1589,4 +1589,22 @@
   <data name="People_NeedsName" xml:space="preserve">
     <value>Needs a name</value>
   </data>
+  <data name="Person_Me_Label" xml:space="preserve">
+    <value>This is me</value>
+  </data>
+  <data name="Person_Me_Hint" xml:space="preserve">
+    <value>Link this person to your sign-in, so "With me" finds them.</value>
+  </data>
+  <data name="Person_Danger_Heading" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="Person_Delete_Hint" xml:space="preserve">
+    <value>Deletes this person, their name and all their faces.</value>
+  </data>
+  <data name="Person_Ignore" xml:space="preserve">
+    <value>Ignore this person</value>
+  </data>
+  <data name="Person_Ignore_Hint" xml:space="preserve">
+    <value>For strangers (posters, crowds): deletes this unnamed person and their faces, so they do not come back.</value>
+  </data>
 </root>

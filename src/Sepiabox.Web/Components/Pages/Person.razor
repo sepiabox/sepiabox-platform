@@ -26,52 +26,82 @@ else
         <Notice Class="person-note">@note</Notice>
     }
 
+    @* One card with a labelled row for each correction (S-074); what cannot be undone is below, in the danger style. *@
     <Panel Class="person-edit">
-        <form method="post" @formname="rename" @onsubmit="RenameAsync" class="rename">
+        <form method="post" @formname="rename" @onsubmit="RenameAsync" class="rename form-row">
             <AntiforgeryToken />
-            <label>
-                <span>@Text["Person_Rename_Label"]</span>
-                <input type="text" name="Name" value="@_person.Name" maxlength="@PeopleCuration.MaxNameLength" placeholder="@Text["People_Unnamed"]" />
-            </label>
-            <button type="submit">@Text["Person_Rename_Submit"]</button>
+            <label class="form-label" for="person-name">@Text["Person_Rename_Label"]</label>
+            <div class="field">
+                <input id="person-name" type="text" name="Name" value="@_person.Name" maxlength="@PeopleCuration.MaxNameLength" placeholder="@Text["People_Unnamed"]" />
+            </div>
+            <div class="form-actions"><button type="submit" class="button">@Text["Person_Rename_Submit"]</button></div>
         </form>
 
-        <form method="post" @formname="me" @onsubmit="MeAsync" class="me">
+        <form method="post" @formname="me" @onsubmit="MeAsync" class="me form-row">
             <AntiforgeryToken />
-            @if (_person.UserEmail is null)
-            {
-                <button type="submit" name="Me" value="link">@Text["Person_Me_Submit"]</button>
-            }
-            else if (IsMe)
-            {
-                <span>@Text["Person_Me_Linked"]</span>
-                <button type="submit" name="Me" value="unlink">@Text["Person_NotMe_Submit"]</button>
-            }
-            else
-            {
-                <span class="muted">@Text["Person_Me_Other", _person.UserEmail]</span>
-            }
+            <span class="form-label">@Text["Person_Me_Label"]</span>
+            <div class="field">
+                @if (_person.UserEmail is null)
+                {
+                    <span class="muted">@Text["Person_Me_Hint"]</span>
+                }
+                else if (IsMe)
+                {
+                    <span class="me-linked">@Text["Person_Me_Linked"]</span>
+                }
+                else
+                {
+                    <span class="muted">@Text["Person_Me_Other", _person.UserEmail]</span>
+                }
+            </div>
+            <div class="form-actions">
+                @if (_person.UserEmail is null)
+                {
+                    <button type="submit" name="Me" value="link" class="button secondary">@Text["Person_Me_Submit"]</button>
+                }
+                else if (IsMe)
+                {
+                    <button type="submit" name="Me" value="unlink" class="button secondary">@Text["Person_NotMe_Submit"]</button>
+                }
+            </div>
         </form>
 
         @if (_person.Others.Count > 0)
         {
             @* A GET form: it only opens the confirmation, which merges on its own POST. *@
-            <form method="get" action="people/@_person.Id/merge" class="merge">
-                <label>
-                    <span>@Text["Person_Merge_Label"]</span>
-                    <select name="other">
+            <form method="get" action="people/@_person.Id/merge" class="merge form-row">
+                <label class="form-label" for="person-merge">@Text["Person_Merge_Label"]</label>
+                <div class="field">
+                    <select id="person-merge" name="other">
                         @foreach (var other in _person.Others)
                         {
                             <option value="@other.Id">@(other.Name ?? Text["People_Unnamed"]) (@FaceCount(other.FaceCount))</option>
                         }
                     </select>
-                </label>
-                <button type="submit">@Text["Person_Merge_Submit"]</button>
-                <p class="hint muted">@Text["Person_Merge_Hint"]</p>
+                    <p class="hint muted">@Text["Person_Merge_Hint"]</p>
+                </div>
+                <div class="form-actions"><button type="submit" class="button secondary">@Text["Person_Merge_Submit"]</button></div>
             </form>
         }
-        @* Only opens the confirmation, which deletes on its own POST (S-022). *@
-        <p class="delete-face-data"><a href="people/@_person.Id/delete">@Text["Person_Delete"]</a></p>
+
+        @* Both only open a confirmation, which deletes on its own POST (S-022, #107). *@
+        <div class="danger-zone">
+            <h3>@Text["Person_Danger_Heading"]</h3>
+            <div class="form-row">
+                <span class="form-label">@Text["Person_Delete"]</span>
+                <div class="field"><p class="hint muted">@Text["Person_Delete_Hint"]</p></div>
+                <div class="form-actions"><a class="button danger" href="people/@_person.Id/delete">@Text["Person_Delete"]</a></div>
+            </div>
+            @if (_person.Name is null && _person.UserEmail is null)
+            {
+                @* A stranger (a poster, a face in a crowd): opens a confirmation, which deletes the faces for good (#107). *@
+                <div class="form-row">
+                    <span class="form-label">@Text["Person_Ignore"]</span>
+                    <div class="field"><p class="hint muted">@Text["Person_Ignore_Hint"]</p></div>
+                    <div class="form-actions"><a class="button danger" href="people/@_person.Id/ignore" data-enhance-nav="false">@Text["Person_Ignore"]</a></div>
+                </div>
+            }
+        </div>
     </Panel>
 
     <SectionTitle Title="@Text["Person_Faces_Heading"]" Count="_person.Faces.Count" />
@@ -87,8 +117,8 @@ else
                             <img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" />
                         }
                     </a>
-                    <button type="submit" name="Face" value="@($"{NotThisPerson}:{face.Id}")" class="small">@Text["Person_Face_NotThis"]</button>
-                    <button type="submit" name="Face" value="@($"{NotAFace}:{face.Id}")" class="small">@Text["Person_Face_NotAFace"]</button>
+                    <button type="submit" name="Face" value="@($"{NotThisPerson}:{face.Id}")" class="button secondary small">@Text["Person_Face_NotThis"]</button>
+                    <button type="submit" name="Face" value="@($"{NotAFace}:{face.Id}")" class="button secondary small">@Text["Person_Face_NotAFace"]</button>
                     <a href="people/@_person.Id/faces/@face.Id/move" class="small">@Text["Person_Face_Move"]</a>
                 </li>
             }
@@ -112,7 +142,7 @@ else
                         {
                             <span class="muted small not-a-face">@Text["Person_Excluded_NotAFace"]</span>
                         }
-                        <button type="submit" name="Face" value="@($"{GiveBack}:{face.Id}")" class="small">@Text["Person_Face_GiveBack"]</button>
+                        <button type="submit" name="Face" value="@($"{GiveBack}:{face.Id}")" class="button secondary small">@Text["Person_Face_GiveBack"]</button>
                         <a href="people/@_person.Id/faces/@face.Id/move" class="small">@Text["Person_Face_Move"]</a>
                     </li>
                 }

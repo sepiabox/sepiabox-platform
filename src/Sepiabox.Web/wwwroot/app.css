@@ -2028,25 +2028,108 @@ button[data-close] {
 }
 
 .person-edit {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px 32px;
-    align-items: flex-end;
-    margin: 16px 0 24px;
+    margin: var(--s-4, 16px) 0 var(--s-6, 24px);
+    padding: var(--s-2, 8px) var(--s-5, 20px);
 }
 
-.person-edit form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: flex-end;
+/* A labelled row: the name of the correction, its field, its button; a hint sits under the field. */
+.person-edit .form-row {
+    display: grid;
+    grid-template-columns: 11rem minmax(0, 1fr) auto;
+    gap: var(--s-2, 8px) var(--s-4, 16px);
+    align-items: start;
     margin: 0;
+    padding: var(--s-4, 16px) 0;
+    border-top: 1px solid var(--border, var(--mat));
 }
 
-.person-edit label {
+.person-edit > .form-row:first-child {
+    border-top: 0;
+}
+
+.person-edit .form-label {
+    padding-top: 9px;
+    font-weight: 600;
+}
+
+.person-edit .field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--s-1, 4px);
+    min-width: 0;
+    padding-top: 0;
+}
+
+.person-edit .field input[type="text"],
+.person-edit .field select {
+    width: 100%;
+    max-width: 28rem;
+}
+
+.person-edit .field > span,
+.person-edit .field > .hint {
+    margin: 0;
+    padding-top: 9px;
+}
+
+.person-edit .field > select + .hint {
+    padding-top: 0;
+}
+
+.person-edit .form-actions {
+    display: flex;
+    gap: var(--s-2, 8px);
+}
+
+.person-edit .me-linked {
+    font-weight: 600;
+}
+
+/* What cannot be undone: below the corrections, in the danger style. */
+.person-edit .danger-zone {
+    margin-top: var(--s-2, 8px);
+    border-top: 1px solid var(--danger, #a1301f);
+}
+
+.person-edit .danger-zone h3 {
+    margin: var(--s-4, 16px) 0 0;
+    color: var(--danger, #a1301f);
+    font-size: 1rem;
+}
+
+.person-edit .danger-zone .form-row:first-of-type {
+    border-top: 0;
+}
+
+.button.danger {
+    background: var(--danger, #a1301f);
+    border: 1px solid var(--danger, #a1301f);
+    color: #fff;
+}
+
+.button.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger, #a1301f) 85%, #000);
+    color: #fff;
+}
+
+.person-faces .button.small {
+    padding: 2px 8px;
+    font-size: var(--text-sm, 0.85rem);
+}
+
+@media (max-width: 800px) {
+    .person-edit .form-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .person-edit .form-label {
+        padding-top: 0;
+    }
+
+    .person-edit .field > span,
+    .person-edit .field > .hint {
+        padding-top: 0;
+    }
 }
 
 .person-faces button {

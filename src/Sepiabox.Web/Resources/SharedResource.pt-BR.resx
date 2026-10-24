@@ -1516,4 +1516,22 @@
   <data name="People_NeedsName" xml:space="preserve">
     <value>Precisa de um nome</value>
   </data>
+  <data name="Person_Me_Label" xml:space="preserve">
+    <value>Esta sou eu</value>
+  </data>
+  <data name="Person_Me_Hint" xml:space="preserve">
+    <value>Liga esta pessoa ao seu login, para que "Comigo" a encontre.</value>
+  </data>
+  <data name="Person_Danger_Heading" xml:space="preserve">
+    <value>Remover</value>
+  </data>
+  <data name="Person_Delete_Hint" xml:space="preserve">
+    <value>Apaga esta pessoa, o nome e todos os rostos dela.</value>
+  </data>
+  <data name="Person_Ignore" xml:space="preserve">
+    <value>Ignorar esta pessoa</value>
+  </data>
+  <data name="Person_Ignore_Hint" xml:space="preserve">
+    <value>Para desconhecidos (cartazes, multidões): apaga esta pessoa sem nome e os rostos dela, para que não voltem.</value>
+  </data>
 </root>
