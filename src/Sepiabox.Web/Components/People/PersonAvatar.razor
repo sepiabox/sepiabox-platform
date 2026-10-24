@@ -1,0 +1,51 @@
+@* A person's face as a round avatar (S-067, shared with S-068): the face cropped from its thumbnail when there is one, the initials of
+   the name otherwise, on one of four tints picked by the person's id so the same person always has the same colour. *@
+
+<span class="@Classes" aria-hidden="true">
+    @if (Crop is { } crop)
+    {
+        <img class="avatar-photo" src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" />
+    }
+    else
+    {
+        @Initials
+    }
+</span>
+
+@code {
+    [Parameter]
+    public string? Name { get; set; }
+
+    [Parameter]
+    public long PersonId { get; set; }
+
+    /// <summary>"md" or "lg"; anything else is the default size.</summary>
+    [Parameter]
+    public string? Size { get; set; }
+
+    [Parameter]
+    public FaceCrop? Crop { get; set; }
+
+    private string Classes =>
+        $"avatar {(Size is "md" or "lg" ? Size + " " : string.Empty)}c{Math.Abs(PersonId % 4) + 2}{(Name is null ? " unnamed" : string.Empty)}";
+
+    /// <summary>The first letters of the first and last words of the name, in upper case; "?" for no name.</summary>
+    public static string InitialsOf(string? name)
+    {
+        var words = (name ?? string.Empty).Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0)
+        {
+            return "?";
+        }
+
+        static string First(string word)
+        {
+            var info = new System.Globalization.StringInfo(word);
+            return info.LengthInTextElements == 0 ? string.Empty : info.SubstringByTextElements(0, 1).ToUpperInvariant();
+        }
+
+        return words.Length == 1 ? First(words[0]) : First(words[0]) + First(words[^1]);
+    }
+
+    private string Initials => InitialsOf(Name);
+}

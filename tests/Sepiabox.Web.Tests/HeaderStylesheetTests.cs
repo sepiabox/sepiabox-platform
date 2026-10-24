@@ -35,6 +35,16 @@ public sealed partial class HeaderStylesheetTests
         Assert.DoesNotContain("--header-h: 112px", Css, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void A_pill_is_positioned_so_its_hidden_checkbox_stays_inside_a_scrolling_row_of_chips()
+    {
+        // The checkbox is absolutely positioned; without a positioned ancestor it sits at the page's corner and, in an overflow
+        // container, widens the page on a phone (S-067).
+        var pill = Regex.Match(Css, @"\n\.pill\s*\{([^}]*)\}", RegexOptions.None, TimeSpan.FromSeconds(5));
+        Assert.True(pill.Success);
+        Assert.Contains("position: relative", pill.Groups[1].Value, StringComparison.Ordinal);
+    }
+
     [GeneratedRegex(@"\n\s*\.top\s*\{([^}]*)\}", RegexOptions.None, 5000)]
     private static partial Regex TopRule();
 

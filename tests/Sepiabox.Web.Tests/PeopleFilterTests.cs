@@ -121,8 +121,8 @@ public sealed class PeopleFilterPageTests : LocalizedContext
 
         var bar = Render<FilterBar>(p => p.Add(b => b.Options, options).Add(b => b.Fields, fields));
 
-        Assert.Equal(["Ana", "Pedro"], bar.FindAll("select[name=person] option").Select(o => o.GetAttribute("value")));
-        Assert.Equal(["Pedro"], bar.FindAll("select[name=person] option[selected]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["Ana", "Pedro"], bar.FindAll("input[name=person]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["Pedro"], bar.FindAll("input[name=person][checked]").Select(o => o.GetAttribute("value")));
         Assert.True(bar.Find("input[name=me]").HasAttribute("checked"));
     }
 
@@ -131,7 +131,7 @@ public sealed class PeopleFilterPageTests : LocalizedContext
     {
         var bar = Render<FilterBar>(p => p.Add(b => b.Options, new FilterOptions([], [], []) { People = ["Ana"] }));
 
-        Assert.Single(bar.FindAll("select[name=person]"));
+        Assert.Single(bar.FindAll("input[name=person]"));
         Assert.Empty(bar.FindAll("input[name=me]"));
     }
 

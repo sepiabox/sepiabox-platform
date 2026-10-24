@@ -271,7 +271,7 @@
     <value>Vídeos de Lisboa em dezembro de 2019</value>
   </data>
   <data name="Ask_Hint" xml:space="preserve">
-    <value>Em português ou inglês. A pergunta e os nomes da sua biblioteca (pessoas, lugares, origens, cidades) vão para o Claude, da Anthropic; nunca suas fotos, e-mails ou coordenadas.</value>
+    <value>A pergunta e os nomes da sua biblioteca (pessoas, lugares, origens, cidades) vão para o Claude, da Anthropic; nunca suas fotos, e-mails ou coordenadas.</value>
   </data>
   <data name="Ask_Submit" xml:space="preserve">
     <value>Perguntar</value>
@@ -1572,5 +1572,29 @@
   </data>
   <data name="Merge_ConfirmInto" xml:space="preserve">
     <value>Juntar em {0}</value>
+  </data>
+  <data name="Filter_Selected" xml:space="preserve">
+    <value>{0} selecionados</value>
+  </data>
+  <data name="Filter_PeopleSearch" xml:space="preserve">
+    <value>Buscar pessoas</value>
+  </data>
+  <data name="Filter_Reset" xml:space="preserve">
+    <value>Limpar</value>
+  </data>
+  <data name="Filter_ShowResults" xml:space="preserve">
+    <value>Mostrar resultados</value>
+  </data>
+  <data name="Ask_HintShort" xml:space="preserve">
+    <value>Em português ou inglês.</value>
+  </data>
+  <data name="Ask_PrivacyLabel" xml:space="preserve">
+    <value>O que é enviado?</value>
+  </data>
+  <data name="Filter_Close" xml:space="preserve">
+    <value>Fechar</value>
+  </data>
+  <data name="Filter_NoMatch" xml:space="preserve">
+    <value>Ninguém encontrado</value>
   </data>
 </root>

@@ -217,7 +217,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 | Story | Title | Epic | Depends on | Priority | Size | Status | Track |
 |---|---|---|---|---|---|---|---|
 | S-066 | [Design tokens, base controls and the header](S-066-design-tokens-and-base-controls.md) | Visual design | S-013 | High | M | `done` | A |
-| S-067 | [Timeline filters and the question box, redesigned](S-067-timeline-filters-and-search.md) | Visual design | S-066, S-052 | High | M | `todo` | A |
+| S-067 | [Timeline filters and the question box, redesigned](S-067-timeline-filters-and-search.md) | Visual design | S-066, S-052 | High | M | `done` | A |
 | S-068 | [Photo grid and photo detail, redesigned](S-068-photo-grid-and-detail.md) | Visual design | S-066, S-041, S-052, S-064 | Medium | M | `todo` | A |
 | S-069 | [Remaining pages on the shared components](S-069-remaining-pages-on-shared-components.md) | Visual design | S-066, S-067, S-068, S-037, S-039, S-040 | Medium | M | `todo` | A |
 | S-070 | [Empty states, notes and a theme switch](S-070-empty-states-and-theme-switch.md) | Visual design | S-069 | Low | S | `todo` | A |

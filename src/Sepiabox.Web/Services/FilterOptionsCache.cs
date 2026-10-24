@@ -28,4 +28,24 @@ public sealed class FilterOptionsCache(TimeProvider clock)
             return options;
         }
     }
+
+    private (DateTimeOffset Expires, Task<Dictionary<long, FaceCrop>> Covers)? _covers;
+
+    /// <summary>The faces shown as the people picker's avatars, by person id (S-067), kept as long as the options; a failed load is not kept.</summary>
+    public Task<Dictionary<long, FaceCrop>> GetCoversAsync(Func<Task<Dictionary<long, FaceCrop>>> load)
+    {
+        ArgumentNullException.ThrowIfNull(load);
+        var now = clock.GetUtcNow();
+        lock (_lock)
+        {
+            if (_covers is { } entry && entry.Expires > now && !entry.Covers.IsFaulted && !entry.Covers.IsCanceled)
+            {
+                return entry.Covers;
+            }
+
+            var covers = load();
+            _covers = (now + Lifetime, covers);
+            return covers;
+        }
+    }
 }
