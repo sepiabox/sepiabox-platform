@@ -6,49 +6,52 @@
 
 <PageTitle>@Text["IgnoreMany_Title"] · Sepiabox</PageTitle>
 
-<p class="back"><a href="people">@Text["Person_Back"]</a></p>
-<h1 class="page-heading">@Text["IgnoreMany_Title"]</h1>
+<PageHead Title="@Text["IgnoreMany_Title"]">
+    <Back><a href="people">@Text["Person_Back"]</a></Back>
+</PageHead>
 @if (Note == "IgnoreChanged")
 {
     <p class="note" role="status">@Text["IgnoreMany_Changed"]</p>
 }
 
-@if (_count == 0)
-{
-    <p>@Text["IgnoreMany_None"]</p>
-}
-else
-{
-    <p>@(_count == 1 ? Text["IgnoreMany_One"] : Text["IgnoreMany_Other", _count])</p>
-    @* A strip of the faces that will be deleted, up to 24, then how many more. *@
-    <ul class="people ignore-crops">
-        @foreach (var crop in _crops)
-        {
-            <li class="person">
-                <span class="face"><img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" /></span>
-            </li>
-        }
-    </ul>
-    @if (_count > _crops.Count)
+<Panel Class="confirm-panel">
+    @if (_count == 0)
     {
-        <p class="muted ignore-more">@Text["IgnoreMany_More", _count - _crops.Count]</p>
+        <p>@Text["IgnoreMany_None"]</p>
     }
-    <p class="ignore-warning"><strong>@Text["Ignore_Irreversible"]</strong></p>
-    <ul class="ignore-effects">
-        <li>@Text["Ignore_Effect_Gone"]</li>
-        <li>@Text["Ignore_Effect_Named"]</li>
-    </ul>
-    <details class="ignore-cloud">
-        <summary>@Text["Ignore_Cloud_Summary"]</summary>
-        <p>@Text["Ignore_Cloud"]</p>
-    </details>
-    <form method="post" @formname="ignore-many" @onsubmit="ConfirmAsync" class="confirm">
-        <AntiforgeryToken />
-        <input type="hidden" name="Expected" value="@_count" />
-        <a href="people" class="button secondary" autofocus>@Text["Merge_Cancel"]</a>
-        <button type="submit" class="button danger">@Text["Ignore_Confirm"]</button>
-    </form>
-}
+    else
+    {
+        <p>@(_count == 1 ? Text["IgnoreMany_One"] : Text["IgnoreMany_Other", _count])</p>
+        @* A strip of the faces that will be deleted, up to 24, then how many more. *@
+        <ul class="people ignore-crops">
+            @foreach (var crop in _crops)
+            {
+                <li class="person">
+                    <span class="face"><img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" /></span>
+                </li>
+            }
+        </ul>
+        @if (_count > _crops.Count)
+        {
+            <p class="muted ignore-more">@Text["IgnoreMany_More", _count - _crops.Count]</p>
+        }
+        <p class="ignore-warning"><strong>@Text["Ignore_Irreversible"]</strong></p>
+        <ul class="ignore-effects">
+            <li>@Text["Ignore_Effect_Gone"]</li>
+            <li>@Text["Ignore_Effect_Named"]</li>
+        </ul>
+        <details class="ignore-cloud">
+            <summary>@Text["Ignore_Cloud_Summary"]</summary>
+            <p>@Text["Ignore_Cloud"]</p>
+        </details>
+        <form method="post" @formname="ignore-many" @onsubmit="ConfirmAsync" class="confirm">
+            <AntiforgeryToken />
+            <input type="hidden" name="Expected" value="@_count" />
+            <a href="people" class="button secondary" autofocus>@Text["Merge_Cancel"]</a>
+            <button type="submit" class="button danger">@Text["Ignore_Confirm"]</button>
+        </form>
+    }
+</Panel>
 
 @code {
     [SupplyParameterFromForm(FormName = "ignore-many")]

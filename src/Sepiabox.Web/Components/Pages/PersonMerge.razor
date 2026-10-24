@@ -18,6 +18,7 @@ else
     <PageHead Title="@Text["Merge_Title"]">
         <Back><a href="people/@_person.Id">@NameOf(_person.Name)</a></Back>
     </PageHead>
+    <Panel Class="confirm-panel">
     <div class="merge-flow">
     <ul class="people merge-people">
         <li class="person merge-leaves"><span class="caption merge-badge">@Text["Merge_Goes"]</span><PersonCard Person="Summary(_leaves)" /></li>
@@ -40,6 +41,7 @@ else
         <button type="submit" class="@(Dangerous ? "button danger" : "button")">@Text["Merge_ConfirmInto", NameOf(_stays.Name)]</button>
     </form>
     </div>
+    </Panel>
 }
 
 @code {

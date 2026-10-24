@@ -167,13 +167,13 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         var unnamed = Render<Person>(p => p.Add(x => x.Id, 7L));
         var named = Render<Person>(p => p.Add(x => x.Id, 8L));
 
-        Assert.Equal("people/7/ignore", unnamed.Find("p.ignore-person a").GetAttribute("href"));
-        Assert.Equal("Ignore this person", unnamed.Find("p.ignore-person a").TextContent);
+        Assert.Equal("people/7/ignore", unnamed.Find("div.ignore-person a").GetAttribute("href"));
+        Assert.Equal("Ignore this person", unnamed.Find("div.ignore-person a").TextContent);
         // Each of the two deletions says what it is for.
-        Assert.Contains("strangers", unnamed.Find("p.ignore-person .muted").TextContent, StringComparison.Ordinal);
-        Assert.Equal("Deletes this person, their name and all their faces.", unnamed.Find("p.delete-face-data .muted").TextContent);
-        Assert.Equal("false", unnamed.Find("p.ignore-person a").GetAttribute("data-enhance-nav"));
-        Assert.Empty(named.FindAll("p.ignore-person"));
+        Assert.Contains("strangers", unnamed.Find("div.ignore-person .muted").TextContent, StringComparison.Ordinal);
+        Assert.Equal("Deletes this person, their name and all their faces.", unnamed.Find("div.delete-face-data .muted").TextContent);
+        Assert.Equal("false", unnamed.Find("div.ignore-person a").GetAttribute("data-enhance-nav"));
+        Assert.Empty(named.FindAll("div.ignore-person"));
     }
 
     [Fact]

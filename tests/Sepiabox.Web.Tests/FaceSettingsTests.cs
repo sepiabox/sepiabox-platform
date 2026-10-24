@@ -133,6 +133,14 @@ public sealed class FaceSettingsPageTests : LocalizedContext
         Assert.Equal("Ana", confirmation.Find(".delete-people .name").TextContent);
         Assert.StartsWith("Esta pessoa, o nome e todos os rostos dela são apagados", confirmation.Find(".note").TextContent, StringComparison.Ordinal);
         Assert.Equal(("post", "Apagar"), (confirmation.Find("form.confirm").GetAttribute("method"), confirmation.Find("form.confirm button").TextContent));
+        // The consequence is one bold line, Cancel comes first and has the focus, and the button is the danger one.
+        Assert.NotNull(confirmation.Find("p.note.danger strong"));
+        var actions = confirmation.Find("form.confirm").Children.Where(c => c.LocalName is "a" or "button").ToList();
+        Assert.Equal(["a", "button"], actions.Select(c => c.LocalName));
+        Assert.True(actions[0].HasAttribute("autofocus"));
+        Assert.Contains("secondary", actions[0].ClassName, StringComparison.Ordinal);
+        Assert.Equal("button danger", actions[1].ClassName);
+        Assert.NotNull(confirmation.Find(".confirm-panel"));
         Assert.Empty(_faces.Calls);
     }
 

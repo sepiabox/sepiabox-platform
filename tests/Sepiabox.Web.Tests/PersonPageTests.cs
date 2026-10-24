@@ -110,13 +110,49 @@ public sealed class PersonPageFormTests : LocalizedContext
     }
 
     [Fact]
+    public void Lays_the_corrections_out_as_labelled_rows_of_one_card_with_the_removals_last_in_the_danger_style()
+    {
+        _library.Persons[7] = PersonPages.Person(7, name: null, user: null);
+
+        var page = Render<Person>(p => p.Add(x => x.Id, 7L));
+
+        var card = page.Find("section.person-edit");
+        var rows = card.QuerySelectorAll(".form-row").ToList();
+        // Rename, This is me, Merge; then Delete and Ignore (an unnamed person), each with a label, a field and an action.
+        Assert.Equal(5, rows.Count);
+        Assert.All(rows, row =>
+        {
+            Assert.NotNull(row.QuerySelector(".form-label"));
+            Assert.NotNull(row.QuerySelector(".field"));
+            Assert.NotNull(row.QuerySelector(".form-actions"));
+        });
+        Assert.Equal(["Name", "This is me", "Same person as"], rows.Take(3).Select(r => r.QuerySelector(".form-label")!.TextContent));
+        // The merge row explains itself under the field.
+        Assert.Equal("You see both people before anything changes.", rows[2].QuerySelector(".field .hint")!.TextContent);
+        // The removals are below, inside the danger zone, as danger buttons that only open a confirmation.
+        var zone = card.QuerySelector(".danger-zone")!;
+        Assert.Equal(["people/7/delete", "people/7/ignore"], zone.QuerySelectorAll("a.button.danger").Select(a => a.GetAttribute("href")));
+        Assert.All(zone.QuerySelectorAll("a.button.danger"), a => Assert.Equal("false", a.GetAttribute("data-enhance-nav")));
+        Assert.Empty(card.QuerySelectorAll("form button.danger"));
+    }
+
+    [Fact]
+    public void Offers_no_ignore_for_a_named_person_and_styles_the_face_buttons_as_secondary()
+    {
+        var page = Render<Person>(p => p.Add(x => x.Id, 7L));
+
+        Assert.Single(page.FindAll(".danger-zone a.button.danger"));
+        Assert.All(page.FindAll(".person-faces button"), b => Assert.Contains("secondary", b.ClassName, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Shows_who_said_this_is_me_and_offers_no_button_to_someone_else()
     {
         _library.Persons[7] = PersonPages.Person(7, name: "Ana", user: "ana@example.com");
 
         var page = Render<Person>(p => p.Add(x => x.Id, 7L));
 
-        Assert.Equal("Linked to ana@example.com.", page.Find("form.me span").TextContent);
+        Assert.Equal("Linked to ana@example.com.", page.Find("form.me .field span").TextContent);
         Assert.Empty(page.FindAll("form.me button"));
     }
 

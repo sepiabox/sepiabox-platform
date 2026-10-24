@@ -2944,3 +2944,32 @@ svg.icon {
     padding: 0;
     list-style: none;
 }
+
+/* The confirmation pages of the people (S-074): one panel with the consequence in a bold line, Cancel first and focused, then the
+   danger button; the move page has a labelled row instead. */
+.confirm-panel {
+    max-width: 48rem;
+    margin: var(--s-4) 0;
+    padding: var(--s-5);
+}
+
+.confirm-panel .confirm,
+.confirm-panel .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-3);
+    align-items: center;
+    margin-top: var(--s-4);
+}
+
+.confirm-panel .form-row {
+    display: grid;
+    grid-template-columns: 6rem minmax(0, 1fr);
+    gap: var(--s-3);
+    align-items: center;
+}
+
+.confirm-panel .field select {
+    width: 100%;
+    max-width: 28rem;
+}

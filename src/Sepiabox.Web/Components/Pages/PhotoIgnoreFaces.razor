@@ -8,44 +8,50 @@
 
 @if (_asset is null || _count == 0)
 {
-    <p class="back"><a href="photos/@Id">@Text["Detail_Back"]</a></p>
-    <h1 class="page-heading">@Text["Ignore_NothingTitle"]</h1>
-    <p>@Text["Ignore_Nothing"]</p>
+    <PageHead Title="@Text["Ignore_NothingTitle"]">
+        <Back><a href="photos/@Id">@Text["Detail_Back"]</a></Back>
+    </PageHead>
+    <Panel Class="confirm-panel">
+        <p>@Text["Ignore_Nothing"]</p>
+    </Panel>
 }
 else
 {
-    <p class="back"><a href="photos/@Id">@Text["Detail_Back"]</a></p>
-    <h1 class="page-heading">@Text["Ignore_Title"]</h1>
-    <p class="ignore-warning"><strong>@Text["Ignore_Irreversible"]</strong></p>
-    <p>@(_count == 1 ? Text["Ignore_Faces_One"] : Text["Ignore_Faces_Other", _count])</p>
-    @* The faces that will be deleted, as cropped on the photo's thumbnail. *@
-    <ul class="people ignore-crops">
-        @foreach (var person in _selected)
-        {
-            <li class="person">
-                <span class="face">
-                    @if (person.Crop is { } crop)
-                    {
-                        <img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" />
-                    }
-                </span>
-            </li>
-        }
-    </ul>
-    <ul class="ignore-effects">
-        <li>@Text["Ignore_Effect_Gone"]</li>
-        <li>@Text["Ignore_Effect_Named"]</li>
-    </ul>
-    <details class="ignore-cloud">
-        <summary>@Text["Ignore_Cloud_Summary"]</summary>
-        <p>@Text["Ignore_Cloud"]</p>
-    </details>
-    <form method="post" @formname="ignore" @onsubmit="ConfirmAsync" class="confirm">
-        <AntiforgeryToken />
-        <input type="hidden" name="Confirmed" value="yes" />
-        <a href="photos/@Id" class="button secondary" autofocus>@Text["Merge_Cancel"]</a>
-        <button type="submit" class="button danger">@Text["Ignore_Confirm"]</button>
-    </form>
+    <PageHead Title="@Text["Ignore_Title"]">
+        <Back><a href="photos/@Id">@Text["Detail_Back"]</a></Back>
+    </PageHead>
+    <Panel Class="confirm-panel">
+        <p class="ignore-warning"><strong>@Text["Ignore_Irreversible"]</strong></p>
+        <p>@(_count == 1 ? Text["Ignore_Faces_One"] : Text["Ignore_Faces_Other", _count])</p>
+        @* The faces that will be deleted, as cropped on the photo's thumbnail. *@
+        <ul class="people ignore-crops">
+            @foreach (var person in _selected)
+            {
+                <li class="person">
+                    <span class="face">
+                        @if (person.Crop is { } crop)
+                        {
+                            <img src="photos/@crop.AssetId/@DerivativeNames.Thumbnail" alt="" loading="lazy" style="@crop.ImageStyle()" />
+                        }
+                    </span>
+                </li>
+            }
+        </ul>
+        <ul class="ignore-effects">
+            <li>@Text["Ignore_Effect_Gone"]</li>
+            <li>@Text["Ignore_Effect_Named"]</li>
+        </ul>
+        <details class="ignore-cloud">
+            <summary>@Text["Ignore_Cloud_Summary"]</summary>
+            <p>@Text["Ignore_Cloud"]</p>
+        </details>
+        <form method="post" @formname="ignore" @onsubmit="ConfirmAsync" class="confirm">
+            <AntiforgeryToken />
+            <input type="hidden" name="Confirmed" value="yes" />
+            <a href="photos/@Id" class="button secondary" autofocus>@Text["Merge_Cancel"]</a>
+            <button type="submit" class="button danger">@Text["Ignore_Confirm"]</button>
+        </form>
+    </Panel>
 }
 
 @code {
