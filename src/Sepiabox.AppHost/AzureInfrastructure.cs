@@ -69,6 +69,24 @@ public static class AzureInfrastructure
     /// </summary>
     public const string FacesSchedule = "17 * * * *";
 
+    /// <summary>The scheduled job that writes the exports people asked for (S-040): <c>export</c>.</summary>
+    public const string ExportJobName = "sepiabox-export";
+
+    /// <summary>The AppHost resource behind <see cref="ExportJobName"/>.</summary>
+    public const string ExportResourceName = "export";
+
+    /// <summary>
+    /// When <see cref="ExportJobName"/> runs: every 15 minutes. With no request waiting a run is one query, so the person
+    /// waits at most a quarter of an hour plus the time to write the file.
+    /// </summary>
+    public const string ExportSchedule = "*/15 * * * *";
+
+    /// <summary>
+    /// Days after which a zip in <c>exports</c> is deleted by a lifecycle rule (S-040, D-110). The page says the same number
+    /// (<c>ExportRequest.RetentionDays</c> in the catalog, which the AppHost cannot see); a test on each side pins both to 7.
+    /// </summary>
+    public const int ExportRetentionDays = 7;
+
     /// <summary>
     /// The manual job that runs the worker's administrative commands (S-057, D-108): <c>assets delete --source</c>. Started
     /// by hand with the arguments of the command; its own identity is the only one that may delete blobs.
@@ -96,6 +114,15 @@ public static class AzureInfrastructure
     /// <summary>The AppHost resource behind <see cref="ProcessJobName"/>: a container built from <c>infra/worker/Dockerfile</c>.</summary>
     public const string ProcessResourceName = "process";
 
+    /// <summary>The scheduled job that syncs the connected Google Drives into <c>incoming</c> (S-038): <c>sync google-drive</c>.</summary>
+    public const string SyncJobName = "sepiabox-sync";
+
+    /// <summary>The AppHost resource behind <see cref="SyncJobName"/>.</summary>
+    public const string SyncResourceName = "sync";
+
+    /// <summary>When <see cref="SyncJobName"/> runs: once a day, at night in Lisbon. A run with nothing new is a few calls to the Drive API.</summary>
+    public const string SyncSchedule = "27 3 * * *";
+
     /// <summary>The queue Event Grid sends <c>incoming</c> events to (S-036).</summary>
     public const string IncomingQueueName = "incoming";
 
@@ -115,7 +142,7 @@ public static class AzureInfrastructure
     /// <c>BlobLayout</c> containers; <c>dataprotection</c> holds the web's key ring (S-058).
     /// </summary>
     public static readonly IReadOnlyList<string> BlobContainers =
-        ["originals", "derivatives", "manifests", "incoming", "exports", "dataprotection"];
+        ["originals", "derivatives", "manifests", "incoming", "exports", "dataprotection", "tokenring"];
 
     /// <summary>
     /// The least-privilege PostgreSQL role the web connects with; <c>sepiabox-worker migrate</c> creates it
@@ -204,8 +231,14 @@ public static class AzureInfrastructure
     // minutes; half an hour bounds a stuck run.
     private const int GeoNamesTimeoutSeconds = 1800;
 
+    // Listing and fetching a few hundred files a run (Sync:MaxFilesPerRun); a stuck run is cut after two hours.
+    private const int SyncTimeoutSeconds = 7200;
+
     // Every manifest of a family library read and, the first time after an erase, written once: well within half an hour.
     private const int FacesTimeoutSeconds = 1800;
+
+    // Streams the catalog and one link per original into a zip; a family library is minutes of work.
+    private const int ExportTimeoutSeconds = 3600;
 
     /// <summary>Two hours: a deletion looks at each asset, its blobs and its rows one after the other (S-057).</summary>
     private const int AdminTimeoutSeconds = 7200;
@@ -280,6 +313,9 @@ public static class AzureInfrastructure
 
         // A file in incoming is normally deleted by the job that processes it; what is left after a month is a problem
         // blob nobody dealt with (S-036), and it is a copy of a file that is still at its source.
+        // An export is a copy made on request; one with face data must not outlive an erase for long, and nobody deletes them by
+        // hand (S-040, D-110). Turning face recognition off also makes the export job delete those with face data at once.
+        // One policy per account: the rules of every story are in this one.
         infrastructure.Add(new StorageAccountManagementPolicy("lifecycle")
         {
             Parent = account,
@@ -302,6 +338,27 @@ public static class AzureInfrastructure
                             BaseBlob = new ManagementPolicyBaseBlob
                             {
                                 Delete = new DateAfterModification { DaysAfterModificationGreaterThan = IncomingRetentionDays },
+                            },
+                        },
+                    },
+                },
+                new ManagementPolicyRule
+                {
+                    Name = "delete-old-exports",
+                    RuleType = ManagementPolicyRuleType.Lifecycle,
+                    IsEnabled = true,
+                    Definition = new ManagementPolicyDefinition
+                    {
+                        Filters = new ManagementPolicyFilter
+                        {
+                            BlobTypes = { "blockBlob" },
+                            PrefixMatch = { "exports/" },
+                        },
+                        Actions = new ManagementPolicyAction
+                        {
+                            BaseBlob = new ManagementPolicyBaseBlob
+                            {
+                                Delete = new DateAfterModification { DaysAfterModificationGreaterThan = ExportRetentionDays },
                             },
                         },
                     },
@@ -600,6 +657,58 @@ public static class AzureInfrastructure
         // Reading and merging small JSON blobs one at a time.
         var container = job.Template.Containers.Single().Value
             ?? throw new InvalidOperationException("The faces job has no container.");
+        container.Resources = new AppContainerResources { Cpu = 0.5, Memory = "1Gi" };
+    }
+
+    /// <summary>
+    /// <c>sync google-drive</c> (S-038) once a day. A run that fails is not repeated: it goes on from the page it stopped at the next
+    /// day, and the execution ends <c>Failed</c> so that it shows.
+    /// </summary>
+    public static void ConfigureSyncJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        job.Name = SyncJobName;
+        job.Location = Region;
+
+        var configuration = job.Configuration;
+        configuration.TriggerType = ContainerAppJobTriggerType.Schedule;
+        configuration.ScheduleTriggerConfig = new JobConfigurationScheduleTriggerConfig
+        {
+            CronExpression = SyncSchedule,
+            Parallelism = 1,
+            ReplicaCompletionCount = 1,
+        };
+        configuration.ReplicaTimeout = SyncTimeoutSeconds;
+        configuration.ReplicaRetryLimit = 0;
+        // Files go from Google to the store a block at a time; nothing is held.
+        var container = job.Template.Containers.Single().Value
+            ?? throw new InvalidOperationException("The sync job has no container.");
+        container.Resources = new AppContainerResources { Cpu = 0.5, Memory = "1Gi" };
+    }
+
+    /// <summary>
+    /// <c>export</c> (S-040) every 15 minutes. A run that fails records the failure on the request, which the person sees on
+    /// the export page and asks for again; it is not repeated.
+    /// </summary>
+    public static void ConfigureExportJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        job.Name = ExportJobName;
+        job.Location = Region;
+
+        var configuration = job.Configuration;
+        configuration.TriggerType = ContainerAppJobTriggerType.Schedule;
+        configuration.ScheduleTriggerConfig = new JobConfigurationScheduleTriggerConfig
+        {
+            CronExpression = ExportSchedule,
+            Parallelism = 1,
+            ReplicaCompletionCount = 1,
+        };
+        configuration.ReplicaTimeout = ExportTimeoutSeconds;
+        configuration.ReplicaRetryLimit = 0;
+        // The zip is streamed in 8 MiB blocks; the catalog is paged.
+        var container = job.Template.Containers.Single().Value
+            ?? throw new InvalidOperationException("The export job has no container.");
         container.Resources = new AppContainerResources { Cpu = 0.5, Memory = "1Gi" };
     }
 

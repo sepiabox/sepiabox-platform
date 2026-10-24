@@ -188,7 +188,7 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 |---|---|---|---|---|---|---|---|
 | S-036 | [Process files that arrive in the cloud without a manifest](S-036-process-files-that-arrive-in-the-cloud.md) | Cloud sources | S-033, S-006, S-015, S-050 | Medium | M | `done` | A |
 | S-057 | [Delete a source's assets from the library](S-057-delete-a-source-s-assets-from-the.md) | Cloud catalog | S-008, S-050, S-058 | Medium | M | `done` | A |
-| S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010, S-051, S-063 | Medium | S | `todo` | A |
+| S-040 | [Export all data](S-040-export-all-data.md) | Privacy | S-020, S-010, S-051, S-063 | Medium | S | `done` | A |
 | S-045 | [Read metadata from photo exports during process](S-045-read-metadata-from-photo-exports-during-process.md) | Import exports | S-004, S-043 | Medium | M | `done` | B |
 | S-046 | [Import a Google Takeout export of Google Photos](S-046-import-a-google-takeout-export-of.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `done` | B |
 
@@ -200,13 +200,13 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 | Story | Title | Epic | Depends on | Priority | Size | Status | Track |
 |---|---|---|---|---|---|---|---|
-| S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036, S-064 | Medium | M | `todo` | A |
+| S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036, S-064 | Medium | M | `done` | A |
 | S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010, S-064 | Medium | M | `todo` | A |
-| S-065 | [Move the code `process` and the cloud worker share into Pipeline](S-065-move-the-shared-process-code-into-pipeline.md) | Cloud sources | S-036, S-063 | Low | S | `doing` | A |
-| S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `todo` | A |
+| S-065 | [Move the code `process` and the cloud worker share into Pipeline](S-065-move-the-shared-process-code-into-pipeline.md) | Cloud sources | S-036, S-063 | Low | S | `done` | A |
+| S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `done` | A |
 | S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `done` | B |
-| S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `todo` | B |
-| S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `todo` | B |
+| S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `done` | B |
+| S-049 | [Import a Facebook data download](S-049-import-a-facebook-data-download.md) | Import exports | S-004, S-043, S-045, S-048 | Medium | S | `done` | B |
 
 ### Sprint 17 — Visual redesign
 

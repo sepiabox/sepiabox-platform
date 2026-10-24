@@ -21,6 +21,13 @@ public sealed class Asset
     /// <summary>Wall-clock time on the camera, without time zone.</summary>
     public DateTime? CapturedAt { get; set; }
 
+    /// <summary>
+    /// Where <see cref="CapturedAt"/> came from, as the manifest says (S-052, D-114): <c>metadata</c>, <c>export</c>, <c>fileName</c> or
+    /// <c>folder</c>; null when the asset has no date. <c>export</c> does not tell an exact date from a posting date, so the page says only
+    /// that it is from the export.
+    /// </summary>
+    public string? CapturedAtSource { get; set; }
+
     /// <summary>WGS 84 point (SRID 4326): X is longitude, Y is latitude.</summary>
     public Point? Location { get; set; }
 
@@ -71,6 +78,12 @@ public sealed class Asset
     /// </summary>
     public bool Hidden { get; set; }
 
+    /// <summary>
+    /// What the owner or an export's maker wrote about the photo (S-052, D-114), as the manifest carries it (the longer
+    /// caption of the sources merged, S-045); null when none. An import without a caption leaves a stored one as it is.
+    /// </summary>
+    public string? Caption { get; set; }
+
     /// <summary>When the asset first entered the catalog.</summary>
     public DateTimeOffset ImportedAt { get; set; }
 
@@ -80,6 +93,17 @@ public sealed class Asset
     public List<AssetSource> Sources { get; set; } = [];
 
     public List<Derivative> Derivatives { get; set; } = [];
+
+    /// <summary>The albums an export put the asset in (S-052); only ever added to, as the sources are (D-032).</summary>
+    public List<AssetAlbum> Albums { get; set; } = [];
+}
+
+/// <summary>An album an asset is in (S-052, D-114), named as the family wrote it; one row per asset and name.</summary>
+public sealed class AssetAlbum
+{
+    public required string AssetId { get; set; }
+
+    public required string Name { get; set; }
 }
 
 /// <summary>One place where the asset's bytes were found, such as a path on a drive.</summary>
@@ -99,6 +123,12 @@ public sealed class AssetSource
 
     /// <summary>The original's address at its source (S-063), when the source gave one; <c>https://</c>.</summary>
     public string? Url { get; set; }
+
+    /// <summary>
+    /// When the sync of a cloud source found the file gone from its source (S-038, D-115): deleted, trashed or moved. The source is
+    /// kept (sources are only added to, D-032) and marked; the sync clears it when the file comes back.
+    /// </summary>
+    public DateTimeOffset? RemovedAt { get; set; }
 }
 
 /// <summary>A file generated for the web, stored in the <c>derivatives</c> container.</summary>
@@ -409,12 +439,76 @@ public sealed class ConnectedSource
     public int? VideoCount { get; set; }
 
     public DateTimeOffset? CountedAt { get; set; }
+
+    /// <summary>
+    /// The purpose the refresh token is protected under (S-037, D-097): the web protects it and the sync job unprotects it, both
+    /// with the same key ring, so both name this.
+    /// </summary>
+    public const string RefreshTokenPurpose = "Sepiabox.Web.ConnectedSources.RefreshToken.v1";
+
+    /// <summary>
+    /// Where the sync (S-038) is in the account's changes: the token the changes API goes on from. Set when the first scan begins,
+    /// before the listing, so what changes meanwhile is seen later. Null before the first sync.
+    /// </summary>
+    public string? SyncChangesToken { get; set; }
+
+    /// <summary>The page the first scan's listing goes on from; null at the start of a listing and once it is complete.</summary>
+    public string? SyncListToken { get; set; }
+
+    /// <summary>True while the first scan lists everything, a few files a run (<c>Sync:MaxFilesPerRun</c>).</summary>
+    public bool SyncListing { get; set; }
+}
+
+/// <summary>
+/// A file of a connected account that the sync has staged (S-038, D-115): its id in the cloud with the path it was given, so a file the
+/// changes API reports as removed (which comes with an id and nothing else) is found, and a file that has not changed is not staged again.
+/// </summary>
+public sealed class DriveFile
+{
+    public long ConnectedSourceId { get; set; }
+
+    /// <summary>The file's id in the cloud.</summary>
+    public required string FileId { get; set; }
+
+    /// <summary>The path of the source this file made: the folders and the name, with <c>/</c>.</summary>
+    public required string Path { get; set; }
+
+    /// <summary>The file's modification time in the cloud when it was staged.</summary>
+    public DateTimeOffset ModifiedAt { get; set; }
+
+    /// <summary>The cloud's checksum of the content, when it gives one.</summary>
+    public string? Checksum { get; set; }
+
+    /// <summary>
+    /// The file's size in bytes when it was staged. With the path and the modification time it tells apart two files of one name in one
+    /// folder (a Drive allows that), which the path alone cannot.
+    /// </summary>
+    public long? SizeBytes { get; set; }
 }
 
 /// <summary>The services a <see cref="ConnectedSource"/> can be.</summary>
 public static class ConnectedSourceTypes
 {
     public const string GoogleDrive = "google-drive";
+
+    /// <summary>
+    /// The name a cloud account's files have as a source (<c>asset_sources.name</c>, and so in the manifests, for good): the address and
+    /// the service, <c>ana@example.com (Google Drive)</c>, since one address may be connected to two services and would otherwise be one source.
+    /// </summary>
+    public static string SourceName(string type, string accountEmail) => $"{accountEmail} ({ServiceName(type)})";
+
+    /// <summary>The account address in a source name made by <see cref="SourceName"/> for that type; null when it is not one.</summary>
+    public static string? AccountOf(string type, string sourceName)
+    {
+        var suffix = $" ({ServiceName(type)})";
+        return sourceName.EndsWith(suffix, StringComparison.Ordinal) && sourceName.Length > suffix.Length ? sourceName[..^suffix.Length] : null;
+    }
+
+    private static string ServiceName(string type) => type switch
+    {
+        GoogleDrive => "Google Drive",
+        _ => type,
+    };
 }
 
 /// <summary>Whether a connection works.</summary>
@@ -427,4 +521,57 @@ public static class ConnectedSourceStatuses
     /// 7 days, D-024, or it was revoked): the family has to connect again.
     /// </summary>
     public const string Reconnect = "reconnect";
+}
+
+/// <summary>
+/// A request to export all the library's data (S-040, D-110): made on the settings page, picked up by the export job, which
+/// writes <c>exports/&lt;date&gt;-&lt;id&gt;.zip</c> and says so here. The page lists the last ones and gives a one-hour link
+/// to each finished zip.
+/// </summary>
+public sealed class ExportRequest
+{
+    /// <summary>
+    /// Days a zip is kept in <c>exports</c> (D-110): a lifecycle rule deletes it then, and the page stops offering it. A zip with
+    /// face data (biometric data) must not outlive an erase for long, and nobody deletes the others by hand.
+    /// </summary>
+    public const int RetentionDays = 7;
+
+    public long Id { get; set; }
+
+    public DateTimeOffset RequestedAt { get; set; }
+
+    /// <summary>The signed-in user who asked, lower-cased.</summary>
+    public required string RequestedBy { get; set; }
+
+    /// <summary>Whether the zip carries the faces: their boxes and embeddings (biometric data), which the default leaves out.</summary>
+    public bool IncludeFaceData { get; set; }
+
+    /// <summary>One of <see cref="ExportStatuses"/>.</summary>
+    public required string Status { get; set; }
+
+    public DateTimeOffset? StartedAt { get; set; }
+
+    public DateTimeOffset? FinishedAt { get; set; }
+
+    /// <summary>
+    /// The zip's blob in the <c>exports</c> container, once it is written; null again once the export job deleted it because
+    /// face recognition was turned off and the zip had face data (D-110).
+    /// </summary>
+    public string? BlobName { get; set; }
+
+    public int? Assets { get; set; }
+
+    public long? SizeBytes { get; set; }
+
+    /// <summary>Why it failed, for the owner to read: no stack, no path.</summary>
+    public string? Error { get; set; }
+}
+
+/// <summary>The states of an <see cref="ExportRequest"/>.</summary>
+public static class ExportStatuses
+{
+    public const string Requested = "requested";
+    public const string Running = "running";
+    public const string Done = "done";
+    public const string Failed = "failed";
 }

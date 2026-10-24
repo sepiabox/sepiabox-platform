@@ -12,6 +12,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<AssetSource> AssetSources => Set<AssetSource>();
 
+    public DbSet<AssetAlbum> AssetAlbums => Set<AssetAlbum>();
+
     public DbSet<Derivative> Derivatives => Set<Derivative>();
 
     public DbSet<ManifestImport> ManifestImports => Set<ManifestImport>();
@@ -32,6 +34,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
     public DbSet<FaceDataDeletion> FaceDataDeletions => Set<FaceDataDeletion>();
 
+    public DbSet<ExportRequest> ExportRequests => Set<ExportRequest>();
+
     public DbSet<SavedPlace> SavedPlaces => Set<SavedPlace>();
 
     public DbSet<Occasion> Occasions => Set<Occasion>();
@@ -39,6 +43,8 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
     public DbSet<OccasionAsset> OccasionAssets => Set<OccasionAsset>();
 
     public DbSet<ConnectedSource> ConnectedSources => Set<ConnectedSource>();
+
+    public DbSet<DriveFile> DriveFiles => Set<DriveFile>();
 
     /// <summary>The one place that knows how the catalog connects, shared by the worker, tests and tooling.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
@@ -74,6 +80,7 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             asset.ToTable("assets");
             asset.Property(a => a.Id).HasMaxLength(64);
             asset.Property(a => a.Kind).HasMaxLength(16);
+            asset.Property(a => a.CapturedAtSource).HasMaxLength(16);
             // True for every asset before index-only mode (S-063). Never generated, as belt and braces: a column with a
             // default and a CLR default of false is the case where EF may leave the value out of the insert.
             asset.Property(a => a.OriginalStored).HasDefaultValue(true).ValueGeneratedNever();
@@ -98,6 +105,16 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
                 .HasNullSortOrder(NullSortOrder.NullsLast, NullSortOrder.NullsLast);
             asset.HasMany(a => a.Sources).WithOne().HasForeignKey(s => s.AssetId);
             asset.HasMany(a => a.Derivatives).WithOne().HasForeignKey(d => d.AssetId);
+            // Cascade: deleting an asset (S-057) takes its album memberships with it.
+            asset.HasMany(a => a.Albums).WithOne().HasForeignKey(l => l.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AssetAlbum>(album =>
+        {
+            album.ToTable("asset_albums");
+            album.HasKey(l => new { l.AssetId, l.Name });
+            // The filter bar's list of albums, and the albums of one name.
+            album.HasIndex(l => l.Name).HasDatabaseName("ix_asset_albums_name");
         });
 
         modelBuilder.Entity<AssetSource>(source =>
@@ -221,8 +238,23 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             source.Property(s => s.AccountEmail).HasMaxLength(320);
             source.Property(s => s.EncryptedRefreshToken).HasColumnType("text");
             source.Property(s => s.Status).HasMaxLength(16);
+            source.Property(s => s.SyncChangesToken).HasColumnType("text");
+            source.Property(s => s.SyncListToken).HasColumnType("text");
+            source.Property(s => s.SyncListing).HasDefaultValue(false).ValueGeneratedNever();
             source.HasIndex(s => new { s.Type, s.AccountEmail }).IsUnique().HasDatabaseName("ix_connected_sources_account");
             source.ToTable(t => t.HasCheckConstraint("ck_connected_sources_status", "status IN ('connected', 'reconnect')"));
+        });
+
+        modelBuilder.Entity<DriveFile>(file =>
+        {
+            file.ToTable("drive_files");
+            file.HasKey(f => new { f.ConnectedSourceId, f.FileId });
+            file.Property(f => f.FileId).HasMaxLength(200);
+            file.Property(f => f.Path).HasColumnType("text");
+            file.Property(f => f.Checksum).HasMaxLength(64);
+            file.HasOne<ConnectedSource>().WithMany().HasForeignKey(f => f.ConnectedSourceId).OnDelete(DeleteBehavior.Cascade);
+            // A removed file is found by the path it made, to mark its source.
+            file.HasIndex(f => new { f.ConnectedSourceId, f.Path }).HasDatabaseName("ix_drive_files_path");
         });
 
         modelBuilder.Entity<Setting>(setting =>
@@ -249,6 +281,18 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             deletion.Property(d => d.DeletedBy).HasMaxLength(320);
             deletion.Property(d => d.Scope).HasMaxLength(16);
             deletion.ToTable(t => t.HasCheckConstraint("ck_face_data_deletions_scope", "scope IN ('library', 'person')"));
+        });
+
+        modelBuilder.Entity<ExportRequest>(export =>
+        {
+            export.ToTable("export_requests");
+            export.Property(e => e.RequestedBy).HasMaxLength(320);
+            export.Property(e => e.Status).HasMaxLength(16);
+            export.Property(e => e.BlobName).HasMaxLength(200);
+            export.Property(e => e.Error).HasMaxLength(500);
+            export.ToTable(t => t.HasCheckConstraint("ck_export_requests_status", "status IN ('requested', 'running', 'done', 'failed')"));
+            // At most one request waiting and one running (D-110): two clicks, or two computers, make only one request.
+            export.HasIndex(e => e.Status).IsUnique().HasFilter("status IN ('requested', 'running')").HasDatabaseName("ux_export_requests_active");
         });
 
         modelBuilder.Entity<QuestionUsage>(usage =>

@@ -9,6 +9,24 @@ public sealed record DriveMediaCount(int Photos, int Videos);
 /// </summary>
 public sealed class DriveAuthorizationException(string message, Exception? inner = null) : Exception(message, inner);
 
+/// <summary>A file of a Drive being read (S-038): its content and what a download needs to name it. Dispose it when the content is read.</summary>
+public sealed class DriveFileDownload(Stream content, string name, string contentType, long? length, IDisposable? owner = null) : IAsyncDisposable
+{
+    public Stream Content { get; } = content;
+
+    public string Name { get; } = name;
+
+    public string ContentType { get; } = contentType;
+
+    public long? Length { get; } = length;
+
+    public async ValueTask DisposeAsync()
+    {
+        await Content.DisposeAsync();
+        owner?.Dispose();
+    }
+}
+
 /// <summary>
 /// What the web asks of an account that is already connected (S-037, D-051): behind an interface so that tests, which
 /// never reach Google, use a fake. Every call takes the plain refresh token and throws
@@ -24,6 +42,9 @@ public interface IDriveClient
     /// (<c>files.list</c>, a page at a time), without reading any of them.
     /// </summary>
     Task<DriveMediaCount> CountMediaAsync(string refreshToken, CancellationToken cancellationToken = default);
+
+    /// <summary>The content of a file, to pass on to the browser (S-038: "Open original" for a Drive source); null when the file is gone.</summary>
+    Task<DriveFileDownload?> OpenFileAsync(string refreshToken, string fileId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>The OAuth half (S-037): the address the browser is sent to, the code it comes back with, and revoking.</summary>
