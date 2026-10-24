@@ -27,6 +27,36 @@ internal static partial class Log
     [LoggerMessage(Level = LogLevel.Warning, Message = "Processing incoming files without {Step}: {Reason}")]
     public static partial void IncomingStepUnavailable(ILogger logger, string step, string reason);
 
+    [LoggerMessage(Level = LogLevel.Error, Message = "No connected Google Drive matches the account given to --rescan.")]
+    public static partial void DriveRescanNotFound(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The secret {Name} is not set, or this job has no role on it yet.")]
+    public static partial void VaultSecretUnavailable(ILogger logger, string name);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The Key Vault secret {Name} could not be read (status {Status}).")]
+    public static partial void VaultSecretStatus(ILogger logger, string name, int status);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "No Google OAuth client is configured (Auth:Google): there is nothing to sync.")]
+    public static partial void DriveSyncNotConfigured(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The refresh token of connected account {AccountId} cannot be read (another key ring, or damaged); it needs to be connected again.")]
+    public static partial void DriveTokenUnreadable(ILogger logger, long accountId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Google no longer honours the token of connected account {AccountId}; it needs to be connected again.")]
+    public static partial void DriveNeedsReconnecting(ILogger logger, long accountId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Synced connected account {AccountId}: {Staged} file(s) staged in incoming; the first listing is still going on: {Listing}.")]
+    public static partial void DriveAccountSynced(ILogger logger, long accountId, int staged, bool listing);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Stopped syncing connected account {AccountId} ({Reason}); the next run goes on from the same page.")]
+    public static partial void DriveAccountStopped(ILogger logger, long accountId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Left out file {FileId} of connected account {AccountId}: {Reason}.")]
+    public static partial void DriveFileSkipped(ILogger logger, long accountId, string fileId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Drive sync finished: {Accounts} account(s), {Staged} file(s) staged, {Removed} source(s) marked removed, {Skipped} left out, {Reconnect} to connect again, {Failed} stopped early.")]
+    public static partial void DriveSyncFinished(ILogger logger, int accounts, int staged, int removed, int skipped, int reconnect, int failed);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Incoming run finished: {Processed} processed, {LeftOut} left out (not photos or videos), {Skipped} skipped and kept in incoming (a lifecycle rule deletes them after 30 days).")]
     public static partial void IncomingFinished(ILogger logger, int processed, int leftOut, int skipped);
 

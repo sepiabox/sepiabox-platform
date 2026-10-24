@@ -200,9 +200,9 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 | Story | Title | Epic | Depends on | Priority | Size | Status | Track |
 |---|---|---|---|---|---|---|---|
-| S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036, S-064 | Medium | M | `todo` | A |
+| S-038 | [Sync Google Drive photos in reference mode](S-038-sync-google-drive-photos-in-reference-mode.md) | Cloud sources | S-037, S-036, S-064 | Medium | M | `done` | A |
 | S-039 | [Connect and sync OneDrive](S-039-connect-and-sync-onedrive.md) | Cloud sources | S-036, S-010, S-064 | Medium | M | `todo` | A |
-| S-065 | [Move the code `process` and the cloud worker share into Pipeline](S-065-move-the-shared-process-code-into-pipeline.md) | Cloud sources | S-036, S-063 | Low | S | `todo` | A |
+| S-065 | [Move the code `process` and the cloud worker share into Pipeline](S-065-move-the-shared-process-code-into-pipeline.md) | Cloud sources | S-036, S-063 | Low | S | `done` | A |
 | S-052 | [Show captions and albums and filter by album](S-052-show-captions-and-albums-and-filter-by-album.md) | Import exports | S-045, S-013, S-044 | Medium | S | `done` | A |
 | S-047 | [Import an Apple Photos or iCloud Photos export](S-047-import-an-apple-photos-or-icloud.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `done` | B |
 | S-048 | [Import an Instagram data download](S-048-import-an-instagram-data-download.md) | Import exports | S-004, S-043, S-045, S-063 | Medium | M | `done` | B |
@@ -216,8 +216,8 @@ The sprints below come after the MVP ([D-053](../decisions.md)), in this order, 
 
 | Story | Title | Epic | Depends on | Priority | Size | Status | Track |
 |---|---|---|---|---|---|---|---|
-| S-066 | [Design tokens, base controls and the header](S-066-design-tokens-and-base-controls.md) | Visual design | S-013 | High | M | `doing` | A |
-| S-067 | [Timeline filters and the question box, redesigned](S-067-timeline-filters-and-search.md) | Visual design | S-066, S-052 | High | M | `doing` | A |
+| S-066 | [Design tokens, base controls and the header](S-066-design-tokens-and-base-controls.md) | Visual design | S-013 | High | M | `done` | A |
+| S-067 | [Timeline filters and the question box, redesigned](S-067-timeline-filters-and-search.md) | Visual design | S-066, S-052 | High | M | `done` | A |
 | S-068 | [Photo grid and photo detail, redesigned](S-068-photo-grid-and-detail.md) | Visual design | S-066, S-041, S-052, S-064 | Medium | M | `doing` | A |
 | S-069 | [Remaining pages on the shared components](S-069-remaining-pages-on-shared-components.md) | Visual design | S-066, S-067, S-068, S-037, S-039, S-040 | Medium | M | `todo` | A |
 | S-070 | [Empty states, notes and a theme switch](S-070-empty-states-and-theme-switch.md) | Visual design | S-069 | Low | S | `todo` | A |

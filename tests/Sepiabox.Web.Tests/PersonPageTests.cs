@@ -130,10 +130,10 @@ public sealed class PersonPageFormTests : LocalizedContext
 
         var page = Render<PersonMerge>(p => p.Add(x => x.Id, 7L));
 
-        Assert.Equal(["Deixa de existir", "Fica"], page.FindAll(".merge-people .caption").Select(c => c.TextContent));
+        Assert.Equal(["Será apagada", "Fica"], page.FindAll(".merge-people .caption").Select(c => c.TextContent));
         Assert.Equal(["Bruno", "Ana"], page.FindAll(".merge-people .name").Select(c => c.TextContent));
-        Assert.Equal("Os rostos de Bruno passam para Ana; Bruno deixa de existir.", page.Find(".note").TextContent);
-        Assert.Equal("Juntar", page.Find("form.confirm button").TextContent);
+        Assert.Equal("Depois de juntar: Ana (2 rostos) fica com os rostos de Bruno (2 rostos), e Bruno deixa de existir.", page.Find(".note:not(.danger)").TextContent);
+        Assert.Equal("Juntar em Ana", page.Find("form.confirm button").TextContent);
     }
 
     [Fact]
@@ -146,9 +146,121 @@ public sealed class PersonPageFormTests : LocalizedContext
         var page = Render<PersonMerge>(p => p.Add(x => x.Id, 7L));
 
         // Left goes, right stays, as the sentence says.
-        Assert.Equal(["Deixa de existir", "Fica"], page.FindAll(".merge-people .caption").Select(c => c.TextContent));
+        Assert.Equal(["Será apagada", "Fica"], page.FindAll(".merge-people .caption").Select(c => c.TextContent));
         Assert.Equal(["Sem nome", "Ana"], page.FindAll(".merge-people .name").Select(c => c.TextContent));
-        Assert.Equal("Os rostos da pessoa à esquerda passam para a da direita; a da esquerda deixa de existir.", page.Find(".note").TextContent);
+        Assert.Equal("Depois de juntar: Ana (2 rostos) fica com os rostos de Sem nome (2 rostos), e Sem nome deixa de existir.", page.Find(".note").TextContent);
+    }
+
+    private IRenderedComponent<PersonMerge> MergePage(string query)
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("people/7/merge" + query);
+        return Render<PersonMerge>(p => p.Add(x => x.Id, 7L));
+    }
+
+    [Fact]
+    public void Keeps_the_named_person_when_the_other_is_unnamed_whichever_page_the_merge_started_from()
+    {
+        // Ana (named, 100 faces) with an unnamed person of 1,500: the named one stays, from either side.
+        _library.Persons[7] = PersonPages.Person(7, name: "Ana", user: null) with { FaceCount = 100 };
+        _library.Persons[9] = PersonPages.Person(9, name: null, user: null) with { FaceCount = 1500 };
+        var fromAna = MergePage("?other=9");
+        Assert.Equal(["Unnamed", "Ana"], fromAna.FindAll(".merge-people .name").Select(c => c.TextContent));
+
+        // Started from the unnamed person's page: the same cards, and the same direction.
+        _library.Persons[9] = PersonPages.Person(9, name: null, user: null) with { FaceCount = 1500 };
+        Services.GetRequiredService<NavigationManager>().NavigateTo("people/9/merge?other=7");
+        var fromUnnamed = Render<PersonMerge>(p => p.Add(x => x.Id, 9L));
+
+        Assert.Equal(["Unnamed", "Ana"], fromUnnamed.FindAll(".merge-people .name").Select(c => c.TextContent));
+        Assert.Empty(fromUnnamed.FindAll(".note.danger"));
+        Assert.DoesNotContain("danger", fromUnnamed.Find("form.confirm button").ClassName, StringComparison.Ordinal);
+        Assert.Equal("Merge into Ana", fromUnnamed.Find("form.confirm button").TextContent);
+    }
+
+    [Fact]
+    public void Keeps_the_person_with_more_faces_when_both_or_neither_have_a_name()
+    {
+        _library.Persons[7] = PersonPages.Person(7, name: "Ana", user: null) with { FaceCount = 40 };
+        _library.Persons[8] = PersonPages.Person(8, name: "Bruno", user: null) with { FaceCount = 300 };
+
+        var page = MergePage("?other=8");
+
+        Assert.Equal(["Ana", "Bruno"], page.FindAll(".merge-people .name").Select(c => c.TextContent));
+    }
+
+    [Fact]
+    public void Keeps_the_person_the_user_said_is_them_even_against_a_named_one_with_more_faces()
+    {
+        _library.Persons[7] = PersonPages.Person(7, name: null, user: "ana@example.com") with { FaceCount = 10 };
+        _library.Persons[8] = PersonPages.Person(8, name: "Bruno", user: null) with { FaceCount = 900 };
+
+        var page = MergePage("?other=8");
+
+        Assert.Equal(["Bruno", "Unnamed"], page.FindAll(".merge-people .name").Select(c => c.TextContent));
+    }
+
+    [Fact]
+    public void States_the_result_with_names_and_counts_and_offers_a_swap_that_reverses_it_and_warns_when_a_named_person_would_go()
+    {
+        _library.Persons[7] = PersonPages.Person(7, name: "Ana", user: null) with { FaceCount = 100 };
+        _library.Persons[9] = PersonPages.Person(9, name: null, user: null) with { FaceCount = 1500 };
+
+        var page = MergePage("?other=9");
+
+        Assert.Equal("After merging: Ana (100 faces) keeps the faces of Unnamed (1500 faces), and Unnamed no longer exists.", page.Find(".note").TextContent);
+        Assert.Equal("people/7/merge?other=9&swap=1", page.Find("a.merge-swap").GetAttribute("href"));
+        Assert.Equal("0", page.Find("input[name=Swap]").GetAttribute("value"));
+
+        var swapped = MergePage("?other=9&swap=1");
+
+        Assert.Equal(["Ana", "Unnamed"], swapped.FindAll(".merge-people .name").Select(c => c.TextContent));
+        Assert.Equal("1", swapped.Find("input[name=Swap]").GetAttribute("value"));
+        Assert.Equal("people/7/merge?other=9", swapped.Find("a.merge-swap").GetAttribute("href"));
+        Assert.Contains("Ana has a name and will be deleted", swapped.Find(".note.danger").TextContent, StringComparison.Ordinal);
+        Assert.Equal("Ana", swapped.Find(".note.danger strong").TextContent);
+        // The danger comes before the result sentence, the button is the danger one and names who stays, and Cancel is a secondary button before it.
+        Assert.Equal(["note danger", "note"], swapped.FindAll("p.note").Select(n => n.ClassName));
+        Assert.Equal("button danger", swapped.Find("form.confirm button").ClassName);
+        Assert.Equal("Merge into Unnamed", swapped.Find("form.confirm button").TextContent);
+        Assert.Equal("a", swapped.Find("form.confirm").Children[^2].LocalName);
+        Assert.Contains("secondary", swapped.Find("form.confirm").Children[^2].ClassName, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Marks_the_person_who_goes_as_deleted_and_the_one_who_stays_with_an_arrow_between()
+    {
+        _library.Persons[7] = PersonPages.Person(7, name: "Ana", user: null) with { FaceCount = 100 };
+        _library.Persons[9] = PersonPages.Person(9, name: null, user: null) with { FaceCount = 1500 };
+
+        var page = MergePage("?other=9");
+
+        Assert.Equal(["Will be deleted", "Stays"], page.FindAll(".merge-people .merge-badge").Select(b => b.TextContent));
+        Assert.Contains("merge-leaves", page.Find(".merge-people li:first-child").ClassName, StringComparison.Ordinal);
+        Assert.Contains("merge-stays", page.Find(".merge-people li:last-child").ClassName, StringComparison.Ordinal);
+        Assert.Equal("true", page.Find(".merge-arrow").GetAttribute("aria-hidden"));
+    }
+
+    [Fact]
+    public void Says_that_the_person_who_goes_is_linked_to_the_user_when_they_are_unnamed()
+    {
+        _library.Persons[7] = PersonPages.Person(7, name: null, user: "ana@example.com") with { FaceCount = 5 };
+        _library.Persons[8] = PersonPages.Person(8, name: "Bruno", user: null) with { FaceCount = 900 };
+
+        var page = MergePage("?other=8&swap=1");
+
+        Assert.Equal("⚠ Unnamed is linked to you (\"This is me\") and will be deleted for good. Go on only if that is what you want; otherwise use Swap.", page.Find(".note.danger").TextContent.Trim());
+    }
+
+    [Fact]
+    public void Says_the_result_and_the_swap_in_brazilian_portuguese()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+        _library.Persons[8] = PersonPages.Person(8, name: "Bruno", user: null) with { FaceCount = 3 };
+
+        var page = MergePage("?other=8&swap=1");
+
+        Assert.Equal("Trocar: manter a outra pessoa", page.Find("a.merge-swap").TextContent);
+        Assert.Contains("tem nome e será apagada", page.Find(".note.danger").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -236,11 +348,32 @@ public sealed partial class PersonPagePostTests
 
         var confirmation = await http.GetStringAsync(new Uri("/people/7/merge?other=9", UriKind.Relative));
         Assert.Empty(editor.Calls);
-        Assert.Contains("The faces of the person on the left move to the one on the right", WebUtility.HtmlDecode(confirmation), StringComparison.Ordinal);
+        Assert.Contains("keeps the faces of", WebUtility.HtmlDecode(confirmation), StringComparison.Ordinal);
         using var response = await PostAsync(http, "/people/7/merge?other=9", "confirm", new() { ["Confirmed"] = "yes" });
 
         Assert.Equal("/people/7?note=merged", response.Headers.Location?.PathAndQuery);
         Assert.Equal(["merge 7 9"], editor.Calls);
+    }
+
+    [Theory]
+    [InlineData("1", "merge 7 9 swap")]
+    [InlineData("0", "merge 7 9")]
+    [InlineData(null, "merge 7 9")]
+    public async Task Passes_a_swap_to_the_editor_only_when_the_form_says_so(string? swap, string call)
+    {
+        var (web, editor) = Web();
+        await using var _ = web;
+        using var http = web.CreateSignedInClient(Ana, followRedirects: false);
+        var fields = new Dictionary<string, string> { ["Confirmed"] = "yes" };
+        if (swap is not null)
+        {
+            fields["Swap"] = swap;
+        }
+
+        using var response = await PostAsync(http, "/people/7/merge?other=9", "confirm", fields);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal([call], editor.Calls);
     }
 
     [Theory]
