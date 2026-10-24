@@ -67,6 +67,23 @@ public sealed class FaceSettingsPageTests : LocalizedContext
     }
 
     [Fact]
+    public void Has_section_navigation_and_a_danger_zone_with_the_turn_off_only_while_recognition_is_on()
+    {
+        var on = Render<Settings>();
+
+        Assert.Equal(["#settings-faces-heading", "#settings-export-heading", "#settings-danger-heading"], on.FindAll("nav.settings-nav a").Select(a => a.GetAttribute("href")!["settings".Length..]));
+        Assert.Equal("Danger zone", on.Find("section.danger-zone h2").TextContent);
+        Assert.NotNull(on.Find("section.danger-zone form.ask-off button.button.danger"));
+        Assert.Empty(on.FindAll("section.settings-faces form.ask-off"));
+
+        _faces.State = _faces.State with { On = false };
+        var off = Render<Settings>();
+
+        Assert.Empty(off.FindAll("section.danger-zone"));
+        Assert.Equal(2, off.FindAll("nav.settings-nav a").Count);
+    }
+
+    [Fact]
     public void Lists_who_deleted_face_data_and_how_much_in_brazilian_portuguese()
     {
         using var language = Cultures.Use(Cultures.BrazilianPortuguese);
@@ -75,12 +92,10 @@ public sealed class FaceSettingsPageTests : LocalizedContext
 
         var page = Render<Settings>();
 
-        Assert.Equal(
-            [
-                "21/10/2026 10:05, por ana@example.com: dados faciais de uma pessoa apagados; rostos: 3.",
-                "20/10/2026 08:00, por ana@example.com: reconhecimento desativado; rostos apagados: 120, pessoas apagadas: 9.",
-            ],
-            page.FindAll(".face-deletions li").Select(li => li.TextContent));
+        var rows = page.FindAll("table.face-deletions tbody tr").Select(tr => tr.QuerySelectorAll("td").Select(td => td.TextContent).ToArray()).ToList();
+        Assert.Equal(["21/10/2026 10:05", "ana@example.com", "Dados faciais de uma pessoa apagados; rostos: 3"], rows[0]);
+        Assert.Equal(["20/10/2026 08:00", "ana@example.com", "Reconhecimento desativado; rostos apagados: 120, pessoas apagadas: 9"], rows[1]);
+        Assert.Equal(["Quando", "Quem", "O quê"], page.FindAll("table.face-deletions th").Select(th => th.TextContent));
     }
 
     [Theory]
