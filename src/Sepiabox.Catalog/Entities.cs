@@ -491,6 +491,9 @@ public static class ConnectedSourceTypes
 {
     public const string GoogleDrive = "google-drive";
 
+    /// <summary>A personal Microsoft account's OneDrive, through Microsoft Graph (S-039).</summary>
+    public const string OneDrive = "onedrive";
+
     /// <summary>
     /// The name a cloud account's files have as a source (<c>asset_sources.name</c>, and so in the manifests, for good): the address and
     /// the service, <c>ana@example.com (Google Drive)</c>, since one address may be connected to two services and would otherwise be one source.
@@ -507,6 +510,7 @@ public static class ConnectedSourceTypes
     private static string ServiceName(string type) => type switch
     {
         GoogleDrive => "Google Drive",
+        OneDrive => "OneDrive",
         _ => type,
     };
 }

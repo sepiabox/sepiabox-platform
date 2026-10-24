@@ -22,7 +22,8 @@ public sealed class DriveOriginalLinkTests : LocalizedContext
     [InlineData("google-drive", 7, false, true, false)]
     [InlineData("google-drive", 7, true, false, false)]
     [InlineData("google-drive", 0, false, false, false)]
-    [InlineData("onedrive", 7, false, false, false)]
+    [InlineData("onedrive", 7, false, false, true)]
+    [InlineData("onedrive", 7, false, true, false)]
     [InlineData("local", 7, false, false, false)]
     public void Offers_the_original_through_the_server_only_for_a_drive_file_that_is_there_and_not_stored(
         string type, long id, bool stored, bool removed, bool offered)
@@ -230,7 +231,7 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
     public async Task A_token_google_refuses_or_a_key_ring_that_cannot_read_it_makes_the_account_reconnect()
     {
         await using var db = await SeedAsync();
-        var drive = new FakeDrive { Failure = () => new DriveAuthorizationException("invalid_grant") };
+        var drive = new FakeDrive { Failure = () => new CloudAuthorizationException("invalid_grant") };
         var source = await SourceIdAsync(db, "Fotos/Praia 2019.jpg");
 
         var refused = await Originals(db, drive).OpenAsync(Ids.Of(1), source);
@@ -241,7 +242,7 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
         db.ChangeTracker.Clear();
         (await db.ConnectedSources.SingleAsync()).Status = ConnectedSourceStatuses.Connected;
         await db.SaveChangesAsync();
-        var otherRing = new DriveOriginals(new TestContexts(catalog.ConnectionStringFor(db)), new DriveTokenProtector(new EphemeralDataProtectionProvider()), new FakeDrive(), NullLogger<DriveOriginals>.Instance);
+        var otherRing = new DriveOriginals(new TestContexts(catalog.ConnectionStringFor(db)), new DriveTokenProtector(new EphemeralDataProtectionProvider()), new FakeDrive(), new FakeOneDrive(), NullLogger<DriveOriginals>.Instance);
 
         Assert.Equal(DriveOriginalOutcome.Reconnect, (await otherRing.OpenAsync(Ids.Of(1), source)).Outcome);
     }
@@ -259,7 +260,7 @@ public sealed class DriveOriginalsCatalogTests(CatalogFixture catalog)
     }
 
     private DriveOriginals Originals(CatalogDbContext db, FakeDrive drive) =>
-        new(new TestContexts(catalog.ConnectionStringFor(db)), new DriveTokenProtector(s_keys), drive, NullLogger<DriveOriginals>.Instance);
+        new(new TestContexts(catalog.ConnectionStringFor(db)), new DriveTokenProtector(s_keys), drive, new FakeOneDrive(), NullLogger<DriveOriginals>.Instance);
 
     private static Task<long> SourceIdAsync(CatalogDbContext db, string path) =>
         db.AssetSources.AsNoTracking().Where(s => s.Path == path).Select(s => s.Id).SingleAsync();

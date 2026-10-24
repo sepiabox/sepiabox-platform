@@ -30,14 +30,8 @@ public sealed record DriveChangesPage(IReadOnlyList<DriveChange> Changes, string
 public sealed record DriveFolder(string Name, string? ParentId);
 
 /// <summary>
-/// Google refused the token (<c>invalid_grant</c>: a token past the 7 days of an app in Testing mode (D-024), or one revoked): the
-/// account has to be connected again.
-/// </summary>
-public sealed class DriveAuthorizationException(string message, Exception? inner = null) : Exception(message, inner);
-
-/// <summary>
 /// What the sync job asks of a Drive (S-038, D-051): behind an interface so that tests use a fake and never reach Google. Every
-/// call takes the plain refresh token and throws <see cref="DriveAuthorizationException"/> when Google no longer honours it.
+/// call takes the plain refresh token and throws <see cref="Sepiabox.Catalog.CloudAuthorizationException"/> when Google no longer honours it.
 /// </summary>
 public interface IDriveSyncClient
 {

@@ -1,5 +1,6 @@
 using Azure;
 using Microsoft.Extensions.Logging;
+using Sepiabox.Catalog;
 using Sepiabox.Web.Services;
 using Sepiabox.Web.Sources;
 
@@ -403,6 +404,8 @@ internal sealed class FakeConnectedSources : IConnectedSources
 {
     public bool CanConnectGoogleDrive { get; init; } = true;
 
+    public bool CanConnectOneDrive { get; init; } = true;
+
     public List<ConnectedSourceSummary> Sources { get; } = [];
 
     public SourceOutcome Completes { get; init; } = SourceOutcome.Done;
@@ -425,6 +428,18 @@ internal sealed class FakeConnectedSources : IConnectedSources
     public Task<SourceOutcome> CompleteGoogleDriveConnectionAsync(string code, string redirectUri, CancellationToken cancellationToken = default)
     {
         Completed.Add((code, redirectUri));
+        return Task.FromResult(Completes);
+    }
+
+    public Uri OneDriveAuthorizationUri(string redirectUri, string state) =>
+        new($"https://login.example.com/authorize?redirect_uri={Uri.EscapeDataString(redirectUri)}&state={Uri.EscapeDataString(state)}");
+
+    /// <summary>The codes and redirect addresses OneDrive connections were completed with.</summary>
+    public List<(string Code, string RedirectUri)> CompletedOneDrive { get; } = [];
+
+    public Task<SourceOutcome> CompleteOneDriveConnectionAsync(string code, string redirectUri, CancellationToken cancellationToken = default)
+    {
+        CompletedOneDrive.Add((code, redirectUri));
         return Task.FromResult(Completes);
     }
 
@@ -465,7 +480,7 @@ internal sealed class FakeDrive : IDriveClient, IDriveAuthorization
     public Uri AuthorizationUri(string redirectUri, string state) => new($"https://accounts.example.com/authorize?state={state}");
 
     public Task<string> ExchangeCodeAsync(string code, string redirectUri, CancellationToken cancellationToken = default) =>
-        RefreshToken is { } token ? Task.FromResult(token) : Task.FromException<string>(new DriveAuthorizationException("refused"));
+        RefreshToken is { } token ? Task.FromResult(token) : Task.FromException<string>(new CloudAuthorizationException("refused"));
 
     public Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
@@ -498,6 +513,66 @@ internal sealed class FakeDrive : IDriveClient, IDriveAuthorization
 
         return Task.FromResult<DriveFileDownload?>(Files.TryGetValue(fileId, out var bytes)
             ? new DriveFileDownload(new MemoryStream(bytes), "Praia 2019.jpg", "image/jpeg", bytes.Length)
+            : null);
+    }
+}
+
+/// <summary>A OneDrive that never reaches Microsoft (S-039): a fixed account and count, rolling refresh tokens, or the failure a test sets.</summary>
+internal sealed class FakeOneDrive : IOneDriveClient, IOneDriveAuthorization
+{
+    public bool IsConfigured { get; init; } = true;
+
+    public string Email { get; set; } = "Ana@Outlook.com";
+
+    public DriveMediaCount Media { get; set; } = new(5, 1);
+
+    /// <summary>When set, every call with a token throws what it returns.</summary>
+    public Func<Exception?>? Failure { get; set; }
+
+    /// <summary>The refresh token a code is exchanged for; null makes the exchange fail like a refused code.</summary>
+    public string? RefreshToken { get; set; } = "M.refresh-token-in-clear-text";
+
+    /// <summary>The refresh token a refresh rolls to (Microsoft's refresh tokens roll); null sends none.</summary>
+    public string? RolledTo { get; set; }
+
+    /// <summary>The refresh tokens that were refreshed with.</summary>
+    public List<string> Refreshed { get; } = [];
+
+    /// <summary>The access tokens the calls were made with.</summary>
+    public List<string> AccessTokensUsed { get; } = [];
+
+    public Dictionary<string, byte[]> Files { get; } = [];
+
+    public Uri AuthorizationUri(string redirectUri, string state) => new($"https://login.example.com/authorize?state={state}");
+
+    public Task<string> ExchangeCodeAsync(string code, string redirectUri, CancellationToken cancellationToken = default) =>
+        RefreshToken is { } token ? Task.FromResult(token) : Task.FromException<string>(new CloudAuthorizationException("refused"));
+
+    public Task<OneDriveWebToken> RefreshAsync(string refreshToken, CancellationToken cancellationToken = default)
+    {
+        Refreshed.Add(refreshToken);
+        return Failure?.Invoke() is { } failure
+            ? Task.FromException<OneDriveWebToken>(failure)
+            : Task.FromResult(new OneDriveWebToken("access-" + Refreshed.Count, RolledTo));
+    }
+
+    public Task<string> GetAccountEmailAsync(string accessToken, CancellationToken cancellationToken = default)
+    {
+        AccessTokensUsed.Add(accessToken);
+        return Task.FromResult(Email.ToLowerInvariant());
+    }
+
+    public Task<DriveMediaCount> CountMediaAsync(string accessToken, CancellationToken cancellationToken = default)
+    {
+        AccessTokensUsed.Add(accessToken);
+        return Task.FromResult(Media);
+    }
+
+    public Task<DriveFileDownload?> OpenFileAsync(string accessToken, string itemId, CancellationToken cancellationToken = default)
+    {
+        AccessTokensUsed.Add(accessToken);
+        return Task.FromResult<DriveFileDownload?>(Files.TryGetValue(itemId, out var bytes)
+            ? new DriveFileDownload(new MemoryStream(bytes), "Praia.jpg", "image/jpeg", bytes.Length)
             : null);
     }
 }

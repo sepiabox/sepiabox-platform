@@ -18,7 +18,7 @@ public enum DriveOriginalOutcome
     Failed,
 }
 
-/// <summary>"Open original" for a Google Drive source (S-038): the file, fetched from the Drive through the server.</summary>
+/// <summary>"Open original" for a Google Drive or OneDrive source (S-038, S-039): the file, fetched from the Drive through the server.</summary>
 public interface IDriveOriginals
 {
     Task<(DriveOriginalOutcome Outcome, DriveFileDownload? File)> OpenAsync(string assetId, long sourceId, CancellationToken cancellationToken = default);
@@ -26,13 +26,13 @@ public interface IDriveOriginals
 
 /// <summary><see cref="IDriveOriginals"/> on the catalog (the source, the account, the file's id the sync recorded) and the account's token.</summary>
 public sealed partial class DriveOriginals(
-    IDbContextFactory<CatalogDbContext> contexts, DriveTokenProtector tokens, IDriveClient drive, ILogger<DriveOriginals> log) : IDriveOriginals
+    IDbContextFactory<CatalogDbContext> contexts, DriveTokenProtector tokens, IDriveClient drive, IOneDriveClient oneDrive, ILogger<DriveOriginals> log) : IDriveOriginals
 {
     public async Task<(DriveOriginalOutcome Outcome, DriveFileDownload? File)> OpenAsync(string assetId, long sourceId, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var source = await db.AssetSources.AsNoTracking().SingleOrDefaultAsync(
-            s => s.Id == sourceId && s.AssetId == assetId && s.Type == ConnectedSourceTypes.GoogleDrive, cancellationToken);
+            s => s.Id == sourceId && s.AssetId == assetId && (s.Type == ConnectedSourceTypes.GoogleDrive || s.Type == ConnectedSourceTypes.OneDrive), cancellationToken);
         if (source is null)
         {
             return (DriveOriginalOutcome.NotFound, null);
@@ -55,11 +55,29 @@ public sealed partial class DriveOriginals(
 
         try
         {
-            return await drive.OpenFileAsync(token, file.FileId, cancellationToken) is { } opened
+            DriveFileDownload? download;
+            if (account.Type == ConnectedSourceTypes.OneDrive)
+            {
+                var access = await oneDrive.RefreshAsync(token, cancellationToken);
+                if (access.RefreshToken is { Length: > 0 } rolled && rolled != token)
+                {
+                    // Microsoft rolls the refresh token: the new one is kept at once, or the account stops working.
+                    account.EncryptedRefreshToken = tokens.Protect(rolled);
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+
+                download = await oneDrive.OpenFileAsync(access.AccessToken, file.FileId, cancellationToken);
+            }
+            else
+            {
+                download = await drive.OpenFileAsync(token, file.FileId, cancellationToken);
+            }
+
+            return download is { } opened
                 ? (DriveOriginalOutcome.Opened, opened)
                 : (DriveOriginalOutcome.NotFound, null);
         }
-        catch (DriveAuthorizationException)
+        catch (CloudAuthorizationException)
         {
             return (await NeedReconnectingAsync(db, account, cancellationToken), null);
         }
@@ -81,7 +99,7 @@ public sealed partial class DriveOriginals(
         return same.Count == 1 ? same[0] : same.Count == 0 && atPath.Count == 1 ? atPath[0] : null;
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Opening a file of the Drive of connection {Id} failed.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Opening a file of the cloud account of connection {Id} failed.")]
     private static partial void LogOpenFailed(ILogger logger, long id, Exception exception);
 
     private static async Task<DriveOriginalOutcome> NeedReconnectingAsync(CatalogDbContext db, ConnectedSource account, CancellationToken cancellationToken)

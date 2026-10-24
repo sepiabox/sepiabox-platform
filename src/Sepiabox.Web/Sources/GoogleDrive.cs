@@ -4,6 +4,7 @@ using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Drive.v3;
 using Google.Apis.Http;
 using Google.Apis.Services;
+using Sepiabox.Catalog;
 using Sepiabox.Web.Auth;
 
 namespace Sepiabox.Web.Sources;
@@ -49,12 +50,12 @@ public sealed class GoogleDrive(OAuthClient? client, HttpMessageHandler? handler
         {
             var token = await Flow().ExchangeCodeForTokenAsync(UserId, code, redirectUri, cancellationToken);
             return string.IsNullOrEmpty(token.RefreshToken)
-                ? throw new DriveAuthorizationException("Google sent no refresh token.")
+                ? throw new CloudAuthorizationException("Google sent no refresh token.")
                 : token.RefreshToken;
         }
         catch (TokenResponseException ex) when (ex.Error?.Error == "invalid_grant")
         {
-            throw new DriveAuthorizationException("Google refused the authorization code.", ex);
+            throw new CloudAuthorizationException("Google refused the authorization code.", ex);
         }
     }
 
@@ -185,7 +186,7 @@ public sealed class GoogleDrive(OAuthClient? client, HttpMessageHandler? handler
         }
         catch (TokenResponseException ex) when (ex.Error?.Error == "invalid_grant")
         {
-            throw new DriveAuthorizationException("Google no longer honours the token.", ex);
+            throw new CloudAuthorizationException("Google no longer honours the token.", ex);
         }
     }
 

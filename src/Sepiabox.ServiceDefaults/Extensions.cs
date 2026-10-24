@@ -57,7 +57,7 @@ public static class Extensions
                     options.Filter = context =>
                         !context.Request.Path.StartsWithSegments(HealthEndpointPath)
                         && !context.Request.Path.StartsWithSegments(AlivenessEndpointPath))
-                .AddHttpClientInstrumentation());
+                .AddHttpClientInstrumentation(options => options.FilterHttpRequestMessage = TelemetryFilter.IsTraced));
 
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
         {

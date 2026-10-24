@@ -111,8 +111,8 @@ export SEPIABOX_DEPLOY_SCRIPT=1
 
 azd provision --no-prompt
 
-# The sync job (S-038, D-115) reads the Google OAuth client from the owner's Key Vault, and nothing else in it: Key Vault Secrets User on
-# each of the two secrets, not on the vault, and the job reads them by name. Bicep cannot name a secret that may not exist yet, so the
+# The sync job (S-038, D-115) reads the Google OAuth client (and, S-039, the OneDrive one) from the owner's Key Vault, and nothing else in it: Key Vault Secrets User on
+# each of the four secrets, not on the vault, and the job reads them by name. Bicep cannot name a secret that may not exist yet, so the
 # role is assigned here, only for a secret that exists: they are the sign-in's own secrets, which the owner sets before any Drive is
 # connected (docs/operations.md), and this script never creates or writes a secret. Run deploy again after setting one.
 # The AppHost's outputs give a vault's URI and an identity's resource id, not the vault's name or the identity's principal id.
@@ -126,7 +126,7 @@ vault_name=${vault_uri#https://}
 vault_name=${vault_name%%.*}
 sync_principal=$(az identity show --ids "$sync_identity" --query principalId --output tsv)
 vault_id=$(az keyvault show --name "$vault_name" --query id --output tsv)
-for secret in Auth--Google--ClientId Auth--Google--ClientSecret; do
+for secret in Auth--Google--ClientId Auth--Google--ClientSecret OneDrive--ClientId OneDrive--ClientSecret; do
   # A data-plane read: an identity with Owner on the resource group but no data access is refused even when the secret exists, which is
   # not the same as the secret not being there.
   if show_error=$(az keyvault secret show --vault-name "$vault_name" --name "$secret" --output none 2>&1); then

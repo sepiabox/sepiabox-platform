@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using Sepiabox.Catalog;
 using Sepiabox.Pipeline.Incoming;
 using Sepiabox.Pipeline.Manifests;
-using Sepiabox.Pipeline.Media;
 using Sepiabox.Storage;
 using Sepiabox.Worker.Cloud;
 
@@ -46,12 +45,10 @@ public sealed class DriveSync(
     /// <summary>The default number of files staged for an account in a run.</summary>
     public const int DefaultMaxFilesPerRun = 500;
 
-    /// <summary>The most a blob's metadata may be, names and values together (Azure's limit; D-107).</summary>
-    public const int MaxMetadataBytes = 8 * 1024;
-
     private const int MaxFolderDepth = 50;
 
     private readonly IDataProtector _tokens = protection.CreateProtector(ConnectedSource.RefreshTokenPurpose);
+    private readonly IncomingStager _stager = new(store);
     private readonly SourceMarks _marks = new(db, clock);
 
     public async Task<DriveSyncResult> RunAsync(CancellationToken cancellationToken)
@@ -73,25 +70,8 @@ public sealed class DriveSync(
     /// file, so those the processing job skipped (a problem, left in incoming and deleted after 30 days) are put there again. Files already
     /// processed are found by their content and only gain the source they already had. False when no such account is connected.
     /// </summary>
-    public async Task<bool> RescanAsync(string accountEmail, CancellationToken cancellationToken)
-    {
-        var email = accountEmail.Trim().ToLowerInvariant();
-        var account = await db.ConnectedSources.SingleOrDefaultAsync(s => s.Type == ConnectedSourceTypes.GoogleDrive && s.AccountEmail == email, cancellationToken);
-        if (account is null)
-        {
-            return false;
-        }
-
-        await db.DriveFiles.Where(f => f.ConnectedSourceId == account.Id).ExecuteDeleteAsync(cancellationToken);
-        foreach (var entry in db.ChangeTracker.Entries<DriveFile>().ToList())
-        {
-            entry.State = EntityState.Detached;
-        }
-
-        (account.SyncChangesToken, account.SyncListToken, account.SyncListing) = (null, null, false);
-        await db.SaveChangesAsync(cancellationToken);
-        return true;
-    }
+    public Task<bool> RescanAsync(string accountEmail, CancellationToken cancellationToken) =>
+        CloudRescan.RescanAsync(db, ConnectedSourceTypes.GoogleDrive, accountEmail, cancellationToken);
 
     private async Task SyncAccountAsync(ConnectedSource account, Totals totals, CancellationToken cancellationToken)
     {
@@ -140,7 +120,7 @@ public sealed class DriveSync(
             await db.SaveChangesAsync(cancellationToken);
             Log.DriveAccountSynced(logger, account.Id, run.Staged, account.SyncListing);
         }
-        catch (DriveAuthorizationException)
+        catch (CloudAuthorizationException)
         {
             await MarkReconnectAsync(account, totals, cancellationToken);
         }
@@ -232,17 +212,15 @@ public sealed class DriveSync(
         }
 
         var incoming = new IncomingFile(
-            ConnectedSourceTypes.GoogleDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.GoogleDrive, account.AccountEmail), path, IncomingMode.Reference, file.ModifiedTime, file.Id, HttpsOnly(file.WebViewLink));
-        var metadata = incoming.ToMetadata();
-        if (MetadataBytes(metadata) > MaxMetadataBytes)
+            ConnectedSourceTypes.GoogleDrive, ConnectedSourceTypes.SourceName(ConnectedSourceTypes.GoogleDrive, account.AccountEmail), path, IncomingMode.Reference, file.ModifiedTime, file.Id, IncomingStager.HttpsOnly(file.WebViewLink));
+        var staged = await _stager.StageAsync(incoming, file.MimeType, (sink, token) => client.DownloadAsync(run.Token, file.Id, sink, token), cancellationToken);
+        if (!staged)
         {
-            // Never truncated: a path cut short would be another file's (D-107).
             Log.DriveFileSkipped(logger, account.Id, file.Id, "its path is too long for a blob's metadata");
             totals.Skipped++;
             return;
         }
 
-        await TransferAsync(run, file, metadata, cancellationToken);
         run.Staged++;
         totals.Staged++;
 
@@ -263,18 +241,6 @@ public sealed class DriveSync(
 
         await ClearRemovedAsync(account, path, file.ModifiedTime, file.Size, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-    }
-
-    // A new blob name for each transfer (D-107): the name means one set of bytes, and the processing job deletes it when it is done.
-    private async Task TransferAsync(AccountRun run, DriveFileInfo file, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken)
-    {
-        var name = Guid.NewGuid().ToString("N");
-        await using var upload = store.BeginUpload(BlobLayout.IncomingContainer, name);
-        await using var sink = new StagedBlockStream(upload);
-        await client.DownloadAsync(run.Token, file.Id, sink, cancellationToken);
-        await sink.FinishAsync(cancellationToken);
-        // The commit makes the blob and gives it its metadata in one call, so the event never finds it bare (D-107).
-        await upload.CommitAsync(file.MimeType, BlobStorageClass.Default, metadata, cancellationToken);
     }
 
     private async Task<int> RemoveAsync(ConnectedSource account, string fileId, CancellationToken cancellationToken)
@@ -300,13 +266,7 @@ public sealed class DriveSync(
     // The folders' names and the file's, with '/', and an extension if the name has none; null when it is not a photo or video.
     private async Task<string?> PathAsync(AccountRun run, DriveFileInfo file, CancellationToken cancellationToken)
     {
-        var name = file.Name.Replace('/', '-').Replace('\\', '-').Trim();
-        if (MediaTypes.Classify(name) == MediaKind.Other)
-        {
-            name += MimeExtension(file.MimeType);
-        }
-
-        if (name.Length == 0 || MediaTypes.Classify(name) == MediaKind.Other)
+        if (CloudNames.FileName(file.Name, file.MimeType) is not { } name)
         {
             return null;
         }
@@ -327,7 +287,7 @@ public sealed class DriveSync(
                 break;
             }
 
-            names.Add(folder.Name.Replace('/', '-').Replace('\\', '-').Trim());
+            names.Add(CloudNames.Segment(folder.Name));
             parent = folder.ParentId;
         }
 
@@ -336,32 +296,6 @@ public sealed class DriveSync(
         return ManifestSource.NormalizePath(string.Join('/', names.Where(n => n.Length > 0)));
     }
 
-    private static string MimeExtension(string mimeType) => mimeType switch
-    {
-        "image/jpeg" => ".jpg",
-        "image/png" => ".png",
-        "image/heic" => ".heic",
-        "image/heif" => ".heif",
-        "image/gif" => ".gif",
-        "image/webp" => ".webp",
-        "image/tiff" => ".tif",
-        "video/mp4" => ".mp4",
-        "video/quicktime" => ".mov",
-        "video/x-msvideo" => ".avi",
-        "video/x-matroska" => ".mkv",
-        "video/mpeg" => ".mpg",
-        _ => string.Empty,
-    };
-
-    // Only an absolute https address without credentials, within the manifest's limit: the schema refuses any other (D-107).
-    private static string? HttpsOnly(string? url) =>
-        url is { Length: > 0 and <= ManifestSource.MaxUrlLength }
-        && Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && uri.UserInfo.Length == 0
-            ? url
-            : null;
-
-    private static int MetadataBytes(IReadOnlyDictionary<string, string> metadata) =>
-        metadata.Sum(p => Encoding.UTF8.GetByteCount(p.Key) + Encoding.UTF8.GetByteCount(p.Value));
 
     private async Task MarkReconnectAsync(ConnectedSource account, Totals totals, CancellationToken cancellationToken)
     {

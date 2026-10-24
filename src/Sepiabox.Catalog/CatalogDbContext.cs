@@ -238,6 +238,7 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             source.Property(s => s.AccountEmail).HasMaxLength(320);
             source.Property(s => s.EncryptedRefreshToken).HasColumnType("text");
             source.Property(s => s.Status).HasMaxLength(16);
+            // A Microsoft Graph delta link or next link is a long address (S-039), so these are text.
             source.Property(s => s.SyncChangesToken).HasColumnType("text");
             source.Property(s => s.SyncListToken).HasColumnType("text");
             source.Property(s => s.SyncListing).HasDefaultValue(false).ValueGeneratedNever();

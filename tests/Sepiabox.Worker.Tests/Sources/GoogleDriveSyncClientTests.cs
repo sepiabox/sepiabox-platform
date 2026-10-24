@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Web;
+using Sepiabox.Catalog;
 using Sepiabox.Worker.Sources;
 
 namespace Sepiabox.Worker.Tests.Sources;
@@ -158,8 +159,8 @@ public sealed class GoogleDriveSyncClientTests
     {
         var google = new FakeGoogle { RefreshStatus = HttpStatusCode.BadRequest, RefreshBody = """{"error":"invalid_grant"}""" };
 
-        await Assert.ThrowsAsync<DriveAuthorizationException>(() => Client(google).ListMediaAsync(RefreshToken, null));
-        await Assert.ThrowsAsync<DriveAuthorizationException>(() => Client(google).GetStartPageTokenAsync(RefreshToken));
+        await Assert.ThrowsAsync<CloudAuthorizationException>(() => Client(google).ListMediaAsync(RefreshToken, null));
+        await Assert.ThrowsAsync<CloudAuthorizationException>(() => Client(google).GetStartPageTokenAsync(RefreshToken));
         Assert.DoesNotContain(google.Requests, r => r.Path.StartsWith("/drive", StringComparison.Ordinal));
     }
 

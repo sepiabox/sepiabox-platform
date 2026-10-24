@@ -12,20 +12,32 @@ public interface ISecretSource
     Task<string?> GetAsync(string name, CancellationToken cancellationToken);
 }
 
-/// <summary>The Google OAuth client the sync reads by name from the owner's Key Vault (S-038, D-115): the two names, and when it counts as not set.</summary>
+/// <summary>The Google and OneDrive OAuth clients the sync reads by name from the owner's Key Vault (S-038, D-115): the two names, and when it counts as not set.</summary>
 public static class VaultSecrets
 {
     public const string GoogleClientId = "Auth--Google--ClientId";
     public const string GoogleClientSecret = "Auth--Google--ClientSecret";
 
+    /// <summary>The Microsoft app registration for OneDrive (S-039): its own, not the sign-in's <c>Auth--Microsoft--*</c>.</summary>
+    public const string OneDriveClientId = "OneDrive--ClientId";
+    public const string OneDriveClientSecret = "OneDrive--ClientSecret";
+
     /// <summary>The id and the secret of the Google client, or null when either is missing or empty.</summary>
-    public static async Task<(string Id, string Secret)?> ReadGoogleClientAsync(ISecretSource source, ILogger logger, CancellationToken cancellationToken)
+    public static Task<(string Id, string Secret)?> ReadGoogleClientAsync(ISecretSource source, ILogger logger, CancellationToken cancellationToken) =>
+        ReadClientAsync(source, GoogleClientId, GoogleClientSecret, logger, cancellationToken);
+
+    /// <summary>The id and the secret of the OneDrive client, or null when either is missing or empty.</summary>
+    public static Task<(string Id, string Secret)?> ReadOneDriveClientAsync(ISecretSource source, ILogger logger, CancellationToken cancellationToken) =>
+        ReadClientAsync(source, OneDriveClientId, OneDriveClientSecret, logger, cancellationToken);
+
+    private static async Task<(string Id, string Secret)?> ReadClientAsync(
+        ISecretSource source, string idName, string secretName, ILogger logger, CancellationToken cancellationToken)
     {
-        var id = await source.GetAsync(GoogleClientId, cancellationToken);
-        var secret = await source.GetAsync(GoogleClientSecret, cancellationToken);
+        var id = await source.GetAsync(idName, cancellationToken);
+        var secret = await source.GetAsync(secretName, cancellationToken);
         if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(secret))
         {
-            Log.VaultSecretUnavailable(logger, string.IsNullOrEmpty(id) ? GoogleClientId : GoogleClientSecret);
+            Log.VaultSecretUnavailable(logger, string.IsNullOrEmpty(id) ? idName : secretName);
             return null;
         }
 

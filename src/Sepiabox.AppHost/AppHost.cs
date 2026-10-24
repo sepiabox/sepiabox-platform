@@ -269,7 +269,7 @@ else
     // assigned by scripts/deploy.sh, and it loads only those two) and the token ring, read-only, to unprotect the refresh tokens;
     // its storage roles (write incoming, read the token ring) and its use of the ring's key are in access.bicep.
     builder.AddProject<Projects.Sepiabox_Worker>(AzureInfrastructure.SyncResourceName)
-        .WithArgs("sync", "google-drive")
+        .WithArgs("sync")
         .WithReferenceEnvironment(ConnectionStringsOnly)
         .WithReference(blobs)
         // The vault's address only: a reference would also give the identity a role on the whole vault (see scripts/deploy.sh).

@@ -17,21 +17,23 @@
     <p class="note" role="status">@note</p>
 }
 
-<section class="connection-service">
-    <h2>@Text["Sources_GoogleDrive"]</h2>
+@foreach (var service in Services)
+{
+<section class="connection-service" id="@service.Type">
+    <h2>@Text[service.Title]</h2>
 
     @if (_sources is null)
     {
         <p class="muted">@Text["Timeline_Loading"]</p>
     }
-    else if (_sources.Count == 0)
+    else if (!_sources.Any(s => s.Type == service.Type))
     {
         <p class="empty">@Text["Sources_None"]</p>
     }
     else
     {
         <ul class="connections">
-            @foreach (var source in _sources)
+            @foreach (var source in _sources.Where(s => s.Type == service.Type))
             {
                 <li class="connection">
                     <p class="connection-account"><strong>@source.AccountEmail</strong>
@@ -39,7 +41,7 @@
 
                     @if (source.NeedsReconnecting)
                     {
-                        <p class="muted">@Text["Sources_ExpiredHint"]</p>
+                        <p class="muted">@Text[service.ExpiredHint]</p>
                     }
 
                     @if (source is { PhotoCount: { } photos, VideoCount: { } videos })
@@ -61,7 +63,7 @@
                     <div class="connection-actions">
                         @if (source.NeedsReconnecting)
                         {
-                            <a class="button" href="@SourceEndpoints.ConnectPath.TrimStart('/')" aria-label="@Text["Sources_ReconnectAria", source.AccountEmail]">@Text["Sources_Reconnect"]</a>
+                            <a class="button" href="@service.ConnectPath.TrimStart('/')" aria-label="@Text["Sources_ReconnectAria", source.AccountEmail]">@Text["Sources_Reconnect"]</a>
                         }
                         else
                         {
@@ -81,20 +83,31 @@
                 </li>
             }
         </ul>
-        <p class="muted small">@Text["Sources_DisconnectHint"]</p>
+        <p class="muted small">@Text[service.DisconnectHint]</p>
     }
 
-    @if (Connections.CanConnectGoogleDrive)
+    @if (service.CanConnect(Connections))
     {
-        <p><a class="button connect" href="@SourceEndpoints.ConnectPath.TrimStart('/')">@Text["Sources_Connect"]</a></p>
+        <p><a class="button connect" href="@service.ConnectPath.TrimStart('/')">@Text[service.Connect]</a></p>
     }
     else
     {
-        <p class="note">@Text["Sources_NotConfigured"]</p>
+        <p class="note">@Text[service.NotConfigured]</p>
     }
 </section>
+}
 
 @code {
+    // One section per service: its heading and wording, and where "Connect" goes.
+    private sealed record CloudService(
+        string Type, string Title, string Connect, string ConnectPath, string NotConfigured, string ExpiredHint, string DisconnectHint, Func<IConnectedSources, bool> CanConnect);
+
+    private static readonly CloudService[] Services =
+    [
+        new(ConnectedSourceTypes.GoogleDrive, "Sources_GoogleDrive", "Sources_Connect", SourceEndpoints.ConnectPath, "Sources_NotConfigured", "Sources_ExpiredHint", "Sources_DisconnectHint", c => c.CanConnectGoogleDrive),
+        new(ConnectedSourceTypes.OneDrive, "Sources_OneDrive", "Sources_ConnectOneDrive", SourceEndpoints.OneDriveConnectPath, "Sources_NotConfiguredOneDrive", "Sources_ExpiredHintOneDrive", "Sources_DisconnectHintOneDrive", c => c.CanConnectOneDrive),
+    ];
+
     // What a note in the address may say, and its text: nothing else from the address is shown.
     private static readonly Dictionary<string, string> s_notes = new(StringComparer.Ordinal)
     {
@@ -103,6 +116,10 @@
         ["state"] = "Sources_Note_state",
         ["failed"] = "Sources_Note_failed",
         ["not-configured"] = "Sources_NotConfigured",
+        ["onedrive-connected"] = "Sources_Note_connectedOneDrive",
+        ["onedrive-denied"] = "Sources_Note_deniedOneDrive",
+        ["onedrive-failed"] = "Sources_Note_failedOneDrive",
+        ["onedrive-not-configured"] = "Sources_NotConfiguredOneDrive",
         ["counted"] = "Sources_Note_counted",
         ["disconnected"] = "Sources_Note_disconnected",
         ["reconnect"] = "Sources_Note_reconnect",

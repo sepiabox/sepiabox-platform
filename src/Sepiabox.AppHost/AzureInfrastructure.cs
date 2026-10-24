@@ -114,7 +114,7 @@ public static class AzureInfrastructure
     /// <summary>The AppHost resource behind <see cref="ProcessJobName"/>: a container built from <c>infra/worker/Dockerfile</c>.</summary>
     public const string ProcessResourceName = "process";
 
-    /// <summary>The scheduled job that syncs the connected Google Drives into <c>incoming</c> (S-038): <c>sync google-drive</c>.</summary>
+    /// <summary>The scheduled job that syncs the connected Google Drives and OneDrives into <c>incoming</c> (S-038, S-039): <c>sync</c>.</summary>
     public const string SyncJobName = "sepiabox-sync";
 
     /// <summary>The AppHost resource behind <see cref="SyncJobName"/>.</summary>
@@ -661,7 +661,7 @@ public static class AzureInfrastructure
     }
 
     /// <summary>
-    /// <c>sync google-drive</c> (S-038) once a day. A run that fails is not repeated: it goes on from the page it stopped at the next
+    /// <c>sync</c> (S-038, S-039) once a day. A run that fails is not repeated: it goes on from the page it stopped at the next
     /// day, and the execution ends <c>Failed</c> so that it shows.
     /// </summary>
     public static void ConfigureSyncJob(AzureResourceInfrastructure infrastructure, ContainerAppJob job)

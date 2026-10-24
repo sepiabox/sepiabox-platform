@@ -6,6 +6,7 @@ using Google.Apis.Download;
 using Google.Apis.Drive.v3;
 using Google.Apis.Http;
 using Google.Apis.Services;
+using Sepiabox.Catalog;
 
 namespace Sepiabox.Worker.Sources;
 
@@ -142,7 +143,7 @@ public sealed class GoogleDriveSyncClient(string clientId, string clientSecret, 
         }
         catch (TokenResponseException ex) when (ex.Error?.Error == "invalid_grant")
         {
-            throw new DriveAuthorizationException("Google no longer honours the token.", ex);
+            throw new CloudAuthorizationException("Google no longer honours the token.", ex);
         }
         catch (TokenResponseException ex)
         {

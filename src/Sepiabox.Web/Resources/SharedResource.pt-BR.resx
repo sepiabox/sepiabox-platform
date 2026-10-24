@@ -1297,16 +1297,40 @@
     <value>Contagem feita.</value>
   </data>
   <data name="Sources_Note_disconnected" xml:space="preserve">
-    <value>Desconectado. Nada mudou no Google Drive; você pode conectar de novo quando quiser.</value>
+    <value>Desconectado. Nada mudou na conta na nuvem; você pode conectar de novo quando quiser.</value>
   </data>
   <data name="Sources_Note_reconnect" xml:space="preserve">
-    <value>O Google deixou de aceitar o acesso a esta conta. Reconecte-a.</value>
+    <value>O acesso a esta conta deixou de ser aceito. Reconecte-a.</value>
   </data>
   <data name="Sources_Note_countFailed" xml:space="preserve">
     <value>Não foi possível contar agora. Tente mais tarde.</value>
   </data>
   <data name="Sources_Note_notFound" xml:space="preserve">
     <value>Essa conexão não existe mais.</value>
+  </data>
+  <data name="Sources_OneDrive" xml:space="preserve">
+    <value>OneDrive</value>
+  </data>
+  <data name="Sources_ConnectOneDrive" xml:space="preserve">
+    <value>Conectar o OneDrive</value>
+  </data>
+  <data name="Sources_ExpiredHintOneDrive" xml:space="preserve">
+    <value>A Microsoft não aceita mais o acesso a esta conta (ele termina após 90 dias sem uso, ou quando o acesso é removido na conta Microsoft). Reconecte para contar de novo.</value>
+  </data>
+  <data name="Sources_NotConfiguredOneDrive" xml:space="preserve">
+    <value>O OneDrive ainda não foi configurado, então não dá para conectá-lo.</value>
+  </data>
+  <data name="Sources_DisconnectHintOneDrive" xml:space="preserve">
+    <value>Desconectar apaga o acesso guardado à conta. Nada muda no OneDrive. Isso não revoga o acesso na Microsoft: para remover o app também da conta Microsoft, use a página de permissões de apps em account.microsoft.com.</value>
+  </data>
+  <data name="Sources_Note_connectedOneDrive" xml:space="preserve">
+    <value>OneDrive conectado.</value>
+  </data>
+  <data name="Sources_Note_deniedOneDrive" xml:space="preserve">
+    <value>O OneDrive não foi conectado: o acesso não foi concedido.</value>
+  </data>
+  <data name="Sources_Note_failedOneDrive" xml:space="preserve">
+    <value>Não foi possível conectar o OneDrive. Tente de novo.</value>
   </data>
   <data name="Sources_DisconnectAria" xml:space="preserve">
     <value>Desconectar {0}</value>
@@ -1370,7 +1394,7 @@
     <value>Não está mais na origem</value>
   </data>
   <data name="Source_OpenOriginalHint" xml:space="preserve">
-    <value>Baixado do Drive pelo Sepiabox, de uma vez só; um vídeo muito grande pode não terminar.</value>
+    <value>Baixado da conta na nuvem pelo Sepiabox, de uma vez só; um vídeo muito grande pode não terminar.</value>
   </data>
   <data name="Settings_Export_Link" xml:space="preserve">
     <value>Exportar todos os dados</value>

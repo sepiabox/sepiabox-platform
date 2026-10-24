@@ -39,6 +39,9 @@ public interface IConnectedSources
     /// <summary>Whether the Google OAuth client is configured, so "Connect Google Drive" can work.</summary>
     bool CanConnectGoogleDrive { get; }
 
+    /// <summary>Whether the OneDrive OAuth client (<c>OneDrive:</c>, its own app registration, S-039) is configured.</summary>
+    bool CanConnectOneDrive { get; }
+
     Task<IReadOnlyList<ConnectedSourceSummary>> ListAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Google's consent address for a connection (see <see cref="IDriveAuthorization.AuthorizationUri"/>).</summary>
@@ -51,13 +54,22 @@ public interface IConnectedSources
     /// </summary>
     Task<SourceOutcome> CompleteGoogleDriveConnectionAsync(string code, string redirectUri, CancellationToken cancellationToken = default);
 
+    /// <summary>Microsoft's consent address for a OneDrive connection (S-039).</summary>
+    Uri OneDriveAuthorizationUri(string redirectUri, string state);
+
+    /// <summary>
+    /// Finishes a OneDrive connection with the code Microsoft sent back (S-039): exchanges it, refreshes once to ask whose OneDrive it is,
+    /// and stores the newest refresh token protected, as <see cref="CompleteGoogleDriveConnectionAsync"/> does.
+    /// </summary>
+    Task<SourceOutcome> CompleteOneDriveConnectionAsync(string code, string redirectUri, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Counts the account's photos and videos without importing them and keeps the numbers; a token Google refuses (or
     /// that cannot be read any more) makes the status <c>reconnect</c>.
     /// </summary>
     Task<SourceOutcome> CountAsync(long id, CancellationToken cancellationToken = default);
 
-    /// <summary>Tells Google to forget the token, as far as it can, and deletes the connection and its token.</summary>
+    /// <summary>Tells Google to forget the token, as far as it can (Microsoft has no such call: the person removes the app in the Microsoft account), and deletes the connection and its token.</summary>
     Task<SourceOutcome> DisconnectAsync(long id, CancellationToken cancellationToken = default);
 }
 
@@ -98,10 +110,14 @@ public sealed partial class ConnectedSources(
     DriveTokenProtector tokens,
     IDriveClient drive,
     IDriveAuthorization authorization,
+    IOneDriveClient oneDrive,
+    IOneDriveAuthorization oneDriveAuthorization,
     TimeProvider clock,
     ILogger<ConnectedSources> log) : IConnectedSources
 {
     public bool CanConnectGoogleDrive => authorization.IsConfigured;
+
+    public bool CanConnectOneDrive => oneDriveAuthorization.IsConfigured;
 
     public async Task<IReadOnlyList<ConnectedSourceSummary>> ListAsync(CancellationToken cancellationToken = default)
     {
@@ -113,15 +129,33 @@ public sealed partial class ConnectedSources(
 
     public Uri GoogleDriveAuthorizationUri(string redirectUri, string state) => authorization.AuthorizationUri(redirectUri, state);
 
-    public async Task<SourceOutcome> CompleteGoogleDriveConnectionAsync(string code, string redirectUri, CancellationToken cancellationToken = default)
+    public Uri OneDriveAuthorizationUri(string redirectUri, string state) => oneDriveAuthorization.AuthorizationUri(redirectUri, state);
+
+    public Task<SourceOutcome> CompleteGoogleDriveConnectionAsync(string code, string redirectUri, CancellationToken cancellationToken = default) =>
+        CompleteAsync(ConnectedSourceTypes.GoogleDrive, async () =>
+        {
+            var token = await authorization.ExchangeCodeAsync(code, redirectUri, cancellationToken);
+            return (token, await drive.GetAccountEmailAsync(token, cancellationToken));
+        }, cancellationToken);
+
+    public Task<SourceOutcome> CompleteOneDriveConnectionAsync(string code, string redirectUri, CancellationToken cancellationToken = default) =>
+        CompleteAsync(ConnectedSourceTypes.OneDrive, async () =>
+        {
+            var token = await oneDriveAuthorization.ExchangeCodeAsync(code, redirectUri, cancellationToken);
+            // Microsoft's refresh tokens roll: the one that comes out of this first refresh is the one to keep.
+            var refreshed = await oneDrive.RefreshAsync(token, cancellationToken);
+            return (refreshed.RefreshToken ?? token, await oneDrive.GetAccountEmailAsync(refreshed.AccessToken, cancellationToken));
+        }, cancellationToken);
+
+    private async Task<SourceOutcome> CompleteAsync(string type, Func<Task<(string Token, string Email)>> connect, CancellationToken cancellationToken)
     {
         string token, email;
         try
         {
-            token = await authorization.ExchangeCodeAsync(code, redirectUri, cancellationToken);
-            email = (await drive.GetAccountEmailAsync(token, cancellationToken)).Trim().ToLowerInvariant();
+            (token, email) = await connect();
+            email = email.Trim().ToLowerInvariant();
         }
-        catch (DriveAuthorizationException ex)
+        catch (CloudAuthorizationException ex)
         {
             LogCodeRefused(log, ex);
             return SourceOutcome.Failed;
@@ -134,12 +168,12 @@ public sealed partial class ConnectedSources(
 
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var protectedToken = tokens.Protect(token);
-        var existing = await FindAsync(db, email, cancellationToken);
+        var existing = await FindAsync(db, type, email, cancellationToken);
         if (existing is null)
         {
             db.ConnectedSources.Add(new ConnectedSource
             {
-                Type = ConnectedSourceTypes.GoogleDrive,
+                Type = type,
                 AccountEmail = email,
                 EncryptedRefreshToken = protectedToken,
                 Status = ConnectedSourceStatuses.Connected,
@@ -154,7 +188,7 @@ public sealed partial class ConnectedSources(
             {
                 // Two callbacks for a new account at once: the other one won the unique key, so this is an update.
                 db.ChangeTracker.Clear();
-                existing = await FindAsync(db, email, cancellationToken) ?? throw new InvalidOperationException("The connection could not be saved.");
+                existing = await FindAsync(db, type, email, cancellationToken) ?? throw new InvalidOperationException("The connection could not be saved.");
             }
         }
 
@@ -165,8 +199,8 @@ public sealed partial class ConnectedSources(
         return SourceOutcome.Done;
     }
 
-    private static Task<ConnectedSource?> FindAsync(CatalogDbContext db, string email, CancellationToken cancellationToken) =>
-        db.ConnectedSources.SingleOrDefaultAsync(s => s.Type == ConnectedSourceTypes.GoogleDrive && s.AccountEmail == email, cancellationToken);
+    private static Task<ConnectedSource?> FindAsync(CatalogDbContext db, string type, string email, CancellationToken cancellationToken) =>
+        db.ConnectedSources.SingleOrDefaultAsync(s => s.Type == type && s.AccountEmail == email, cancellationToken);
 
     public async Task<SourceOutcome> CountAsync(long id, CancellationToken cancellationToken = default)
     {
@@ -186,9 +220,18 @@ public sealed partial class ConnectedSources(
         DriveMediaCount found;
         try
         {
-            found = await drive.CountMediaAsync(token, cancellationToken);
+            if (source.Type == ConnectedSourceTypes.OneDrive)
+            {
+                var access = await oneDrive.RefreshAsync(token, cancellationToken);
+                await KeepRolledTokenAsync(db, source, token, access.RefreshToken, cancellationToken);
+                found = await oneDrive.CountMediaAsync(access.AccessToken, cancellationToken);
+            }
+            else
+            {
+                found = await drive.CountMediaAsync(token, cancellationToken);
+            }
         }
-        catch (DriveAuthorizationException ex)
+        catch (CloudAuthorizationException ex)
         {
             LogTokenRefused(log, id, ex);
             return await NeedReconnectingAsync(db, source, cancellationToken);
@@ -215,7 +258,7 @@ public sealed partial class ConnectedSources(
         }
 
         // Google is asked to forget the token, but a failure never keeps the family from deleting it here.
-        if (tokens.Unprotect(source.EncryptedRefreshToken) is { } token)
+        if (source.Type == ConnectedSourceTypes.GoogleDrive && tokens.Unprotect(source.EncryptedRefreshToken) is { } token)
         {
             try
             {
@@ -232,20 +275,30 @@ public sealed partial class ConnectedSources(
         return SourceOutcome.Done;
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Google refused the Drive authorization code.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The cloud service refused the authorization code.")]
     private static partial void LogCodeRefused(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Connecting a Google Drive failed.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Connecting a cloud account failed.")]
     private static partial void LogConnectFailed(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Google no longer honours the Drive token of connection {Id}.")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "The cloud service no longer honours the token of connection {Id}.")]
     private static partial void LogTokenRefused(ILogger logger, long id, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Counting the Drive of connection {Id} failed.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Counting the files of connection {Id} failed.")]
     private static partial void LogCountFailed(ILogger logger, long id, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Google did not revoke the Drive token of connection {Id}.")]
     private static partial void LogRevokeFailed(ILogger logger, long id, Exception exception);
+
+    // A refresh token Microsoft rolled replaces the one stored, at once: the old one stops being the one that keeps the account alive.
+    private async Task KeepRolledTokenAsync(CatalogDbContext db, ConnectedSource source, string used, string? rolled, CancellationToken cancellationToken)
+    {
+        if (rolled is { Length: > 0 } && rolled != used)
+        {
+            source.EncryptedRefreshToken = tokens.Protect(rolled);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
 
     private static async Task<SourceOutcome> NeedReconnectingAsync(CatalogDbContext db, ConnectedSource source, CancellationToken cancellationToken)
     {
