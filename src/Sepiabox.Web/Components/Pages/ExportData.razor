@@ -82,6 +82,13 @@
     </ul>
     <p class="muted small">@Text["Export_LinkHint"]</p>
 }
+else if (_requests is { Count: 0 })
+{
+    <EmptyState Title="@Text["Export_NoneTitle"]">
+        <Icon><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14" /></Icon>
+        <ChildContent>@Text["Export_NoneHelp"]</ChildContent>
+    </EmptyState>
+}
 
 <p><a href="settings">@Text["Export_Back"]</a></p>
 

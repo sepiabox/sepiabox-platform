@@ -87,7 +87,8 @@ public sealed class TimelineTests : LocalizedContext
 
         var page = Render<Timeline>();
 
-        Assert.Equal("No photos yet. Use sepiabox-ingest to upload the ones on the external drive.", page.Find("p.empty").TextContent);
+        Assert.Equal("Your library is empty", page.Find(".empty-state .empty-title").TextContent);
+        Assert.Equal("Use sepiabox-ingest to upload the photos on your external drive. They appear here when it finishes.", page.Find(".empty-state .empty-help").TextContent);
         Assert.Equal("Photos and videos", page.Find("h1").TextContent);
     }
 
@@ -192,7 +193,8 @@ public sealed class TimelineTests : LocalizedContext
 
         var page = Render<Timeline>();
 
-        Assert.Equal("Ainda não há fotos. Use sepiabox-ingest para enviar as do HD externo.", page.Find("p.empty").TextContent);
+        Assert.Equal("Sua biblioteca está vazia", page.Find(".empty-state .empty-title").TextContent);
+        Assert.Equal("Use sepiabox-ingest para enviar as fotos do seu disco externo. Elas aparecem aqui quando terminar.", page.Find(".empty-state .empty-help").TextContent);
     }
 
     [Fact]

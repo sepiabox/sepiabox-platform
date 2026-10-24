@@ -79,11 +79,15 @@ else if (_filtered)
     }
     @if (_results is null)
     {
-        <p class="muted">@Text["Timeline_Loading"]</p>
+        <Skeleton />
     }
     else if (_results.Items.Count == 0)
     {
-        <p class="empty">@Text["Search_NoResults"] <a href="./">@Text["Filter_Clear"]</a></p>
+        <EmptyState Title="@Text["Search_NoResultsTitle"]">
+            <Icon><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></Icon>
+            <ChildContent>@Text["Search_NoResultsHelp"]</ChildContent>
+            <Action><a class="button secondary" href="./">@Text["Filter_Clear"]</a></Action>
+        </EmptyState>
     }
     else if (_query?.Filters.SimilarToRegion is not null)
     {
@@ -152,11 +156,11 @@ else if (_filtered)
 }
 else if (_page is null)
 {
-    <p class="muted">@Text["Timeline_Loading"]</p>
+    <Skeleton />
 }
 else if (_page.Items.Count == 0 && _page.Page == 1)
 {
-    <p class="empty">@Text["Timeline_EmptyBefore"] <code>sepiabox-ingest</code> @Text["Timeline_EmptyAfter"]</p>
+    <EmptyState Title="@Text["Timeline_EmptyTitle"]">@Text["Timeline_EmptyBefore"] <code>sepiabox-ingest</code> @Text["Timeline_EmptyAfter"]</EmptyState>
 }
 else if (_page.Items.Count == 0)
 {

@@ -104,6 +104,28 @@ public sealed class SharedPageComponentsTests : LocalizedContext
     }
 
     [Fact]
+    public void Draws_a_loading_grid_of_skeleton_cards_announced_once_and_hidden_from_a_reader()
+    {
+        var grid = Render<Skeleton>(p => p.Add(k => k.Count, 6));
+
+        Assert.Equal("Loading", grid.Find("[role=status][aria-busy=true] .visually-hidden").TextContent);
+        Assert.Equal(6, grid.FindAll("ul.skeleton-grid li.skeleton.skeleton-card").Count);
+        Assert.Equal("true", grid.Find("ul.skeleton-grid").GetAttribute("aria-hidden"));
+    }
+
+    [Fact]
+    public void Draws_a_few_skeleton_lines_for_a_list_and_says_carregando_in_brazilian_portuguese()
+    {
+        using var language = Cultures.Use(Cultures.BrazilianPortuguese);
+
+        var lines = Render<Skeleton>(p => p.Add(k => k.Lines, true));
+
+        Assert.Equal(5, lines.FindAll(".skeleton-lines .skeleton-line").Count);
+        Assert.Empty(lines.FindAll("ul.skeleton-grid"));
+        Assert.Equal("Carregando", lines.Find(".visually-hidden").TextContent);
+    }
+
+    [Fact]
     public void Draws_a_panel_without_a_label_when_it_has_no_title()
     {
         var panel = Render<Panel>(p => p.AddChildContent("<p>Body</p>"));
@@ -180,6 +202,13 @@ public sealed class SharedStylesheetTests
         Assert.Equal(4, edges.Distinct().Count());
         Assert.All(edges, e => Assert.NotEqual(string.Empty, e));
         Assert.Matches(@"\.note-info \.icon\s*\{\s*color:", Css);
+    }
+
+    [Fact]
+    public void Pulses_the_skeletons_unless_the_person_asked_for_less_motion()
+    {
+        Assert.Contains("animation: skeleton-pulse", Css, StringComparison.Ordinal);
+        Assert.Matches(@"prefers-reduced-motion: reduce\)\s*\{\s*\.skeleton\s*\{\s*animation:\s*none", Css);
     }
 
     [Fact]

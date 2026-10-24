@@ -8,9 +8,10 @@
 The last part of the redesign (D-119): pages without content say so with a plain sentence, and the theme follows only the system setting.
 
 ### Scope
-- The `EmptyState` component exists (S-069); put illustrated empty states (SVG, no images of people) on the pages that can be empty: timeline, people, occasions, places, storage, sources, organize, export.
+- The `EmptyState` component exists (S-069). It is put on the timeline (an empty library, and no matches with a "Clear filters" action), people, storage, sources (its action is the Connect button) and export. Places has its own (S-071, "Add your home"); occasions and organize get theirs in S-075.
+- Loading skeletons (`Skeleton`, grid or lines, pulsing unless reduced motion is asked for) replace the "Loading…" lines on the timeline, storage and sources.
 - Notes after an action: `Notice` has its four variants (S-069); only the toast-like placement and dismissal are left.
-- A theme switch (system / light / dark) in Settings, remembered per browser in a cookie.
+- A theme switch (system / light / dark) in Settings, remembered per browser in a cookie (taken by another implementer).
 
 ### Acceptance criteria
 - [ ] Given each page with no content, in `en` and `pt-BR`, then it shows its illustrated empty state with a localized sentence.

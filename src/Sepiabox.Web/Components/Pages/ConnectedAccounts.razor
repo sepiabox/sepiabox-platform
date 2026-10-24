@@ -22,11 +22,20 @@
 
     @if (_sources is null)
     {
-        <p class="muted">@Text["Timeline_Loading"]</p>
+        <Skeleton Lines="true" />
     }
     else if (_sources.Count == 0)
     {
-        <p class="empty">@Text["Sources_None"]</p>
+        <EmptyState Title="@Text["Sources_NoneTitle"]">
+            <Icon><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A5.5 5.5 0 0 1 17 8.5a4 4 0 0 1 .5 7.97V16.5" /><path d="M9 15l3-3 3 3M12 12v7" /></Icon>
+            <ChildContent>@Text["Sources_NoneHelp"]</ChildContent>
+            <Action>
+                @if (Connections.CanConnectGoogleDrive)
+                {
+                    <a class="button connect" href="@SourceEndpoints.ConnectPath.TrimStart('/')">@Text["Sources_Connect"]</a>
+                }
+            </Action>
+        </EmptyState>
     }
     else
     {
@@ -84,11 +93,11 @@
         <p class="muted small">@Text["Sources_DisconnectHint"]</p>
     }
 
-    @if (Connections.CanConnectGoogleDrive)
+    @if (Connections.CanConnectGoogleDrive && _sources is { Count: > 0 })
     {
         <p><a class="button connect" href="@SourceEndpoints.ConnectPath.TrimStart('/')">@Text["Sources_Connect"]</a></p>
     }
-    else
+    else if (!Connections.CanConnectGoogleDrive)
     {
         <p class="note">@Text["Sources_NotConfigured"]</p>
     }

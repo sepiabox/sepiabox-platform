@@ -53,7 +53,10 @@ else if (_people is { Count: > 0 })
 }
 else
 {
-    <p class="empty">@Text["People_None"]</p>
+    <EmptyState Title="@Text["People_NoneTitle"]">
+        <Icon><circle cx="9" cy="8.5" r="3.2" /><path d="M3.5 19c.7-3.4 3-5 5.5-5s4.8 1.6 5.5 5" /><circle cx="17" cy="9.5" r="2.4" /><path d="M16 14.2c2.4-.2 4 1.2 4.5 4.3" /></Icon>
+        <ChildContent>@Text["People_NoneHelp"]</ChildContent>
+    </EmptyState>
 }
 
 @code {

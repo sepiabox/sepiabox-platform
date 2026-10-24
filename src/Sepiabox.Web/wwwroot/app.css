@@ -2872,3 +2872,52 @@ svg.icon {
 .empty-help {
     margin: 0;
 }
+
+/* Loading skeletons (S-070): grey shapes where the content will be, pulsing gently. */
+.skeleton {
+    display: block;
+    border-radius: var(--r-md);
+    background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-card {
+    aspect-ratio: 4 / 3;
+}
+
+.skeleton-grid {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.skeleton-lines {
+    display: grid;
+    gap: var(--s-3);
+    max-width: 720px;
+}
+
+.skeleton-line {
+    height: 18px;
+}
+
+.skeleton-line:nth-child(odd) {
+    width: 92%;
+}
+
+@keyframes skeleton-pulse {
+    from {
+        background-position: 200% 0;
+    }
+
+    to {
+        background-position: -200% 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none;
+    }
+}

@@ -146,11 +146,11 @@
     <value>Loading…</value>
   </data>
   <data name="Timeline_EmptyBefore" xml:space="preserve">
-    <value>No photos yet. Use</value>
+    <value>Use</value>
     <comment>Followed by the command name sepiabox-ingest.</comment>
   </data>
   <data name="Timeline_EmptyAfter" xml:space="preserve">
-    <value>to upload the ones on the external drive.</value>
+    <value>to upload the photos on your external drive. They appear here when it finishes.</value>
     <comment>After the command name sepiabox-ingest.</comment>
   </data>
   <data name="Timeline_NoMore" xml:space="preserve">
@@ -1702,5 +1702,38 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Needs a name</value>
+  </data>
+  <data name="Timeline_EmptyTitle" xml:space="preserve">
+    <value>Your library is empty</value>
+  </data>
+  <data name="Search_NoResultsTitle" xml:space="preserve">
+    <value>No matches</value>
+  </data>
+  <data name="Search_NoResultsHelp" xml:space="preserve">
+    <value>Nothing matches these filters. Try fewer filters, or clear them all.</value>
+  </data>
+  <data name="People_NoneTitle" xml:space="preserve">
+    <value>No people yet</value>
+  </data>
+  <data name="People_NoneHelp" xml:space="preserve">
+    <value>Faces appear here once photos processed with face recognition are uploaded.</value>
+  </data>
+  <data name="Storage_EmptyTitle" xml:space="preserve">
+    <value>Nothing stored yet</value>
+  </data>
+  <data name="Sources_NoneTitle" xml:space="preserve">
+    <value>No account connected</value>
+  </data>
+  <data name="Sources_NoneHelp" xml:space="preserve">
+    <value>Connect a Google Drive account to bring its photos and videos into the library. Sepiabox only reads them.</value>
+  </data>
+  <data name="Export_NoneTitle" xml:space="preserve">
+    <value>No exports yet</value>
+  </data>
+  <data name="Export_NoneHelp" xml:space="preserve">
+    <value>Ask for one above. When it is ready it appears here with a download button.</value>
+  </data>
+  <data name="Loading_Label" xml:space="preserve">
+    <value>Loading</value>
   </data>
 </root>
