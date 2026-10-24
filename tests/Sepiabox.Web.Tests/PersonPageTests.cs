@@ -297,7 +297,7 @@ public sealed class PersonPageFormTests : LocalizedContext
         Assert.Contains("Ana has a name and will be deleted", swapped.Find(".note.danger").TextContent, StringComparison.Ordinal);
         Assert.Equal("Ana", swapped.Find(".note.danger strong").TextContent);
         // The danger comes before the result sentence, the button is the danger one and names who stays, and Cancel is a secondary button before it.
-        Assert.Equal(["note danger", "note"], swapped.FindAll("p.note").Select(n => n.ClassName));
+        Assert.Equal(["note note-error danger", "note"], swapped.FindAll("p.note").Select(n => n.ClassName));
         Assert.Equal("button danger", swapped.Find("form.confirm button").ClassName);
         Assert.Equal("Merge into Unnamed", swapped.Find("form.confirm button").TextContent);
         Assert.Equal("a", swapped.Find("form.confirm").Children[^2].LocalName);
@@ -326,7 +326,7 @@ public sealed class PersonPageFormTests : LocalizedContext
 
         var page = MergePage("?other=8&swap=1");
 
-        Assert.Equal("⚠ Unnamed is linked to you (\"This is me\") and will be deleted for good. Go on only if that is what you want; otherwise use Swap.", page.Find(".note.danger").TextContent.Trim());
+        Assert.Equal("Unnamed is linked to you (\"This is me\") and will be deleted for good. Go on only if that is what you want; otherwise use Swap.", page.Find(".note.danger").TextContent.Trim());
     }
 
     [Fact]

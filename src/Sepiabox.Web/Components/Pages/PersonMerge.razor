@@ -29,7 +29,7 @@ else
        stays, else the one with more faces (D-125); "Swap" reverses it, on purpose. A named or linked person going is a danger. *@
     @if (Dangerous)
     {
-        <p class="note danger" role="alert"><span aria-hidden="true">&#9888;</span> <strong>@NameOf(_leaves.Name)</strong> @Text[_leaves.Name is not null ? "Merge_LeavingNamed" : "Merge_LeavingLinked"]</p>
+        <Notice Variant="@NoticeVariant.Error" Class="danger"><strong>@NameOf(_leaves.Name)</strong> @Text[_leaves.Name is not null ? "Merge_LeavingNamed" : "Merge_LeavingLinked"]</Notice>
     }
     <p class="note">@Text["Merge_Result", NameOf(_leaves.Name), _leaves.FaceCount, NameOf(_stays.Name), _stays.FaceCount]</p>
     <p><a class="merge-swap" href="@SwapHref" data-enhance-nav="false">@Text["Merge_Swap"]</a></p>

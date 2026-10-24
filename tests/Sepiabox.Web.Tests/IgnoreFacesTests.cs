@@ -105,7 +105,7 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
     public void Asks_before_ignoring_one_face_and_says_what_it_does_not_reach()
     {
         var crop = new FaceCrop(Ids.Of(1), [0.1, 0.1, 0.2, 0.2], 256, 192);
-        var asset = PhotoWith(new AssetPerson(1, "Ana", 10), new AssetPerson(2, null, 20, crop), new AssetPerson(3, null, 30, crop));
+        var asset = PhotoWithFaces(new AssetFace(10, 1, "Ana", null), new AssetFace(20, 2, null, crop), new AssetFace(30, 3, null, crop));
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}/ignore-faces?face=20");
 
         var page = Render<PhotoIgnoreFaces>(p => p.Add(d => d.Id, asset.Id));
@@ -134,7 +134,7 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
     public void Counts_every_unnamed_face_when_none_is_named_and_says_so_in_portuguese()
     {
         using var language = Cultures.Use(Cultures.BrazilianPortuguese);
-        var asset = PhotoWith(new AssetPerson(2, null, 20), new AssetPerson(3, null, 30));
+        var asset = PhotoWithFaces(new AssetFace(20, 2, null, null), new AssetFace(30, 3, null, null));
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}/ignore-faces");
 
         var page = Render<PhotoIgnoreFaces>(p => p.Add(d => d.Id, asset.Id));
@@ -147,9 +147,24 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
     }
 
     [Fact]
+    public void Reaches_each_of_two_unnamed_faces_of_one_person_in_a_photo()
+    {
+        var crop = new FaceCrop(Ids.Of(1), [0.1, 0.1, 0.2, 0.2], 256, 192);
+        var asset = PhotoWithFaces(new AssetFace(20, 2, null, crop), new AssetFace(21, 2, null, crop));
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}/ignore-faces?face=21");
+
+        var one = Render<PhotoIgnoreFaces>(p => p.Add(d => d.Id, asset.Id));
+
+        Assert.Contains("1 unnamed face in this photo will be ignored.", one.Markup, StringComparison.Ordinal);
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}/ignore-faces");
+        var both = Render<PhotoIgnoreFaces>(p => p.Add(d => d.Id, asset.Id));
+        Assert.Contains("2 unnamed faces in this photo will be ignored.", both.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Says_there_is_nothing_to_ignore_for_a_face_that_is_named_or_not_there()
     {
-        var asset = PhotoWith(new AssetPerson(1, "Ana", 10));
+        var asset = PhotoWithFaces(new AssetFace(10, 1, "Ana", null));
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}/ignore-faces?face=10");
 
         var page = Render<PhotoIgnoreFaces>(p => p.Add(d => d.Id, asset.Id));
@@ -171,7 +186,7 @@ public sealed class IgnoreFacesPageTests : LocalizedContext
         Assert.Equal("Ignore this person", unnamed.Find("div.ignore-person a").TextContent);
         // Each of the two deletions says what it is for.
         Assert.Contains("strangers", unnamed.Find("div.ignore-person .muted").TextContent, StringComparison.Ordinal);
-        Assert.StartsWith("Deletes this person, their name and all their faces.", unnamed.Find("div.delete-face-data .muted").TextContent, StringComparison.Ordinal);
+        Assert.StartsWith("Deletes this person, their name and their faces.", unnamed.Find("div.delete-face-data .muted").TextContent, StringComparison.Ordinal);
         Assert.Equal("Danger zone", unnamed.Find(".danger-zone h3").TextContent);
         Assert.Equal(["Face data", "Stranger"], unnamed.FindAll(".danger-zone .form-label").Select(l => l.TextContent));
         Assert.Equal("false", unnamed.Find("div.ignore-person a").GetAttribute("data-enhance-nav"));
@@ -318,10 +333,64 @@ public sealed class IgnoreFacesPostTests
     private static (WebFactory Web, FakeFaceSettings Faces, string Asset) Web()
     {
         var library = new FakeLibrary();
-        var asset = Details.Photo(Ids.Of(1), new DateTime(2019, 7, 14)) with { People = [new AssetPerson(2, null, 20), new AssetPerson(3, null, 30)] };
+        var asset = Details.Photo(Ids.Of(1), new DateTime(2019, 7, 14)) with { Faces = [new AssetFace(20, 2, null, null), new AssetFace(30, 3, null, null)], People = [new AssetPerson(2, null, 20), new AssetPerson(3, null, 30)] };
         library.Assets[asset.Id] = asset;
         library.Persons[9] = PersonPages.Person(9, name: null, user: null);
         var faces = new FakeFaceSettings { FewFaces = 2 };
         return (new WebFactory(library) { AccessEmails = Ana, FaceSettings = faces }, faces, asset.Id);
+    }
+}
+
+/// <summary>The names of the fields the confirmation pages post: the form binding reads them by name, so a rename must fail a test.</summary>
+public sealed class ConfirmationFieldNameTests : LocalizedContext
+{
+    private readonly FakeLibrary _library = new();
+
+    public ConfirmationFieldNameTests()
+    {
+        Services.AddSingleton<IFaceSettings>(new FakeFaceSettings());
+        Services.AddSingleton<ILibraryQueries>(_library);
+        Services.AddSingleton<IPeopleEditor>(new FakePeopleEditor());
+        _library.Persons[7] = PersonPages.Person(7, name: "Ana", user: null);
+        _library.Persons[9] = PersonPages.Person(9, name: null, user: null);
+    }
+
+    [Fact]
+    public void The_merge_page_posts_confirmed_and_swap()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("people/7/merge?other=9");
+
+        var form = Render<PersonMerge>(p => p.Add(x => x.Id, 7L)).Find("form.confirm");
+
+        Assert.Equal("yes", form.QuerySelector("input[name=Confirmed]")!.GetAttribute("value"));
+        Assert.Equal("0", form.QuerySelector("input[name=Swap]")!.GetAttribute("value"));
+    }
+
+    [Fact]
+    public void The_ignore_delete_and_photo_ignore_pages_post_confirmed()
+    {
+        var asset = Details.Photo(Ids.Of(1), new DateTime(2019, 7, 14, 10, 32, 0)) with { Faces = [new AssetFace(20, 9, null, null)] };
+        _library.Assets[asset.Id] = asset;
+
+        Services.GetRequiredService<NavigationManager>().NavigateTo("people/9/ignore");
+        var person = Render<PersonIgnore>(p => p.Add(x => x.Id, 9L)).Find("form.confirm input[name=Confirmed]");
+        Services.GetRequiredService<NavigationManager>().NavigateTo("people/7/delete");
+        var delete = Render<PersonDelete>(p => p.Add(x => x.Id, 7L)).Find("form.confirm input[name=Confirmed]");
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/photos/{asset.Id}/ignore-faces");
+        var photo = Render<PhotoIgnoreFaces>(p => p.Add(x => x.Id, asset.Id)).Find("form.confirm input[name=Confirmed]");
+
+        Assert.All(new[] { person, delete, photo }, input => Assert.Equal("yes", input.GetAttribute("value")));
+    }
+
+    [Fact]
+    public void The_move_page_posts_target_and_the_person_page_posts_me()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("people/7/faces/70/move");
+        var move = Render<FaceMove>(p => p.Add(x => x.Id, 7L).Add(x => x.FaceId, 70L));
+        Assert.NotNull(move.Find("form.move select[name=Target]"));
+
+        Services.GetRequiredService<NavigationManager>().NavigateTo("people/7");
+        var person = Render<Person>(p => p.Add(x => x.Id, 7L));
+        Assert.Equal(["link"], person.FindAll("form.me button[name=Me]").Select(b => b.GetAttribute("value")));
     }
 }

@@ -2183,7 +2183,7 @@ button[data-close] {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
 }
 
-.confirm-panel .card-face {
+.confirm-panel .person .face.card-face {
     justify-items: start;
 }
 

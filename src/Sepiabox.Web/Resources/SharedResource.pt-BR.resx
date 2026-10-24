@@ -1565,7 +1565,7 @@
     <value>tem nome e será apagada de vez. Continue só se for isso que você quer; senão, use Trocar.</value>
   </data>
   <data name="Merge_LeavingLinked" xml:space="preserve">
-    <value>está ligada a você ("Esta sou eu") e será apagada de vez. Continue só se for isso que você quer; senão, use Trocar.</value>
+    <value>está ligada a você ("Sou eu") e será apagada de vez. Continue só se for isso que você quer; senão, use Trocar.</value>
   </data>
   <data name="Merge_Swap" xml:space="preserve">
     <value>Trocar: manter a outra pessoa</value>
