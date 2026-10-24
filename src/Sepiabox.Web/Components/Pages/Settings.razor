@@ -10,17 +10,16 @@
 
 <PageTitle>@Text["Settings_Heading"] · Sepiabox</PageTitle>
 
-<h1 class="page-heading">@Text["Settings_Heading"]</h1>
+<PageHead Title="@Text["Settings_Heading"]" />
 
 @if (NoteText is { } note)
 {
-    <p class="note" role="status">@note</p>
+    <Notice>@note</Notice>
 }
 
 @if (_view is { } view)
 {
-    <section class="settings-faces">
-        <h2>@Text["Settings_Faces_Heading"]</h2>
+    <Panel Class="settings-faces" Title="@Text["Settings_Faces_Heading"]">
         @if (view.State.On)
         {
             <p class="faces-status">@Text["Settings_Faces_IsOn"]</p>
@@ -77,14 +76,13 @@
                 }
             </ul>
         }
-    </section>
+    </Panel>
 }
 
-<section class="settings-export">
-    <h2>@Text["Export_Heading"]</h2>
+<Panel Class="settings-export" Title="@Text["Export_Heading"]">
     <p class="muted">@Text["Export_Intro"]</p>
     <p><a class="button" href="settings/export">@Text["Settings_Export_Link"]</a></p>
-</section>
+</Panel>
 
 @code {
     private const string ConfirmOff = "faces-off";

@@ -1574,4 +1574,19 @@
   <data name="Detail_AddNameFace" xml:space="preserve">
     <value>Add a name, unnamed face {0}</value>
   </data>
+  <data name="People_Subtitle" xml:space="preserve">
+    <value>People found in your photos by face.</value>
+  </data>
+  <data name="People_NeedName_One" xml:space="preserve">
+    <value>1 person still needs a name. Naming people makes searching by person work.</value>
+  </data>
+  <data name="People_NeedName_Other" xml:space="preserve">
+    <value>{0} people still need a name. Naming people makes searching by person work.</value>
+  </data>
+  <data name="People_Named" xml:space="preserve">
+    <value>Named</value>
+  </data>
+  <data name="People_NeedsName" xml:space="preserve">
+    <value>Needs a name</value>
+  </data>
 </root>

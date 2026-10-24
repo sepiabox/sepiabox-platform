@@ -22,6 +22,19 @@ public sealed class PersonPageFormTests : LocalizedContext
     }
 
     [Fact]
+    public void Uses_the_shared_parts_the_head_with_the_way_back_a_panel_for_the_corrections_and_counted_section_titles()
+    {
+        var page = Render<Person>(p => p.Add(x => x.Id, 7L));
+
+        Assert.Equal("people", page.Find("p.back a").GetAttribute("href"));
+        Assert.Equal("Ana", page.Find("div.page-head h1.page-heading").TextContent);
+        Assert.NotEmpty(page.FindAll("div.page-head p.page-sub"));
+        Assert.NotEmpty(page.FindAll("section.panel.block.person-edit"));
+        var counts = page.FindAll(".section-title .n").Select(n => n.TextContent).ToList();
+        Assert.Equal(["2", "2"], counts);
+    }
+
+    [Fact]
     public void Offers_rename_this_is_me_merge_and_the_face_corrections()
     {
         var page = Render<Person>(p => p.Add(x => x.Id, 7L));

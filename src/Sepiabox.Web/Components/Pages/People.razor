@@ -1,24 +1,45 @@
 @page "/people"
 @inject ILibraryQueries Library
 @inject IFaceSettings Faces
-@* Static server rendering, as the timeline: the people faces were grouped into (S-019). Naming them is S-020. *@
+@* Static server rendering, as the timeline: the people faces were grouped into (S-019), the named ones first and the ones that
+   need a name after them with a callout that counts them (S-069). Naming them is S-020. *@
 
 <PageTitle>@Text["People_Heading"] · Sepiabox</PageTitle>
 
-<h1 class="page-heading">@Text["People_Heading"]</h1>
+<PageHead Title="@Text["People_Heading"]">
+    <Subtitle>@Text["People_Subtitle"]</Subtitle>
+</PageHead>
 
 @if (Note == "deleted")
 {
-    <p class="note" role="status">@Text["People_Done_Deleted"]</p>
+    <Notice>@Text["People_Done_Deleted"]</Notice>
 }
 
 @if (_off)
 {
     <p class="note faces-off">@Text["People_FacesOff"] <a href="settings">@Text["Layout_Settings"]</a></p>
 }
-else if (_people is { Count: > 0 } people)
+else if (_people is { Count: > 0 })
 {
-    <PeopleGrid People="people" />
+    @if (_unnamed.Count > 0)
+    {
+        <Callout>@(_unnamed.Count == 1 ? Text["People_NeedName_One"] : Text["People_NeedName_Other", _unnamed.Count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)])</Callout>
+    }
+
+    @if (_named.Count > 0)
+    {
+        @if (_unnamed.Count > 0)
+        {
+            <SectionTitle Title="@Text["People_Named"]" Count="_named.Count" />
+        }
+        <PeopleGrid People="_named" />
+    }
+
+    @if (_unnamed.Count > 0)
+    {
+        <SectionTitle Title="@Text["People_NeedsName"]" Count="_unnamed.Count" />
+        <PeopleGrid People="_unnamed" />
+    }
 }
 else
 {
@@ -27,6 +48,8 @@ else
 
 @code {
     private IReadOnlyList<PersonSummary>? _people;
+    private IReadOnlyList<PersonSummary> _named = [];
+    private IReadOnlyList<PersonSummary> _unnamed = [];
     private bool _off;
 
     // Only "deleted" is shown; nothing else from the address.
@@ -37,5 +60,7 @@ else
     {
         _off = !(await Faces.GetAsync()).State.On;
         _people = _off ? [] : await Library.GetPeopleAsync();
+        _named = _people.Where(p => p.Name is not null).ToList();
+        _unnamed = _people.Where(p => p.Name is null).ToList();
     }
 }

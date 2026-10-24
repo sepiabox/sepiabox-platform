@@ -9,16 +9,16 @@
 
 <PageTitle>@Text["Sources_Heading"] · Sepiabox</PageTitle>
 
-<h1 class="page-heading">@Text["Sources_Heading"]</h1>
-<p class="muted">@Text["Sources_Intro"]</p>
+<PageHead Title="@Text["Sources_Heading"]">
+    <Subtitle>@Text["Sources_Intro"]</Subtitle>
+</PageHead>
 
 @if (NoteText is { } note)
 {
-    <p class="note" role="status">@note</p>
+    <Notice>@note</Notice>
 }
 
-<section class="connection-service">
-    <h2>@Text["Sources_GoogleDrive"]</h2>
+<Panel Class="connection-service" Title="@Text["Sources_GoogleDrive"]">
 
     @if (_sources is null)
     {
@@ -92,7 +92,7 @@
     {
         <p class="note">@Text["Sources_NotConfigured"]</p>
     }
-</section>
+</Panel>
 
 @code {
     // What a note in the address may say, and its text: nothing else from the address is shown.

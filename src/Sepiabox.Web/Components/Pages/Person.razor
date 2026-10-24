@@ -8,23 +8,25 @@
 
 <PageTitle>@Title · Sepiabox</PageTitle>
 
-<p class="back"><a href="people">@Text["Person_Back"]</a></p>
-
 @if (_person is null)
 {
-    <h1 class="page-heading">@Text["Person_NotFound"]</h1>
+    <PageHead Title="@Text["Person_NotFound"]">
+        <Back><a href="people">@Text["Person_Back"]</a></Back>
+    </PageHead>
 }
 else
 {
-    <h1 class="page-heading">@Title</h1>
-    <p class="muted">@FaceCount(_person.FaceCount)</p>
+    <PageHead Title="@Title">
+        <Back><a href="people">@Text["Person_Back"]</a></Back>
+        <Subtitle>@FaceCount(_person.FaceCount)</Subtitle>
+    </PageHead>
 
     @if (NoteText is { } note)
     {
-        <p class="note person-note" role="status">@note</p>
+        <Notice Class="person-note">@note</Notice>
     }
 
-    <section class="person-edit">
+    <Panel Class="person-edit">
         <form method="post" @formname="rename" @onsubmit="RenameAsync" class="rename">
             <AntiforgeryToken />
             <label>
@@ -70,9 +72,9 @@ else
         }
         @* Only opens the confirmation, which deletes on its own POST (S-022). *@
         <p class="delete-face-data"><a href="people/@_person.Id/delete">@Text["Person_Delete"]</a></p>
-    </section>
+    </Panel>
 
-    <h2>@Text["Person_Faces_Heading"]</h2>
+    <SectionTitle Title="@Text["Person_Faces_Heading"]" Count="_person.Faces.Count" />
     <form method="post" @formname="faces" @onsubmit="FaceAsync">
         <AntiforgeryToken />
         <ul class="people person-faces">
@@ -94,7 +96,7 @@ else
 
         @if (_person.ExcludedFaces.Count > 0)
         {
-            <h2>@Text["Person_Excluded_Heading"]</h2>
+            <SectionTitle Title="@Text["Person_Excluded_Heading"]" Count="_person.ExcludedFaces.Count" />
             <p class="hint muted">@Text["Person_Excluded_Hint"]</p>
             <ul class="people person-faces excluded-faces">
                 @foreach (var face in _person.ExcludedFaces)

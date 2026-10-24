@@ -1863,14 +1863,83 @@ button[data-close] {
 
 /* The people page (S-019): one card per person, the face cropped from its thumbnail by an inline style. */
 .page-heading {
-    margin: 24px 0 16px;
-    font-size: 1.5rem;
+    margin: 0;
+    font-size: var(--text-2xl);
+}
+
+/* The shared page parts (S-069, D-119): the head with its actions, a callout, a section title, and a titled panel. */
+.page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: var(--s-3);
+    margin: var(--s-2) 0 var(--s-5);
+}
+
+.page-head-text {
+    min-width: 0;
+}
+
+.page-sub {
+    margin: var(--s-1) 0 0;
+}
+
+.page-head-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+}
+
+.callout {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    margin: 0 0 var(--s-5);
+    padding: var(--s-4);
+    border-radius: var(--r-md);
+    background: var(--brand-soft);
+    color: var(--text);
+}
+
+.section-title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-3);
+    margin: var(--s-6) 0 var(--s-4);
+}
+
+.section-title h2 {
+    margin: 0;
+    font-size: var(--text-xl);
+}
+
+.section-title .n {
+    color: var(--text-2);
+    font-size: var(--text-sm);
+}
+
+.block {
+    display: grid;
+    gap: var(--s-3);
+    margin: 0 0 var(--s-5);
+    padding: var(--s-5);
+    overflow-wrap: anywhere;
+}
+
+.block > h2,
+.block > p {
+    margin: 0;
+}
+
+.note {
+    margin: 0 0 var(--s-5);
 }
 
 .people {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: var(--s-4);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -1894,6 +1963,55 @@ button[data-close] {
 .person .face img {
     position: absolute;
     max-width: none;
+}
+
+/* A person's card on the people page (S-069): the avatar over the name and the count, the whole card one link. */
+.person .face.card-face {
+    display: grid;
+    position: static;
+    width: auto;
+    aspect-ratio: auto;
+    overflow: visible;
+    background: none;
+    border-radius: 0;
+    justify-items: center;
+}
+
+.person-link {
+    align-items: center;
+    padding: var(--s-5) var(--s-3) var(--s-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    text-align: center;
+    transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+.person-link:hover {
+    border-color: var(--control-border);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.person .name {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    overflow-wrap: anywhere;
+}
+
+.person.unnamed .name {
+    color: var(--accent);
+}
+
+.person .count {
+    color: var(--text-2);
+    font-size: var(--text-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .person-link:hover {
+        transform: none;
+    }
 }
 
 .person .name {
@@ -2078,8 +2196,32 @@ button[data-close] {
 
 .organize-views {
     display: flex;
-    gap: 16px;
-    margin: 12px 0;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    margin: 0 0 var(--s-5);
+}
+
+.organize-views a,
+.organize-views strong {
+    padding: var(--s-2) var(--s-4);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.organize-views a {
+    border-color: var(--control-border);
+    background: var(--surface);
+}
+
+.organize-views a:hover {
+    background: var(--accent-soft);
+}
+
+.organize-views strong {
+    background: var(--accent-soft);
+    color: var(--accent);
 }
 
 .organize-form .organize-submit {
@@ -2099,8 +2241,8 @@ button[data-close] {
 }
 
 .burst h2 {
-    margin: 24px 0 8px;
-    font-size: 1.1rem;
+    margin: 0;
+    font-size: var(--text-lg);
 }
 
 .organize-item {
@@ -2145,10 +2287,10 @@ button[data-close] {
 }
 
 .connection {
-    padding: 16px;
-    background: var(--white);
-    border: 1px solid var(--mat);
-    border-radius: 4px;
+    padding: var(--s-4);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
 }
 
 .connection p {
@@ -2164,14 +2306,14 @@ button[data-close] {
     padding: 1px 8px;
     border-radius: 999px;
     font-size: 0.8rem;
-    background: var(--chip);
-    color: var(--cyanotype);
+    background: var(--accent-soft);
+    color: var(--accent);
 }
 
 .connection-account .status-expired {
     background: transparent;
-    border: 1px solid var(--sepia);
-    color: var(--sepia);
+    border: 1px solid var(--danger);
+    color: var(--danger);
 }
 
 .connection .counts span {
@@ -2225,4 +2367,69 @@ button[data-close] {
     padding: 12px 0;
     color: var(--cyanotype);
     text-decoration: underline;
+}
+
+.block .note {
+    margin: 0;
+}
+
+/* Lists of things on the settings-like pages (S-069): saved places, exports, deletions and the sources, one small card each. */
+.saved-places,
+.exports,
+.face-deletions,
+.connections {
+    display: grid;
+    gap: var(--s-3);
+    margin: 0 0 var(--s-5);
+    padding: 0;
+    list-style: none;
+}
+
+.saved-place,
+.export {
+    padding: var(--s-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.saved-place {
+    display: grid;
+    gap: var(--s-2);
+    overflow-wrap: anywhere;
+}
+
+.saved-place h2 {
+    margin: 0;
+    font-size: var(--text-lg);
+}
+
+.export {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2) var(--s-4);
+}
+
+.block label:not(:has(input[type="checkbox"], input[type="radio"])) {
+    display: grid;
+    gap: var(--s-1);
+}
+
+.block form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--s-3);
+}
+
+.block table {
+    width: 100%;
+}
+
+@media (max-width: 600px) {
+    .block {
+        padding: var(--s-4);
+    }
 }

@@ -98,10 +98,24 @@ public sealed class PeoplePageTests
         // Only the page's own markup: the header's sign-out and language forms carry a fresh antiforgery token (base64url,
         // about 150 characters) on every request, and a short name such as "Ana" turns up in one about once in a thousand.
         var main = html[html.IndexOf("<main", StringComparison.Ordinal)..];
-        var (unnamed, ana) = (main.IndexOf("Unnamed", StringComparison.Ordinal), main.IndexOf(">Ana<", StringComparison.Ordinal));
-        Assert.True(unnamed >= 0 && ana > unnamed, $"Unnamed at {unnamed}, Ana at {ana}.");
+        var (named, needsName, unnamed) = (main.IndexOf(">Ana<", StringComparison.Ordinal), main.IndexOf("Needs a name", StringComparison.Ordinal), main.IndexOf(">Unnamed<", StringComparison.Ordinal));
+        Assert.True(named >= 0 && needsName > named && unnamed > needsName, $"Ana at {named}, the section at {needsName}, Unnamed at {unnamed}.");
+        Assert.Contains("1 person still needs a name", main, StringComparison.Ordinal);
         Assert.Contains("3 faces", html, StringComparison.Ordinal);
         Assert.Contains("href=\"people\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Leaves_out_the_callout_and_the_sections_when_every_person_has_a_name()
+    {
+        await using var web = new WebFactory(new FakeLibrary { People = [new PersonSummary(2, "Ana", 1, null)] });
+        using var http = web.CreateSignedInClient();
+
+        var html = await http.GetStringAsync(new Uri("/people", UriKind.Relative));
+
+        Assert.DoesNotContain("class=\"callout\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("section-title", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"person\"", html, StringComparison.Ordinal);
     }
 
     [Fact]

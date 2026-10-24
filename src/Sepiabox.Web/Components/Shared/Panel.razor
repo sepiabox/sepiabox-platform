@@ -1,0 +1,25 @@
+@* A titled block of a page (S-069): the white surface with its heading, for a form, a list or a table. *@
+
+<section class="panel block @Class" aria-labelledby="@(Title is null ? null : HeadingId)">
+    @if (Title is not null)
+    {
+        <h2 id="@HeadingId">@Title</h2>
+    }
+    @ChildContent
+</section>
+
+@code {
+    [Parameter]
+    public string? Title { get; set; }
+
+    /// <summary>The id of the heading, when something else points at it.</summary>
+    [Parameter]
+    public string? HeadingId { get; set; }
+
+    /// <summary>More classes for the section, so a page's own rules and tests still find it.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

@@ -10,8 +10,9 @@
 
 <PageTitle>@Text["Organize_Heading"] · Sepiabox</PageTitle>
 
-<h1 class="page-heading">@Text["Organize_Heading"]</h1>
-<p class="hint muted">@Text["Organize_Intro"]</p>
+<PageHead Title="@Text["Organize_Heading"]">
+    <Subtitle>@Text["Organize_Intro"]</Subtitle>
+</PageHead>
 
 <nav class="organize-views" aria-label="@Text["Organize_Views"]">
     @foreach (var name in s_views)
@@ -29,7 +30,7 @@
 
 @if (NoteText is { } note)
 {
-    <p class="note" role="status">@note</p>
+    <Notice>@note</Notice>
 }
 
 @if (_view == "bursts")
@@ -46,7 +47,7 @@
             <input type="hidden" name="View" value="bursts" />
             @foreach (var burst in _bursts.Items)
             {
-                <section class="burst">
+                <section class="burst panel block">
                     <h2>@Text["Organize_Burst", burst.Items.Count]</h2>
                     <ul class="grid">
                         @foreach (var photo in burst.Items)

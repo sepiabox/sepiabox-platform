@@ -1501,4 +1501,19 @@
   <data name="Detail_AddNameFace" xml:space="preserve">
     <value>Dar um nome, rosto sem nome {0}</value>
   </data>
+  <data name="People_Subtitle" xml:space="preserve">
+    <value>Pessoas encontradas nas suas fotos pelo rosto.</value>
+  </data>
+  <data name="People_NeedName_One" xml:space="preserve">
+    <value>1 pessoa ainda precisa de um nome. Dar nomes faz a busca por pessoa funcionar.</value>
+  </data>
+  <data name="People_NeedName_Other" xml:space="preserve">
+    <value>{0} pessoas ainda precisam de um nome. Dar nomes faz a busca por pessoa funcionar.</value>
+  </data>
+  <data name="People_Named" xml:space="preserve">
+    <value>Com nome</value>
+  </data>
+  <data name="People_NeedsName" xml:space="preserve">
+    <value>Precisa de um nome</value>
+  </data>
 </root>

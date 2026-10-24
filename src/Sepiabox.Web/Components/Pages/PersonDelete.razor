@@ -8,13 +8,15 @@
 
 @if (_person is null)
 {
-    <p class="back"><a href="people">@Text["Person_Back"]</a></p>
-    <h1 class="page-heading">@Text["Person_Error_NotFound"]</h1>
+    <PageHead Title="@Text["Person_Error_NotFound"]">
+        <Back><a href="people">@Text["Person_Back"]</a></Back>
+    </PageHead>
 }
 else
 {
-    <p class="back"><a href="people/@_person.Id">@(_person.Name ?? Text["People_Unnamed"])</a></p>
-    <h1 class="page-heading">@Text["Delete_Title"]</h1>
+    <PageHead Title="@Text["Delete_Title"]">
+        <Back><a href="people/@_person.Id">@(_person.Name ?? Text["People_Unnamed"])</a></Back>
+    </PageHead>
     <ul class="people delete-people">
         <li class="person"><PersonCard Person="Summary(_person)" /></li>
     </ul>

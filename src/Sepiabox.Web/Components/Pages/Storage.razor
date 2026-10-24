@@ -7,8 +7,9 @@
 
 <PageTitle>@Text["Storage_Heading"] · Sepiabox</PageTitle>
 
-<h1 class="page-heading">@Text["Storage_Heading"]</h1>
-<p class="hint muted">@Text["Storage_Intro"]</p>
+<PageHead Title="@Text["Storage_Heading"]">
+    <Subtitle>@Text["Storage_Intro"]</Subtitle>
+</PageHead>
 
 @if (_report is null)
 {
@@ -20,8 +21,7 @@ else if (_report.Rows.Count == 0)
 }
 else
 {
-    <section class="storage-totals" aria-labelledby="storage-totals-heading">
-        <h2 id="storage-totals-heading">@Text["Storage_Totals"]</h2>
+    <Panel Class="storage-totals" HeadingId="storage-totals-heading" Title="@Text["Storage_Totals"]">
         <table class="ranking">
             <thead>
                 <tr>
@@ -65,10 +65,9 @@ else
                 </tr>
             </tfoot>
         </table>
-    </section>
+    </Panel>
 
-    <section class="storage-one-source" aria-labelledby="storage-one-source-heading">
-        <h2 id="storage-one-source-heading">@Text["Storage_OneSource"]</h2>
+    <Panel Class="storage-one-source" HeadingId="storage-one-source-heading" Title="@Text["Storage_OneSource"]">
         @if (_report.OneSource == 0)
         {
             <p class="muted">@Text["Storage_NoneOneSource"]</p>
@@ -77,10 +76,9 @@ else
         {
             <p>@Summary(_report.OneSource, _report.OneSourceBytes) <a href="@SearchLinks.Timeline(WithSourceCount(new SourceCountFilter { Eq = 1 }))" aria-label="@Text["Storage_ShowOneSource"]">@Text["Storage_ShowThem"]</a></p>
         }
-    </section>
+    </Panel>
 
-    <section class="storage-several-sources" aria-labelledby="storage-several-heading">
-        <h2 id="storage-several-heading">@Text["Storage_Several"]</h2>
+    <Panel Class="storage-several-sources" HeadingId="storage-several-heading" Title="@Text["Storage_Several"]">
         @if (_report.SeveralSources == 0)
         {
             <p class="muted">@Text["Storage_NoneSeveral"]</p>
@@ -102,10 +100,9 @@ else
                 <p class="muted small shown">@Text["Storage_FirstShown", _report.InSeveralSources.Count.ToString("N0", CultureInfo.CurrentCulture)]</p>
             }
         }
-    </section>
+    </Panel>
 
-    <section class="storage-largest" aria-labelledby="storage-largest-heading">
-        <h2 id="storage-largest-heading">@Text["Storage_Largest"]</h2>
+    <Panel Class="storage-largest" HeadingId="storage-largest-heading" Title="@Text["Storage_Largest"]">
         @if (_report.LargestVideos.Count == 0)
         {
             <p class="muted">@Text["Storage_NoVideos"]</p>
@@ -122,7 +119,7 @@ else
                 }
             </ol>
         }
-    </section>
+    </Panel>
 }
 
 @code {

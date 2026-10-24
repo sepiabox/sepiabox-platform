@@ -11,11 +11,11 @@
 
 <PageTitle>@Text["Places_Heading"] · Sepiabox</PageTitle>
 
-<h1 class="page-heading">@Text["Places_Heading"]</h1>
+<PageHead Title="@Text["Places_Heading"]" />
 
 @if (NoteText is { } note)
 {
-    <p class="note" role="status">@note</p>
+    <Notice>@note</Notice>
 }
 
 @if (_deleting is { } deleting)
@@ -31,8 +31,7 @@
     </section>
 }
 
-<section class="new-place">
-    <h2>@Text["Places_New"]</h2>
+<Panel Class="new-place" Title="@Text["Places_New"]">
     <form method="post" @formname="create" @onsubmit="CreateAsync" class="create">
         <AntiforgeryToken />
         <label>
@@ -55,7 +54,7 @@
         <button type="submit">@Text["Places_Save"]</button>
     </form>
     <p class="hint muted">@Text["Places_Hint"]</p>
-</section>
+</Panel>
 
 @if (_places is { Count: > 0 } places)
 {

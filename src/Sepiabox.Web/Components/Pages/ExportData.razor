@@ -13,16 +13,17 @@
 
 <PageTitle>@Text["Export_Heading"] · Sepiabox</PageTitle>
 
-<h1 class="page-heading">@Text["Export_Heading"]</h1>
-<p>@Text["Export_Intro"]</p>
+<PageHead Title="@Text["Export_Heading"]">
+    <Subtitle>@Text["Export_Intro"]</Subtitle>
+</PageHead>
 <p class="muted">@Text["Export_Contents"]</p>
 
 @if (NoteText is { } note)
 {
-    <p class="note" role="status">@note</p>
+    <Notice>@note</Notice>
 }
 
-<form method="post" @formname="request" @onsubmit="RequestAsync" class="export-request">
+<form method="post" @formname="request" @onsubmit="RequestAsync" class="export-request panel block">
     <AntiforgeryToken />
     @if (_faceRecognitionOn)
     {
@@ -38,7 +39,7 @@
 
 @if (_requests is { Count: > 0 } requests)
 {
-    <h2>@Text["Export_History"]</h2>
+    <SectionTitle Title="@Text["Export_History"]" Count="requests.Count" />
     <ul class="exports">
         @foreach (var request in requests)
         {

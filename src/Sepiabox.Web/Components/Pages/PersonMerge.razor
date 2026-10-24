@@ -9,13 +9,15 @@
 
 @if (_person is null || _other is null || _person.Id == _other.Id)
 {
-    <p class="back"><a href="people/@Id">@Text["Person_Back"]</a></p>
-    <h1 class="page-heading">@Text["Person_Error_NotFound"]</h1>
+    <PageHead Title="@Text["Person_Error_NotFound"]">
+        <Back><a href="people/@Id">@Text["Person_Back"]</a></Back>
+    </PageHead>
 }
 else
 {
-    <p class="back"><a href="people/@_person.Id">@NameOf(_person.Name)</a></p>
-    <h1 class="page-heading">@Text["Merge_Title"]</h1>
+    <PageHead Title="@Text["Merge_Title"]">
+        <Back><a href="people/@_person.Id">@NameOf(_person.Name)</a></Back>
+    </PageHead>
     <ul class="people merge-people">
         <li class="person"><span class="caption">@Text["Merge_Goes"]</span><PersonCard Person="Summary(_other)" /></li>
         <li class="person"><span class="caption">@Text["Merge_Stays"]</span><PersonCard Person="Summary(_person)" /></li>

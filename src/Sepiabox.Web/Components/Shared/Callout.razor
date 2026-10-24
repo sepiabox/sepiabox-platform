@@ -1,0 +1,11 @@
+@* A highlighted line that asks the person to do something, such as naming faces (S-069); a status note after an action is a Notice. *@
+
+<div class="callout" role="note">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z" /></svg>
+    <span>@ChildContent</span>
+</div>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}
