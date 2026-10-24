@@ -14,16 +14,18 @@
     <Subtitle>@Text["Organize_Intro"]</Subtitle>
 </PageHead>
 
-<nav class="organize-views" aria-label="@Text["Organize_Views"]">
+@* A segmented control with the counts (S-075): the tab you are on is filled; each is a link, so it works without JavaScript. *@
+<nav class="organize-views segmented" aria-label="@Text["Organize_Views"]">
     @foreach (var name in s_views)
     {
+        var count = CountOf(name);
         if (name == _view)
         {
-            <strong aria-current="page">@Text[$"Organize_View_{name}"]</strong>
+            <strong class="seg active" aria-current="page">@Text[$"Organize_View_{name}"]@if (count is { } n) { <span class="seg-count">@n.ToString("N0", CultureInfo.CurrentCulture)</span> }</strong>
         }
         else
         {
-            <a href="organize?view=@name">@Text[$"Organize_View_{name}"]</a>
+            <a class="seg" href="organize?view=@name">@Text[$"Organize_View_{name}"]@if (count is { } n) { <span class="seg-count">@n.ToString("N0", CultureInfo.CurrentCulture)</span> }</a>
         }
     }
 </nav>
@@ -37,7 +39,7 @@
 {
     @if (_bursts is null || _bursts.Items.Count == 0)
     {
-        <p class="empty">@Text["Organize_NoBursts"]</p>
+        <EmptyState Title="@Text["Organize_NoBursts"]">@Text["Organize_NoBurstsHelp"]</EmptyState>
     }
     else
     {
@@ -58,7 +60,9 @@
                     </ul>
                 </section>
             }
-            <button type="submit" class="button organize-submit" name="Action" value="hide">@Text["Organize_HideSelected"]</button>
+            <div class="organize-bar">
+                <button type="submit" class="button organize-submit" name="Action" value="hide" data-bar-button data-zero="@Text["Organize_HideSelected"]" data-none="@Text["Organize_HideSelected_None"]" data-one="@Text["Organize_HideSelected_One"]" data-other="@Text["Organize_HideSelected_Other"]">@BarLabel("Organize_HideSelected", _bursts.Items.Sum(b => b.Items.Count - 1))</button>
+            </div>
         </form>
         <Pager Page="_bursts.Page" HasMore="_bursts.HasMore" Link="PageLink" />
     }
@@ -67,7 +71,7 @@ else if (_view == "blurry")
 {
     @if (_photos is null || _photos.Items.Count == 0)
     {
-        <p class="empty">@Text["Organize_NoBlurry"]</p>
+        <EmptyState Title="@Text["Organize_NoBlurry"]">@Text["Organize_NoBlurryHelp"]</EmptyState>
     }
     else
     {
@@ -82,7 +86,9 @@ else if (_view == "blurry")
                     <OrganizeCard Photo="photo" LabelKey="Organize_SetAsideOne" BlurryBelow="Organization.BlurryBelow" />
                 }
             </ul>
-            <button type="submit" class="button organize-submit" name="Action" value="hide">@Text["Organize_HideSelected"]</button>
+            <div class="organize-bar">
+                <button type="submit" class="button organize-submit" name="Action" value="hide" data-bar-button data-zero="@Text["Organize_HideSelected"]" data-none="@Text["Organize_HideSelected_None"]" data-one="@Text["Organize_HideSelected_One"]" data-other="@Text["Organize_HideSelected_Other"]">@BarLabel("Organize_HideSelected", 0)</button>
+            </div>
         </form>
         <Pager Page="_photos.Page" HasMore="_photos.HasMore" Link="PageLink" />
     }
@@ -91,7 +97,7 @@ else
 {
     @if (_photos is null || _photos.Items.Count == 0)
     {
-        <p class="empty">@Text["Organize_NoHidden"]</p>
+        <EmptyState Title="@Text["Organize_NoHidden"]">@Text["Organize_NoHiddenHelp"]</EmptyState>
     }
     else
     {
@@ -106,7 +112,9 @@ else
                     <OrganizeCard Photo="photo" LabelKey="Organize_BringBackOne" />
                 }
             </ul>
-            <button type="submit" class="button organize-submit" name="Action" value="unhide">@Text["Organize_UnhideSelected"]</button>
+            <div class="organize-bar">
+                <button type="submit" class="button organize-submit" name="Action" value="unhide" data-bar-button data-zero="@Text["Organize_UnhideSelected"]" data-none="@Text["Organize_UnhideSelected_None"]" data-one="@Text["Organize_UnhideSelected_One"]" data-other="@Text["Organize_UnhideSelected_Other"]">@BarLabel("Organize_UnhideSelected", 0)</button>
+            </div>
         </form>
         <Pager Page="_photos.Page" HasMore="_photos.HasMore" Link="PageLink" />
     }
@@ -145,6 +153,18 @@ else
     private string _view = "bursts";
     private OrganizePage<BurstGroup>? _bursts;
     private OrganizePage<OrganizeItem>? _photos;
+
+    // The number on the tab shown, from its list's own total; the others have none: counting the bursts reads every measured photo, so
+    // no tab is counted ahead (all three or none, S-075).
+    private int? CountOf(string view) => view != _view ? null : view == "bursts" ? _bursts?.Total : _photos?.Total;
+
+    // The action's words with the number checked: none, one or several (JavaScript keeps it current as boxes are ticked).
+    private string BarLabel(string key, int checkedCount) => checkedCount switch
+    {
+        0 => Text[key].Value,
+        1 => Text[key + "_One"].Value,
+        _ => Text[key + "_Other", checkedCount.ToString("N0", CultureInfo.CurrentCulture)].Value,
+    };
 
     private string? NoteText
     {

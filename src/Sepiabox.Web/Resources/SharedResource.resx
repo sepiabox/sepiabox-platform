@@ -1010,14 +1010,14 @@
     <value>Occasions</value>
   </data>
   <data name="Occasions_None" xml:space="preserve">
-    <value>There are no occasions yet.</value>
+    <value>No occasions yet</value>
   </data>
   <data name="Occasions_Items_One" xml:space="preserve">
-    <value>1 item</value>
+    <value>1 photo or video</value>
     <comment>One photo or video.</comment>
   </data>
   <data name="Occasions_Items_Other" xml:space="preserve">
-    <value>{0} items</value>
+    <value>{0} photos and videos</value>
   </data>
   <data name="Occasion_Back" xml:space="preserve">
     <value>All occasions</value>
@@ -1033,13 +1033,6 @@
   </data>
   <data name="Chip_Occasion_Other" xml:space="preserve">
     <value>In {0} occasions</value>
-  </data>
-  <data name="Occasions_NoneBefore" xml:space="preserve">
-    <value>Photos taken close together in time and place are grouped into occasions when the library owner runs</value>
-    <comment>Before the command name, in a code element (D-058).</comment>
-  </data>
-  <data name="Occasions_NoneAfter" xml:space="preserve">
-    <value>.</value>
   </data>
   <data name="Occasion_Empty" xml:space="preserve">
     <value>This occasion has no photos or videos.</value>
@@ -1114,7 +1107,7 @@
     <value>Type</value>
   </data>
   <data name="Occasions_NoneOfType" xml:space="preserve">
-    <value>There are no occasions of this type.</value>
+    <value>There are no occasions of this type</value>
   </data>
   <data name="Storage_ShowOneSource" xml:space="preserve">
     <value>Show these items, only in one source</value>
@@ -1209,13 +1202,13 @@
     <value>Set aside</value>
   </data>
   <data name="Organize_NoBursts" xml:space="preserve">
-    <value>No bursts found. A burst is photos taken within two seconds of each other that look alike.</value>
+    <value>No bursts found</value>
   </data>
   <data name="Organize_NoBlurry" xml:space="preserve">
-    <value>No blurry photos found.</value>
+    <value>No blurry photos found</value>
   </data>
   <data name="Organize_NoHidden" xml:space="preserve">
-    <value>Nothing is set aside.</value>
+    <value>Nothing is set aside</value>
   </data>
   <data name="Organize_BurstsCount" xml:space="preserve">
     <value>Bursts: {0}. The sharpest photo of each is left unchecked.</value>
@@ -1702,5 +1695,35 @@
   </data>
   <data name="People_NeedsName" xml:space="preserve">
     <value>Needs a name</value>
+  </data>
+  <data name="Organize_HideSelected_One" xml:space="preserve">
+    <value>Set aside 1 checked photo</value>
+  </data>
+  <data name="Organize_HideSelected_Other" xml:space="preserve">
+    <value>Set aside {0} checked photos</value>
+  </data>
+  <data name="Organize_UnhideSelected_One" xml:space="preserve">
+    <value>Bring back 1 checked photo</value>
+  </data>
+  <data name="Organize_UnhideSelected_Other" xml:space="preserve">
+    <value>Bring back {0} checked photos</value>
+  </data>
+  <data name="Occasions_NoneHelp" xml:space="preserve">
+    <value>Photos taken close together in time and place are grouped into occasions once the library has been processed.</value>
+  </data>
+  <data name="Organize_NoBurstsHelp" xml:space="preserve">
+    <value>A burst is photos taken within two seconds of each other that look alike.</value>
+  </data>
+  <data name="Organize_NoBlurryHelp" xml:space="preserve">
+    <value>Photos that look sharp are left alone.</value>
+  </data>
+  <data name="Organize_NoHiddenHelp" xml:space="preserve">
+    <value>Photos you set aside appear here, and you can bring them back.</value>
+  </data>
+  <data name="Organize_HideSelected_None" xml:space="preserve">
+    <value>Check photos to set them aside</value>
+  </data>
+  <data name="Organize_UnhideSelected_None" xml:space="preserve">
+    <value>Check photos to bring them back</value>
   </data>
 </root>

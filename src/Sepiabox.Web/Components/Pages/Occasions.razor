@@ -13,18 +13,14 @@
 
 @if (_types.Count > 0 || _type is not null)
 {
+    @* The timeline's chip control (S-067): the type as radios in a dropdown, with how many occasions each has; "Filter" applies without JavaScript. *@
     <form class="filters occasion-filter" method="get" action="occasions" role="search" aria-label="@Text["Occasions_FilterLabel"]">
-        <label>
-            <span>@Text["Occasions_FilterType"]</span>
-            <select name="type">
-                <option value="">@Text["Filter_Any"]</option>
-                @foreach (var type in _types)
-                {
-                    <option value="@type" selected="@(type == _type)">@Text.EventTypeLabel(type)</option>
-                }
-            </select>
-        </label>
-        <button type="submit">@Text["Filter_Apply"]</button>
+        <div class="chips">
+            <FilterChip Label="@Text["Occasions_FilterType"]" Set="@(_type is not null)" Value="@(_type is null ? null : Text.EventTypeLabel(_type))">
+                <FilterRadios Name="type" Selected="@_type" Options="@_types.Select(t => (t, TypeOption(t)))" />
+            </FilterChip>
+        </div>
+        <button type="submit" class="button">@Text["Filter_Apply"]</button>
         @if (_type is not null)
         {
             <a class="clear" href="occasions">@Text["Filter_Clear"]</a>
@@ -38,12 +34,13 @@
 }
 else if (_page.Items.Count == 0 && _page.Page == 1 && _type is not null)
 {
-    <p class="empty">@Text["Occasions_NoneOfType"] <a href="occasions">@Text["Occasions_ShowAll"]</a></p>
+    <EmptyState Title="@Text["Occasions_NoneOfType"]">
+        <Action><a class="button secondary" href="occasions">@Text["Occasions_ShowAll"]</a></Action>
+    </EmptyState>
 }
 else if (_page.Items.Count == 0 && _page.Page == 1)
 {
-    <p class="empty">@Text["Occasions_None"]</p>
-    <p class="muted">@Text["Occasions_NoneBefore"] <code>sepiabox-worker events rebuild</code>@Text["Occasions_NoneAfter"]</p>
+    <EmptyState Title="@Text["Occasions_None"]">@Text["Occasions_NoneHelp"]</EmptyState>
 }
 else if (_page.Items.Count == 0)
 {
@@ -51,12 +48,17 @@ else if (_page.Items.Count == 0)
 }
 else
 {
-    <ul class="occasions">
-        @foreach (var occasion in _page.Items)
-        {
-            <li class="occasion"><OccasionCard Occasion="occasion" /></li>
-        }
-    </ul>
+    @foreach (var year in _page.Items.GroupBy(o => o.StartsAt.Year))
+    {
+        @* A heading for each year with how many occasions it has (all pages, the same filter), the cards on a surface under it (S-075). *@
+        <SectionTitle Title="@year.Key.ToString(System.Globalization.CultureInfo.CurrentCulture)" Count="@(_page.YearCounts.TryGetValue(year.Key, out var total) ? total : year.Count())" />
+        <ul class="occasions">
+            @foreach (var occasion in year)
+            {
+                <li class="occasion"><OccasionCard Occasion="occasion" /></li>
+            }
+        </ul>
+    }
 
     <nav class="pages" aria-label="@Text["Timeline_Pages"]">
         @if (_page.Page > 1)
@@ -82,15 +84,21 @@ else
     private OccasionsPage? _page;
     private IReadOnlyList<string> _types = [];
     private string? _type;
+    private IReadOnlyDictionary<string, int> _counts = new Dictionary<string, int>();
 
     protected override async Task OnParametersSetAsync()
     {
         _type = TypeQuery is not null && OccasionTypes.IsKnown(TypeQuery) ? TypeQuery : null;
         // The type in the address stays selectable though no occasion has it (yet).
-        var present = (await Library.GetFilterOptionsAsync()).EventTypes;
+        var options = await Library.GetFilterOptionsAsync();
+        var present = options.EventTypes;
+        _counts = options.EventTypeCounts;
         _types = _type is not null && !present.Contains(_type) ? [.. OccasionTypes.All.Where(t => t == _type || present.Contains(t))] : present;
         _page = await Library.GetOccasionsPageAsync(LibraryQueries.ParsePage(PageQuery), _type);
     }
+
+    private string TypeOption(string type) =>
+        $"{Text.EventTypeLabel(type)} ({_counts.GetValueOrDefault(type).ToString("N0", System.Globalization.CultureInfo.CurrentCulture)})";
 
     // Relative, so links work under whatever base path the app has; the type stays while paging.
     private string PageLink(int page)

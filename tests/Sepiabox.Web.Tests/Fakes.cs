@@ -55,12 +55,15 @@ internal sealed class FakeLibrary(params TimelineItem[] items) : ILibraryQueries
 
     public string? RequestedOccasionType { get; private set; }
 
+    /// <summary>The year counts a page of occasions carries (S-075); empty, the page counts its own.</summary>
+    public IReadOnlyDictionary<int, int> OccasionYearCounts { get; set; } = new Dictionary<int, int>();
+
     public Task<OccasionsPage> GetOccasionsPageAsync(int page, string? type = null, CancellationToken cancellationToken = default)
     {
         (RequestedOccasionsPage, RequestedOccasionType) = (page, type);
         var matching = Occasions.Where(o => type is null || o.Type == type).ToList();
         var slice = matching.Skip((page - 1) * OccasionPageSize).Take(OccasionPageSize).ToList();
-        return Task.FromResult(new OccasionsPage(page, slice, matching.Count > page * OccasionPageSize));
+        return Task.FromResult(new OccasionsPage(page, slice, matching.Count > page * OccasionPageSize) { YearCounts = OccasionYearCounts });
     }
 
     /// <summary>The occasion of each asset, for the results grouped by occasion (S-041).</summary>

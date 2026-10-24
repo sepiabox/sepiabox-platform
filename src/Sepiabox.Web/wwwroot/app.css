@@ -2238,9 +2238,43 @@ button[data-close] {
 .occasion-link {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--s-3);
+    height: 100%;
+    padding: var(--s-3);
     color: inherit;
     text-decoration: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.occasion-link:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-md, var(--shadow-sm));
+}
+
+.occasion-body {
+    display: grid;
+    gap: var(--s-1);
+}
+
+.occasion-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+}
+
+/* The type of an occasion, a small pill (not the video-duration .badge, which sits on a thumbnail). */
+.occasion-type {
+    padding: 1px var(--s-2);
+    border-radius: var(--r-pill);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: var(--text-sm);
+    font-weight: 600;
 }
 
 .occasion-thumbs {
@@ -2278,8 +2312,7 @@ button[data-close] {
 }
 
 .occasion-link:hover .occasion-title {
-    color: var(--cyanotype);
-    text-decoration: underline;
+    color: var(--accent);
 }
 
 .occasion-title {
@@ -2337,43 +2370,67 @@ button[data-close] {
     font-variant-numeric: tabular-nums;
 }
 
+/* A segmented control (S-075): one pill with a segment for each list, the one shown filled, each with its count. */
 .organize-views {
-    display: flex;
+    display: inline-flex;
     flex-wrap: wrap;
-    gap: var(--s-2);
-    margin: 0 0 var(--s-5);
+    gap: 2px;
+    margin: 0 0 var(--s-3);
+    padding: 3px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
 }
 
-.organize-views a,
-.organize-views strong {
-    padding: var(--s-2) var(--s-4);
-    border: 1px solid transparent;
-    border-radius: 999px;
+.organize-views .seg {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    min-height: 36px;
+    padding: 0 var(--s-4);
+    border-radius: var(--r-pill);
+    color: var(--text-2);
     font-weight: 600;
     text-decoration: none;
 }
 
-.organize-views a {
-    border-color: var(--control-border);
+.organize-views a.seg:hover {
+    background: var(--accent-soft);
+    color: var(--text);
+}
+
+.organize-views .seg.active {
+    background: var(--accent);
+    color: var(--accent-contrast);
+}
+
+.organize-views .seg-count {
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+}
+
+/* The action stays at the bottom of the window while a long list is checked (S-075). */
+.organize-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    justify-content: flex-end;
+    margin: var(--s-5) 0 0;
+    padding: var(--s-3) var(--s-4);
     background: var(--surface);
-}
-
-.organize-views a:hover {
-    background: var(--accent-soft);
-}
-
-.organize-views strong {
-    background: var(--accent-soft);
-    color: var(--accent);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .organize-form .organize-submit {
-    margin-top: 24px;
+    margin: 0;
 }
 
 .organize-form .grid {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--s-3);
 }
 
 .bulk {

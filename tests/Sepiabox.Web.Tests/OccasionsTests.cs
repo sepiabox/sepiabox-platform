@@ -80,9 +80,9 @@ public sealed class OccasionsPageTests : LocalizedContext
             [$"photos/{Ids.Of(1)}/thumb-256", $"photos/{Ids.Of(2)}/thumb-256", $"photos/{Ids.Of(3)}/thumb-256"],
             cards[0].QuerySelectorAll("img").Select(i => i.GetAttribute("src")));
         Assert.Equal("Lisbon · Dec 14–16, 2024", cards[0].QuerySelector(".occasion-title")!.TextContent);
-        Assert.Equal("120 items", cards[0].QuerySelector(".count")!.TextContent);
+        Assert.Equal("120 photos and videos", cards[0].QuerySelector(".count")!.TextContent);
         Assert.Equal("Jun 1, 2024", cards[1].QuerySelector(".occasion-title")!.TextContent);
-        Assert.Equal("1 item", cards[1].QuerySelector(".count")!.TextContent);
+        Assert.Equal("1 photo or video", cards[1].QuerySelector(".count")!.TextContent);
         Assert.Empty(cards[1].QuerySelectorAll("img"));
     }
 
@@ -95,7 +95,7 @@ public sealed class OccasionsPageTests : LocalizedContext
         var page = RenderPage();
 
         Assert.Equal("Lisbon · 14–16 dez 2024", page.Find(".occasion-title").TextContent);
-        Assert.Equal("1.200 itens", page.Find(".count").TextContent);
+        Assert.Equal("1.200 fotos e vídeos", page.Find(".count").TextContent);
         Assert.Equal("Ocasiões", page.Find("h1").TextContent);
     }
 
@@ -104,11 +104,13 @@ public sealed class OccasionsPageTests : LocalizedContext
     {
         var page = RenderPage();
 
-        Assert.Equal("There are no occasions yet.", page.Find("p.empty").TextContent);
-        Assert.Equal("sepiabox-worker events rebuild", page.Find("p.muted code").TextContent);
+        // An empty state in the person's words: no command to run, and no button (there is nothing to do from here).
+        Assert.Equal("No occasions yet", page.Find(".empty-state .empty-title").TextContent);
         Assert.Equal(
-            "Photos taken close together in time and place are grouped into occasions when the library owner runs sepiabox-worker events rebuild.",
-            page.Find("p.muted").TextContent);
+            "Photos taken close together in time and place are grouped into occasions once the library has been processed.",
+            page.Find(".empty-state .empty-help").TextContent);
+        Assert.DoesNotContain("sepiabox-worker", page.Markup, StringComparison.Ordinal);
+        Assert.Empty(page.FindAll(".empty-state .empty-action"));
     }
 
     [Fact]
@@ -137,14 +139,36 @@ public sealed class OccasionsPageTests : LocalizedContext
 
         var cards = RenderPage().FindAll("li.occasion .count");
 
-        Assert.Equal(["Casamento · 3 itens", "1 item"], cards.Select(c => c.TextContent));
-        Assert.Contains("Casamento · 3 itens", Render<Occasion>(p => p.Add(o => o.Id, 7)).Find(".page-sub").TextContent, StringComparison.Ordinal);
+        Assert.Equal(["3 fotos e vídeos", "1 foto ou vídeo"], cards.Select(c => c.TextContent));
+        // The type is a badge of its own on the card that has one.
+        Assert.Equal(["Casamento"], RenderPage().FindAll("li.occasion .occasion-type").Select(b => b.TextContent));
+        Assert.Contains("Casamento · 3 fotos e vídeos", Render<Occasion>(p => p.Add(o => o.Id, 7)).Find(".page-sub").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Heads_each_year_with_how_many_occasions_it_has_in_all_and_puts_each_year_s_cards_under_it()
+    {
+        var library = new FakeLibrary();
+        library.Occasions.Add(new OccasionSummary(1, new DateTime(2024, 12, 14), new DateTime(2024, 12, 14), null, 3, []));
+        library.Occasions.Add(new OccasionSummary(2, new DateTime(2023, 6, 1), new DateTime(2023, 6, 1), null, 1, []));
+        library.OccasionYearCounts = new Dictionary<int, int> { [2024] = 1, [2023] = 40 };
+        Services.AddSingleton<ILibraryQueries>(library);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/occasions");
+
+        var page = Render<Occasions>();
+
+        Assert.Equal(["2024", "2023"], page.FindAll(".section-title h2").Select(h => h.TextContent));
+        Assert.Equal(["1", "40"], page.FindAll(".section-title .n").Select(n => n.TextContent));
+        Assert.Equal(2, page.FindAll("ul.occasions").Count);
     }
 
     [Fact]
     public void Offers_the_types_the_occasions_have_and_lists_the_ones_chosen()
     {
-        var library = new FakeLibrary { Options = new FilterOptions([], [], []) { EventTypes = ["wedding", "trip"] } };
+        var library = new FakeLibrary
+        {
+            Options = new FilterOptions([], [], []) { EventTypes = ["wedding", "trip"], EventTypeCounts = new Dictionary<string, int> { ["wedding"] = 12, ["trip"] = 1200 } },
+        };
         library.Occasions.Add(new OccasionSummary(7, new DateTime(2024, 12, 14), new DateTime(2024, 12, 14), null, 3, []) { Type = "wedding" });
         library.Occasions.Add(new OccasionSummary(8, new DateTime(2024, 11, 1), new DateTime(2024, 11, 1), null, 1, []) { Type = "trip" });
         Services.AddSingleton<ILibraryQueries>(library);
@@ -152,9 +176,12 @@ public sealed class OccasionsPageTests : LocalizedContext
 
         var page = Render<Occasions>();
 
-        Assert.Equal(["", "wedding", "trip"], page.FindAll("form.occasion-filter option").Select(o => o.GetAttribute("value")));
-        Assert.Equal("trip", page.Find("form.occasion-filter option[selected]").GetAttribute("value"));
-        Assert.Equal(["Any", "Wedding", "Trip"], page.FindAll("form.occasion-filter option").Select(o => o.TextContent));
+        // The timeline's chip control (S-067) with a count for each type; the chosen one is checked and tints the chip.
+        Assert.Equal(["", "wedding", "trip"], page.FindAll("form.occasion-filter input[name=type]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["trip"], page.FindAll("form.occasion-filter input[name=type][checked]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["Any", "Wedding (12)", "Trip (1,200)"], page.FindAll("form.occasion-filter label.opt").Select(o => o.TextContent.Trim()));
+        Assert.True(page.Find("form.occasion-filter details.fchip").HasAttribute("data-set"));
+        Assert.Equal("Trip", page.Find("form.occasion-filter summary .v").TextContent);
         Assert.Equal("occasions", page.Find("form.occasion-filter a.clear").GetAttribute("href"));
         Assert.Equal("trip", library.RequestedOccasionType);
         Assert.Single(page.FindAll("li.occasion"));
@@ -174,7 +201,8 @@ public sealed class OccasionsPageTests : LocalizedContext
 
         navigation.NavigateTo("/occasions?type=party");
         var none = Render<Occasions>();
-        Assert.Equal("There are no occasions of this type. Show all occasions", none.Find("p.empty").TextContent);
+        Assert.Equal("There are no occasions of this type", none.Find(".empty-state .empty-title").TextContent);
+        Assert.Equal(("occasions", "Show all occasions"), (none.Find(".empty-state .empty-action a.button").GetAttribute("href"), none.Find(".empty-state .empty-action a.button").TextContent));
     }
 
     [Fact]
@@ -201,8 +229,9 @@ public sealed class OccasionsPageTests : LocalizedContext
 
         var page = Render<Occasions>();
 
-        Assert.Equal(["", "wedding", "party"], page.FindAll("form.occasion-filter option").Select(o => o.GetAttribute("value")));
-        Assert.Equal("party", page.Find("form.occasion-filter option[selected]").GetAttribute("value"));
+        Assert.Equal(["", "wedding", "party"], page.FindAll("form.occasion-filter input[name=type]").Select(o => o.GetAttribute("value")));
+        Assert.Equal(["party"], page.FindAll("form.occasion-filter input[name=type][checked]").Select(o => o.GetAttribute("value")));
+        Assert.Contains("Party (0)", page.FindAll("form.occasion-filter label.opt").Select(o => o.TextContent.Trim()));
     }
 
     [Fact]

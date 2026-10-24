@@ -35,6 +35,68 @@ public sealed class OrganizePageTests : LocalizedContext
     }
 
     [Fact]
+    public void Shows_the_lists_as_a_segmented_control_with_the_count_of_the_list_shown_only()
+    {
+        _organization.Bursts = [new BurstGroup([Item(1, 300), Item(2, 800)], Ids.Of(2)), new BurstGroup([Item(3, 300), Item(4, 800)], Ids.Of(4))];
+        _organization.Blurry = [Item(5, 10), Item(6, 20), Item(7, 30)];
+        _organization.Hidden = [Item(8, null)];
+
+        var tabs = Open("/organize").FindAll("nav.segmented .seg");
+
+        Assert.Equal(["Bursts2", "Blurry", "Set aside"], tabs.Select(t => t.TextContent));
+        Assert.Equal("page", tabs[0].GetAttribute("aria-current"));
+        Assert.All(tabs.Skip(1), t => Assert.Equal("a", t.LocalName));
+        // No tab is counted ahead: the bursts cost a read of every measured photo, and all three or none is the rule.
+        Assert.Equal(["Bursts", "Blurry3", "Set aside"], Open("/organize?view=blurry").FindAll("nav.segmented .seg").Select(t => t.TextContent));
+    }
+
+    [Theory]
+    [InlineData(Cultures.English, "Set aside 1 checked photo", "Set aside the checked photos", "Set aside {0} checked photos", "Check photos to set them aside")]
+    [InlineData(Cultures.BrazilianPortuguese, "Ocultar 1 foto marcada", "Ocultar as fotos marcadas", "Ocultar {0} fotos marcadas", "Marque fotos para ocultá-las")]
+    public void Puts_the_action_in_a_bar_at_the_bottom_that_says_how_many_are_checked_and_carries_the_other_wordings_for_the_script(string culture, string one, string zero, string other, string none)
+    {
+        using var _ = Cultures.Use(culture);
+        // A burst's sharpest photo is unchecked, so the rest of two bursts of two are checked: two photos.
+        _organization.Bursts = [new BurstGroup([Item(1, 300), Item(2, 800)], Ids.Of(2)), new BurstGroup([Item(3, 300), Item(4, 800)], Ids.Of(4))];
+        _organization.Blurry = [Item(5, 10)];
+
+        var bursts = Open("/organize").Find("form.organize-form .organize-bar button");
+
+        Assert.Equal(other.Replace("{0}", "2", StringComparison.Ordinal), bursts.TextContent);
+        Assert.Equal((zero, one, other), (bursts.GetAttribute("data-zero"), bursts.GetAttribute("data-one"), bursts.GetAttribute("data-other")));
+        // With nothing checked, the script shows a prompt instead and disables the button.
+        Assert.Equal(none, bursts.GetAttribute("data-none"));
+        // Nothing is checked on the blurry list on arrival.
+        var blurry = Open("/organize?view=blurry").Find("form.organize-form .organize-bar button");
+        Assert.Equal(zero, blurry.TextContent);
+        Assert.Equal("hide", blurry.GetAttribute("value"));
+    }
+
+    [Theory]
+    [InlineData("/organize", "No bursts found", "A burst is photos taken within two seconds of each other that look alike.")]
+    [InlineData("/organize?view=blurry", "No blurry photos found", "Photos that look sharp are left alone.")]
+    [InlineData("/organize?view=hidden", "Nothing is set aside", "Photos you set aside appear here, and you can bring them back.")]
+    public void Says_a_list_is_empty_with_an_empty_state_and_keeps_the_tabs(string address, string title, string help)
+    {
+        var page = Open(address);
+
+        Assert.Equal(title, page.Find(".empty-state .empty-title").TextContent);
+        Assert.Equal(help, page.Find(".empty-state .empty-help").TextContent);
+        Assert.Equal(3, page.FindAll("nav.segmented .seg").Count);
+    }
+
+    [Fact]
+    public void Brings_back_has_its_own_bar_with_the_matching_words()
+    {
+        _organization.Hidden = [Item(8, null)];
+
+        var button = Open("/organize?view=hidden").Find(".organize-bar button");
+
+        Assert.Equal("Bring back the checked photos", button.TextContent);
+        Assert.Equal(("unhide", "Bring back 1 checked photo", "Bring back {0} checked photos"), (button.GetAttribute("value"), button.GetAttribute("data-one"), button.GetAttribute("data-other")));
+    }
+
+    [Fact]
     public void Each_box_is_named_for_its_photo_and_each_photo_opens_in_a_new_tab_with_the_larger_preview()
     {
         _organization.Bursts = [new BurstGroup([Item(1, 300), Item(2, 800)], Ids.Of(2))];
